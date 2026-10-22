@@ -16,8 +16,8 @@ bb ona new <ona-project>                  # 4b. or create a fresh devbox
 bb ona list                               # 5. wait until it says "connected"
 ```
 
-Then pick the machine in bb's composer, or open a shell with
-`ssh "$(bb ona host <name>)"`.
+Then pick the machine in bb's composer. Threads running on a devbox get an
+**Editor** button in their header.
 
 ## How it works
 
@@ -191,13 +191,20 @@ bb machine provider-cli status ona:<name>
 
 ### Shell access
 
-```sh
-ssh "$(bb ona host <name>)"    # interactive shell in the devbox
-bb ona ssh <name>              # prints the ssh command
-bb ona open <name>             # opens the devbox in your Ona editor
-```
+**In a thread:** a thread that runs on a devbox shows an **Editor** button in its header, which
+opens the box in your Ona editor. For a shell, use bb's terminal panel in the right sidebar: on a
+devbox thread it already runs on the box.
 
-bb's terminal panel also opens shells on the devbox.
+bb's native **Open in** menu can't reach devboxes, so the plugin hides it on devbox threads.
+
+**From your Mac's terminal:**
+
+```sh
+bb ona ssh <name> --thread <thread-id>   # a new terminal to <name> in that thread (ssh from a Mac thread)
+bb ona shell <name> -- git status        # run one command in the checkout, print output, keep its exit code
+ssh "$(bb ona host <name>)"              # plain ssh, outside bb
+bb ona open <name>                       # open the devbox in your Ona editor
+```
 
 ### Manage devboxes
 

@@ -41,6 +41,10 @@ devbox. Use `bb` commands from a thread instead; bb routes them correctly.
 
 ## Shell access
 - `bb ona list` — machines, Ona env, tunnel status.
+- `bb ona shell <ref> -- <cmd…>` — run one command in the devbox checkout; prints output, keeps the exit code.
+- `bb ona ssh <ref> --thread <thread-id>` — open another terminal to the devbox in that thread's
+  terminal panel (threads on a devbox also get an **Editor** header button). Agents should not type into the
+  user's terminals; use your own thread terminals instead.
 - `ssh "$(bb ona host <machine-or-env>)"` — interactive shell; `bb ona ssh <ref>` prints the command.
 - `bb ona open <ref>` — open in your Ona editor.
 - `bb ona reconnect <ref>` — reopen the tunnel and restart the daemon (after changing settings).

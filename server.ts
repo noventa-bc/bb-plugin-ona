@@ -31,7 +31,10 @@ import {
   type OnaResource,
 } from "./src/provider.ts";
 import { startDaemonProxy } from "./src/proxy.ts";
+import { rpcContract, type Devbox } from "./src/rpc.ts";
+import { runOnce, threadTerminalPlan, type ShellBackend, type ShellTarget } from "./src/shells.ts";
 import { TunnelManager } from "./src/ssh.ts";
+import { hostIsBusy, parseProviderList, updatesToApply, type CliStatus } from "./src/updates.ts";
 
 const TUNNELS_KEY = "tunnels";
 
@@ -79,9 +82,29 @@ export default async function plugin(bb: BbPluginApi) {
       default: "/workspaces/.bb-machines",
       experimental_schema: devboxPath,
     },
+    autoUpdateClis: {
+      type: "boolean",
+      label: "Auto-update agent CLIs on devboxes",
+      description: "Weekdays at 09:00 (this Mac's time), apply pending updates for the CLIs below on connected Ona devboxes. Boxes with a running agent turn are skipped until the next run.",
+      default: true,
+    },
+    autoUpdateProviders: {
+      type: "string",
+      label: "CLIs to auto-update",
+      description: "bb provider ids, comma-separated. Only installed CLIs are updated; nothing new is installed.",
+      default: "claude-code,codex",
+    },
   });
-  const { onaPath, sshPath, defaultProject, inactivityTimeout, codexSqliteHome, machineDataDir } =
-    await settings.get();
+  const {
+    onaPath,
+    sshPath,
+    defaultProject,
+    inactivityTimeout,
+    codexSqliteHome,
+    machineDataDir,
+    autoUpdateClis,
+    autoUpdateProviders,
+  } = await settings.get();
 
   // Settings path first, then PATH and common install locations.
   const resolveOna = () => findOnaBinary(onaPath) ?? onaPath;
@@ -164,7 +187,9 @@ export default async function plugin(bb: BbPluginApi) {
       if (host.machineProviderId !== PROVIDER_ID) continue;
       const parsed = resourceSchema.safeParse(await bb.experimental_machines.getResource(host.id));
       if (!parsed.success) continue;
-      rows.push({ hostId: host.id, machine: host.name, status: String(host.status), resource: parsed.data });
+      // A suspended machine reports "disconnected"; surface the suspension itself.
+      const status = host.lifecycle?.suspendedAt ? "suspended" : String(host.status);
+      rows.push({ hostId: host.id, machine: host.name, status, resource: parsed.data });
     }
     return rows;
   }
@@ -180,6 +205,115 @@ export default async function plugin(bb: BbPluginApi) {
     return env.id;
   }
 
+  async function findMachine(ref: string): Promise<Row | null> {
+    return (
+      (await machines()).find((r) => [r.hostId, r.machine, r.resource.envId, r.resource.envName].includes(ref)) ??
+      null
+    );
+  }
+
+  async function devboxes(): Promise<Devbox[]> {
+    return (await machines()).map((row) => ({
+      machine: row.machine,
+      hostId: row.hostId,
+      envId: row.resource.envId,
+      envName: row.resource.envName,
+      status: row.status,
+      tunnel: tunnels.status(row.resource.envId),
+      adopted: row.resource.adopted,
+      sshCommand: `ssh ${sshHost(row.resource.envId)}`,
+    }));
+  }
+
+  const shellBackend: ShellBackend = {
+    async getTerminal(terminalId) {
+      try {
+        const terminal = await bb.sdk.terminals.get({ terminalId });
+        return { id: terminal.id, status: terminal.status, exitCode: terminal.exitCode };
+      } catch {
+        return null;
+      }
+    },
+    async createTerminal({ hostId, cwd, title, cols, rows, argv }) {
+      const terminal = await bb.sdk.terminals.create({
+        scope: { kind: "host_path", hostId, cwd },
+        cols,
+        rows,
+        title,
+        ...(argv ? { start: { mode: "argv" as const, argv } } : {}),
+      });
+      return { id: terminal.id, status: terminal.status, exitCode: terminal.exitCode };
+    },
+    async output(terminalId, tailBytes) {
+      const result = await bb.sdk.terminals.output({ terminalId, tailBytes });
+      return Buffer.concat(result.chunks.map((chunk) => Buffer.from(chunk.dataBase64, "base64"))).toString("utf8");
+    },
+  };
+
+  /** A connected Ona machine plus its checkout path, for opening shells. */
+  async function shellTarget(ref: string): Promise<ShellTarget> {
+    const row = await findMachine(ref);
+    if (!row) throw new Error(`No Ona-backed bb machine matches "${ref}". See \`bb ona list\`.`);
+    if (row.status !== "connected") {
+      throw new Error(`${row.machine} is ${row.status}. Start it with: bb machine resume ${row.machine}`);
+    }
+    const env = await ona.findEnvironment(row.resource.envId).catch(() => null);
+    return {
+      hostId: row.hostId,
+      cwd: env?.status?.content?.contentLocationInMachine ?? null,
+      boxName: row.resource.envName,
+    };
+  }
+
+  /** The Ona devbox a thread runs on, if any. */
+  async function threadDevbox(threadId: string): Promise<Devbox | null> {
+    const thread = await bb.sdk.threads.get({ threadId });
+    if (!thread.environmentId) return null;
+    const environment = await bb.sdk.environments.get({ environmentId: thread.environmentId });
+    return (await devboxes()).find((box) => box.hostId === environment.hostId) ?? null;
+  }
+
+  /**
+   * A new terminal in a thread's own terminal panel, connected to a devbox.
+   * Thread terminals run on the thread's machine: from the Mac that means
+   * `ssh` to the box; a thread already on that box just gets a shell there.
+   */
+  async function openThreadTerminal(threadId: string, ref: string, size: { cols: number; rows: number }) {
+    const row = await findMachine(ref);
+    if (!row) throw new Error(`No Ona-backed bb machine matches "${ref}". See \`bb ona list\`.`);
+    const thread = await bb.sdk.threads.get({ threadId });
+    if (!thread.environmentId) throw new Error("This thread has no environment yet; try again once it has started.");
+    const environment = await bb.sdk.environments.get({ environmentId: thread.environmentId });
+    const env = await ona.findEnvironment(row.resource.envId).catch(() => null);
+    const plan = threadTerminalPlan({
+      threadHostId: environment.hostId,
+      target: { hostId: row.hostId, envId: row.resource.envId, boxName: row.resource.envName },
+      otherDevboxHostIds: (await machines()).map((r) => r.hostId).filter((id) => id !== row.hostId),
+      cwd: env?.status?.content?.contentLocationInMachine ?? null,
+      sshBinary: sshPath,
+      sshHost: sshHost(row.resource.envId),
+    });
+    const terminal = await bb.sdk.terminals.create({
+      scope: { kind: "thread", threadId },
+      ...size,
+      title: plan.title,
+      ...(plan.argv ? { start: { mode: "argv" as const, argv: plan.argv } } : {}),
+    });
+    return { terminalId: terminal.id, via: plan.via };
+  }
+
+  bb.rpc.register(rpcContract, {
+    devboxes_list: async () => ({ devboxes: await devboxes() }),
+    thread_devbox: async ({ threadId }) => ({ devbox: await threadDevbox(threadId) }),
+    devbox_open_editor: async ({ hostId }) => {
+      const row = await findMachine(hostId);
+      if (!row) return { opened: false };
+      const { execFile } = await import("node:child_process");
+      execFile(resolveOna(), ["environment", "open", row.resource.envId]);
+      return { opened: true };
+    },
+  });
+
   // bb's settings are changed through its own CLI, one key at a time, so
   // unrelated settings are never rewritten.
   function bbCli(args: string[]) {
@@ -194,6 +328,55 @@ export default async function plugin(bb: BbPluginApi) {
       return run(process.execPath, [cli, ...args], { timeoutMs: 60_000, env: { ...env, ELECTRON_RUN_AS_NODE: "1" } });
     }
     return run(cli, args, { timeoutMs: 60_000, env });
+  }
+
+  /**
+   * Apply pending agent-CLI updates on connected Ona devboxes. Returns one
+   * line per box for the CLI and the plugin log.
+   */
+  async function updateClis(options: { ref?: string; force?: boolean } = {}): Promise<string[]> {
+    const wanted = parseProviderList(autoUpdateProviders);
+    const lines: string[] = [];
+    for (const row of await machines()) {
+      if (options.ref && ![row.hostId, row.machine, row.resource.envId, row.resource.envName].includes(options.ref)) continue;
+      const name = row.resource.envName;
+      if (row.status !== "connected") {
+        lines.push(`${name}: skipped (${row.status})`);
+        continue;
+      }
+      if (!options.force) {
+        const listed = await bb.sdk.threads.list({ hostId: row.hostId });
+        const threads = (Array.isArray(listed) ? listed : (listed as { threads?: unknown[] }).threads ?? []) as Array<{ status: string }>;
+        if (hostIsBusy(threads.map((thread) => thread.status))) {
+          lines.push(`${name}: skipped (an agent is running; retry with --force)`);
+          continue;
+        }
+      }
+      const statuses = (await bb.sdk.hosts.providerCliStatus({ hostId: row.hostId })) as Record<string, CliStatus>;
+      const pending = updatesToApply(statuses, wanted);
+      if (pending.length === 0) {
+        lines.push(`${name}: up to date (${wanted.map((p) => `${p} ${statuses[p]?.currentVersion ?? "not installed"}`).join(", ")})`);
+        continue;
+      }
+      for (const provider of pending) {
+        const from = statuses[provider]?.currentVersion ?? "?";
+        const to = statuses[provider]?.latestVersion ?? "latest";
+        const events = await bb.sdk.hosts.installProviderCli({ hostId: row.hostId, provider, actionKind: "update" });
+        const failed = events.find((event) => event.type === "error" || (event.type === "completed" && event.exitCode !== 0));
+        lines.push(
+          failed
+            ? `${name}: ${provider} update failed (${"message" in failed ? failed.message : `exit ${"exitCode" in failed ? failed.exitCode : "?"}`})`
+            : `${name}: ${provider} ${from} -> ${to}`,
+        );
+      }
+    }
+    return lines.length > 0 ? lines : ["No matching Ona devboxes."];
+  }
+
+  if (autoUpdateClis) {
+    bb.background.schedule("cli-updates", "0 9 * * 1-5", async () => {
+      for (const line of await updateClis()) bb.log.info(`cli update: ${line}`);
+    });
   }
 
   async function readGeneralSettings(): Promise<GeneralSettings> {
@@ -276,9 +459,12 @@ export default async function plugin(bb: BbPluginApi) {
     "  bb ona list [--json]          bb machines backed by Ona, with tunnel status",
     "  bb ona host <ref>             SSH host alias (use: ssh \"$(bb ona host <ref>)\")",
     "  bb ona ssh <ref>              Print the ssh command for a devbox",
+    "  bb ona ssh <ref> --thread <id>  Open another terminal to the devbox in that thread's terminal panel",
     "  bb ona open <ref>             Open the devbox in your Ona editor",
+    "  bb ona shell <ref> -- <cmd…>  Run one command in the devbox checkout and print its output",
     "  bb ona rename <ref> [name]    Rename the Ona environment (random fun name if omitted) and its bb machine",
     "  bb ona reconnect <ref>        Reopen the tunnel and restart the bb daemon (applies new settings)",
+    "  bb ona update [ref] [--force] Apply pending Claude Code / Codex updates now (also runs weekdays 09:00)",
     "",
     "<ref> is a bb machine name/id or an Ona environment name/id.",
   ].join("\n");
@@ -292,12 +478,26 @@ export default async function plugin(bb: BbPluginApi) {
       { name: "new", summary: "Create a new Ona devbox", usage: "bb ona new [project]" },
       { name: "list", summary: "List Ona-backed machines", usage: "bb ona list [--json]" },
       { name: "host", summary: "Print a devbox's SSH host alias", usage: "bb ona host <ref>" },
-      { name: "ssh", summary: "Print the ssh command for a devbox", usage: "bb ona ssh <ref>" },
+      {
+        name: "ssh",
+        summary: "Print the ssh command, or open a devbox terminal in a thread",
+        usage: "bb ona ssh <ref> [--thread <thread-id>]",
+      },
       { name: "open", summary: "Open a devbox in your Ona editor", usage: "bb ona open <ref>" },
+      {
+        name: "shell",
+        summary: "Run one command in a devbox checkout",
+        usage: "bb ona shell <ref> -- <command...>",
+      },
       {
         name: "rename",
         summary: "Rename a devbox (random fun name if omitted)",
         usage: "bb ona rename <ref> [name]",
+      },
+      {
+        name: "update",
+        summary: "Apply pending agent-CLI updates on devboxes",
+        usage: "bb ona update [ref] [--force]",
       },
       {
         name: "reconnect",
@@ -305,10 +505,18 @@ export default async function plugin(bb: BbPluginApi) {
         usage: "bb ona reconnect <ref>",
       },
     ],
-    async run(argv, ctx) {
+    async run(rawArgv, ctx) {
+      // Everything after a bare `--` is a command for `bb ona shell`.
+      const dash = rawArgv.indexOf("--");
+      const argv = dash === -1 ? rawArgv : rawArgv.slice(0, dash);
+      const commandArgv = dash === -1 ? [] : rawArgv.slice(dash + 1);
       const json = argv.includes("--json");
-      const flags = new Set(argv.filter((arg) => arg.startsWith("--")));
-      const [command, ref, newName] = argv.filter((arg) => !arg.startsWith("--"));
+      // `--thread <id>` takes a value; pull it out before reading positionals.
+      const threadAt = argv.indexOf("--thread");
+      const threadId = threadAt === -1 ? undefined : argv[threadAt + 1];
+      const rest = threadAt === -1 ? argv : [...argv.slice(0, threadAt), ...argv.slice(threadAt + 2)];
+      const flags = new Set(rest.filter((arg) => arg.startsWith("--")));
+      const [command, ref, newName] = rest.filter((arg) => !arg.startsWith("--"));
       try {
         switch (command) {
           case undefined:
@@ -335,6 +543,15 @@ export default async function plugin(bb: BbPluginApi) {
           case "host":
           case "ssh": {
             if (!ref) break;
+            if (command === "ssh" && threadAt !== -1) {
+              if (!threadId) return { exitCode: 1, stderr: "Usage: bb ona ssh <ref> --thread <thread-id>" };
+              const opened = await openThreadTerminal(threadId, ref, { cols: 120, rows: 32 });
+              if (json) return { exitCode: 0, stdout: JSON.stringify(opened) };
+              return {
+                exitCode: 0,
+                stdout: `Opened ${opened.terminalId} (${opened.via}) in thread ${threadId}. Attach: bb terminal attach ${opened.terminalId}`,
+              };
+            }
             const host = sshHost(await resolveEnvId(ref));
             return { exitCode: 0, stdout: command === "host" ? host : `ssh ${host}` };
           }
@@ -380,6 +597,30 @@ export default async function plugin(bb: BbPluginApi) {
             await provider.reconnect(row.resource, report, ctx.signal ?? new AbortController().signal);
             return { exitCode: 0, stdout: [...steps, `Reconnected ${row.machine}`].join("\n") };
           }
+          case "shell": {
+            if (!ref) break;
+            const target = await shellTarget(ref);
+            if (commandArgv.length > 0) {
+              const result = await runOnce(shellBackend, target, commandArgv, {
+                timeoutMs: 10 * 60_000,
+                signal: ctx.signal,
+              });
+              if (result.timedOut) {
+                return {
+                  exitCode: 124,
+                  stdout: result.output,
+                  stderr: `Still running after 10 minutes. Follow it with: bb terminal attach ${result.terminalId}`,
+                };
+              }
+              return { exitCode: result.exitCode ?? 1, stdout: result.output };
+            }
+            return {
+              exitCode: 1,
+              stderr: `Usage: bb ona shell ${ref} -- <command...>   (for an interactive shell: bb ona ssh ${ref} --thread <thread-id>)`,
+            };
+          }
+          case "update":
+            return { exitCode: 0, stdout: (await updateClis({ ref, force: flags.has("--force") })).join("\n") };
           case "open": {
             if (!ref) break;
             const envId = await resolveEnvId(ref);

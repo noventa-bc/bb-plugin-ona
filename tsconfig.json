@@ -17,6 +17,7 @@
     "allowImportingTsExtensions": true
   },
   "include": [
+    "app.tsx",
     "server.ts",
     "src",
     "test"
