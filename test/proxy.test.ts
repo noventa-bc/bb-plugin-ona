@@ -67,6 +67,13 @@ before(async () => {
   });
   target.on("upgrade", (req, socket) => {
     seen.push({ url: req.url ?? "", headers: req.headers });
+    if (req.url?.includes("reject")) {
+      // Like a rejected handshake that keeps the connection open: anything
+      // the client sends next would reach bb unfiltered if the proxy spliced.
+      socket.write("HTTP/1.1 401 Unauthorized\r\ncontent-length: 0\r\n\r\n");
+      socket.on("data", (data) => seen.push({ url: `raw:${String(data).split("\r\n")[0]}`, headers: {} }));
+      return;
+    }
     socket.end("HTTP/1.1 101 Switching Protocols\r\nupgrade: websocket\r\nconnection: Upgrade\r\n\r\nhello");
   });
   await new Promise<void>((resolve) => target.listen(0, "127.0.0.1", resolve));
@@ -124,6 +131,28 @@ test("proxy upgrades only the daemon socket", async () => {
     assert.match(reply, /^HTTP\/1\.1 101[\s\S]*hello$/);
     assert.equal(seen[0]!.url, "/internal/ws?sessionId=1");
     assert.equal(seen[0]!.headers["x-bb-gate-auth"], undefined);
+  } finally {
+    await proxy.close();
+  }
+});
+
+test("a rejected upgrade is closed, not spliced", async () => {
+  const proxy = await startDaemonProxy(() => targetUrl, noop);
+  try {
+    seen.length = 0;
+    const reply = await new Promise<string>((resolve, reject) => {
+      const socket = net.connect(proxy.port, "127.0.0.1", () => {
+        socket.write("GET /internal/ws?reject=1 HTTP/1.1\r\nhost: x\r\nconnection: Upgrade\r\nupgrade: websocket\r\n\r\n");
+        setTimeout(() => {
+          if (!socket.destroyed) socket.write("GET /api/v1/projects HTTP/1.1\r\nhost: x\r\n\r\n");
+        }, 100);
+      });
+      let data = "";
+      socket.setEncoding("utf8").on("data", (c) => (data += c)).on("close", () => resolve(data)).on("error", reject);
+    });
+    assert.match(reply, /^HTTP\/1\.1 401/);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.deepEqual(seen.map((entry) => entry.url), ["/internal/ws?reject=1"]);
   } finally {
     await proxy.close();
   }

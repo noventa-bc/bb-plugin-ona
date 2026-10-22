@@ -9,6 +9,9 @@
 //   ANY  /internal/*   (bb requires daemon credentials on these)
 //   WS   /internal/ws  (daemon socket; bb authenticates it)
 //
+// The WebSocket path is spliced only after bb answers 101; a rejected
+// handshake is answered and closed, so it can't carry follow-up requests.
+//
 // Blocked inside /internal: `hosts/enroll-key` and `server-move/*`, which bb
 // trusts for any loopback caller. Headers that could forge identity or origin
 // (`x-bb-*`, `x-forwarded-*`, `forwarded`, `x-real-ip`) are stripped.
@@ -122,8 +125,29 @@ export function startDaemonProxy(target: () => URL, log: PluginLogger): Promise<
       }
       upstream.write(`${lines.join("\r\n")}\r\n\r\n`);
       if (head.length > 0) upstream.write(head);
-      upstream.pipe(socket);
-      socket.pipe(upstream);
+      // Don't splice the sockets until bb accepts the upgrade. Otherwise a
+      // rejected handshake (e.g. 401) could leave a raw, unfiltered HTTP
+      // connection to bb that the devbox reuses for /api requests.
+      let response = Buffer.alloc(0);
+      const onHead = (chunk: Buffer) => {
+        response = Buffer.concat([response, chunk]);
+        const end = response.indexOf("\r\n\r\n");
+        if (end === -1) {
+          if (response.length > 16 * 1024) close();
+          return;
+        }
+        upstream.off("data", onHead);
+        if (!/^HTTP\/1\.[01] 101 /.test(response.subarray(0, end).toString("latin1"))) {
+          // Forward only the response head, then close both sides.
+          socket.end(response.subarray(0, end + 4));
+          upstream.destroy();
+          return;
+        }
+        socket.write(response);
+        upstream.pipe(socket);
+        socket.pipe(upstream);
+      };
+      upstream.on("data", onHead);
     });
     const close = () => {
       upstream.destroy();

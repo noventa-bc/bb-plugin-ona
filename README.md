@@ -254,12 +254,27 @@ too: `/internal/hosts/enroll-key` (mints machine enrollment keys) and
   so routing can't be tricked;
 - strips headers that could forge identity or origin (`x-bb-*`, including bb
   Connect's gate headers, `x-forwarded-*`, `forwarded`, `x-real-ip`);
+- connects the daemon's WebSocket only after bb accepts the handshake (`101`).
+  A rejected handshake is answered and closed, so the connection can't be
+  reused to slip other requests past the filter;
 - logs every blocked request (`bb plugin logs ona`).
 
-**What remains.** Code running as the same user on a devbox can read the bb
-daemon's own credentials there and act as that machine's daemon. That is true
-of any bb remote machine; the proxy ensures a devbox gets no more than a
-daemon's access, never your bb user's.
+The tunnel's port inside the devbox listens on loopback only (`127.0.0.1`,
+`::1`), so other machines on Ona's network can't reach it.
+
+**What remains.**
+
+- Code running as the same user on a devbox can read the bb daemon's
+  credentials there and act as that machine's daemon. That is true of any bb
+  remote machine. The proxy ensures a devbox gets no more than a daemon's
+  access, never your bb user's.
+- What a daemon credential can do on `/internal/*` is decided by bb, not by
+  this plugin. If bb doesn't scope a daemon to its own machine, a compromised
+  devbox could affect other machines' data in bb.
+- The proxy relies on its allowlist matching how bb routes requests. Upgrading
+  bb can add routes, so re-check the allowlist when bb changes its routing.
+- Treat what an agent on a devbox reports (output, diffs, links) as untrusted
+  input, as with any remote agent.
 
 **Check it yourself** from inside a devbox:
 
