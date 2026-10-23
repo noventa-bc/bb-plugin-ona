@@ -33,7 +33,9 @@ devbox. Use `bb` commands from a thread instead; bb routes them correctly.
   (optional `"classId"` from `ona environment list-classes`). New devboxes get
   the plugin's `inactivityTimeout` (default `3h`; `bb plugin config ona set inactivityTimeout 6h`).
 - `bb machine suspend <m>` stops the Ona environment; `bb machine resume <m>`
-  starts it, reopens the tunnel and restarts the daemon.
+  starts it, reopens the tunnel and restarts the daemon. Devboxes Ona stopped
+  on its own are marked suspended automatically, and starting a thread on one
+  wakes it (takes a few minutes).
 - Check agent CLIs: `bb machine provider-cli status <m>`.
 - Point a project at the devbox checkout:
   `bb project source add <projectId> --machine <m> --path /workspaces/<repo>`.

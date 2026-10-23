@@ -9,8 +9,9 @@ and you drive them from bb as usual.
   devboxes get fun names like `nimble-badger-ca1b` and a 3h idle timeout.
 - A **New Ona devbox** option in the environment picker, for starting a thread
   on a fresh devbox.
-- **Suspend and resume**: suspending a machine stops its Ona environment, and
-  resuming starts it again and reconnects.
+- **Suspend and resume**: bb's Pause/Play buttons stop and start the Ona
+  environment. A devbox Ona stopped on its own shows as suspended, and a new
+  thread or message on it starts it first.
 - **Shell access**: `ssh "$(bb ona host <name>)"`, `bb ona open <name>` for
   your Ona editor, and bb's terminal panel on the devbox.
 - `bb ona adopt <environment>` and `bb ona new [project]` to add devboxes, and

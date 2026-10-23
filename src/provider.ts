@@ -3,7 +3,7 @@
 import type { BbPluginApi, MachineBootstrapRequest, MachineExecutor } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { friendlyName } from "./names.ts";
-import { isRunning, type OnaCli, type OnaEnvironment } from "./ona.ts";
+import { isRunning, isStopped, type OnaCli, type OnaEnvironment } from "./ona.ts";
 import type { PluginMachineProviderAvailability } from "./setup.ts";
 import { daemonEnv, shellQuote, sshCapture, sshExecutor, type TunnelManager } from "./ssh.ts";
 
@@ -85,6 +85,17 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
 
   async function ensureRunning(env: OnaEnvironment, report: PluginMachineProviderProgress, signal: AbortSignal) {
     if (isRunning(env)) return;
+    // Ona refuses to start an environment that is still stopping; let it finish first.
+    if (env.status?.phase === "ENVIRONMENT_PHASE_STOPPING") {
+      report.step(`Waiting for Ona to finish stopping ${env.metadata.name ?? env.id}`);
+      const deadline = Date.now() + 10 * 60_000;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 5_000));
+        signal.throwIfAborted();
+        const current = await ona.findEnvironment(env.id, signal);
+        if (!current || current.status?.phase !== "ENVIRONMENT_PHASE_STOPPING") break;
+      }
+    }
     report.step(`Starting Ona environment ${env.metadata.name ?? env.id}`);
     await ona.start(env.id, signal);
   }
@@ -282,8 +293,12 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     async suspend({ resource, report, signal }) {
       const owned = resourceSchema.parse(resource);
       await disconnect(owned.envId);
-      report.step(`Stopping Ona environment ${owned.envName}`);
-      await ona.stop(owned.envId, signal);
+      // Ona may have stopped it already (idle timeout); bb then only records the suspension.
+      const env = await ona.findEnvironment(owned.envId, signal);
+      if (env && !isStopped(env)) {
+        report.step(`Stopping Ona environment ${owned.envName}`);
+        await ona.stop(owned.envId, signal);
+      }
       return { resource };
     },
     async resume({ resource, checkpoint, report, signal }) {

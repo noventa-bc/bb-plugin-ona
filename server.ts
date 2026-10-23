@@ -31,6 +31,7 @@ import {
   type OnaResource,
 } from "./src/provider.ts";
 import { startDaemonProxy } from "./src/proxy.ts";
+import { machinesToSuspend } from "./src/lifecycle.ts";
 import { rpcContract, type Devbox } from "./src/rpc.ts";
 import { runOnce, threadTerminalPlan, type ShellBackend, type ShellTarget } from "./src/shells.ts";
 import { TunnelManager } from "./src/ssh.ts";
@@ -123,10 +124,13 @@ export default async function plugin(bb: BbPluginApi) {
   // bb trusts loopback, so a raw tunnel would expose its whole API to devboxes.
   const proxy = await startDaemonProxy(() => new URL(bb.server.loopbackBaseUrl), bb.log);
   bb.onDispose(() => proxy.close());
-  // Don't let tunnel reconnects wake environments Ona has stopped.
+  // Don't let tunnel reconnects wake environments Ona has stopped; a stop
+  // noticed here is synced to bb right away (see syncStoppedMachines).
   const tunnels = new TunnelManager(sshPath, port, () => proxy.port, bb.log, async (envId) => {
     const env = await ona.findEnvironment(envId);
-    return env !== null && !isStopped(env);
+    const stopped = env !== null && isStopped(env);
+    if (stopped) void syncStoppedMachines();
+    return env !== null && !stopped;
   });
 
   async function rememberedTunnels(): Promise<string[]> {
@@ -177,6 +181,8 @@ export default async function plugin(bb: BbPluginApi) {
     hostId: string;
     machine: string;
     status: string;
+    /** bb lifecycle phase (active, suspended, resuming, ...). */
+    phase: string;
     resource: OnaResource;
   }
 
@@ -189,10 +195,60 @@ export default async function plugin(bb: BbPluginApi) {
       if (!parsed.success) continue;
       // A suspended machine reports "disconnected"; surface the suspension itself.
       const status = host.lifecycle?.suspendedAt ? "suspended" : String(host.status);
-      rows.push({ hostId: host.id, machine: host.name, status, resource: parsed.data });
+      rows.push({
+        hostId: host.id,
+        machine: host.name,
+        status,
+        phase: host.lifecycle?.phase ?? "active",
+        resource: parsed.data,
+      });
     }
     return rows;
   }
+
+  /**
+   * Mark machines suspended in bb when Ona stopped their environment (idle
+   * timeout, Ona UI). bb then offers Resume and wakes the box when a thread
+   * needs it, instead of failing against a dead daemon.
+   */
+  let syncing: Promise<void> | null = null;
+  function syncStoppedMachines(): Promise<void> {
+    syncing ??= (async () => {
+      try {
+        const rows = await machines();
+        if (!rows.some((row) => row.phase === "active" && row.status !== "connected")) return;
+        const envs = await ona.listEnvironments();
+        const states = rows.map((row) => ({ hostId: row.hostId, envId: row.resource.envId, phase: row.phase, status: row.status }));
+        for (const hostId of machinesToSuspend(states, envs)) {
+          const row = rows.find((r) => r.hostId === hostId)!;
+          bb.log.info(`${row.machine}: Ona stopped the environment; marking the machine suspended`);
+          await bb.sdk.hosts.experimental_suspend({ hostId }).catch((error) => {
+            bb.log.warn(`${row.machine}: could not mark suspended: ${error instanceof Error ? error.message : String(error)}`);
+          });
+        }
+      } catch (error) {
+        bb.log.warn(`stopped-machine sync failed: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        syncing = null;
+      }
+    })();
+    return syncing;
+  }
+
+  bb.background.service("lifecycle-sync", {
+    async start(signal) {
+      while (!signal.aborted) {
+        await syncStoppedMachines();
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, 2 * 60_000);
+          signal.addEventListener("abort", () => {
+            clearTimeout(timer);
+            resolve();
+          }, { once: true });
+        });
+      }
+    },
+  });
 
   /** Resolve a bb machine name/id or an Ona environment name/id to an env id. */
   async function resolveEnvId(ref: string): Promise<string> {

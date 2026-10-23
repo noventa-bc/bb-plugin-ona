@@ -16,21 +16,22 @@ const NATIVE_OPEN_SELECTOR =
 
 /**
  * bb's native "Open in" can't reach Ona devboxes, so hide it in this thread's
- * header while our buttons are shown, and restore it when they go away. The
- * header re-renders, so keep re-applying with a MutationObserver.
+ * header while our buttons are shown, and restore it when they go away. bb
+ * renders the control late (only once the workspace is ready, e.g. after a
+ * devbox wakes up), so keep looking for it with a MutationObserver.
  */
 function useHideNativeOpenIn(anchor: React.RefObject<HTMLElement | null>, active: boolean) {
   useEffect(() => {
     if (!active || !anchor.current) return;
-    // Climb to the nearest ancestor that also holds the native control: this thread's header.
-    let header: HTMLElement | null = anchor.current.parentElement;
-    for (let depth = 0; header && depth < 8 && !header.querySelector(NATIVE_OPEN_SELECTOR); depth++) {
-      header = header.parentElement;
-    }
-    if (!header) return;
     const hidden = new Set<HTMLElement>();
     const hide = () => {
-      header!.querySelectorAll<HTMLElement>(NATIVE_OPEN_SELECTOR).forEach((button) => {
+      // The nearest ancestor that also holds the native control is this thread's header.
+      let header: HTMLElement | null = anchor.current?.parentElement ?? null;
+      for (let depth = 0; header && depth < 8 && !header.querySelector(NATIVE_OPEN_SELECTOR); depth++) {
+        header = header.parentElement;
+      }
+      if (!header?.querySelector(NATIVE_OPEN_SELECTOR)) return;
+      header.querySelectorAll<HTMLElement>(NATIVE_OPEN_SELECTOR).forEach((button) => {
         // The control is a span holding the split button; hide the whole span.
         const control = button.closest<HTMLElement>("span.inline-flex") ?? button;
         if (control.contains(anchor.current)) return;
@@ -41,10 +42,20 @@ function useHideNativeOpenIn(anchor: React.RefObject<HTMLElement | null>, active
       });
     };
     hide();
-    const observer = new MutationObserver(hide);
-    observer.observe(header, { childList: true, subtree: true });
+    // Batch bursts of DOM changes (streaming messages) into one check per frame.
+    let frame = 0;
+    const observer = new MutationObserver(() => {
+      if (frame === 0) {
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          hide();
+        });
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
     return () => {
       observer.disconnect();
+      cancelAnimationFrame(frame);
       hidden.forEach((control) => {
         control.style.display = "";
       });

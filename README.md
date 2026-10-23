@@ -37,7 +37,10 @@ SSH, and the tunnel lands on a small proxy that only lets bb's daemon traffic
 through (see [Security model](#security-model)). The server stays on loopback,
 and nothing goes through getbb.app or any other third-party relay. Tunnels only
 work while your Mac is awake and bb is running. The tunnel does not reconnect
-to an environment Ona has stopped, so Ona's idle auto-stop still works.
+to an environment Ona has stopped, so Ona's idle auto-stop still works. When
+Ona stops a devbox, the plugin marks its bb machine suspended (within about two
+minutes). bb's machine list then shows Resume (▶), and starting a thread or
+sending a message on that devbox starts it first and waits until it's ready.
 
 ## Prerequisites
 
@@ -212,8 +215,8 @@ bb ona open <name>                       # open the devbox in your Ona editor
 bb ona list                    # machines, Ona env, tunnel status
 bb ona rename <name> [new]     # rename env + bb machine (random fun name if omitted)
 bb ona reconnect <name>        # reopen the tunnel and restart the bb daemon
-bb machine suspend ona:<name>  # stops the Ona environment
-bb machine resume ona:<name>   # starts it, reopens the tunnel, restarts the daemon
+bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
+bb machine resume ona:<name>   # starts it, reopens the tunnel, restarts the daemon (Play button)
 bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's daemon only
 ```
 
@@ -225,8 +228,9 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
   `mv ~/.bb-machines ~/.bb-machines.shared`, then add the machine again.
 - **Creation times out or fails:** check `bb plugin logs ona` and `bb machine show <id>`.
   Prerequisite failures name the missing tool.
-- **Machine disconnected:** the Ona environment may have auto-stopped. Run
-  `bb machine resume ona:<name>`, or `bb ona reconnect <name>` if it is running.
+- **Machine disconnected:** if Ona stopped it, the plugin marks it suspended
+  within about two minutes and it resumes on demand. If it is running, use
+  `bb ona reconnect <name>`.
 - **Codex: "Unable to load codex models":** right after setup, Codex rebuilds its
   index from your session files (can take a minute). Retry shortly after.
 - **Shared `~/.codex` database corruption:** for Codex you run yourself on the
