@@ -1,14 +1,11 @@
 # Changelog
 
-All notable changes to the `ona` bb plugin. The plugin is still at version
-0.1.0 (`package.json`) and has not been released; entries are grouped by date,
-newest first, with the commit that made each change.
+All notable changes to the `ona` bb plugin, newest first, with the commit that
+made each change. The version is the one in `package.json`.
 
-## 0.1.0 (unreleased)
+## 0.2.0 (2026-10-23)
 
-### 2026-10-23
-
-#### Added
+### Added
 - Spend chip on devbox threads: the thread header shows what the thread has
   cost so far. For Codex this is OpenAI's own per-thread estimate, read from a
   short-lived Codex app-server on the box. For Claude Code it is the session's
@@ -22,7 +19,7 @@ newest first, with the commit that made each change.
 - `waitForSharedHome` setting (on by default): connecting a box waits until its
   NFS home is mounted before starting bb's daemon and agents. (`13d439c`)
 
-#### Fixed
+### Fixed
 - "no rollout found" on Codex threads started right after a box woke: Codex
   could start before the shared home was mounted, write its thread to the
   container's own home, and lose it when the mount appeared. (`13d439c`)
@@ -31,9 +28,9 @@ newest first, with the commit that made each change.
 - bb's native "Open in" control stayed visible on woken boxes, where bb renders
   it late; it is now hidden whenever it appears. (`3d00dd2`)
 
-### 2026-10-22
+## 0.1.0 (2026-10-22)
 
-#### Added
+### Added
 - Editor button in the header of devbox threads; it opens the box in your Ona
   editor. bb's native "Open in" is hidden on devbox threads because it can't
   reach devboxes. (`ce3b3a5`)
@@ -55,11 +52,11 @@ newest first, with the commit that made each change.
   - `bb ona` commands: setup, adopt, new, list, host, ssh, open, rename,
     reconnect; prerequisite checks; README, overview and agent skill.
 
-#### Changed
+### Changed
 - Machines that are suspended now show as "suspended" instead of
   "disconnected". (`ce3b3a5`)
 
-#### Security
+### Security
 - The proxy only joins a devbox's WebSocket to bb once bb has accepted it. A
   rejected upgrade that bb kept open could otherwise have left a devbox an
   unfiltered connection to bb's API. (`8a72030`)
