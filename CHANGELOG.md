@@ -11,7 +11,7 @@ made each change. The version is the one in `package.json`.
   thread timeline. Codex prints it on every session in a repo with that setting, it is
   harmless, and bb can't mute warnings. The plugin's app adds a CSS rule that
   hides warning rows with that exact text, so other warnings still show. If
-  Codex rewords the message, the rule in `app.tsx` needs updating. (`a711d7c`)
+  Codex rewords the message, the rule in `app.tsx` needs updating. (`1e5e4d8`)
 
 ## 0.2.0 (2026-10-23)
 
