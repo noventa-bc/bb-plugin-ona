@@ -129,6 +129,7 @@ View them with `bb plugin config ona`, and change one with `bb plugin config ona
 | `sshPath` | `/usr/bin/ssh` | Path to `ssh`. |
 | `defaultProject` | *(empty)* | Ona project used when creating a devbox without one, e.g. `my-app`. |
 | `inactivityTimeout` | `3h` | Auto-stop timeout for devboxes bb creates. Adopted ones keep their own. |
+| `waitForSharedHome` | `true` | After a devbox starts, wait until its NFS home is mounted before starting bb's daemon and agents. Starting earlier lets Codex write threads into the container's own home, where the mount hides them ("no rollout found"). Turn off if your environments don't share a home. |
 | `codexSqliteHome` | `/workspaces/.codex-sqlite-bb` | Where Codex launched by bb keeps its SQLite state on the devbox's local disk. |
 | `machineDataDir` | `/workspaces/.bb-machines` | Local folder that `~/.bb-machines` is symlinked to on every devbox. Empty leaves `~/.bb-machines` alone. |
 

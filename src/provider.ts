@@ -61,6 +61,8 @@ export interface ProviderDeps {
    * leaves ~/.bb-machines alone.
    */
   machineDataDir: string;
+  /** Hold off starting anything until $HOME is a mount point (shared NFS home). */
+  waitForSharedHome: boolean;
   port: () => number;
   rememberTunnel(envId: string): Promise<void>;
   forgetTunnel(envId: string): Promise<void>;
@@ -119,6 +121,32 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     throw new Error(`Could not SSH into the devbox within 10 minutes: ${last}`);
   }
 
+  /**
+   * Right after Ona starts a devbox, SSH can work before the shared NFS home is
+   * mounted. Anything started then (the bb daemon, Codex) writes to the
+   * container's own home, which the mount later hides: Codex loses the thread's
+   * rollout and can't resume it. Wait for $HOME to become a mount point.
+   */
+  async function waitForSharedHome(executor: MachineExecutor, report: PluginMachineProviderProgress, signal: AbortSignal) {
+    const probe = () => sshCapture(executor, 'mountpoint -q "$HOME"', signal, CHECK_TIMEOUT_MS)
+      .then((result) => result.exitCode === 0)
+      .catch((error) => {
+        if (signal.aborted) throw error;
+        return false;
+      });
+    if (await probe()) return;
+    report.step("Waiting for the shared home folder to be mounted");
+    const deadline = Date.now() + 5 * 60_000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
+      signal.throwIfAborted();
+      if (await probe()) return;
+    }
+    throw new Error(
+      "The devbox's home folder was not mounted within 5 minutes. If your Ona environments don't share a home folder, turn off the plugin's waitForSharedHome setting.",
+    );
+  }
+
   async function waitForTunnel(executor: MachineExecutor, report: PluginMachineProviderProgress, signal: AbortSignal) {
     report.step("Opening SSH reverse tunnel to bb server");
     const url = `http://127.0.0.1:${deps.port()}/health`;
@@ -161,6 +189,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       daemonEnv(deps.codexSqliteHome),
     );
     await waitForSsh(executor, report, signal);
+    if (deps.waitForSharedHome) await waitForSharedHome(executor, report, signal);
     if (deps.codexSqliteHome) {
       await sshCapture(executor, `mkdir -p ${shellQuote(deps.codexSqliteHome)}`, signal, CHECK_TIMEOUT_MS);
     }

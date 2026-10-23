@@ -83,6 +83,13 @@ export default async function plugin(bb: BbPluginApi) {
       default: "/workspaces/.bb-machines",
       experimental_schema: devboxPath,
     },
+    waitForSharedHome: {
+      type: "boolean",
+      label: "Wait for the shared home on devboxes",
+      description:
+        "After a devbox starts, wait until its home folder (shared over NFS) is mounted before starting bb's daemon and agents. Turn off if your Ona environments don't share a home folder.",
+      default: true,
+    },
     autoUpdateClis: {
       type: "boolean",
       label: "Auto-update agent CLIs on devboxes",
@@ -103,6 +110,7 @@ export default async function plugin(bb: BbPluginApi) {
     inactivityTimeout,
     codexSqliteHome,
     machineDataDir,
+    waitForSharedHome,
     autoUpdateClis,
     autoUpdateProviders,
   } = await settings.get();
@@ -155,6 +163,7 @@ export default async function plugin(bb: BbPluginApi) {
     inactivityTimeout,
     codexSqliteHome,
     machineDataDir,
+    waitForSharedHome,
     port,
     async rememberTunnel(envId) {
       const current = await rememberedTunnels();
