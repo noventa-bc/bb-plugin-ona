@@ -147,7 +147,25 @@ function DevboxEditor({ threadId, isCompactViewport }: PluginThreadHeaderActionP
   );
 }
 
+/**
+ * Codex warns on every session start when a repo's
+ * .codex/config.toml has a setting it ignores (`shell_environment_policy.include`).
+ * It is harmless and bb has no way to mute it, so hide those timeline rows.
+ * bb renders each warning as its own row with the full text in a title.
+ */
+const HIDDEN_WARNING_CSS =
+  '[data-timeline-row-id*=":op:warning:"]:has([title*="`shell_environment_policy.include` is ignored"]) { display: none !important; }';
+
+function hideKnownWarnings() {
+  if (typeof document === "undefined" || document.getElementById("bb-ona-hidden-warnings")) return;
+  const style = document.createElement("style");
+  style.id = "bb-ona-hidden-warnings";
+  style.textContent = HIDDEN_WARNING_CSS;
+  document.head.appendChild(style);
+}
+
 export default definePluginApp((app) => {
+  hideKnownWarnings();
   app.slots.experimental_threadHeaderAction({
     id: "devbox",
     title: "Devbox editor",
