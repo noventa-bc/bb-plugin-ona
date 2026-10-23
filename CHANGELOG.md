@@ -3,6 +3,16 @@
 All notable changes to the `ona` bb plugin, newest first, with the commit that
 made each change. The version is the one in `package.json`.
 
+## Unreleased
+
+### Added
+- Codex's "ignoring 1 unrecognized configuration setting …
+  `shell_environment_policy.include` is ignored" warning is hidden in bb's
+  thread timeline. Codex prints it on every session in a repo with that setting, it is
+  harmless, and bb can't mute warnings. The plugin's app adds a CSS rule that
+  hides warning rows with that exact text, so other warnings still show. If
+  Codex rewords the message, the rule in `app.tsx` needs updating. (`a711d7c`)
+
 ## 0.2.0 (2026-10-23)
 
 ### Added
