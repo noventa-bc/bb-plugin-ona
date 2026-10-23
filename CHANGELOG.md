@@ -3,7 +3,7 @@
 All notable changes to the `ona` bb plugin, newest first, with the commit that
 made each change. The version is the one in `package.json`.
 
-## Unreleased
+## 0.2.1 (2026-10-23)
 
 ### Added
 - Codex's "ignoring 1 unrecognized configuration setting …
