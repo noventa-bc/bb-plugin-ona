@@ -1,9 +1,10 @@
-// Thread header Editor button for threads that run on an Ona devbox: opens the
-// box in the Ona editor. bb's own terminal panel already covers shells.
+// Thread header for threads that run on an Ona devbox: what the thread has
+// spent so far, and an Editor button that opens the box in the Ona editor.
+// bb's own terminal panel already covers shells.
 import { useEffect, useRef, useState } from "react";
 import type { PluginThreadHeaderActionProps } from "@get-bb/plugin-sdk/app";
 import { definePluginApp, experimental_Icon as Icon, useRpc } from "@get-bb/plugin-sdk/app";
-import type { Devbox, rpcContract } from "./src/rpc.ts";
+import type { Devbox, rpcContract, ThreadCost } from "./src/rpc.ts";
 
 const editorButton = [
   "inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-muted-foreground shadow-sm",
@@ -63,6 +64,53 @@ function useHideNativeOpenIn(anchor: React.RefObject<HTMLElement | null>, active
   }, [anchor, active]);
 }
 
+const costChip =
+  "inline-flex h-7 items-center rounded-md border border-border bg-background px-2 text-xs font-medium tabular-nums text-muted-foreground shadow-sm";
+
+function formatUsd(usd: number): string {
+  if (usd > 0 && usd < 0.01) return "<$0.01";
+  return `$${usd.toFixed(usd >= 100 ? 0 : 2)}`;
+}
+
+function ago(timestamp: number): string {
+  const minutes = Math.round((Date.now() - timestamp) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  return `${Math.round(minutes / 60)}h ago`;
+}
+
+/** What this thread has cost so far, refreshed every minute while it's open. */
+function ThreadCostChip({ threadId }: { threadId: string }) {
+  const rpc = useRpc<typeof rpcContract>();
+  const [cost, setCost] = useState<ThreadCost | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      rpc
+        .call("thread_cost", { threadId })
+        .then(({ cost }) => !cancelled && setCost(cost))
+        .catch(() => undefined);
+    void load();
+    const timer = setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [rpc, threadId]);
+
+  if (!cost) return null;
+  const source =
+    cost.basis === "openai-estimate" ? "Codex · OpenAI's usage estimate" : "Claude Code · tokens × Anthropic list prices";
+  const partial = cost.partial ? " · some usage couldn't be priced, so the real total is higher" : "";
+  return (
+    <span className={costChip} title={`Spent in this thread so far. ${source} · updated ${ago(cost.updatedAt)}${partial}`}>
+      {cost.partial ? "≥" : ""}
+      {formatUsd(cost.usd)}
+    </span>
+  );
+}
+
 function DevboxEditor({ threadId, isCompactViewport }: PluginThreadHeaderActionProps) {
   const rpc = useRpc<typeof rpcContract>();
   const [devbox, setDevbox] = useState<Devbox | null>(null);
@@ -82,17 +130,20 @@ function DevboxEditor({ threadId, isCompactViewport }: PluginThreadHeaderActionP
 
   if (!devbox) return null;
   return (
-    <button
-      ref={root}
-      type="button"
-      className={editorButton}
-      aria-label={`Open ${devbox.envName} in the Ona editor`}
-      title={`Open ${devbox.envName} in your Ona editor`}
-      onClick={() => void rpc.call("devbox_open_editor", { hostId: devbox.hostId })}
-    >
-      <Icon name="Code" fallback="SquarePen" className="size-3.5" aria-hidden />
-      {!isCompactViewport && <span>Editor</span>}
-    </button>
+    <span className="inline-flex items-center gap-1.5">
+      <ThreadCostChip threadId={threadId} />
+      <button
+        ref={root}
+        type="button"
+        className={editorButton}
+        aria-label={`Open ${devbox.envName} in the Ona editor`}
+        title={`Open ${devbox.envName} in your Ona editor`}
+        onClick={() => void rpc.call("devbox_open_editor", { hostId: devbox.hostId })}
+      >
+        <Icon name="Code" fallback="SquarePen" className="size-3.5" aria-hidden />
+        {!isCompactViewport && <span>Editor</span>}
+      </button>
+    </span>
   );
 }
 

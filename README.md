@@ -16,8 +16,8 @@ bb ona new <ona-project>                  # 4b. or create a fresh devbox
 bb ona list                               # 5. wait until it says "connected"
 ```
 
-Then pick the machine in bb's composer. Threads running on a devbox get an
-**Editor** button in their header.
+Then pick the machine in bb's composer. Threads running on a devbox show what
+they've spent so far and an **Editor** button in their header.
 
 ## How it works
 
@@ -200,6 +200,21 @@ opens the box in your Ona editor. For a shell, use bb's terminal panel in the ri
 devbox thread it already runs on the box.
 
 bb's native **Open in** menu can't reach devboxes, so the plugin hides it on devbox threads.
+
+### Spend per thread
+
+A devbox thread's header shows what the thread has cost so far (for example `$3.50`); hover it
+for the source. It updates when a turn finishes (at most every 5 minutes per thread), not while
+the agent is still working. A paused box shows its last figure and isn't woken.
+
+- **Codex:** OpenAI's own per-thread estimate, the number behind Codex's `estimated-thread-cost`
+  status item. The plugin asks a short-lived `codex app-server` on the box (`account/usage/read`),
+  using the box's own Codex login.
+- **Claude Code:** Claude Code doesn't save its cost, so the plugin adds up the session's tokens per
+  model (including subagents) from `~/.claude/projects` on the box and multiplies by Anthropic list
+  prices, which is how Claude Code works out its own figure. The prices live in `CLAUDE_PRICES` in
+  `src/cost.ts`; update them when Anthropic changes prices. A model missing from that table shows
+  as `≥$…` (the total leaves it out).
 
 **From your Mac's terminal:**
 

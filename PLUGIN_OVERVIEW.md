@@ -12,6 +12,8 @@ and you drive them from bb as usual.
 - **Suspend and resume**: bb's Pause/Play buttons stop and start the Ona
   environment. A devbox Ona stopped on its own shows as suspended, and a new
   thread or message on it starts it first.
+- **Spend per thread**: a devbox thread's header shows its cost so far (OpenAI's
+  estimate for Codex, tokens × Anthropic list prices for Claude Code).
 - **Shell access**: `ssh "$(bb ona host <name>)"`, `bb ona open <name>` for
   your Ona editor, and bb's terminal panel on the devbox.
 - `bb ona adopt <environment>` and `bb ona new [project]` to add devboxes, and
