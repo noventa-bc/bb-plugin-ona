@@ -3,7 +3,16 @@ import { test } from "node:test";
 import { OnaSnapshot, type OnaEnvironment } from "../src/ona.ts";
 import type { WorkspaceView } from "../src/lifecycle.ts";
 import { ALL, GIVE_UP_AFTER, HostGuard } from "../src/reconcile.ts";
-import { connectedAtKey, createSync, forgetBox, RELEASING_KEY, type BbHost, type ThreadRecord } from "../src/sync.ts";
+import {
+  connectedAtKey,
+  createSync,
+  forgetBox,
+  matchesRef,
+  RELEASING_KEY,
+  type BbHost,
+  type Row,
+  type ThreadRecord,
+} from "../src/sync.ts";
 
 // A fake of the bb calls a sync pass makes (SyncBb), one Ona box per machine.
 const HOUR = 3_600_000;
@@ -237,4 +246,10 @@ test("removing a machine drops its box's stored keys and leaves other boxes' alo
   assert.deepEqual(kv.get(RELEASING_KEY), ["env-h2"]);
   await forgetBox(store, "env-h9");
   assert.equal(kv.size, 2, "an unknown box changes nothing");
+});
+
+test("a ref matches a row by host id, machine name, env id or env name, and nothing else", () => {
+  const row = { hostId: "h1", machine: "box-one", resource: { envId: "env-1", envName: "one" } } as Row;
+  for (const ref of ["h1", "box-one", "env-1", "one"]) assert.equal(matchesRef(row, ref), true, ref);
+  assert.equal(matchesRef(row, "two"), false);
 });

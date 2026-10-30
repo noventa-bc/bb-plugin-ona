@@ -131,6 +131,10 @@ export interface Row {
   resource: OnaResource;
 }
 
+/** A user's ref names a row by bb host id, bb machine name, Ona env id or Ona env name. */
+export const matchesRef = (row: Row, ref: string) =>
+  [row.hostId, row.machine, row.resource.envId, row.resource.envName].includes(ref);
+
 export interface StatusRow {
   machine: string;
   hostId: string;
@@ -412,9 +416,7 @@ export function createSync(deps: SyncDeps) {
   }
 
   async function statusRows(ref?: string): Promise<StatusRow[]> {
-    const rows = (await machines()).filter(
-      (r) => !ref || [r.hostId, r.machine, r.resource.envId, r.resource.envName].includes(ref),
-    );
+    const rows = (await machines()).filter((r) => !ref || matchesRef(r, ref));
     const listing = await snapshot.get().catch(() => snapshot.latest);
     return Promise.all(
       rows.map(async (row) => {
