@@ -9,6 +9,7 @@ const environmentSchema = z.object({
     .object({
       name: z.string().optional(),
       projectId: z.string().optional(),
+      archivedAt: z.string().optional(),
     })
     .passthrough(),
   status: z
@@ -59,6 +60,14 @@ export class OnaCli {
   async listEnvironments(signal?: AbortSignal): Promise<OnaEnvironment[]> {
     const out = await this.run(["environment", "list", "-o", "json"], signal);
     return z.array(environmentSchema).parse(JSON.parse(out || "[]"));
+  }
+
+  /** One environment by id, including archived ones, which `list` leaves out. */
+  async getEnvironment(envId: string, signal?: AbortSignal): Promise<OnaEnvironment> {
+    const out = await this.run(["environment", "get", envId, "-o", "json"], signal);
+    // `get` takes several ids, so it may print an array.
+    const parsed: unknown = JSON.parse(out);
+    return environmentSchema.parse(Array.isArray(parsed) ? parsed[0] : parsed);
   }
 
   /** Match by exact id, exact name, or unambiguous id prefix. */
@@ -118,6 +127,10 @@ export function isStarting(env: OnaEnvironment): boolean {
     phase === "ENVIRONMENT_PHASE_STARTING" ||
     phase === "ENVIRONMENT_PHASE_PENDING"
   );
+}
+
+export function isArchived(env: OnaEnvironment): boolean {
+  return Boolean(env.metadata.archivedAt);
 }
 
 export function isStopped(env: OnaEnvironment): boolean {

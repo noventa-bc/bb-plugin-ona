@@ -15,6 +15,9 @@ made each change. The version is the one in `package.json`.
   report repairs instead of making them. (`bdc7e4b`)
 
 ### Fixed
+- An archived devbox is reported as archived in `bb ona status`, not gone.
+  Archived environments drop out of `ona environment list`, so before reporting
+  a box gone the plugin asks Ona about it once with `ona environment get`.
 - bb no longer gets stuck when a devbox is started, stopped, restarted or
   deleted outside bb (Ona UI, `ona` CLI, auto-stop):
   - a box that came back gets its bb daemon restarted, but only after an SSH

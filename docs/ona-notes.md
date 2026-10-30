@@ -24,7 +24,10 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   - `metadata.lastStartedAt`
 - Commands the plugin may use or could use:
   - `ona environment exec` (goes through the EnvironmentOps API, not SSH)
-  - `ona environment keep-alive`
+  - `ona environment keep-alive`: watches a process (`--pid`, or a command
+    after `--`) and sends activity signals every `--interval` (default `5m`)
+    while it runs; `--environment-id` picks the box. It is not an on/off
+    switch (checked 2026-10-30).
   - `ona environment port open` and `ona environment port forward`
   - `ona environment devcontainer rebuild` and `ona environment devcontainer logs`
   - `ona environment logs --follow`
@@ -60,8 +63,10 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 
 ## Known gaps
 
-- Archived environments vanish from `ona environment list`. The reconciler's
-  "missing" rule therefore reports them as gone, even though they still exist
-  in Ona.
+- Archived environments vanish from `ona environment list`, but
+  `ona environment get <id>` still returns them. The plugin reads
+  `metadata.archivedAt` from that output to tell archived from gone. That field
+  name comes from Ona's API and hasn't been seen on a real archived box yet
+  (checked 2026-10-30); if it's wrong, archived boxes are still reported gone.
 - The Ona SDK (`@gitpod/sdk`) is Enterprise-only. The Ona CLI is the portable
   path for plugins that must run for every user.

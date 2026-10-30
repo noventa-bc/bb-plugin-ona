@@ -36,7 +36,7 @@ export interface MachineView {
 export type OnaView =
   | { kind: "unknown" }
   /** Absent from `streak` consecutive good listings. */
-  | { kind: "missing"; streak: number }
+  | { kind: "missing"; streak: number; archived?: boolean }
   | { kind: "env"; phase: string };
 
 export type Action =
@@ -85,7 +85,10 @@ export function decide(machine: MachineView, ona: OnaView, now: number): Decisio
       return { action: "none", reason: "not in Ona's list (checking again)" };
     return {
       action: "suspend-observed",
-      reason: "the Ona environment is gone; remove the machine with `bb machine remove`",
+      reason:
+        ona.kind === "missing" && ona.archived
+          ? "the Ona environment is archived; unarchive it in Ona, or remove the machine with `bb machine remove`"
+          : "the Ona environment is gone; remove the machine with `bb machine remove`",
     };
   }
   if (machine.status === "connected") return { action: "none", reason: "connected" };

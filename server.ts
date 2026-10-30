@@ -6,7 +6,7 @@
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { randomFriendlyName } from "./src/names.ts";
-import { isRunning, isStopped, OnaCli, OnaSnapshot, sshHost, type OnaListing } from "./src/ona.ts";
+import { isArchived, isRunning, isStopped, OnaCli, OnaSnapshot, sshHost, type OnaListing } from "./src/ona.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -373,7 +373,7 @@ export default async function plugin(bb: BbPluginApi) {
   }
 
   /** Consecutive good listings each missing env was absent from (rule 4). */
-  const missing = new Map<string, { streak: number; at: number }>();
+  const missing = new Map<string, { streak: number; at: number; archived?: boolean }>();
 
   function onaView(envId: string, listing: OnaListing | null): OnaView {
     // An empty list is as likely a CLI/context problem as "no environments".
@@ -385,8 +385,24 @@ export default async function plugin(bb: BbPluginApi) {
     }
     const seen = missing.get(envId);
     const streak = seen?.at === listing.at ? seen.streak : (seen?.streak ?? 0) + 1;
-    missing.set(envId, { streak, at: listing.at });
-    return { kind: "missing", streak };
+    missing.set(envId, { streak, at: listing.at, archived: seen?.archived });
+    return { kind: "missing", streak, archived: seen?.archived };
+  }
+
+  /**
+   * Archived environments drop out of `ona environment list`. Before a box is
+   * reported gone, ask Ona about it once. A failed lookup (a deleted box, or
+   * Ona unreachable) keeps the "gone" report, as before this check existed.
+   */
+  async function checkArchived(envId: string): Promise<void> {
+    const seen = missing.get(envId);
+    if (!seen || seen.streak < 2 || seen.archived !== undefined) return;
+    try {
+      seen.archived = isArchived(await ona.getEnvironment(envId, AbortSignal.timeout(30_000)));
+    } catch (error) {
+      seen.archived = false;
+      bb.log.info(`${envId}: couldn't ask Ona whether it is archived: ${errorText(error)}`);
+    }
   }
 
   async function threadWaiting(hostId: string): Promise<boolean> {
@@ -484,7 +500,12 @@ export default async function plugin(bb: BbPluginApi) {
               ? await threadWaiting(row.hostId).catch(() => false)
               : false,
         };
-        const decision = decide(view, onaView(row.resource.envId, listing), now);
+        let onaState = onaView(row.resource.envId, listing);
+        if (onaState.kind === "missing" && onaState.streak >= 2 && onaState.archived === undefined) {
+          await checkArchived(row.resource.envId);
+          onaState = onaView(row.resource.envId, listing);
+        }
+        const decision = decide(view, onaState, now);
         // With autoRepair off, only observed stops and deletions reach bb.
         const skipped = !autoRepair && decision.action !== "none" && decision.action !== "suspend-observed";
         guard.note(
@@ -982,7 +1003,9 @@ export default async function plugin(bb: BbPluginApi) {
           ? "unknown"
           : env
             ? (env.status?.phase ?? "?").replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase()
-            : "missing",
+            : missing.get(row.resource.envId)?.archived
+              ? "archived"
+              : "missing",
         now: guard.seen.get(row.hostId) ?? null,
         last: busy
           ? { action: busy, reason: "in progress", at: Date.now() }

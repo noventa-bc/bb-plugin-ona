@@ -4,13 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, after, test } from "node:test";
-import { isRunning, isStarting, isStopped, OnaCli } from "../src/ona.ts";
+import { isArchived, isRunning, isStarting, isStopped, OnaCli } from "../src/ona.ts";
 
 const fakeOna = fileURLToPath(new URL("./fake-ona.sh", import.meta.url));
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/ona/${name}`, import.meta.url));
 const cli = new OnaCli(fakeOna);
 const dir = mkdtempSync(join(tmpdir(), "bb-ona-fake-"));
-const FAKE_KEYS = ["FAKE_ONA_ENVIRONMENTS", "FAKE_ONA_PROJECTS", "FAKE_ONA_LOG", "FAKE_ONA_FAIL"] as const;
+const FAKE_KEYS = [
+  "FAKE_ONA_ENVIRONMENTS",
+  "FAKE_ONA_PROJECTS",
+  "FAKE_ONA_GET",
+  "FAKE_ONA_LOG",
+  "FAKE_ONA_FAIL",
+] as const;
 
 function setFake(vars: Partial<Record<(typeof FAKE_KEYS)[number], string>>): void {
   process.env.FAKE_ONA_ENVIRONMENTS = fixture("environments.json");
@@ -121,5 +127,16 @@ test("a CLI failure becomes a readable error", async () => {
   await assert.rejects(cli.listEnvironments(), /ona environment list failed: .*context deadline exceeded/);
 });
 
-// Archived environments drop out of `ona environment list` (see docs/ona-notes.md "Known gaps").
-void test.todo("an archived box is reported as archived, not gone");
+test("getEnvironment finds an archived box that the list leaves out", async () => {
+  setFake({ FAKE_ONA_GET: fixture("archived-environment.json") });
+  assert.equal(await cli.findEnvironment("env-5aaa"), null);
+  const env = await cli.getEnvironment("env-5aaa");
+  assert.equal(env.id, "env-5aaa");
+  assert.equal(isArchived(env), true);
+  assert.equal(isArchived((await cli.listEnvironments())[0]!), false);
+});
+
+test("getEnvironment rejects when Ona doesn't know the box", async () => {
+  setFake({});
+  await assert.rejects(cli.getEnvironment("env-0000"), /ona environment get failed: .*not found/);
+});
