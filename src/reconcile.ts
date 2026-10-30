@@ -190,7 +190,10 @@ export interface HostRecord {
  */
 export class HostGuard {
   private readonly busy = new Map<string, string>();
+  /** The last action actually taken per machine; routine checks never overwrite it. */
   readonly records = new Map<string, HostRecord>();
+  /** What the latest check concluded per machine, and since when. */
+  readonly seen = new Map<string, { reason: string; since: number }>();
   private active = 0;
   private readonly queue: Array<() => void> = [];
 
@@ -265,18 +268,13 @@ export class HostGuard {
     return true;
   }
 
-  /** Record a decision that needed no action (for `bb ona status`). */
-  note(hostId: string, action: string, reason: string): void {
-    const previous = this.records.get(hostId);
-    if (previous && previous.action === action && previous.reason === reason) return;
-    this.records.set(hostId, {
-      action,
-      reason,
-      at: this.clock.now(),
-      failures: previous?.failures ?? 0,
-      quietUntil: previous?.quietUntil ?? 0,
-      ...(previous?.error ? { error: previous.error } : {}),
-    });
+  /**
+   * Record what a check concluded (for `bb ona status`). Kept apart from
+   * `records`, so "connected" doesn't hide the repair that got it there.
+   */
+  note(hostId: string, reason: string): void {
+    if (this.seen.get(hostId)?.reason === reason) return;
+    this.seen.set(hostId, { reason, since: this.clock.now() });
   }
 
   private acquire(): Promise<void> {

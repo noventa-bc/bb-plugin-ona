@@ -113,15 +113,21 @@ bb ona status [name] [--json]  # bb's view, tunnel, Ona's view, and what the plu
 bb ona sync [name]             # re-check Ona now and repair (skips cooldowns, never the safety rules)
 ```
 
-Example `bb ona status` output:
+Example `bb ona status` output. `now` is what the latest check concluded, and
+`last action` is the last thing the plugin actually did. Routine checks never
+overwrite `last action`, so a repair stays visible after the box is healthy
+again.
 
 ```
 Ona CLI: ok, listed 12s ago
-ona:amber-otter  bb:disconnected  tunnel:up  ona:running
-  last: heal-daemon: running in Ona but the daemon isn't connected; daemon was down; restarted it (3m ago)
+ona:amber-otter  bb:connected  tunnel:up  ona:running
+  now: connected (since 2m ago)
+  last action: heal-daemon: running in Ona but the daemon isn't connected; daemon was down; restarted it (3m ago)
 ona:brisk-heron  bb:suspended  tunnel:off  ona:running
-  last: none: suspended in bb, running in Ona (1m ago)
+  now: suspended in bb, running in Ona (since 1h ago)
 ```
+
+`last action` resets when the plugin restarts or reloads.
 
 If the automatic repairs get in your way, turn them off with
 `bb plugin config ona set autoRepair false`. Stopped and deleted boxes are then

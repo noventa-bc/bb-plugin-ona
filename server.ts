@@ -437,15 +437,10 @@ export default async function plugin(bb: BbPluginApi) {
             row.phase === "active" && row.status !== "connected" ? await threadWaiting(row.hostId).catch(() => false) : false,
         };
         const decision = decide(view, onaView(row.resource.envId, listing), now);
-        if (decision.action === "none") {
-          if (!guard.busyWith(row.hostId)) guard.note(row.hostId, "none", decision.reason);
-          continue;
-        }
         // With autoRepair off, only observed stops and deletions reach bb.
-        if (!autoRepair && decision.action !== "suspend-observed") {
-          guard.note(row.hostId, `skipped ${decision.action}`, `${decision.reason} (autoRepair is off)`);
-          continue;
-        }
+        const skipped = !autoRepair && decision.action !== "none" && decision.action !== "suspend-observed";
+        guard.note(row.hostId, skipped ? `${decision.reason} (would ${decision.action}; autoRepair is off)` : decision.reason);
+        if (decision.action === "none" || skipped) continue;
         actions.push(act(row, decision, options.force ?? false));
       }
       if (keys.has(ALL)) await releaseIdleMachines(rows);
@@ -882,6 +877,9 @@ export default async function plugin(bb: BbPluginApi) {
     bb: string;
     tunnel: string;
     ona: string;
+    /** What the latest check concluded, and since when. */
+    now: { reason: string; since: number } | null;
+    /** The last action the plugin took (or the one in flight). */
     last: { action: string; reason: string; at: number; error?: string } | null;
     retry: string | null;
   }
@@ -901,6 +899,7 @@ export default async function plugin(bb: BbPluginApi) {
         bb: row.phase === "active" ? row.status : row.phase,
         tunnel: tunnels.status(row.resource.envId),
         ona: !listing ? "unknown" : env ? (env.status?.phase ?? "?").replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase() : "missing",
+        now: guard.seen.get(row.hostId) ?? null,
         last: busy
           ? { action: busy, reason: "in progress", at: Date.now() }
           : record ? { action: record.action, reason: record.reason, at: record.at, ...(record.error ? { error: record.error } : {}) } : null,
@@ -922,8 +921,13 @@ export default async function plugin(bb: BbPluginApi) {
       : `Ona CLI: ok${listing ? `, listed ${ago(listing.at)}` : ""}${autoRepair ? "" : "  (autoRepair is off)"}`;
     if (rows.length === 0) return `${header}\nNo Ona machines yet.`;
     const lines = rows.map((row) => {
-      const last = row.last ? `${row.last.action}: ${row.last.reason} (${ago(row.last.at)})${row.last.error ? ` ERROR ${row.last.error}` : ""}` : "-";
-      return [`${row.machine}  bb:${row.bb}  tunnel:${row.tunnel}  ona:${row.ona}`, `  last: ${last}`, ...(row.retry ? [`  ${row.retry}`] : [])].join("\n");
+      const lines = [`${row.machine}  bb:${row.bb}  tunnel:${row.tunnel}  ona:${row.ona}`];
+      if (row.now) lines.push(`  now: ${row.now.reason} (since ${ago(row.now.since)})`);
+      if (row.last) {
+        lines.push(`  last action: ${row.last.action}: ${row.last.reason} (${ago(row.last.at)})${row.last.error ? ` ERROR ${row.last.error}` : ""}`);
+      }
+      if (row.retry) lines.push(`  ${row.retry}`);
+      return lines.join("\n");
     });
     return [header, ...lines].join("\n");
   }

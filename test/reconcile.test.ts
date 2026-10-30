@@ -201,6 +201,21 @@ test("guard: failures back off and give up, a forced run still goes", async () =
   assert.match(guard.records.get("h1")!.reason, /ok/);
 });
 
+test("guard: routine checks don't hide the last action, and keep their own 'since'", async () => {
+  const { clock, advance } = fakeClock();
+  const guard = new HostGuard(2, clock);
+  await guard.run("h1", "heal-daemon", "daemon not connected", async () => "restarted it");
+  await advance(1_000);
+  guard.note("h1", "connected");
+  await advance(60_000);
+  guard.note("h1", "connected");
+  assert.equal(guard.records.get("h1")?.action, "heal-daemon");
+  assert.match(guard.records.get("h1")!.reason, /restarted it/);
+  assert.deepEqual(guard.seen.get("h1"), { reason: "connected", since: 1_000 });
+  guard.note("h1", "disconnected briefly");
+  assert.equal(guard.seen.get("h1")?.since, 61_000);
+});
+
 test("guard: heavy actions run at most `limit` at a time", async () => {
   const guard = new HostGuard(2);
   let running = 0;
