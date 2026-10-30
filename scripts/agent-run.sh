@@ -5,8 +5,9 @@
 #
 #   scripts/agent-run.sh "<task brief>" [claude|codex]
 #
-# Env: CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`) for claude, since the
-# sandbox has no keychain access. AGENT_BUDGET_USD caps a claude run (default 5).
+# Claude's login: the sandbox has no keychain access, so nono passes in the token
+# from `claude setup-token`, stored once in the keychain (see docs/owner.md), or
+# CLAUDE_CODE_OAUTH_TOKEN if it is exported. AGENT_BUDGET_USD caps a claude run (default 5).
 set -euo pipefail
 
 brief=${1:?usage: scripts/agent-run.sh "<task brief>" [claude|codex]}
@@ -15,8 +16,14 @@ repo=$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel)
 slug=$(printf '%s' "$brief" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | cut -c1-40 | sed 's/-*$//')-$(date +%m%d%H%M)
 tree="$repo/../bb-ona-worktrees/$slug"
 
+credential=()
 case $agent in
-  claude) [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || { echo "Set CLAUDE_CODE_OAUTH_TOKEN first (see docs/owner.md)." >&2; exit 1; } ;;
+  claude)
+    if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+      security find-generic-password -s nono -a claude_code_oauth_token >/dev/null 2>&1 ||
+        { echo "No Claude token: see docs/owner.md, one-time setup." >&2; exit 1; }
+      credential=(--env-credential-map claude_code_oauth_token CLAUDE_CODE_OAUTH_TOKEN)
+    fi ;;
   codex) ;;
   *) echo "agent must be claude or codex" >&2; exit 1 ;;
 esac
@@ -34,7 +41,7 @@ watched=("$HOME/.claude/settings.json" "$HOME/.codex/config.toml")
 before=$(cat "${watched[@]}" 2>/dev/null | shasum)
 
 sandbox=(nono run -s --allow-cwd --profile "$repo/.nono/agent.jsonc"
-  --read "$repo/.git" --allow "$repo/.git/worktrees/$slug" --)
+  --read "$repo/.git" --allow "$repo/.git/worktrees/$slug" ${credential[@]+"${credential[@]}"} --)
 cd "$tree"
 status=0
 if [ "$agent" = claude ]; then
