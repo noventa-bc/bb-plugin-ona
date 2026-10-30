@@ -1,12 +1,5 @@
 {
   "permissions": {
-    "ask": [
-      "Bash(git commit:*)",
-      "Bash(git push:*)",
-      "Bash(ona:*)",
-      "Bash(ssh:*)",
-      "Bash(bb:*)",
-      "Bash(~/.bb/bin/bb:*)"
-    ]
+    "ask": ["Bash(git push:*)", "Bash(ona:*)", "Bash(ssh:*)"]
   }
 }
