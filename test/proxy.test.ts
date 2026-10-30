@@ -59,8 +59,11 @@ let target: http.Server;
 let targetUrl: URL;
 const seen: Array<{ url: string; headers: http.IncomingHttpHeaders }> = [];
 const noop = { debug() {}, info() {}, warn() {}, error() {} };
+// The agent sandbox blocks localhost; these tests run in CI and outside the sandbox.
+const local = { skip: process.env.NONO_CAP_FILE ? "needs local ports, blocked in the agent sandbox" : false };
 
 before(async () => {
+  if (local.skip) return;
   target = http.createServer((req, res) => {
     seen.push({ url: req.url ?? "", headers: req.headers });
     res.end(`ok ${req.url}`);
@@ -79,7 +82,7 @@ before(async () => {
   await new Promise<void>((resolve) => target.listen(0, "127.0.0.1", resolve));
   targetUrl = new URL(`http://127.0.0.1:${(target.address() as net.AddressInfo).port}`);
 });
-after(() => target.close());
+after(() => target?.close());
 
 function get(port: number, path: string, headers: Record<string, string> = {}) {
   return new Promise<{ status: number; body: string }>((resolve, reject) => {
@@ -90,7 +93,7 @@ function get(port: number, path: string, headers: Record<string, string> = {}) {
   });
 }
 
-test("proxy forwards allowed routes and blocks the user API", async () => {
+test("proxy forwards allowed routes and blocks the user API", local, async () => {
   const proxy = await startDaemonProxy(() => targetUrl, noop);
   try {
     seen.length = 0;
@@ -120,7 +123,7 @@ function upgrade(port: number, path: string): Promise<string> {
   });
 }
 
-test("proxy upgrades only the daemon socket", async () => {
+test("proxy upgrades only the daemon socket", local, async () => {
   const proxy = await startDaemonProxy(() => targetUrl, noop);
   try {
     seen.length = 0;
@@ -136,7 +139,7 @@ test("proxy upgrades only the daemon socket", async () => {
   }
 });
 
-test("a rejected upgrade is closed, not spliced", async () => {
+test("a rejected upgrade is closed, not spliced", local, async () => {
   const proxy = await startDaemonProxy(() => targetUrl, noop);
   try {
     seen.length = 0;

@@ -1,0 +1,30 @@
+// Sandbox for agent sessions on this repo (scripts/agent-run.sh, scripts/agent-shell.sh).
+// Read/write: the working folder and the agents' own state. Network: model APIs only.
+// Everything else in $HOME (ssh keys, ona and bb credentials, the live checkout) is unreachable.
+{
+  "extends": "node-dev",
+  "meta": {
+    "name": "bb-ona-agent",
+    "description": "Coding agent on the bb-ona plugin: worktree, toolchain and model APIs only"
+  },
+  "groups": { "include": ["git_config"] },
+  "workdir": { "access": "readwrite" },
+  "filesystem": {
+    "read": ["$HOME/.local/share/claude", "$HOME/.local/bin"],
+    "allow": ["$HOME/.claude", "$HOME/.codex"],
+    "allow_file": ["$HOME/.claude.json"]
+  },
+  "network": {
+    "network_profile": null,
+    "allow_domain": [
+      "api.anthropic.com",
+      "claude.ai",
+      "platform.claude.com",
+      "api.openai.com",
+      "chatgpt.com",
+      "auth.openai.com",
+      "*.openai.com",
+      "*.chatgpt.com"
+    ]
+  }
+}

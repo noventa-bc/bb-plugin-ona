@@ -402,6 +402,12 @@ export default async function plugin(bb: BbPluginApi) {
         case "reconcile-stuck":
           await bb.sdk.hosts.experimental_reconcile({ hostId });
           return;
+        case "none":
+          return;
+        default: {
+          const unhandled: never = decision.action;
+          throw new Error(`unhandled action ${unhandled}`);
+        }
       }
     }, { force, heavy, cooldown: heavy }).catch((error) => {
       bb.log.warn(`${machine}: ${decision.action} failed: ${errorText(error)}`);
