@@ -31,7 +31,14 @@ import {
   type OnaResource,
 } from "./src/provider.ts";
 import { startDaemonProxy } from "./src/proxy.ts";
-import { machinesToRelease, parseDuration, suspendRefusal, type MachineActivity } from "./src/lifecycle.ts";
+import {
+  lifecycleRefusal,
+  machinesToRelease,
+  parseDuration,
+  RESUMED,
+  SUSPENDED,
+  type MachineActivity,
+} from "./src/lifecycle.ts";
 import {
   ALL,
   decide,
@@ -320,7 +327,7 @@ export default async function plugin(bb: BbPluginApi) {
       await bb.storage.kv.set(RELEASING_KEY, [...releasing, row.resource.envId]);
     try {
       const host = await bb.sdk.hosts.experimental_suspend({ hostId: row.hostId });
-      const refusal = suspendRefusal(host.lifecycle);
+      const refusal = lifecycleRefusal(host.lifecycle, SUSPENDED);
       if (refusal) throw new Error(refusal);
     } catch (error) {
       // Don't leave the flag behind for a later user suspend, which should stop the box.
@@ -433,8 +440,11 @@ export default async function plugin(bb: BbPluginApi) {
               if (!decision.resumeAfter) return;
               // A thread is waiting on it: that's you using the box, so let bb start it.
               try {
-                await bb.sdk.hosts.experimental_resume({ hostId });
-                return "resumed for a waiting thread";
+                const host = await bb.sdk.hosts.experimental_resume({ hostId });
+                const refusal = lifecycleRefusal(host.lifecycle, RESUMED);
+                return refusal
+                  ? `couldn't resume it for a waiting thread (${refusal})`
+                  : "resumed for a waiting thread";
               } catch (error) {
                 return `bb will resume it on your next message (${errorText(error)})`;
               }
@@ -454,9 +464,10 @@ export default async function plugin(bb: BbPluginApi) {
               await provider.reconnect(resource, report, AbortSignal.timeout(15 * 60_000));
               return "daemon was down; restarted it";
             }
-            case "reconcile-stuck":
-              await bb.sdk.hosts.experimental_reconcile({ hostId });
-              return;
+            case "reconcile-stuck": {
+              const host = await bb.sdk.hosts.experimental_reconcile({ hostId });
+              return `bb now shows it ${host.lifecycle.phase}${host.lifecycle.message ? ` (${host.lifecycle.message})` : ""}`;
+            }
             case "none":
               return;
             default: {
