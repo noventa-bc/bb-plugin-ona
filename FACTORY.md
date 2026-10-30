@@ -43,11 +43,11 @@ The ponytail plugin (`docs/owner.md` has the install) is the "least code"
 ruleset for every agent in the flow. The orchestrator checks at session start
 that its skills are listed (`/ponytail-help`; after an install, run
 `/reload-plugins`) and runs at level `full`. Its hooks inject the ruleset into
-subagents, so briefs state the task scope and need not repeat it. Reviews run `/ponytail-review` with
-the target spelled out (`staged`, `branch`, or the PR link). A builder marks a
-known limit with a `shortcut:` comment; its handoff carries those and the
-"skipped or not checked" lines ponytail ends with. `/ponytail-debt` runs before
-a release and its ledger goes to the roadmap.
+subagents, so briefs state the scope and need not repeat it. Reviews run
+`/ponytail-review` on a named target (`staged`, `branch`, or the PR link). A
+builder marks a known limit with a `shortcut:` comment; its handoff carries
+those and the "skipped or not checked" lines ponytail ends with.
+`/ponytail-debt` runs before a release and its ledger goes to the roadmap.
 
 ## Inputs
 
@@ -72,7 +72,8 @@ a release and its ledger goes to the roadmap.
 4. **Brief** each builder with the template in `docs/owner.md`, plus: the
    branch name `agent/<slug>`, the files and line areas involved, the tests to
    write first, the coupled changes from `AGENTS.md`, and what to report back.
-5. **Build** in a worktree. The builder runs `npm ci --ignore-scripts`, writes
+5. **Build** in a worktree (slow commands in the background). The builder runs
+   `npm ci --ignore-scripts`, writes
    a failing test first where possible, keeps `npm run check` green, writes
    `.agent/HANDOFF.md`, and leaves the work staged for the orchestrator.
 6. **Review.** The orchestrator reads the handoff and the diff, runs a reviewer
@@ -141,7 +142,6 @@ This file is the memory of the flow. Keep it current:
 Rules the owner gave that the sections above do not already state. Checked
 2026-10-30. Purpose, Flow and Self-improvement hold the rest.
 
-- Run slow commands in the background and keep working meanwhile.
 - Several worktrees are open at once and the shell's working directory drifts
   between them. Address every git command with `git -C <path>` and every file
   with its absolute path; never rely on `cd`.
