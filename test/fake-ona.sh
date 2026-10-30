@@ -15,9 +15,9 @@ case "$1 $2" in
     # The real CLI's messages for an unknown uuid and for a ref that isn't one (docs/ona-notes.md).
     if [ -n "${FAKE_ONA_GET:-}" ]; then cat "$FAKE_ONA_GET"
     else
+      # shellcheck disable=SC2016  # the backticks below are the real CLI text, not an expansion
       case "$3" in
         env-*) echo "Error: not_found: environment not found" >&2 ;;
-        # shellcheck disable=SC2016  # the backticks are the real CLI text, not an expansion
         *) printf 'Error: no environment found matching "%s"\nPossible resolutions:\n  - Run `ona environment list`\n' "$3" >&2 ;;
       esac
       exit 1
