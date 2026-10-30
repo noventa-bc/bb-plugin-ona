@@ -29,6 +29,12 @@ const projectSchema = z.object({
 });
 
 /**
+ * The two ways `ona environment get` says an id doesn't exist (see
+ * docs/ona-notes.md). Nothing broader: a proxy's "404 Not Found" is not this.
+ */
+const NOT_FOUND = /\bError: (not_found: environment not found$|no environment found matching ")/m;
+
+/**
  * Ona's own `--timeout` (its default is 30s) for a call allowed `timeoutMs`.
  * The process gets `ONA_TIMEOUT_GRACE_MS` more, so a slow call ends with
  * Ona's message, not a kill.
@@ -81,7 +87,20 @@ export class OnaCli {
     return environmentSchema.parse(Array.isArray(parsed) ? parsed[0] : parsed);
   }
 
-  /** Match by exact id, exact name, or unambiguous id prefix. */
+  /**
+   * One environment by id, or null when Ona says it doesn't exist. Any other
+   * failure (network, timeout, login) throws: unknown is not gone (rule 4).
+   */
+  async getEnvironmentIfExists(envId: string, signal?: AbortSignal): Promise<OnaEnvironment | null> {
+    try {
+      return await this.getEnvironment(envId, signal);
+    } catch (error) {
+      if (error instanceof Error && NOT_FOUND.test(error.message)) return null;
+      throw error;
+    }
+  }
+
+  /** Match by exact id, exact name, or unambiguous id prefix. For refs a user typed; use get for ids. */
   async findEnvironment(ref: string, signal?: AbortSignal): Promise<OnaEnvironment | null> {
     return matchEnvironment(await this.listEnvironments(signal), ref);
   }
@@ -195,6 +214,12 @@ export function isStarting(env: OnaEnvironment): boolean {
 
 export function isArchived(env: OnaEnvironment): boolean {
   return Boolean(env.metadata.archivedAt);
+}
+
+/** Deleted or being deleted; `get` still returns such a box for a while. */
+export function isDeleted(env: OnaEnvironment): boolean {
+  const phase = env.status?.phase;
+  return phase === "ENVIRONMENT_PHASE_DELETED" || phase === "ENVIRONMENT_PHASE_DELETING";
 }
 
 export function isStopped(env: OnaEnvironment): boolean {

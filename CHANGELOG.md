@@ -22,6 +22,18 @@ made each change. The version is the one in `package.json`.
   report repairs instead of making them. (`bdc7e4b`)
 
 ### Fixed
+- Suspend, resume, remove and the shell and terminal commands look a devbox up
+  by id with `ona environment get` instead of searching
+  `ona environment list`, so they also find archived boxes. A failed lookup is
+  reported as an error; only Ona saying the id doesn't exist counts as the box
+  being gone.
+- Removing a machine whose bb-created devbox is archived now deletes that box;
+  it used to be left in Ona. A box Ona already deleted or is deleting is not
+  deleted again.
+- Resuming a machine whose box is archived now finds the box and starts it,
+  instead of failing with "not found".
+- Removing an Ona machine from bb drops the plugin's stored idle-release state
+  for its box, so those entries no longer pile up.
 - `bb ona open` uses the same resolved `ona` binary as the Editor button, so it
   works when `onaPath` is empty or a bare name. A failed open is logged instead
   of dropped.

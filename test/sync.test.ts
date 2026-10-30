@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { OnaSnapshot, type OnaEnvironment } from "../src/ona.ts";
 import type { WorkspaceView } from "../src/lifecycle.ts";
 import { ALL, GIVE_UP_AFTER, HostGuard } from "../src/reconcile.ts";
-import { createSync, RELEASING_KEY, type BbHost, type ThreadRecord } from "../src/sync.ts";
+import { connectedAtKey, createSync, forgetBox, RELEASING_KEY, type BbHost, type ThreadRecord } from "../src/sync.ts";
 
 // A fake of the bb calls a sync pass makes (SyncBb), one Ona box per machine.
 const HOUR = 3_600_000;
@@ -206,4 +206,23 @@ test("a running box whose daemon dropped is probed, and restarted only if the da
     await sync.reconcile(new Set(["h1"]), { wait: true });
     assert.deepEqual(calls, daemonAlive === false ? ["probe", "restart daemon"] : ["probe"], String(daemonAlive));
   }
+});
+
+test("removing a machine drops its box's stored keys and leaves other boxes' alone", async () => {
+  const kv = new Map<string, unknown>([
+    [connectedAtKey("env-h1"), NOW],
+    [connectedAtKey("env-h2"), NOW],
+    [RELEASING_KEY, ["env-h1", "env-h2"]],
+  ]);
+  const store = {
+    get: async <T>(key: string) => kv.get(key) as T | undefined,
+    set: async (key: string, value: unknown) => void kv.set(key, value),
+    delete: async (key: string) => void kv.delete(key),
+  };
+  await forgetBox(store, "env-h1");
+  assert.equal(kv.has(connectedAtKey("env-h1")), false);
+  assert.equal(kv.get(connectedAtKey("env-h2")), NOW);
+  assert.deepEqual(kv.get(RELEASING_KEY), ["env-h2"]);
+  await forgetBox(store, "env-h9");
+  assert.equal(kv.size, 2, "an unknown box changes nothing");
 });
