@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { machinesToRelease, parseDuration, suspendRefusal, type MachineActivity } from "../src/lifecycle.ts";
+import {
+  lifecycleRefusal,
+  machinesToRelease,
+  parseDuration,
+  RESUMED,
+  SUSPENDED,
+  type MachineActivity,
+} from "../src/lifecycle.ts";
 
 const MIN = 60_000;
 const NOW = 1_000 * MIN;
@@ -45,13 +52,14 @@ test("parseDuration reads s/m/h and bare minutes, and treats junk as off", () =>
   assert.equal(parseDuration("soon"), 0);
 });
 
-test("a suspend bb didn't take is reported with bb's reason", () => {
-  assert.equal(suspendRefusal({ phase: "suspending", message: null }), null);
-  assert.equal(suspendRefusal({ phase: "suspended", message: null }), null);
-  assert.equal(suspendRefusal(undefined), null);
+test("a lifecycle request bb didn't take is reported with bb's reason", () => {
+  assert.equal(lifecycleRefusal({ phase: "suspending", message: null }, SUSPENDED), null);
+  assert.equal(lifecycleRefusal({ phase: "suspended", message: null }, SUSPENDED), null);
+  assert.equal(lifecycleRefusal({ phase: "resuming", message: null }, RESUMED), null);
+  assert.equal(lifecycleRefusal(undefined, SUSPENDED), null);
   assert.equal(
-    suspendRefusal({ phase: "active", message: "Automatic cleanup is blocked" }),
+    lifecycleRefusal({ phase: "active", message: "Automatic cleanup is blocked" }, SUSPENDED),
     "bb kept the machine active: Automatic cleanup is blocked",
   );
-  assert.equal(suspendRefusal({ phase: "resuming", message: null }), "bb kept the machine resuming");
+  assert.equal(lifecycleRefusal({ phase: "suspended", message: null }, RESUMED), "bb kept the machine suspended");
 });

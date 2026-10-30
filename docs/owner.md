@@ -56,7 +56,8 @@ an unattended agent skips a conflicting item.
 
 bb loads the plugin from this folder. After merging into this checkout, run
 `~/.bb/bin/bb plugin reload ona`, then `bb ona status` and the handoff's
-live-test steps.
+live-test steps. A few minutes later, check `bb plugin logs ona` for the same
+action repeating every pass: a repair that never sticks shows up there first.
 
 ## Sandbox checks (nono 0.81.0, checked 2026-10-30)
 

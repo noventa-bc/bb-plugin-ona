@@ -29,14 +29,21 @@ export function machinesToRelease(machines: readonly MachineActivity[], now: num
 }
 
 /**
- * Why bb didn't take a suspend it accepted, or null if it did. bb can answer a
- * suspend request without suspending (for example while it blocks lifecycle
- * changes on a host after an interrupted environment hook).
+ * Why bb didn't take a lifecycle request it accepted, or null if the machine
+ * is in one of the `expected` phases. bb can answer a suspend or resume
+ * without acting on it (for example while it blocks lifecycle changes on a
+ * host after an interrupted environment hook), so every such call checks this.
  */
-export function suspendRefusal(lifecycle: { phase: string; message: string | null } | undefined): string | null {
-  if (!lifecycle || lifecycle.phase === "suspending" || lifecycle.phase === "suspended") return null;
+export function lifecycleRefusal(
+  lifecycle: { phase: string; message: string | null } | undefined,
+  expected: readonly string[],
+): string | null {
+  if (!lifecycle || expected.includes(lifecycle.phase)) return null;
   return `bb kept the machine ${lifecycle.phase}${lifecycle.message ? `: ${lifecycle.message}` : ""}`;
 }
+
+export const SUSPENDED = ["suspending", "suspended"] as const;
+export const RESUMED = ["resuming", "active"] as const;
 
 /** "30m", "2h", "45s" or bare minutes to ms; empty, "0" or unparseable is 0 (off). */
 export function parseDuration(value: string): number {

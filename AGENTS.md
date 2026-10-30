@@ -66,7 +66,8 @@ The safety rules behind 1–4 are in the README section "How bb and Ona stay in 
 5. Remote script text is a constant. Values are passed as arguments or through `shellQuote`.
 6. The tunnel goes only to the loopback proxy. Added proxy routes need a test and a line in the README "Security model" section.
 7. No secrets in logs, storage or errors.
-8. Public content: no company, client or person names, no personal paths, no real environment names or IDs, and no description of an unfixed weakness (those go under Security (private) in the handoff).
+8. A call that changes state can be accepted without taking effect (bb suspend, resume and reconcile return the host). Check the result, treat "not done" as a failure so the guard backs off, and never report an action as done on the call alone. ESLint enforces this for the bb lifecycle calls.
+9. Public content: no company, client or person names, no personal paths, no real environment names or IDs, and no description of an unfixed weakness (those go under Security (private) in the handoff).
 
 ## Handoff
 
