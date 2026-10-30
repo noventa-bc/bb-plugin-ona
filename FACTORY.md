@@ -55,8 +55,7 @@ those and the "skipped or not checked" lines ponytail ends with.
   hands its link to the orchestrator in the session. Never write that link, the
   document's ids or its text into any file in this repo. Refer to items by their
   roadmap label only (for example "T2", "R9").
-- Items come with a size (S, M, L) and a status (Open, In review, Done, Parked,
-  Ruled out). Work only on items the owner names.
+- Items carry a size (S, M, L) and a status. Work only on items the owner names.
 
 ## Flow
 
