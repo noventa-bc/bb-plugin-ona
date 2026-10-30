@@ -75,7 +75,10 @@ never start or stop a box; only bb's own Resume and Pause do that.
 
 The idle rule from [How it works](#how-it-works) sits alongside these: after
 `idleDisconnect` with no thread activity, an active box is marked suspended
-without being stopped.
+without being stopped. A box isn't let go while bb is setting up or tearing
+down one of its thread workspaces: closing the tunnel mid-hook leaves bb unable
+to tell how the hook ended, and it then refuses to suspend the machine until
+the workspace is recovered.
 
 `bb ona keep-alive <name> <duration>` is the one way to hold a box past Ona's
 inactivity timeout, and only on your request; the plugin never starts one by
@@ -109,7 +112,8 @@ Keep-alives are not restored after a reload. `bb ona status` shows
 
 **When the plugin checks.**
 
-- **Right away** when a thread is waiting for an Ona machine.
+- **Right away** when a thread is waiting for an Ona machine, or bb is setting
+  up or tearing down a workspace on it (a running box only; this never starts one).
 - **45s after** an Ona machine disconnects, so a brief drop (Wi-Fi, Mac sleep) can recover on its own.
 - **30s after** a tunnel comes back up.
 - **After** bb's realtime connection reconnects.
@@ -366,6 +370,14 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
   `mv ~/.bb-machines ~/.bb-machines.shared`, then add the machine again.
 - **Creation times out or fails:** check `bb plugin logs ona` and `bb machine show <id>`.
   Prerequisite failures name the missing tool.
+- **"workspace(s) need recovery" in `bb ona status`:** a thread workspace's
+  teardown failed for good, and bb won't suspend the machine until it's
+  recovered, so the box stays awake. Check what's left in it
+  (`bb environment list --host <machine>`, then the workspace path on the box).
+  bb's `bb environment cleanup <id> --recover` refuses on Ona boxes while
+  they're connected, because it can't inspect Ona's SSH processes. For an
+  adopted box: stop bb's daemon on the box, `bb machine remove <machine>
+  --force`, then `bb ona adopt <box>`; the Ona environment and its files stay.
 - **bb and Ona disagree about a box** (bb says down but it's running, or the
   other way round): run `bb ona status <name>`. It shows both views and what
   the plugin last did about it. `bb ona sync <name>` re-checks now, and

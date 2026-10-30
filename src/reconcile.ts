@@ -30,6 +30,11 @@ export interface MachineView {
   tunnel: "up" | "connecting" | "off";
   /** A thread is waiting for this machine right now. */
   threadWaiting: boolean;
+  /**
+   * bb is setting up or tearing down a workspace and needs the daemon. Skips
+   * the grace period like a waiting thread, but never resumes a stopped box.
+   */
+  workspaceWaiting?: boolean;
 }
 
 /** What Ona says about the machine's environment. */
@@ -102,12 +107,14 @@ export function decide(machine: MachineView, ona: OnaView, now: number): Decisio
   if (ona.phase !== RUNNING) return { action: "none", reason: `Ona is ${short(ona.phase)}` };
   if (machine.tunnel === "off") return { action: "ensure-tunnel", reason: "running in Ona but no tunnel" };
   const disconnectedFor = machine.lastSeenAt === null ? Infinity : now - machine.lastSeenAt;
-  if (machine.threadWaiting || disconnectedFor >= GRACE_MS) {
+  if (machine.threadWaiting || machine.workspaceWaiting || disconnectedFor >= GRACE_MS) {
     return {
       action: "heal-daemon",
       reason: machine.threadWaiting
         ? "a thread is waiting and the daemon isn't connected"
-        : "running in Ona but the daemon isn't connected",
+        : machine.workspaceWaiting
+          ? "bb is setting up or tearing down a workspace and the daemon isn't connected"
+          : "running in Ona but the daemon isn't connected",
     };
   }
   return { action: "none", reason: "disconnected briefly (waiting for it to come back)" };

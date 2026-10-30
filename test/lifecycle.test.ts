@@ -4,6 +4,7 @@ import {
   lifecycleRefusal,
   machinesToRelease,
   parseDuration,
+  workspaceWork,
   RESUMED,
   SUSPENDED,
   type MachineActivity,
@@ -62,4 +63,30 @@ test("a lifecycle request bb didn't take is reported with bb's reason", () => {
     "bb kept the machine active: Automatic cleanup is blocked",
   );
   assert.equal(lifecycleRefusal({ phase: "suspended", message: null }, RESUMED), "bb kept the machine suspended");
+});
+
+const workspace = (status: string, phase = "active", teardown: string | null = null) => ({
+  status,
+  lifecycle: { phase, teardown: teardown ? { status: teardown } : null },
+});
+
+test("workspaceWork: setup and running teardowns are busy; failed teardowns need recovery", () => {
+  assert.deepEqual(workspaceWork([]), { busy: false, needsRecovery: 0 });
+  assert.deepEqual(workspaceWork([workspace("ready")]), { busy: false, needsRecovery: 0 });
+  assert.deepEqual(workspaceWork([workspace("provisioning")]), { busy: true, needsRecovery: 0 });
+  assert.deepEqual(workspaceWork([workspace("creating")]), { busy: true, needsRecovery: 0 });
+  assert.deepEqual(workspaceWork([workspace("ready", "teardown", "running")]), { busy: true, needsRecovery: 0 });
+  assert.deepEqual(workspaceWork([workspace("ready", "teardown")]), { busy: true, needsRecovery: 0 });
+  assert.deepEqual(
+    workspaceWork([workspace("error", "teardown", "failed"), workspace("error", "teardown", "failed")]),
+    {
+      busy: false,
+      needsRecovery: 2,
+    },
+  );
+});
+
+test("an idle machine whose workspaces bb is working on, or that need recovery, is not let go", () => {
+  const idle = [machine("a"), machine("b", { workspacesBlock: true }), machine("c", { workspacesBlock: false })];
+  assert.deepEqual(machinesToRelease(idle, NOW, 30 * MIN), ["a", "c"]);
 });

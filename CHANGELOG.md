@@ -19,6 +19,11 @@ made each change. The version is the one in `package.json`.
   report repairs instead of making them. (`bdc7e4b`)
 
 ### Fixed
+- Idle release no longer lets a box go while bb is setting up or tearing down
+  one of its thread workspaces; doing so could leave the workspace needing
+  recovery and the machine impossible to suspend. A disconnected running box
+  that bb needs for such work is reconnected right away, and `bb ona status`
+  flags workspaces that need recovery.
 - When bb accepts a suspend but keeps the machine active (for example while it
   blocks lifecycle changes after an interrupted environment hook), the plugin
   no longer reports the idle release as done and retries every 2 minutes. It
