@@ -21,7 +21,10 @@ export interface MachineActivity {
 export function machinesToRelease(machines: readonly MachineActivity[], now: number, idleMs: number): string[] {
   if (idleMs <= 0) return [];
   return machines
-    .filter((machine) => machine.phase === "active" && !hostIsBusy(machine.threadStatuses) && now - machine.lastActivityAt >= idleMs)
+    .filter(
+      (machine) =>
+        machine.phase === "active" && !hostIsBusy(machine.threadStatuses) && now - machine.lastActivityAt >= idleMs,
+    )
     .map((machine) => machine.hostId);
 }
 

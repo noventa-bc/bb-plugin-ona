@@ -13,7 +13,8 @@ test("allows only daemon and installer routes", () => {
     ["POST", "/internal/threads/events"],
     ["GET", "/internal/plugins/x/host/abc"],
     ["POST", "/internal/hosts/enroll"],
-  ]) assert.equal(isAllowedRequest(method!, url!), true, `${method} ${url}`);
+  ])
+    assert.equal(isAllowedRequest(method!, url!), true, `${method} ${url}`);
 
   for (const [method, url] of [
     ["GET", "/"],
@@ -30,7 +31,8 @@ test("allows only daemon and installer routes", () => {
     ["GET", "/internal//api"],
     ["GET", "//evil/internal/x"],
     ["GET", "http://127.0.0.1/internal/x"],
-  ]) assert.equal(isAllowedRequest(method!, url!), false, `${method} ${url}`);
+  ])
+    assert.equal(isAllowedRequest(method!, url!), false, `${method} ${url}`);
 
   assert.equal(isAllowedUpgrade("/internal/ws?sessionId=1"), true);
   assert.equal(isAllowedUpgrade("/ws"), false);
@@ -86,10 +88,15 @@ after(() => target?.close());
 
 function get(port: number, path: string, headers: Record<string, string> = {}) {
   return new Promise<{ status: number; body: string }>((resolve, reject) => {
-    http.get({ host: "127.0.0.1", port, path, headers }, (res) => {
-      let body = "";
-      res.setEncoding("utf8").on("data", (c) => (body += c)).on("end", () => resolve({ status: res.statusCode!, body }));
-    }).on("error", reject);
+    http
+      .get({ host: "127.0.0.1", port, path, headers }, (res) => {
+        let body = "";
+        res
+          .setEncoding("utf8")
+          .on("data", (c) => (body += c))
+          .on("end", () => resolve({ status: res.statusCode!, body }));
+      })
+      .on("error", reject);
   });
 }
 
@@ -116,10 +123,16 @@ test("proxy forwards allowed routes and blocks the user API", local, async () =>
 function upgrade(port: number, path: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const socket = net.connect(port, "127.0.0.1", () => {
-      socket.write(`GET ${path} HTTP/1.1\r\nhost: x\r\nconnection: Upgrade\r\nupgrade: websocket\r\nx-bb-gate-auth: machine\r\n\r\n`);
+      socket.write(
+        `GET ${path} HTTP/1.1\r\nhost: x\r\nconnection: Upgrade\r\nupgrade: websocket\r\nx-bb-gate-auth: machine\r\n\r\n`,
+      );
     });
     let data = "";
-    socket.setEncoding("utf8").on("data", (c) => (data += c)).on("end", () => resolve(data)).on("error", reject);
+    socket
+      .setEncoding("utf8")
+      .on("data", (c) => (data += c))
+      .on("end", () => resolve(data))
+      .on("error", reject);
   });
 }
 
@@ -145,17 +158,26 @@ test("a rejected upgrade is closed, not spliced", local, async () => {
     seen.length = 0;
     const reply = await new Promise<string>((resolve, reject) => {
       const socket = net.connect(proxy.port, "127.0.0.1", () => {
-        socket.write("GET /internal/ws?reject=1 HTTP/1.1\r\nhost: x\r\nconnection: Upgrade\r\nupgrade: websocket\r\n\r\n");
+        socket.write(
+          "GET /internal/ws?reject=1 HTTP/1.1\r\nhost: x\r\nconnection: Upgrade\r\nupgrade: websocket\r\n\r\n",
+        );
         setTimeout(() => {
           if (!socket.destroyed) socket.write("GET /api/v1/projects HTTP/1.1\r\nhost: x\r\n\r\n");
         }, 100);
       });
       let data = "";
-      socket.setEncoding("utf8").on("data", (c) => (data += c)).on("close", () => resolve(data)).on("error", reject);
+      socket
+        .setEncoding("utf8")
+        .on("data", (c) => (data += c))
+        .on("close", () => resolve(data))
+        .on("error", reject);
     });
     assert.match(reply, /^HTTP\/1\.1 401/);
     await new Promise((resolve) => setTimeout(resolve, 200));
-    assert.deepEqual(seen.map((entry) => entry.url), ["/internal/ws?reject=1"]);
+    assert.deepEqual(
+      seen.map((entry) => entry.url),
+      ["/internal/ws?reject=1"],
+    );
   } finally {
     await proxy.close();
   }

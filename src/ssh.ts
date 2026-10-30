@@ -5,11 +5,7 @@ import { spawn } from "node:child_process";
 import type { MachineExecutor, PluginLogger } from "@get-bb/plugin-sdk";
 import { sshHost } from "./ona.ts";
 
-const SSH_OPTIONS = [
-  "-o", "BatchMode=yes",
-  "-o", "ServerAliveInterval=15",
-  "-o", "ServerAliveCountMax=3",
-];
+const SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3"];
 
 export function shellQuote(arg: string): string {
   if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(arg)) return arg;
@@ -92,10 +88,14 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal.aborted) return resolve();
     const timer = setTimeout(resolve, ms);
-    signal.addEventListener("abort", () => {
-      clearTimeout(timer);
-      resolve();
-    }, { once: true });
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
   });
 }
 
@@ -171,13 +171,19 @@ export class TunnelManager {
       const localPort = this.localPort();
       const started = Date.now();
       await new Promise<void>((resolve) => {
-        const child = spawn(this.sshBinary, [
-          ...SSH_OPTIONS,
-          "-N",
-          "-o", "ExitOnForwardFailure=yes",
-          "-R", `${remotePort}:127.0.0.1:${localPort}`,
-          sshHost(envId),
-        ], { stdio: ["ignore", "ignore", "pipe"] });
+        const child = spawn(
+          this.sshBinary,
+          [
+            ...SSH_OPTIONS,
+            "-N",
+            "-o",
+            "ExitOnForwardFailure=yes",
+            "-R",
+            `${remotePort}:127.0.0.1:${localPort}`,
+            sshHost(envId),
+          ],
+          { stdio: ["ignore", "ignore", "pipe"] },
+        );
         let stderr = "";
         child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
           stderr = (stderr + chunk).slice(-2_000);

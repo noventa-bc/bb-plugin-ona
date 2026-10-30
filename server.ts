@@ -59,7 +59,9 @@ import { hostIsBusy, parseProviderList, updatesToApply, type CliStatus } from ".
 const TUNNELS_KEY = "tunnels";
 
 /** Devbox folder settings end up in remote commands: plain absolute paths only. */
-const devboxPath = z.string().regex(/^(\/[A-Za-z0-9._-]+)*$/, "use an absolute path of letters, digits, '.', '_' or '-' (or leave empty)");
+const devboxPath = z
+  .string()
+  .regex(/^(\/[A-Za-z0-9._-]+)*$/, "use an absolute path of letters, digits, '.', '_' or '-' (or leave empty)");
 
 export default async function plugin(bb: BbPluginApi) {
   const settings = bb.settings.define({
@@ -83,7 +85,8 @@ export default async function plugin(bb: BbPluginApi) {
     inactivityTimeout: {
       type: "string",
       label: "Inactivity timeout for new devboxes",
-      description: "Auto-stop timeout passed to `ona environment create` (e.g. 3h). Adopted environments keep their own.",
+      description:
+        "Auto-stop timeout passed to `ona environment create` (e.g. 3h). Adopted environments keep their own.",
       default: "3h",
     },
     idleDisconnect: {
@@ -126,7 +129,8 @@ export default async function plugin(bb: BbPluginApi) {
     autoUpdateClis: {
       type: "boolean",
       label: "Auto-update agent CLIs on devboxes",
-      description: "Weekdays at 09:00 (this Mac's time), apply pending updates for the CLIs below on connected Ona devboxes. Boxes with a running agent turn are skipped until the next run.",
+      description:
+        "Weekdays at 09:00 (this Mac's time), apply pending updates for the CLIs below on connected Ona devboxes. Boxes with a running agent turn are skipped until the next run.",
       default: true,
     },
     autoUpdateProviders: {
@@ -171,7 +175,11 @@ export default async function plugin(bb: BbPluginApi) {
   // few seconds' staleness (see OnaSnapshot).
   const snapshot = new OnaSnapshot(() => ona.listEnvironments());
   const guard = new HostGuard();
-  const scheduler = new PassScheduler((keys) => reconcile(keys), undefined, (error) => bb.log.warn(`reconcile pass failed: ${errorText(error)}`));
+  const scheduler = new PassScheduler(
+    (keys) => reconcile(keys),
+    undefined,
+    (error) => bb.log.warn(`reconcile pass failed: ${errorText(error)}`),
+  );
   /** Ona env id -> bb host id, refreshed on every pass. */
   const hostByEnv = new Map<string, string>();
 
@@ -212,9 +220,13 @@ export default async function plugin(bb: BbPluginApi) {
       const binary = findOnaBinary(onaPath);
       if (!binary) return { status: "setup-required", message: ONA_INSTALL_HINT };
       const login = await onaLogin(binary);
-      if (!login.ok) return { status: "setup-required", message: `Ona CLI is not logged in: run \`ona login\`. (${login.message})` };
+      if (!login.ok)
+        return { status: "setup-required", message: `Ona CLI is not logged in: run \`ona login\`. (${login.message})` };
       if (!hasOnaSshConfig()) {
-        return { status: "setup-required", message: "Run `ona environment ssh-config` so bb can reach Ona environments over SSH." };
+        return {
+          status: "setup-required",
+          message: "Run `ona environment ssh-config` so bb can reach Ona environments over SSH.",
+        };
       }
       return { status: "available" };
     },
@@ -230,7 +242,10 @@ export default async function plugin(bb: BbPluginApi) {
     rememberTunnel,
     async forgetTunnel(envId) {
       const current = await rememberedTunnels();
-      await bb.storage.kv.set(TUNNELS_KEY, current.filter((id) => id !== envId));
+      await bb.storage.kv.set(
+        TUNNELS_KEY,
+        current.filter((id) => id !== envId),
+      );
     },
     async markConnected(envId) {
       await bb.storage.kv.set(connectedAtKey(envId), Date.now());
@@ -238,7 +253,10 @@ export default async function plugin(bb: BbPluginApi) {
     async takeRelease(envId) {
       const current = (await bb.storage.kv.get<string[]>(RELEASING_KEY)) ?? [];
       if (!current.includes(envId)) return false;
-      await bb.storage.kv.set(RELEASING_KEY, current.filter((id) => id !== envId));
+      await bb.storage.kv.set(
+        RELEASING_KEY,
+        current.filter((id) => id !== envId),
+      );
       return true;
     },
   });
@@ -298,7 +316,8 @@ export default async function plugin(bb: BbPluginApi) {
    */
   async function suspendWithoutStop(row: Row): Promise<void> {
     const releasing = (await bb.storage.kv.get<string[]>(RELEASING_KEY)) ?? [];
-    if (!releasing.includes(row.resource.envId)) await bb.storage.kv.set(RELEASING_KEY, [...releasing, row.resource.envId]);
+    if (!releasing.includes(row.resource.envId))
+      await bb.storage.kv.set(RELEASING_KEY, [...releasing, row.resource.envId]);
     try {
       await bb.sdk.hosts.experimental_suspend({ hostId: row.hostId });
     } catch (error) {
@@ -327,18 +346,29 @@ export default async function plugin(bb: BbPluginApi) {
         hostId: row.hostId,
         phase: row.phase,
         threadStatuses: threads.map((thread) => (thread.queuedWork === "waiting" ? "pending" : thread.status)),
-        lastActivityAt: Math.max(connectedAt, ...threads.map((thread) => Math.max(thread.updatedAt, thread.lastReadAt ?? 0))),
+        lastActivityAt: Math.max(
+          connectedAt,
+          ...threads.map((thread) => Math.max(thread.updatedAt, thread.lastReadAt ?? 0)),
+        ),
       });
     }
     for (const hostId of machinesToRelease(activity, Date.now(), idleMs)) {
       const row = candidates.find((r) => r.hostId === hostId)!;
       const reason = `idle for ${idleDisconnect}; Ona's own timeout will stop the box`;
-      await guard.run(hostId, "release-idle", reason, async () => {
-        bb.log.info(`${row.machine}: ${reason}; closing the tunnel`);
-        await suspendWithoutStop(row);
-      }, { cooldown: false }).catch((error) => {
-        bb.log.warn(`${row.machine}: could not let go: ${errorText(error)}`);
-      });
+      await guard
+        .run(
+          hostId,
+          "release-idle",
+          reason,
+          async () => {
+            bb.log.info(`${row.machine}: ${reason}; closing the tunnel`);
+            await suspendWithoutStop(row);
+          },
+          { cooldown: false },
+        )
+        .catch((error) => {
+          bb.log.warn(`${row.machine}: could not let go: ${errorText(error)}`);
+        });
     }
   }
 
@@ -361,7 +391,9 @@ export default async function plugin(bb: BbPluginApi) {
 
   async function threadWaiting(hostId: string): Promise<boolean> {
     const threads = await bb.sdk.threads.list({ hostId });
-    return threads.some((thread) => thread.runtime.displayStatus === "waiting-for-host" || thread.queuedWork === "waiting");
+    return threads.some(
+      (thread) => thread.runtime.displayStatus === "waiting-for-host" || thread.queuedWork === "waiting",
+    );
   }
 
   const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -370,48 +402,56 @@ export default async function plugin(bb: BbPluginApi) {
   async function act(row: Row, decision: Decision, force: boolean): Promise<void> {
     const { hostId, machine, resource } = row;
     const heavy = decision.action === "heal-daemon" || decision.action === "reconcile-stuck";
-    await guard.run(hostId, decision.action, decision.reason, async () => {
-      bb.log.info(`${machine}: ${decision.action} (${decision.reason})`);
-      switch (decision.action) {
-        case "suspend-observed":
-          await suspendWithoutStop(row);
-          if (!decision.resumeAfter) return;
-          // A thread is waiting on it: that's you using the box, so let bb start it.
-          try {
-            await bb.sdk.hosts.experimental_resume({ hostId });
-            return "resumed for a waiting thread";
-          } catch (error) {
-            return `bb will resume it on your next message (${errorText(error)})`;
+    await guard
+      .run(
+        hostId,
+        decision.action,
+        decision.reason,
+        async () => {
+          bb.log.info(`${machine}: ${decision.action} (${decision.reason})`);
+          switch (decision.action) {
+            case "suspend-observed":
+              await suspendWithoutStop(row);
+              if (!decision.resumeAfter) return;
+              // A thread is waiting on it: that's you using the box, so let bb start it.
+              try {
+                await bb.sdk.hosts.experimental_resume({ hostId });
+                return "resumed for a waiting thread";
+              } catch (error) {
+                return `bb will resume it on your next message (${errorText(error)})`;
+              }
+            case "ensure-tunnel":
+              tunnels.ensure(resource.envId);
+              await rememberTunnel(resource.envId);
+              return;
+            case "heal-daemon": {
+              // Rule 1: SSH starts stopped boxes, so re-check Ona right before it.
+              const env = (await snapshot.refresh()).envs.find((e) => e.id === resource.envId);
+              if (!env || !isRunning(env)) return "Ona no longer reports it running; nothing done";
+              // Rule 3: restarting a live daemon would kill running turns.
+              const alive = await provider.daemonAlive(resource, AbortSignal.timeout(30_000));
+              if (alive === true) return "daemon is running; not restarting";
+              if (alive === null) return "couldn't check the daemon over SSH; not restarting";
+              const report = { step: (text: string) => bb.log.info(`${machine}: ${text}`), log: () => {} };
+              await provider.reconnect(resource, report, AbortSignal.timeout(15 * 60_000));
+              return "daemon was down; restarted it";
+            }
+            case "reconcile-stuck":
+              await bb.sdk.hosts.experimental_reconcile({ hostId });
+              return;
+            case "none":
+              return;
+            default: {
+              const unhandled: never = decision.action;
+              throw new Error(`unhandled action ${unhandled}`);
+            }
           }
-        case "ensure-tunnel":
-          tunnels.ensure(resource.envId);
-          await rememberTunnel(resource.envId);
-          return;
-        case "heal-daemon": {
-          // Rule 1: SSH starts stopped boxes, so re-check Ona right before it.
-          const env = (await snapshot.refresh()).envs.find((e) => e.id === resource.envId);
-          if (!env || !isRunning(env)) return "Ona no longer reports it running; nothing done";
-          // Rule 3: restarting a live daemon would kill running turns.
-          const alive = await provider.daemonAlive(resource, AbortSignal.timeout(30_000));
-          if (alive === true) return "daemon is running; not restarting";
-          if (alive === null) return "couldn't check the daemon over SSH; not restarting";
-          const report = { step: (text: string) => bb.log.info(`${machine}: ${text}`), log: () => {} };
-          await provider.reconnect(resource, report, AbortSignal.timeout(15 * 60_000));
-          return "daemon was down; restarted it";
-        }
-        case "reconcile-stuck":
-          await bb.sdk.hosts.experimental_reconcile({ hostId });
-          return;
-        case "none":
-          return;
-        default: {
-          const unhandled: never = decision.action;
-          throw new Error(`unhandled action ${unhandled}`);
-        }
-      }
-    }, { force, heavy, cooldown: heavy }).catch((error) => {
-      bb.log.warn(`${machine}: ${decision.action} failed: ${errorText(error)}`);
-    });
+        },
+        { force, heavy, cooldown: heavy },
+      )
+      .catch((error) => {
+        bb.log.warn(`${machine}: ${decision.action} failed: ${errorText(error)}`);
+      });
   }
 
   /**
@@ -440,12 +480,17 @@ export default async function plugin(bb: BbPluginApi) {
           phaseSince: row.updatedAt,
           tunnel: tunnels.status(row.resource.envId),
           threadWaiting:
-            row.phase === "active" && row.status !== "connected" ? await threadWaiting(row.hostId).catch(() => false) : false,
+            row.phase === "active" && row.status !== "connected"
+              ? await threadWaiting(row.hostId).catch(() => false)
+              : false,
         };
         const decision = decide(view, onaView(row.resource.envId, listing), now);
         // With autoRepair off, only observed stops and deletions reach bb.
         const skipped = !autoRepair && decision.action !== "none" && decision.action !== "suspend-observed";
-        guard.note(row.hostId, skipped ? `${decision.reason} (would ${decision.action}; autoRepair is off)` : decision.reason);
+        guard.note(
+          row.hostId,
+          skipped ? `${decision.reason} (would ${decision.action}; autoRepair is off)` : decision.reason,
+        );
         if (decision.action === "none" || skipped) continue;
         actions.push(act(row, decision, options.force ?? false));
       }
@@ -524,8 +569,8 @@ export default async function plugin(bb: BbPluginApi) {
 
   /** Resolve a bb machine name/id or an Ona environment name/id to an env id. */
   async function resolveEnvId(ref: string): Promise<string> {
-    const row = (await machines()).find(
-      (r) => [r.hostId, r.machine, r.resource.envId, r.resource.envName].includes(ref),
+    const row = (await machines()).find((r) =>
+      [r.hostId, r.machine, r.resource.envId, r.resource.envName].includes(ref),
     );
     if (row) return row.resource.envId;
     const env = await ona.findEnvironment(ref);
@@ -535,8 +580,7 @@ export default async function plugin(bb: BbPluginApi) {
 
   async function findMachine(ref: string): Promise<Row | null> {
     return (
-      (await machines()).find((r) => [r.hostId, r.machine, r.resource.envId, r.resource.envName].includes(ref)) ??
-      null
+      (await machines()).find((r) => [r.hostId, r.machine, r.resource.envId, r.resource.envName].includes(ref)) ?? null
     );
   }
 
@@ -605,9 +649,13 @@ export default async function plugin(bb: BbPluginApi) {
   async function runCollector(envId: string, script: string, ids: string[]): Promise<unknown> {
     // Login shell for the user's PATH (node, codex); Codex keeps bb's local SQLite home.
     const command = [
-      "bash", "-lc",
+      "bash",
+      "-lc",
       '[ -n "$1" ] && export CODEX_SQLITE_HOME="$1"; script="$2"; shift 2; exec node -e "$script" "$@"',
-      "bb-ona-cost", codexSqliteHome, script, ...ids,
+      "bb-ona-cost",
+      codexSqliteHome,
+      script,
+      ...ids,
     ];
     let output = "";
     const { exitCode } = await sshExecutor(sshPath, envId, []).exec({
@@ -619,8 +667,12 @@ export default async function plugin(bb: BbPluginApi) {
         output += chunk;
       },
     });
-    const line = output.split("\n").reverse().find((l) => l.trim().startsWith("{"));
-    if (exitCode !== 0 || !line) throw new Error(`cost collector failed (exit ${exitCode}): ${output.trim().slice(-300)}`);
+    const line = output
+      .split("\n")
+      .reverse()
+      .find((l) => l.trim().startsWith("{"));
+    if (exitCode !== 0 || !line)
+      throw new Error(`cost collector failed (exit ${exitCode}): ${output.trim().slice(-300)}`);
     return JSON.parse(line);
   }
 
@@ -643,7 +695,12 @@ export default async function plugin(bb: BbPluginApi) {
     // Recompute once per finished turn, never mid-turn, and at most every 5
     // minutes: each check is an SSH round trip, and for Codex a short-lived
     // app-server that talks to OpenAI and reads the box's Codex login.
-    const [latest] = await bb.sdk.threads.events.list({ threadId, types: ["turn/completed"], order: "desc", limit: "1" });
+    const [latest] = await bb.sdk.threads.events.list({
+      threadId,
+      types: ["turn/completed"],
+      order: "desc",
+      limit: "1",
+    });
     const seq = Number(latest?.seq ?? 0);
     if (stored && (stored.seq === seq || Date.now() - stored.checkedAt < 5 * 60_000)) return stored.cost;
 
@@ -652,7 +709,7 @@ export default async function plugin(bb: BbPluginApi) {
       running = (async () => {
         // bb pages events at most 100 at a time.
         const identity: Array<{ seq: number | string; data?: unknown }> = [];
-        for (let afterSeq: string | undefined; ; ) {
+        for (let afterSeq: string | undefined; ;) {
           const page = await bb.sdk.threads.events.list({
             threadId,
             types: ["thread/identity", "turn/started"],
@@ -677,7 +734,9 @@ export default async function plugin(bb: BbPluginApi) {
               cost = { provider, usd, basis: "openai-estimate", partial: missing.length > 0, updatedAt: Date.now() };
             }
           } else {
-            const reply = (await runCollector(devbox.envId, CLAUDE_COLLECTOR, sessions)) as { buckets: ClaudeUsageBucket[] };
+            const reply = (await runCollector(devbox.envId, CLAUDE_COLLECTOR, sessions)) as {
+              buckets: ClaudeUsageBucket[];
+            };
             if (reply.buckets.length > 0) {
               const { usd, unknownModels } = claudeCost(reply.buckets);
               cost = { provider, usd, basis: "list-price", partial: unknownModels.length > 0, updatedAt: Date.now() };
@@ -745,8 +804,11 @@ export default async function plugin(bb: BbPluginApi) {
   // unrelated settings are never rewritten.
   function bbCli(args: string[]) {
     const env = { ...process.env, BB_SERVER_URL: bb.server.loopbackBaseUrl };
-    const cli = [process.env.BB_CLI, join(bb.server.experimental_dataDir, "bin", "bb"), join(homedir(), ".bb", "bin", "bb")]
-      .find((path): path is string => Boolean(path) && existsSync(path!));
+    const cli = [
+      process.env.BB_CLI,
+      join(bb.server.experimental_dataDir, "bin", "bb"),
+      join(homedir(), ".bb", "bin", "bb"),
+    ].find((path): path is string => Boolean(path) && existsSync(path!));
     if (!cli) return Promise.resolve({ ok: false, stdout: "", stderr: "bb CLI not found" });
     // A `#!/usr/bin/env node` CLI needs a node runtime; PATH may have none, so
     // run it with the runtime hosting this plugin (Node, or bb's Electron).
@@ -765,7 +827,8 @@ export default async function plugin(bb: BbPluginApi) {
     const wanted = parseProviderList(autoUpdateProviders);
     const lines: string[] = [];
     for (const row of await machines()) {
-      if (options.ref && ![row.hostId, row.machine, row.resource.envId, row.resource.envName].includes(options.ref)) continue;
+      if (options.ref && ![row.hostId, row.machine, row.resource.envId, row.resource.envName].includes(options.ref))
+        continue;
       const name = row.resource.envName;
       if (row.status !== "connected") {
         lines.push(`${name}: skipped (${row.status})`);
@@ -773,7 +836,9 @@ export default async function plugin(bb: BbPluginApi) {
       }
       if (!options.force) {
         const listed = await bb.sdk.threads.list({ hostId: row.hostId });
-        const threads = (Array.isArray(listed) ? listed : (listed as { threads?: unknown[] }).threads ?? []) as Array<{ status: string }>;
+        const threads = (
+          Array.isArray(listed) ? listed : ((listed as { threads?: unknown[] }).threads ?? [])
+        ) as Array<{ status: string }>;
         if (hostIsBusy(threads.map((thread) => thread.status))) {
           lines.push(`${name}: skipped (an agent is running; retry with --force)`);
           continue;
@@ -782,14 +847,18 @@ export default async function plugin(bb: BbPluginApi) {
       const statuses = (await bb.sdk.hosts.providerCliStatus({ hostId: row.hostId })) as Record<string, CliStatus>;
       const pending = updatesToApply(statuses, wanted);
       if (pending.length === 0) {
-        lines.push(`${name}: up to date (${wanted.map((p) => `${p} ${statuses[p]?.currentVersion ?? "not installed"}`).join(", ")})`);
+        lines.push(
+          `${name}: up to date (${wanted.map((p) => `${p} ${statuses[p]?.currentVersion ?? "not installed"}`).join(", ")})`,
+        );
         continue;
       }
       for (const provider of pending) {
         const from = statuses[provider]?.currentVersion ?? "?";
         const to = statuses[provider]?.latestVersion ?? "latest";
         const events = await bb.sdk.hosts.installProviderCli({ hostId: row.hostId, provider, actionKind: "update" });
-        const failed = events.find((event) => event.type === "error" || (event.type === "completed" && event.exitCode !== 0));
+        const failed = events.find(
+          (event) => event.type === "error" || (event.type === "completed" && event.exitCode !== 0),
+        );
         lines.push(
           failed
             ? `${name}: ${provider} update failed (${"message" in failed ? failed.message : `exit ${"exitCode" in failed ? failed.exitCode : "?"}`})`
@@ -834,12 +903,15 @@ export default async function plugin(bb: BbPluginApi) {
 
   async function applyStep(step: SetupStep): Promise<string | null> {
     const result =
-      step.id === "ssh-config" ? await run(resolveOna(), ["environment", "ssh-config"])
-      : step.id === "access" ? await bbCli(["settings", "general", "defaultMachineAccess", "direct"])
-      : step.id === "server-url"
-        ? await bbCli(["settings", "general", "machineServerUrl", bb.server.loopbackBaseUrl.replace(/\/+$/, "")])
-      : step.id === "git-credentials" ? await bbCli(["settings", "general", "machineGitCredentialsEnabled", "false"])
-      : null;
+      step.id === "ssh-config"
+        ? await run(resolveOna(), ["environment", "ssh-config"])
+        : step.id === "access"
+          ? await bbCli(["settings", "general", "defaultMachineAccess", "direct"])
+          : step.id === "server-url"
+            ? await bbCli(["settings", "general", "machineServerUrl", bb.server.loopbackBaseUrl.replace(/\/+$/, "")])
+            : step.id === "git-credentials"
+              ? await bbCli(["settings", "general", "machineGitCredentialsEnabled", "false"])
+              : null;
     if (result === null || result.ok) return null;
     return `${step.title}: ${result.stderr.trim().split("\n").slice(-1)[0]}`;
   }
@@ -850,9 +922,11 @@ export default async function plugin(bb: BbPluginApi) {
     const blocked = before.filter((step) => step.state === "blocked");
     if (!apply || changes.length === 0) {
       const footer =
-        blocked.length > 0 ? "\nFix the ✗ items above, then run `bb ona setup` again."
-        : changes.length > 0 ? "\nRun `bb ona setup --yes` to apply the → changes."
-        : "\nAll set. Add a devbox with `bb ona adopt <environment>` or `bb ona new [project]`.";
+        blocked.length > 0
+          ? "\nFix the ✗ items above, then run `bb ona setup` again."
+          : changes.length > 0
+            ? "\nRun `bb ona setup --yes` to apply the → changes."
+            : "\nAll set. Add a devbox with `bb ona adopt <environment>` or `bb ona new [project]`.";
       return { exitCode: blocked.length > 0 ? 1 : 0, stdout: formatSteps(before) + footer };
     }
     const errors: string[] = [];
@@ -904,14 +978,28 @@ export default async function plugin(bb: BbPluginApi) {
         hostId: row.hostId,
         bb: row.phase === "active" ? row.status : row.phase,
         tunnel: tunnels.status(row.resource.envId),
-        ona: !listing ? "unknown" : env ? (env.status?.phase ?? "?").replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase() : "missing",
+        ona: !listing
+          ? "unknown"
+          : env
+            ? (env.status?.phase ?? "?").replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase()
+            : "missing",
         now: guard.seen.get(row.hostId) ?? null,
         last: busy
           ? { action: busy, reason: "in progress", at: Date.now() }
-          : record ? { action: record.action, reason: record.reason, at: record.at, ...(record.error ? { error: record.error } : {}) } : null,
-        retry: !record || record.failures === 0 ? null
-          : record.failures >= GIVE_UP_AFTER ? `gave up after ${record.failures} failures; run \`bb ona sync ${row.machine}\``
-          : `retrying after ${new Date(record.quietUntil).toLocaleTimeString()}`,
+          : record
+            ? {
+                action: record.action,
+                reason: record.reason,
+                at: record.at,
+                ...(record.error ? { error: record.error } : {}),
+              }
+            : null,
+        retry:
+          !record || record.failures === 0
+            ? null
+            : record.failures >= GIVE_UP_AFTER
+              ? `gave up after ${record.failures} failures; run \`bb ona sync ${row.machine}\``
+              : `retrying after ${new Date(record.quietUntil).toLocaleTimeString()}`,
       };
     });
   }
@@ -930,7 +1018,9 @@ export default async function plugin(bb: BbPluginApi) {
       const lines = [`${row.machine}  bb:${row.bb}  tunnel:${row.tunnel}  ona:${row.ona}`];
       if (row.now) lines.push(`  now: ${row.now.reason} (since ${ago(row.now.since)})`);
       if (row.last) {
-        lines.push(`  last action: ${row.last.action}: ${row.last.reason} (${ago(row.last.at)})${row.last.error ? ` ERROR ${row.last.error}` : ""}`);
+        lines.push(
+          `  last action: ${row.last.action}: ${row.last.reason} (${ago(row.last.at)})${row.last.error ? ` ERROR ${row.last.error}` : ""}`,
+        );
       }
       if (row.retry) lines.push(`  ${row.retry}`);
       return lines.join("\n");
@@ -945,7 +1035,7 @@ export default async function plugin(bb: BbPluginApi) {
     "  bb ona adopt <environment>    Add an existing Ona environment as a bb machine (never deleted by bb)",
     "  bb ona new [project]          Create a new Ona devbox (defaults to the defaultProject setting)",
     "  bb ona list [--json]          bb machines backed by Ona, with tunnel status",
-    "  bb ona host <ref>             SSH host alias (use: ssh \"$(bb ona host <ref>)\")",
+    '  bb ona host <ref>             SSH host alias (use: ssh "$(bb ona host <ref>)")',
     "  bb ona ssh <ref>              Print the ssh command for a devbox",
     "  bb ona ssh <ref> --thread <id>  Open another terminal to the devbox in that thread's terminal panel",
     "  bb ona open <ref>             Open the devbox in your Ona editor",
@@ -963,7 +1053,11 @@ export default async function plugin(bb: BbPluginApi) {
     name: "ona",
     summary: "Ona devboxes as bb machines",
     commands: [
-      { name: "setup", summary: "Check prerequisites and apply one-time settings", usage: "bb ona setup [--yes] [--keep-git-credentials]" },
+      {
+        name: "setup",
+        summary: "Check prerequisites and apply one-time settings",
+        usage: "bb ona setup [--yes] [--keep-git-credentials]",
+      },
       { name: "adopt", summary: "Add an existing Ona environment", usage: "bb ona adopt <environment>" },
       { name: "new", summary: "Create a new Ona devbox", usage: "bb ona new [project]" },
       { name: "list", summary: "List Ona-backed machines", usage: "bb ona list [--json]" },
@@ -1034,8 +1128,14 @@ export default async function plugin(bb: BbPluginApi) {
               exitCode: 0,
               stdout: rows
                 .map((r) =>
-                  [r.machine, r.hostId, r.status, `tunnel:${r.tunnel}`, r.resource.envName,
-                    r.resource.adopted ? "adopted" : "created"].join("  "),
+                  [
+                    r.machine,
+                    r.hostId,
+                    r.status,
+                    `tunnel:${r.tunnel}`,
+                    r.resource.envName,
+                    r.resource.adopted ? "adopted" : "created",
+                  ].join("  "),
                 )
                 .join("\n"),
             };
@@ -1060,7 +1160,8 @@ export default async function plugin(bb: BbPluginApi) {
             const envId = await resolveEnvId(ref);
             const name = newName ?? randomFriendlyName();
             const valid = onaRef.safeParse(name);
-            if (!valid.success) return { exitCode: 1, stderr: `Invalid name "${name}": ${valid.error.issues[0]?.message}` };
+            if (!valid.success)
+              return { exitCode: 1, stderr: `Invalid name "${name}": ${valid.error.issues[0]?.message}` };
             await ona.rename(envId, name);
             const row = (await machines()).find((r) => r.resource.envId === envId);
             if (row) await bb.sdk.hosts.update({ hostId: row.hostId, name: `ona:${name}` });
@@ -1074,31 +1175,47 @@ export default async function plugin(bb: BbPluginApi) {
           case "adopt": {
             if (!ref) break;
             const valid = onaRef.safeParse(ref);
-            if (!valid.success) return { exitCode: 1, stderr: `Invalid environment "${ref}": ${valid.error.issues[0]?.message}` };
+            if (!valid.success)
+              return { exitCode: 1, stderr: `Invalid environment "${ref}": ${valid.error.issues[0]?.message}` };
             return { exitCode: 0, stdout: await addMachine({ mode: "adopt", environment: ref }) };
           }
           case "new": {
             const project = ref ?? defaultProject;
             if (!project) {
-              return { exitCode: 1, stderr: "Name an Ona project (`bb ona new <project>`) or set one: bb plugin config ona set defaultProject <project>" };
+              return {
+                exitCode: 1,
+                stderr:
+                  "Name an Ona project (`bb ona new <project>`) or set one: bb plugin config ona set defaultProject <project>",
+              };
             }
             const valid = onaRef.safeParse(project);
-            if (!valid.success) return { exitCode: 1, stderr: `Invalid project "${project}": ${valid.error.issues[0]?.message}` };
+            if (!valid.success)
+              return { exitCode: 1, stderr: `Invalid project "${project}": ${valid.error.issues[0]?.message}` };
             return { exitCode: 0, stdout: await addMachine({ mode: "create", project }) };
           }
           case "reconnect": {
             if (!ref) break;
-            const row = (await machines()).find(
-              (r) => [r.hostId, r.machine, r.resource.envId, r.resource.envName].includes(ref),
+            const row = (await machines()).find((r) =>
+              [r.hostId, r.machine, r.resource.envId, r.resource.envName].includes(ref),
             );
             if (!row) return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${ref}".` };
             const steps: string[] = [];
             const report = { step: (text: string) => steps.push(text), log: () => {} };
             const busy = guard.busyWith(row.hostId);
-            if (busy) return { exitCode: 1, stderr: `${row.machine} is busy (${busy}); try again shortly or see \`bb ona status\`.` };
-            await guard.run(row.hostId, "reconnect", "requested with bb ona reconnect", async () => {
-              await provider.reconnect(row.resource, report, ctx.signal ?? new AbortController().signal);
-            }, { force: true, cooldown: false });
+            if (busy)
+              return {
+                exitCode: 1,
+                stderr: `${row.machine} is busy (${busy}); try again shortly or see \`bb ona status\`.`,
+              };
+            await guard.run(
+              row.hostId,
+              "reconnect",
+              "requested with bb ona reconnect",
+              async () => {
+                await provider.reconnect(row.resource, report, ctx.signal ?? new AbortController().signal);
+              },
+              { force: true, cooldown: false },
+            );
             return { exitCode: 0, stdout: [...steps, `Reconnected ${row.machine}`].join("\n") };
           }
           case "status": {
@@ -1108,9 +1225,13 @@ export default async function plugin(bb: BbPluginApi) {
           }
           case "sync": {
             const targets = ref ? [await findMachine(ref)] : await machines();
-            if (targets.some((row) => row === null)) return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${ref}".` };
+            if (targets.some((row) => row === null))
+              return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${ref}".` };
             await snapshot.refresh().catch(() => undefined);
-            await reconcile(ref ? new Set(targets.map((row) => row!.hostId)) : new Set([ALL]), { force: true, wait: true });
+            await reconcile(ref ? new Set(targets.map((row) => row!.hostId)) : new Set([ALL]), {
+              force: true,
+              wait: true,
+            });
             return { exitCode: 0, stdout: formatStatus(await statusRows(ref)) };
           }
           case "shell": {

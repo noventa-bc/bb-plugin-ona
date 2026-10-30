@@ -5,14 +5,14 @@
   "extends": "node-dev",
   "meta": {
     "name": "bb-ona-agent",
-    "description": "Coding agent on the bb-ona plugin: worktree, toolchain and model APIs only"
+    "description": "Coding agent on the bb-ona plugin: worktree, toolchain and model APIs only",
   },
   "groups": { "include": ["git_config"] },
   "workdir": { "access": "readwrite" },
   "filesystem": {
     "read": ["$HOME/.local/share/claude", "$HOME/.local/bin"],
     "allow": ["$HOME/.claude", "$HOME/.codex"],
-    "allow_file": ["$HOME/.claude.json"]
+    "allow_file": ["$HOME/.claude.json"],
   },
   "network": {
     "network_profile": null,
@@ -24,7 +24,7 @@
       "chatgpt.com",
       "auth.openai.com",
       "*.openai.com",
-      "*.chatgpt.com"
-    ]
-  }
+      "*.chatgpt.com",
+    ],
+  },
 }

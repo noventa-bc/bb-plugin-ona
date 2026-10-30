@@ -4,7 +4,14 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { CLAUDE_COLLECTOR, claudeCost, claudePriceFor, codexCost, providerSessions, type ClaudeUsageBucket } from "../src/cost.ts";
+import {
+  CLAUDE_COLLECTOR,
+  claudeCost,
+  claudePriceFor,
+  codexCost,
+  providerSessions,
+  type ClaudeUsageBucket,
+} from "../src/cost.ts";
 
 const bucket = (model: string, usage: Partial<ClaudeUsageBucket> = {}): ClaudeUsageBucket => ({
   model,
@@ -18,7 +25,8 @@ const bucket = (model: string, usage: Partial<ClaudeUsageBucket> = {}): ClaudeUs
   ...usage,
 });
 
-const close = (actual: number, expected: number) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
+const close = (actual: number, expected: number) =>
+  assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
 
 test("Claude cost uses each model's input, output and cache rates", () => {
   const { usd, unknownModels } = claudeCost([
@@ -77,15 +85,30 @@ test("the Claude collector counts each API response once, including subagents", 
   const home = mkdtempSync(join(tmpdir(), "bb-ona-cost-"));
   const project = join(home, "projects", "-workspaces-app");
   mkdirSync(join(project, "s1", "subagents"), { recursive: true });
-  const usage = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 100, cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 20 } };
+  const usage = {
+    input_tokens: 10,
+    output_tokens: 5,
+    cache_read_input_tokens: 100,
+    cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 20 },
+  };
   const line = (id: string, model: string) => JSON.stringify({ type: "assistant", message: { id, model, usage } });
   // Two lines for one response (thinking + text blocks) and one more response.
-  writeFileSync(join(project, "s1.jsonl"), [line("m1", "claude-opus-5-5"), line("m1", "claude-opus-5-5"), line("m2", "claude-opus-5-5"), "{bad json"].join("\n"));
+  writeFileSync(
+    join(project, "s1.jsonl"),
+    [line("m1", "claude-opus-5-5"), line("m1", "claude-opus-5-5"), line("m2", "claude-opus-5-5"), "{bad json"].join(
+      "\n",
+    ),
+  );
   writeFileSync(join(project, "s1", "subagents", "agent-1.jsonl"), line("m3", "claude-haiku-5-5"));
-  const out = execFileSync(process.execPath, ["-e", CLAUDE_COLLECTOR, "s1"], { env: { ...process.env, CLAUDE_CONFIG_DIR: home } }).toString();
+  const out = execFileSync(process.execPath, ["-e", CLAUDE_COLLECTOR, "s1"], {
+    env: { ...process.env, CLAUDE_CONFIG_DIR: home },
+  }).toString();
   const { files, buckets } = JSON.parse(out) as { files: number; buckets: ClaudeUsageBucket[] };
   assert.equal(files, 2);
   const opus = buckets.find((b) => b.model === "claude-opus-5-5")!;
-  assert.deepEqual({ input: opus.input, output: opus.output, cacheRead: opus.cacheRead, cacheWrite1h: opus.cacheWrite1h }, { input: 20, output: 10, cacheRead: 200, cacheWrite1h: 40 });
+  assert.deepEqual(
+    { input: opus.input, output: opus.output, cacheRead: opus.cacheRead, cacheWrite1h: opus.cacheWrite1h },
+    { input: 20, output: 10, cacheRead: 200, cacheWrite1h: 40 },
+  );
   assert.equal(buckets.find((b) => b.model === "claude-haiku-5-5")?.input, 10);
 });

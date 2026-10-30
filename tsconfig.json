@@ -5,13 +5,8 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
-    "lib": [
-      "ES2022",
-      "DOM"
-    ],
-    "types": [
-      "node"
-    ],
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
     "noEmit": true,
     "skipLibCheck": false,
     "allowImportingTsExtensions": true,
@@ -23,10 +18,5 @@
     "verbatimModuleSyntax": true,
     "erasableSyntaxOnly": true
   },
-  "include": [
-    "app.tsx",
-    "server.ts",
-    "src",
-    "test"
-  ]
+  "include": ["app.tsx", "server.ts", "src", "test"]
 }

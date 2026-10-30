@@ -20,7 +20,11 @@ const ready = {
   onaBinary: "/opt/homebrew/bin/ona",
   login: { ok: true as const, user: "Ada", org: "example.com" },
   sshConfigured: true,
-  settings: { defaultMachineAccess: "direct", machineServerUrl: "http://127.0.0.1:38886", machineGitCredentialsEnabled: false },
+  settings: {
+    defaultMachineAccess: "direct",
+    machineServerUrl: "http://127.0.0.1:38886",
+    machineGitCredentialsEnabled: false,
+  },
   serverUrl: "http://127.0.0.1:38886",
   keepGitCredentials: false,
 };
@@ -55,5 +59,12 @@ test("planSetup blocks without the ona CLI and can keep git credentials", () => 
     keepGitCredentials: true,
     settings: { ...ready.settings, machineGitCredentialsEnabled: true },
   });
-  assert.deepEqual(steps.map((step) => [step.id, step.state]), [["ona", "blocked"], ["access", "ok"], ["server-url", "ok"]]);
+  assert.deepEqual(
+    steps.map((step) => [step.id, step.state]),
+    [
+      ["ona", "blocked"],
+      ["access", "ok"],
+      ["server-url", "ok"],
+    ],
+  );
 });

@@ -72,24 +72,40 @@ export function decide(machine: MachineView, ona: OnaView, now: number): Decisio
   }
   // Suspended stays suspended until you use it, even if Ona runs the box.
   if (phase === "suspended") {
-    return { action: "none", reason: ona.kind === "env" && ona.phase === RUNNING ? "suspended in bb, running in Ona" : "suspended" };
+    return {
+      action: "none",
+      reason: ona.kind === "env" && ona.phase === RUNNING ? "suspended in bb, running in Ona" : "suspended",
+    };
   }
   if (phase !== "active") return { action: "none", reason: `bb is ${phase}` };
 
   if (ona.kind === "unknown") return { action: "none", reason: "Ona state unknown" };
   if (ona.kind === "missing" || GONE.has(ona.phase)) {
-    if (ona.kind === "missing" && ona.streak < 2) return { action: "none", reason: "not in Ona's list (checking again)" };
-    return { action: "suspend-observed", reason: "the Ona environment is gone; remove the machine with `bb machine remove`" };
+    if (ona.kind === "missing" && ona.streak < 2)
+      return { action: "none", reason: "not in Ona's list (checking again)" };
+    return {
+      action: "suspend-observed",
+      reason: "the Ona environment is gone; remove the machine with `bb machine remove`",
+    };
   }
   if (machine.status === "connected") return { action: "none", reason: "connected" };
   if (STOPPED.has(ona.phase)) {
-    return { action: "suspend-observed", reason: `Ona ${short(ona.phase)} the box`, resumeAfter: machine.threadWaiting };
+    return {
+      action: "suspend-observed",
+      reason: `Ona ${short(ona.phase)} the box`,
+      resumeAfter: machine.threadWaiting,
+    };
   }
   if (ona.phase !== RUNNING) return { action: "none", reason: `Ona is ${short(ona.phase)}` };
   if (machine.tunnel === "off") return { action: "ensure-tunnel", reason: "running in Ona but no tunnel" };
   const disconnectedFor = machine.lastSeenAt === null ? Infinity : now - machine.lastSeenAt;
   if (machine.threadWaiting || disconnectedFor >= GRACE_MS) {
-    return { action: "heal-daemon", reason: machine.threadWaiting ? "a thread is waiting and the daemon isn't connected" : "running in Ona but the daemon isn't connected" };
+    return {
+      action: "heal-daemon",
+      reason: machine.threadWaiting
+        ? "a thread is waiting and the daemon isn't connected"
+        : "running in Ona but the daemon isn't connected",
+    };
   }
   return { action: "none", reason: "disconnected briefly (waiting for it to come back)" };
 }
@@ -125,7 +141,11 @@ export class PassScheduler {
   private readonly onError: (error: unknown) => void;
 
   /** A pass that throws is reported to `onError`; it never escapes as an unhandled rejection. */
-  constructor(run: (keys: Set<string>) => Promise<void>, clock: Clock = systemClock, onError: (error: unknown) => void = () => {}) {
+  constructor(
+    run: (keys: Set<string>) => Promise<void>,
+    clock: Clock = systemClock,
+    onError: (error: unknown) => void = () => {},
+  ) {
     this.run = run;
     this.clock = clock;
     this.onError = onError;
@@ -256,7 +276,7 @@ export class HostGuard {
         quietUntil: options.cooldown === false ? now : now + COOLDOWN_MS,
       });
     } catch (error) {
-      const failures = (options.force ? 0 : previous?.failures ?? 0) + 1;
+      const failures = (options.force ? 0 : (previous?.failures ?? 0)) + 1;
       const now = this.clock.now();
       this.records.set(hostId, {
         action,
@@ -287,10 +307,12 @@ export class HostGuard {
       this.active++;
       return Promise.resolve();
     }
-    return new Promise((resolve) => this.queue.push(() => {
-      this.active++;
-      resolve();
-    }));
+    return new Promise((resolve) =>
+      this.queue.push(() => {
+        this.active++;
+        resolve();
+      }),
+    );
   }
 
   private release(): void {
@@ -305,13 +327,13 @@ export class HostGuard {
  * timeout) means "unknown" and must not trigger a restart.
  */
 export const DAEMON_PROBE = [
-  'me=$$; pp=$PPID; found=1',
+  "me=$$; pp=$PPID; found=1",
   'root="$HOME/.bb-machines"',
   'for dir in "$root" "$(readlink -f "$root" 2>/dev/null)" "$@"; do',
   '  [ -n "$dir" ] || continue',
   // This shell, its parent and the ps/awk children carry the folder in their
   // own command lines; skip them.
   '  if ps -eo pid=,ppid=,args= | awk -v d="$dir/" -v me="$me" -v pp="$pp" \'$1!=me && $1!=pp && $2!=me && index($0, d) {f=1} END {exit !f}\'; then found=0; break; fi',
-  'done',
-  'exit $found',
+  "done",
+  "exit $found",
 ].join("\n");
