@@ -47,6 +47,8 @@ an unattended agent skips a conflicting item.
 ## Review a handoff
 
 1. Read `.agent/HANDOFF.md` in the worktree, then the diff (`git -C <worktree> diff`).
+   Decide on anything under "Needs owner review", and check that each added
+   piece of complexity is worth what the handoff says it costs.
 2. Run `npm run check` in the worktree (outside the sandbox, so every test runs).
 3. Stage files by name, commit, then run `/changelog` to add the hash and commit that.
 4. Apply "Process feedback" proposals to `AGENTS.md` yourself, if they hold up.
