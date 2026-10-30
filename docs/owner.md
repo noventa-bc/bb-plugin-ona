@@ -5,7 +5,9 @@ read and write their working folder and their own state (`~/.claude`,
 `~/.codex`), read the toolchain, and reach only the model APIs. They can't read
 `~/.ssh`, `~/.ona` or `~/.bb`, can't write anywhere else, and can't reach
 localhost, so `ona`, `ssh` to boxes and the live bb server are out of reach.
-Agents never commit or push; you review and commit.
+Agents never commit to `main` or push; you review and merge. Under the
+orchestrated flow in `FACTORY.md` they commit on `agent/*` branches and the
+orchestrator opens PRs.
 
 ## One-time setup
 

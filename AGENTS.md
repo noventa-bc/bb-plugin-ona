@@ -5,9 +5,12 @@
 bb-ona is a bb plugin. It runs bb threads (Claude Code, Codex) in Ona devboxes and keeps bb's view of each devbox in step with Ona.
 This repo is public. Name only this plugin and public tools.
 
+Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
+
 ## Commands
 
 - Run `npm run check` (typecheck, lint, format check and tests) before you finish. `npm run format` fixes formatting.
+- CI also runs `shellcheck` on `scripts/*.sh` and `test/*.sh`; `npm run check` does not. After changing a `.sh` file, run `shellcheck` on it (`brew install shellcheck`), or say in the handoff that it was not run.
 - Run one test file with `node --test --experimental-strip-types test/reconcile.test.ts`.
 - Inside the agent sandbox, tests that need local ports or other processes skip themselves. CI runs them.
 - Live reload of the plugin is owner-only. Do not run it.
@@ -18,7 +21,7 @@ This repo is public. Name only this plugin and public tools.
 - Ona devboxes cost money while they run.
 - Ona's SSH starts stopped devboxes. Any SSH to a devbox can wake it.
 - Never run `ona` actions, `ssh` to devboxes, or `bb machine` or `bb plugin` changes.
-- Never run `git commit` or `git push`.
+- Never commit to `main` or push, except as `FACTORY.md` allows: builders commit on `agent/*` branches, the orchestrator pushes them and opens PRs.
 - Read-only `bb ona status` is fine, but only when the owner is present.
 
 ## Coupled changes
@@ -40,6 +43,7 @@ Change these together, in the same edit.
 ## How to work
 
 - Fix a bug with a failing test first, where a test is possible.
+- When you find a bug, a source of noise or anything that can damage the repo, add the guard that stops it recurring in the same change: a test, a lint rule, a CI step, a `.gitignore` line or a written rule here. Say in the handoff which guard you added.
 - A change to what a sync pass does gets a scenario in `test/sync.test.ts` (fake bb calls, fake Ona listing).
 - For `server.ts` code without tests, list owner check steps in the handoff instead.
 - Put logic in `src/` as pure functions with tests.
@@ -90,7 +94,7 @@ Write `.agent/HANDOFF.md` when a task ends. The file is git-ignored. Use these s
 - Security (private)
 - Process feedback
 
-Leave changes uncommitted for the owner to review.
+Leave changes uncommitted for the owner to review, unless the task runs under `FACTORY.md`, where they go into a PR.
 Write unfixed weaknesses only under Security (private). Never put them in a committed file.
 Process feedback holds proposed edits to this file, with evidence.
 
