@@ -5,6 +5,8 @@
 bb-ona is a bb plugin. It runs bb threads (Claude Code, Codex) in Ona devboxes and keeps bb's view of each devbox in step with Ona.
 This repo is public. Name only this plugin and public tools.
 
+Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
+
 ## Commands
 
 - Run `npm run check` (typecheck, lint, format check and tests) before you finish. `npm run format` fixes formatting.
@@ -18,7 +20,7 @@ This repo is public. Name only this plugin and public tools.
 - Ona devboxes cost money while they run.
 - Ona's SSH starts stopped devboxes. Any SSH to a devbox can wake it.
 - Never run `ona` actions, `ssh` to devboxes, or `bb machine` or `bb plugin` changes.
-- Never run `git commit` or `git push`.
+- Never commit to `main` or push, except as `FACTORY.md` allows: builders commit on `agent/*` branches, the orchestrator pushes them and opens PRs.
 - Read-only `bb ona status` is fine, but only when the owner is present.
 
 ## Coupled changes
@@ -90,7 +92,7 @@ Write `.agent/HANDOFF.md` when a task ends. The file is git-ignored. Use these s
 - Security (private)
 - Process feedback
 
-Leave changes uncommitted for the owner to review.
+Leave changes uncommitted for the owner to review, unless the task runs under `FACTORY.md`, where they go into a PR.
 Write unfixed weaknesses only under Security (private). Never put them in a committed file.
 Process feedback holds proposed edits to this file, with evidence.
 
