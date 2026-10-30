@@ -87,6 +87,11 @@ This file is the memory of the flow. Keep it current:
   adding a near-duplicate.
 - When a step failed or wasted time, record what to do instead, next to the
   step.
+- When a bug, a source of noise or a repo hazard shows up (in the code, in CI,
+  in a review or in the flow itself), add the guardrail that stops it recurring
+  before the PR opens: a test with the failing case, a lint rule, a CI step, a
+  `.gitignore` line, or a rule here or in `AGENTS.md`. A finding that is only
+  fixed, with no guard, is not closed.
 - When a rule here conflicts with `AGENTS.md`, fix `AGENTS.md` in the same PR
   so the two agree, and say so in the PR.
 - Keep this file under 150 lines. An addition that goes over names what it
@@ -106,6 +111,12 @@ Rules the owner gave in sessions, restated so they stay true. Checked 2026-10-30
   it is stale. Propose improvements and simplifications in it, and improve its
   structure.
 - Run slow commands in the background and keep working meanwhile.
+- Whenever something buggy, noisy or risky for the repo is seen, add
+  guidelines, guardrails and harnesses so it does not happen again, and keep
+  that rule documented in the repo.
+- The roadmap keeps status only in its Status tab table, one row per item,
+  with the PR or commit named in the Item cell. The main tab carries no status
+  words. Follow the structure the owner sets; do not add status elsewhere.
 - A subagent cannot see the owner's approvals. When a builder needs an approved
   install or commit, the orchestrator performs that step in the builder's
   worktree, then tells the builder to continue.

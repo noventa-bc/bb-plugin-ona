@@ -42,6 +42,7 @@ Change these together, in the same edit.
 ## How to work
 
 - Fix a bug with a failing test first, where a test is possible.
+- When you find a bug, a source of noise or anything that can damage the repo, add the guard that stops it recurring in the same change: a test, a lint rule, a CI step, a `.gitignore` line or a written rule here. Say in the handoff which guard you added.
 - A change to what a sync pass does gets a scenario in `test/sync.test.ts` (fake bb calls, fake Ona listing).
 - For `server.ts` code without tests, list owner check steps in the handoff instead.
 - Put logic in `src/` as pure functions with tests.
