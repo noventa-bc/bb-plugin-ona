@@ -14,6 +14,8 @@ true, and complexity that pays for itself. When a shortcut would be faster
 today and costlier to keep, take the slower path and say so. Removing code,
 settings, processes and steps counts as progress: every session looks for a
 simplification or an optimisation to propose, in the code and in this flow.
+Keep it simple and do not repeat yourself; judge like a staff engineer who
+knows when the quick fix is right and when it is not.
 
 ## Roles
 
@@ -125,6 +127,7 @@ Rules the owner gave in sessions, restated so they stay true. Checked 2026-10-30
 
 - Make the repo sustainable in the long term; it is not a one-weekend app.
   Simplifications and optimisations matter as much as features for that.
+- Don't over-engineer: KISS and DRY, with a staff engineer's judgement.
 - Every change goes through a reviewed PR and merges as soon as CI is green.
   Make CI able to catch issues and regressions, so merging on green is safe.
 - Delegate mechanical tasks to cheaper models such as Haiku, and supervise them.
