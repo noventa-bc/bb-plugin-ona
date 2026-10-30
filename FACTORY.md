@@ -33,11 +33,21 @@ mechanical work such as merges, renames, fixture updates and lookups. The
 orchestrator checks a small model's output before using it, and gives it a
 brief with exact commands and a stop condition.
 
-Every session runs with the ponytail plugin on (`/ponytail full`, the
-default), so builders and reviewers write the least code that solves the whole
-task; `docs/owner.md` has the install. Merging on green is only as safe as CI. Every PR adds a test for the behaviour
+Merging on green is only as safe as CI. Every PR adds a test for the behaviour
 it changes; a gap CI cannot see (untested module, missing lint, unchecked
 script) becomes a roadmap item and is named in the PR.
+
+## Ponytail
+
+The ponytail plugin (`docs/owner.md` has the install) is the "least code"
+ruleset for every agent in the flow. The orchestrator checks at session start
+that its skills are listed (`/ponytail-help`; after an install, run
+`/reload-plugins`) and runs at level `full`. Its hooks inject the ruleset into
+subagents, so briefs state the task scope and need not repeat it. Reviews run `/ponytail-review` with
+the target spelled out (`staged`, `branch`, or the PR link). A builder marks a
+known limit with a `shortcut:` comment; its handoff carries those and the
+"skipped or not checked" lines ponytail ends with. `/ponytail-debt` runs before
+a release and its ledger goes to the roadmap.
 
 ## Inputs
 
@@ -64,12 +74,11 @@ script) becomes a roadmap item and is named in the PR.
    write first, the coupled changes from `AGENTS.md`, and what to report back.
 5. **Build** in a worktree. The builder runs `npm ci --ignore-scripts`, writes
    a failing test first where possible, keeps `npm run check` green, writes
-   `.agent/HANDOFF.md`, and commits on its branch.
+   `.agent/HANDOFF.md`, and leaves the work staged for the orchestrator.
 6. **Review.** The orchestrator reads the handoff and the diff, runs a reviewer
    agent, `code-review` and `/ponytail-review branch`, and sends findings back
    to the builder. Repeat until there are no open findings. Check the ten Code
-   Review Rules in `AGENTS.md`. A ponytail finding that the change is bigger
-   than the task needs is a finding like any other.
+   Review Rules in `AGENTS.md`.
 7. **Open the PR.** Push the branch and open a pull request against `main`.
    The description carries: the roadmap labels, what changed and why, how it
    was tested, the owner live-test steps from the handoff, and anything left
@@ -83,7 +92,9 @@ script) becomes a roadmap item and is named in the PR.
    conflicts keeping both sides, run `npm run check`, let CI run again, then
    merge. Two green PRs can still break each other once combined, so the
    rerun after merging `main` is never skipped. Never merge a red PR.
-10. **Sync the roadmap.** When a PR opens, set the item's status to In review.
+10. **Sync the roadmap.** Status lives only in the table at the top of the
+    roadmap, one linked row per item, with the landing commit in the Item cell.
+    When a PR opens, set the item to In review.
     When it merges, set it to Done and note the gap if part of the item was left
     out. Fix any other status that the code shows to be stale.
 11. **Improve the roadmap.** The orchestrator may add items (fixes,
@@ -130,12 +141,6 @@ This file is the memory of the flow. Keep it current:
 Rules the owner gave that the sections above do not already state. Checked
 2026-10-30. Purpose, Flow and Self-improvement hold the rest.
 
-- Semgrep rules may be added as guardrails when they fit, or proposed in the
-  roadmap.
-- Keep roadmap statuses up to date and the roadmap in step with the code.
-  Status lives only in the Status table at the top of the roadmap, one row per
-  item linked to its section, with the landing commit named in the Item cell;
-  headings carry no status words.
 - Run slow commands in the background and keep working meanwhile.
 - Several worktrees are open at once and the shell's working directory drifts
   between them. Address every git command with `git -C <path>` and every file
