@@ -1,5 +1,0 @@
-{
-  "permissions": {
-    "ask": ["Bash(ona:*)", "Bash(ssh:*)"]
-  }
-}
