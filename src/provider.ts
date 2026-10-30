@@ -3,7 +3,7 @@
 import type { BbPluginApi, MachineBootstrapRequest, MachineExecutor } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { friendlyName } from "./names.ts";
-import { isRunning, isStarting, isStopped, type OnaCli, type OnaEnvironment } from "./ona.ts";
+import { isDeleted, isRunning, isStarting, isStopped, type OnaCli, type OnaEnvironment } from "./ona.ts";
 import { DAEMON_PROBE } from "./reconcile.ts";
 import type { PluginMachineProviderAvailability } from "./setup.ts";
 import { daemonEnv, shellQuote, sshCapture, sshExecutor, type TunnelManager } from "./ssh.ts";
@@ -74,6 +74,8 @@ export interface ProviderDeps {
    * the tunnel closes and Ona's own inactivity timeout stops the box.
    */
   takeRelease(envId: string): Promise<boolean>;
+  /** Drop the plugin's stored keys for a box whose machine is removed. */
+  forgetBox(envId: string): Promise<void>;
 }
 
 /** Deterministic Ona name for a creation key, so retries find the same environment. */
@@ -102,7 +104,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       while (Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 5_000));
         signal.throwIfAborted();
-        const current = await ona.findEnvironment(env.id, signal);
+        const current = await ona.getEnvironmentIfExists(env.id, signal);
         if (!current) throw new Error(`Ona environment ${env.metadata.name ?? env.id} disappeared while starting.`);
         if (isRunning(current)) return;
         if (!isStarting(current)) {
@@ -118,7 +120,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       while (Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 5_000));
         signal.throwIfAborted();
-        const current = await ona.findEnvironment(env.id, signal);
+        const current = await ona.getEnvironmentIfExists(env.id, signal);
         if (!current || current.status?.phase !== "ENVIRONMENT_PHASE_STOPPING") break;
       }
     }
@@ -363,7 +365,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       // so an open Ona editor still keeps it alive.
       if (await deps.takeRelease(owned.envId)) return { resource };
       // Ona may have stopped it already (idle timeout); bb then only records the suspension.
-      const env = await ona.findEnvironment(owned.envId, signal);
+      const env = await ona.getEnvironmentIfExists(owned.envId, signal);
       if (env && !isStopped(env)) {
         report.step(`Stopping Ona environment ${owned.envName}`);
         await ona.stop(owned.envId, signal);
@@ -374,7 +376,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       const owned = resourceSchema.parse(resource);
       // Drop a no-stop flag a failed suspend may have left; the next suspend is the user's.
       await deps.takeRelease(owned.envId);
-      const env = await requireEnv(owned.envId, signal);
+      const env = await ona.getEnvironmentIfExists(owned.envId, signal);
+      if (!env) throw new Error(`Ona environment "${owned.envId}" not found. Run \`ona environment list\`.`);
       await ensureRunning(env, report, signal);
       await checkpoint(resource);
       // bootstrap with the creation key restarts the already-enrolled daemon.
@@ -384,7 +387,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     async remove({ resource, hostId, report, signal }) {
       const owned = resourceSchema.parse(resource);
       if (owned.adopted) {
-        const env = await ona.findEnvironment(owned.envId, signal);
+        const env = await ona.getEnvironmentIfExists(owned.envId, signal);
         if (env && isRunning(env)) {
           report.step(`Stopping the bb daemon on ${owned.envName} (environment is kept)`);
           // The detached daemon and its supervisor both run from the data dir.
@@ -408,11 +411,14 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
             .catch(() => undefined);
         }
         await disconnect(owned.envId);
+        await deps.forgetBox(owned.envId);
         return { status: "removed" };
       }
       await disconnect(owned.envId);
-      const env = await ona.findEnvironment(owned.envId, signal);
-      if (env) {
+      await deps.forgetBox(owned.envId);
+      // `get` also returns boxes Ona already deleted or is deleting, which `list` hid.
+      const env = await ona.getEnvironmentIfExists(owned.envId, signal);
+      if (env && !isDeleted(env)) {
         report.step(`Deleting Ona environment ${owned.envName}`);
         await ona.delete(owned.envId, signal);
       }

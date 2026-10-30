@@ -55,7 +55,9 @@ Keep-alives are not restored after a reload. `bb ona status` shows
    finds no daemon process. If SSH can't tell, nothing is restarted.
    *Why: a restart kills running agent turns.*
 4. **Unknown is not gone.** A failed or empty `ona environment list` changes
-   nothing, and "missing" needs two listings in a row.
+   nothing, and "missing" needs two listings in a row. A lookup by id
+   (`ona environment get`) that fails is unknown too; only Ona saying the id
+   doesn't exist counts as gone.
 5. **One action per machine at a time.** After an action, the machine waits 5
    minutes before the next one. Failures back off (5, 10, 20 min, …). After 3
    failures in a row the plugin stops trying and says so in `bb ona status`.
@@ -112,6 +114,8 @@ A pass (which machines, carrying out each decision, idle release, the status
 rows) is `createSync()` in `src/sync.ts`; `test/sync.test.ts` drives it against
 a fake of the bb calls it makes. The events, the backstop and the `bb ona`
 commands are wired in `server.ts` (`watchRealtime()`). The shared listing is
-`OnaSnapshot` in `src/ona.ts`. To add or change a rule, update `decide()`, its
-test in `test/reconcile.test.ts`, and the table above, all in the same change.
+`OnaSnapshot` in `src/ona.ts`. Removing an Ona machine drops the box's stored
+keys (`forgetBox()` in `src/sync.ts`, called from the provider's `remove()`).
+To add or change a rule, update `decide()`, its test in
+`test/reconcile.test.ts`, and the table above, all in the same change.
 

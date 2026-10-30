@@ -27,6 +27,24 @@ import {
 export const RELEASING_KEY = "releasing";
 export const connectedAtKey = (envId: string) => `connectedAt:${envId}`;
 
+/** Drop the plugin's stored keys for one box; the provider's remove() calls it. */
+export async function forgetBox(
+  kv: {
+    get<T>(key: string): Promise<T | null | undefined>;
+    set(key: string, value: unknown): Promise<void>;
+    delete(key: string): Promise<void>;
+  },
+  envId: string,
+): Promise<void> {
+  await kv.delete(connectedAtKey(envId));
+  const releasing = (await kv.get<string[]>(RELEASING_KEY)) ?? [];
+  if (releasing.includes(envId))
+    await kv.set(
+      RELEASING_KEY,
+      releasing.filter((id) => id !== envId),
+    );
+}
+
 interface HostLifecycle {
   phase: string;
   message: string | null;

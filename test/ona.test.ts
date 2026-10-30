@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, after, test } from "node:test";
-import { isArchived, isRunning, isStarting, isStopped, OnaCli } from "../src/ona.ts";
+import { isArchived, isDeleted, isRunning, isStarting, isStopped, OnaCli, type OnaEnvironment } from "../src/ona.ts";
 
 const fakeOna = fileURLToPath(new URL("./fake-ona.sh", import.meta.url));
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/ona/${name}`, import.meta.url));
@@ -139,6 +139,39 @@ test("getEnvironment finds an archived box that the list leaves out", async () =
 test("getEnvironment rejects when Ona doesn't know the box", async () => {
   setFake({});
   await assert.rejects(cli.getEnvironment("env-0000"), /ona environment get failed: .*not found/);
+});
+
+test("getEnvironmentIfExists returns the box by id, including one the list leaves out", async () => {
+  const log = join(dir, "get.log");
+  setFake({ FAKE_ONA_GET: fixture("archived-environment.json"), FAKE_ONA_LOG: log });
+  assert.equal((await cli.getEnvironmentIfExists("env-5aaa"))?.id, "env-5aaa");
+  assert.equal(readFileSync(log, "utf8"), "environment get env-5aaa -o json\n");
+});
+
+test("getEnvironmentIfExists returns null only when Ona says the box doesn't exist", async () => {
+  setFake({});
+  assert.equal(await cli.getEnvironmentIfExists("env-0000"), null, "unknown uuid");
+  assert.equal(await cli.getEnvironmentIfExists("not-an-id"), null, "ref that matches nothing");
+});
+
+test("getEnvironmentIfExists rethrows any other failure: unknown is not gone", async () => {
+  for (const message of [
+    "failed to authenticate: context deadline exceeded",
+    "unavailable: connection refused",
+    "Error: 404 Not Found",
+    "Error: config file not found",
+  ]) {
+    setFake({ FAKE_ONA_FAIL: message });
+    await assert.rejects(cli.getEnvironmentIfExists("env-0001"), /ona environment get failed/, message);
+  }
+});
+
+test("isDeleted is true for a box Ona deleted or is deleting, so remove doesn't delete it again", () => {
+  const env = (phase: string): OnaEnvironment => ({ id: "env-0001", metadata: {}, status: { phase } });
+  assert.equal(isDeleted(env("ENVIRONMENT_PHASE_DELETED")), true);
+  assert.equal(isDeleted(env("ENVIRONMENT_PHASE_DELETING")), true);
+  assert.equal(isDeleted(env("ENVIRONMENT_PHASE_STOPPED")), false);
+  assert.equal(isDeleted(env("ENVIRONMENT_PHASE_RUNNING")), false);
 });
 
 function exited(child: ReturnType<OnaCli["keepAlive"]>): Promise<string> {

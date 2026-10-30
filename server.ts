@@ -26,7 +26,7 @@ import {
 import { onaRef, PROVIDER_ID, registerOnaComposition, registerOnaProvider } from "./src/provider.ts";
 import { startDaemonProxy } from "./src/proxy.ts";
 import { formatStatus, keepAliveCommand, parseArgs } from "./src/commands.ts";
-import { connectedAtKey, createSync, RELEASING_KEY, type Row } from "./src/sync.ts";
+import { connectedAtKey, createSync, forgetBox, RELEASING_KEY, type Row } from "./src/sync.ts";
 import { ALL, GRACE_MS, HostGuard, PassScheduler } from "./src/reconcile.ts";
 import {
   CLAUDE_COLLECTOR,
@@ -258,6 +258,7 @@ export default async function plugin(bb: BbPluginApi) {
       );
       return true;
     },
+    forgetBox: (envId) => forgetBox(bb.storage.kv, envId),
   });
 
   registerOnaComposition(bb);
@@ -417,7 +418,7 @@ export default async function plugin(bb: BbPluginApi) {
     if (row.status !== "connected") {
       throw new Error(`${row.machine} is ${row.status}. Start it with: bb machine resume ${row.machine}`);
     }
-    const env = await ona.findEnvironment(row.resource.envId).catch(() => null);
+    const env = await ona.getEnvironmentIfExists(row.resource.envId).catch(() => null);
     return {
       hostId: row.hostId,
       cwd: env?.status?.content?.contentLocationInMachine ?? null,
@@ -557,7 +558,7 @@ export default async function plugin(bb: BbPluginApi) {
     const thread = await bb.sdk.threads.get({ threadId });
     if (!thread.environmentId) throw new Error("This thread has no environment yet; try again once it has started.");
     const environment = await bb.sdk.environments.get({ environmentId: thread.environmentId });
-    const env = await ona.findEnvironment(row.resource.envId).catch(() => null);
+    const env = await ona.getEnvironmentIfExists(row.resource.envId).catch(() => null);
     const plan = threadTerminalPlan({
       threadHostId: environment.hostId,
       target: { hostId: row.hostId, envId: row.resource.envId, boxName: row.resource.envName },
