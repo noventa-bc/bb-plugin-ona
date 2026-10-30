@@ -45,7 +45,9 @@ export const CLAUDE_PRICES: Record<string, ClaudePrice> = {
 
 export function claudePriceFor(model: string): ClaudePrice | null {
   const key = Object.keys(CLAUDE_PRICES)
-    .filter((candidate) => model === candidate || model.startsWith(`${candidate}-`) || model.startsWith(`${candidate}[`))
+    .filter(
+      (candidate) => model === candidate || model.startsWith(`${candidate}-`) || model.startsWith(`${candidate}[`),
+    )
     .sort((a, b) => b.length - a.length)[0];
   return key ? CLAUDE_PRICES[key]! : null;
 }

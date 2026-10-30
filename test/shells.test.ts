@@ -37,7 +37,12 @@ test("a thread on the Mac gets an ssh terminal that lands in the checkout", () =
   const plan = threadTerminalPlan({ ...planArgs, threadHostId: "host_mac" });
   assert.equal(plan.via, "ssh");
   assert.equal(plan.title, "ssh · rapid-mango");
-  assert.deepEqual(plan.argv, ["/usr/bin/ssh", "-t", "env-1.ona.environment", `cd '/workspaces/my app' && exec "$SHELL" -l`]);
+  assert.deepEqual(plan.argv, [
+    "/usr/bin/ssh",
+    "-t",
+    "env-1.ona.environment",
+    `cd '/workspaces/my app' && exec "$SHELL" -l`,
+  ]);
 });
 
 test("a thread already on the devbox gets a plain shell there", () => {

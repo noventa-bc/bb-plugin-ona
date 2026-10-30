@@ -22,8 +22,15 @@ import type { PluginLogger } from "@get-bb/plugin-sdk";
 const PUBLIC_GET_PATHS = new Set(["/health", "/install.sh", "/install/version", "/install/bb-app.tgz"]);
 const LOOPBACK_TRUSTED_INTERNAL = ["/internal/hosts/enroll-key", "/internal/server-move"];
 const HOP_BY_HOP = new Set([
-  "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
-  "te", "trailer", "transfer-encoding", "upgrade", "proxy-connection",
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+  "proxy-connection",
 ]);
 
 /** Returns the normalized pathname when the target is safe to inspect, else null. */

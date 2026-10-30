@@ -33,7 +33,13 @@ test("executor reports nonzero exit codes", async () => {
 
 test("executor enforces timeout and abort", async () => {
   await assert.rejects(
-    executor.exec({ command: ["sleep", "5"], stdin: "", timeoutMs: 200, signal: new AbortController().signal, onOutput() {} }),
+    executor.exec({
+      command: ["sleep", "5"],
+      stdin: "",
+      timeoutMs: 200,
+      signal: new AbortController().signal,
+      onOutput() {},
+    }),
     /timed out/,
   );
   const controller = new AbortController();

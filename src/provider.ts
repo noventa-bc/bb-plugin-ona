@@ -151,13 +151,18 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
    * container's own home, which the mount later hides: Codex loses the thread's
    * rollout and can't resume it. Wait for $HOME to become a mount point.
    */
-  async function waitForSharedHome(executor: MachineExecutor, report: PluginMachineProviderProgress, signal: AbortSignal) {
-    const probe = () => sshCapture(executor, 'mountpoint -q "$HOME"', signal, CHECK_TIMEOUT_MS)
-      .then((result) => result.exitCode === 0)
-      .catch((error) => {
-        if (signal.aborted) throw error;
-        return false;
-      });
+  async function waitForSharedHome(
+    executor: MachineExecutor,
+    report: PluginMachineProviderProgress,
+    signal: AbortSignal,
+  ) {
+    const probe = () =>
+      sshCapture(executor, 'mountpoint -q "$HOME"', signal, CHECK_TIMEOUT_MS)
+        .then((result) => result.exitCode === 0)
+        .catch((error) => {
+          if (signal.aborted) throw error;
+          return false;
+        });
     if (await probe()) return;
     report.step("Waiting for the shared home folder to be mounted");
     const deadline = Date.now() + 5 * 60_000;
@@ -177,15 +182,21 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     const deadline = Date.now() + 10 * 60_000;
     while (Date.now() < deadline) {
       signal.throwIfAborted();
-      const probe = await sshCapture(executor, `curl -sf -o /dev/null --max-time 5 ${url}`, signal, CHECK_TIMEOUT_MS)
-        .catch((error) => {
-          if (signal.aborted) throw error;
-          return { exitCode: 1, output: "" };
-        });
+      const probe = await sshCapture(
+        executor,
+        `curl -sf -o /dev/null --max-time 5 ${url}`,
+        signal,
+        CHECK_TIMEOUT_MS,
+      ).catch((error) => {
+        if (signal.aborted) throw error;
+        return { exitCode: 1, output: "" };
+      });
       if (probe.exitCode === 0) return;
       await new Promise((resolve) => setTimeout(resolve, 3_000));
     }
-    throw new Error("The devbox could not reach the bb server through the SSH tunnel within 10 minutes. Check `bb plugin logs ona`.");
+    throw new Error(
+      "The devbox could not reach the bb server through the SSH tunnel within 10 minutes. Check `bb plugin logs ona`.",
+    );
   }
 
   async function preflight(executor: MachineExecutor, report: PluginMachineProviderProgress, signal: AbortSignal) {
@@ -194,9 +205,9 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       executor,
       [
         "missing=''",
-        "for c in node npm curl git; do command -v $c >/dev/null || missing=\"$missing $c\"; done",
-        "[ -z \"$missing\" ] || { echo \"missing:$missing\"; exit 3; }",
-        "node -e 'const [a,b]=process.versions.node.split(\".\").map(Number); process.exit(a>22||(a===22&&b>=19)?0:4)' || { echo \"node $(node -v) is older than 22.19\"; exit 4; }",
+        'for c in node npm curl git; do command -v $c >/dev/null || missing="$missing $c"; done',
+        '[ -z "$missing" ] || { echo "missing:$missing"; exit 3; }',
+        'node -e \'const [a,b]=process.versions.node.split(".").map(Number); process.exit(a>22||(a===22&&b>=19)?0:4)\' || { echo "node $(node -v) is older than 22.19"; exit 4; }',
       ].join("\n"),
       signal,
       CHECK_TIMEOUT_MS,
@@ -206,12 +217,13 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     }
   }
 
-  async function connect(resource: OnaResource, key: string, report: PluginMachineProviderProgress, signal: AbortSignal) {
-    const executor = sshExecutor(
-      deps.sshBinary,
-      resource.envId,
-      daemonEnv(deps.codexSqliteHome),
-    );
+  async function connect(
+    resource: OnaResource,
+    key: string,
+    report: PluginMachineProviderProgress,
+    signal: AbortSignal,
+  ) {
+    const executor = sshExecutor(deps.sshBinary, resource.envId, daemonEnv(deps.codexSqliteHome));
     await waitForSsh(executor, report, signal);
     if (deps.waitForSharedHome) await waitForSharedHome(executor, report, signal);
     if (deps.codexSqliteHome) {
@@ -238,17 +250,17 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     const script = [
       'target="$1"; root="$HOME/.bb-machines"',
       'mkdir -p "$target" || exit 4',
-      'for attempt in 1 2; do',
+      "for attempt in 1 2; do",
       '  if [ -L "$root" ]; then',
       '    [ "$(readlink "$root")" = "$target" ] && exit 0',
       '    echo "~/.bb-machines points to $(readlink "$root"), expected $target"; exit 5',
-      '  fi',
+      "  fi",
       '  if [ -e "$root" ]; then',
       '    echo "~/.bb-machines is a real folder on the shared home. Move it aside (mv ~/.bb-machines ~/.bb-machines.shared) and retry."; exit 6',
-      '  fi',
+      "  fi",
       '  ln -s "$target" "$root" 2>/dev/null || true',
-      'done',
-      'exit 7',
+      "done",
+      "exit 7",
     ].join("\n");
     // Right after an Ona start the shared home may not be mounted yet, and the
     // container's own ~/.bb-machines shows through. Re-check for a while
@@ -385,13 +397,15 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
             '  [ -f "$f" ] && bash "$f" --uninstall --host-id "$host" || true',
             "done",
           ].join("\n");
-          await sshExecutor(deps.sshBinary, owned.envId).exec({
-            command: ["bash", "-c", script, "bb-ona-remove", dataDir, hostId],
-            stdin: "",
-            timeoutMs: 120_000,
-            signal,
-            onOutput: () => {},
-          }).catch(() => undefined);
+          await sshExecutor(deps.sshBinary, owned.envId)
+            .exec({
+              command: ["bash", "-c", script, "bb-ona-remove", dataDir, hostId],
+              stdin: "",
+              timeoutMs: 120_000,
+              signal,
+              onOutput: () => {},
+            })
+            .catch(() => undefined);
         }
         await disconnect(owned.envId);
         return { status: "removed" };
@@ -411,13 +425,15 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
    * tell. Only call it for a box Ona reports RUNNING (SSH starts stopped boxes).
    */
   async function daemonAlive(resource: OnaResource, signal: AbortSignal): Promise<boolean | null> {
-    const { exitCode } = await sshExecutor(deps.sshBinary, resource.envId, []).exec({
-      command: ["bash", "-c", DAEMON_PROBE, "bb-ona-probe", deps.machineDataDir, resource.dataDir ?? ""],
-      stdin: "",
-      timeoutMs: 15_000,
-      signal,
-      onOutput: () => {},
-    }).catch(() => ({ exitCode: -1 }));
+    const { exitCode } = await sshExecutor(deps.sshBinary, resource.envId, [])
+      .exec({
+        command: ["bash", "-c", DAEMON_PROBE, "bb-ona-probe", deps.machineDataDir, resource.dataDir ?? ""],
+        stdin: "",
+        timeoutMs: 15_000,
+        signal,
+        onOutput: () => {},
+      })
+      .catch(() => ({ exitCode: -1 }));
     return exitCode === 0 ? true : exitCode === 1 ? false : null;
   }
 

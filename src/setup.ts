@@ -24,7 +24,10 @@ function isExecutable(path: string): boolean {
 
 /** Configured path first, then PATH, then common install locations. */
 export function findOnaBinary(configured: string, pathEnv = process.env.PATH ?? ""): string | null {
-  const fromPath = pathEnv.split(delimiter).filter(Boolean).map((dir) => join(dir, "ona"));
+  const fromPath = pathEnv
+    .split(delimiter)
+    .filter(Boolean)
+    .map((dir) => join(dir, "ona"));
   const candidates = [configured, ...fromPath, ...COMMON_ONA_LOCATIONS].filter(Boolean);
   return candidates.find(isExecutable) ?? null;
 }
@@ -57,7 +60,8 @@ export async function checkOnaLogin(binary: string, timeoutMs = 4_000): Promise<
     return { ok: false, message: result.stderr.trim().split("\n").slice(-1)[0] || "ona whoami failed" };
   }
   try {
-    const parsed = JSON.parse(result.stdout) as Array<{ name?: string; org?: string }> | { name?: string; org?: string };
+    const parsed = JSON.parse(result.stdout) as
+      Array<{ name?: string; org?: string }> | { name?: string; org?: string };
     const me = Array.isArray(parsed) ? parsed[0] : parsed;
     if (!me?.name) return { ok: false, message: "ona whoami returned no user" };
     return { ok: true, user: me.name, org: me.org ?? "" };
@@ -67,9 +71,7 @@ export async function checkOnaLogin(binary: string, timeoutMs = 4_000): Promise<
 }
 
 export type PluginMachineProviderAvailability =
-  | { status: "available" }
-  | { status: "setup-required"; message: string }
-  | { status: "unavailable"; message: string };
+  { status: "available" } | { status: "setup-required"; message: string } | { status: "unavailable"; message: string };
 
 export const ONA_INSTALL_HINT =
   "Install the Ona CLI and log in (`ona login`), or set its path with `bb plugin config ona set onaPath <path>`. Then run `bb ona setup`.";

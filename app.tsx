@@ -101,10 +101,15 @@ function ThreadCostChip({ threadId }: { threadId: string }) {
 
   if (!cost) return null;
   const source =
-    cost.basis === "openai-estimate" ? "Codex · OpenAI's usage estimate" : "Claude Code · tokens × Anthropic list prices";
+    cost.basis === "openai-estimate"
+      ? "Codex · OpenAI's usage estimate"
+      : "Claude Code · tokens × Anthropic list prices";
   const partial = cost.partial ? " · some usage couldn't be priced, so the real total is higher" : "";
   return (
-    <span className={costChip} title={`Spent in this thread so far. ${source} · updated ${ago(cost.updatedAt)}${partial}`}>
+    <span
+      className={costChip}
+      title={`Spent in this thread so far. ${source} · updated ${ago(cost.updatedAt)}${partial}`}
+    >
       {cost.partial ? "≥" : ""}
       {formatUsd(cost.usd)}
     </span>

@@ -75,7 +75,10 @@ test("R4: suspended in bb stays suspended even when Ona runs the box", () => {
 });
 
 test("R5: resuming or suspending for too long -> ask bb to reconcile", () => {
-  assert.equal(decide(machine({ phase: "resuming", phaseSince: NOW - STUCK_MS }), ona("RUNNING"), NOW).action, "reconcile-stuck");
+  assert.equal(
+    decide(machine({ phase: "resuming", phaseSince: NOW - STUCK_MS }), ona("RUNNING"), NOW).action,
+    "reconcile-stuck",
+  );
   assert.equal(decide(machine({ phase: "suspending", phaseSince: NOW - 60_000 }), ona("RUNNING"), NOW).action, "none");
 });
 
@@ -173,10 +176,14 @@ test("scheduler reports a failing pass and keeps scheduling", async () => {
   const { clock, advance } = fakeClock();
   const errors: unknown[] = [];
   const passes: string[][] = [];
-  const scheduler = new PassScheduler(async (keys) => {
-    passes.push([...keys]);
-    if (keys.has("h1")) throw new Error("boom");
-  }, clock, (error) => errors.push(error));
+  const scheduler = new PassScheduler(
+    async (keys) => {
+      passes.push([...keys]);
+      if (keys.has("h1")) throw new Error("boom");
+    },
+    clock,
+    (error) => errors.push(error),
+  );
   scheduler.schedule("h1", 0);
   await advance(0);
   assert.match(String(errors[0]), /boom/);
@@ -189,7 +196,9 @@ test("guard: one action per machine, cooldown after it", async () => {
   const { clock, advance } = fakeClock();
   const guard = new HostGuard(2, clock);
   let finish!: () => void;
-  const first = guard.run("h1", "heal-daemon", "r", () => new Promise<void>((resolve) => (finish = resolve)), { cooldown: true });
+  const first = guard.run("h1", "heal-daemon", "r", () => new Promise<void>((resolve) => (finish = resolve)), {
+    cooldown: true,
+  });
   await advance(0);
   assert.equal(guard.busyWith("h1"), "heal-daemon");
   assert.equal(await guard.run("h1", "heal-daemon", "r", async () => {}), false);
@@ -252,10 +261,14 @@ test("snapshot shares one list between concurrent callers and caches it", async 
   let calls = 0;
   let now = 0;
   const envs: OnaEnvironment[] = [{ id: "e1", metadata: {}, status: { phase: "ENVIRONMENT_PHASE_RUNNING" } }];
-  const snapshot = new OnaSnapshot(async () => {
-    calls++;
-    return envs;
-  }, 15_000, () => now);
+  const snapshot = new OnaSnapshot(
+    async () => {
+      calls++;
+      return envs;
+    },
+    15_000,
+    () => now,
+  );
   await Promise.all([snapshot.get(), snapshot.get(), snapshot.get()]);
   assert.equal(calls, 1);
   now += 10_000;
@@ -284,7 +297,9 @@ test("snapshot keeps the last good list and reports the error", async () => {
 // --- daemon probe (rule 3), run locally ---
 
 // The agent sandbox hides other processes from `ps`; this runs in CI and outside the sandbox.
-const sandboxed = { skip: process.env.NONO_CAP_FILE ? "needs to see other processes, hidden in the agent sandbox" : false };
+const sandboxed = {
+  skip: process.env.NONO_CAP_FILE ? "needs to see other processes, hidden in the agent sandbox" : false,
+};
 
 test("daemon probe finds a process running from the data folder, and only that", sandboxed, async () => {
   const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));

@@ -14,10 +14,7 @@ const environmentSchema = z.object({
   status: z
     .object({
       phase: z.string().optional(),
-      content: z
-        .object({ contentLocationInMachine: z.string().optional() })
-        .passthrough()
-        .optional(),
+      content: z.object({ contentLocationInMachine: z.string().optional() }).passthrough().optional(),
     })
     .passthrough()
     .optional(),
@@ -77,8 +74,7 @@ export class OnaCli {
     const out = await this.run(["project", "list", "-o", "json"], signal);
     const projects = z.array(projectSchema).parse(JSON.parse(out || "[]"));
     const match =
-      projects.find((p) => p.id === ref) ??
-      projects.find((p) => p.metadata.name?.toLowerCase() === ref.toLowerCase());
+      projects.find((p) => p.id === ref) ?? projects.find((p) => p.metadata.name?.toLowerCase() === ref.toLowerCase());
     if (!match) throw new Error(`No Ona project named or with id "${ref}". Run \`ona project list\`.`);
     return match.id;
   }
@@ -117,7 +113,11 @@ export function isRunning(env: OnaEnvironment): boolean {
 /** On its way up (created, starting, ...): starting it again would fail. */
 export function isStarting(env: OnaEnvironment): boolean {
   const phase = env.status?.phase;
-  return phase === "ENVIRONMENT_PHASE_CREATING" || phase === "ENVIRONMENT_PHASE_STARTING" || phase === "ENVIRONMENT_PHASE_PENDING";
+  return (
+    phase === "ENVIRONMENT_PHASE_CREATING" ||
+    phase === "ENVIRONMENT_PHASE_STARTING" ||
+    phase === "ENVIRONMENT_PHASE_PENDING"
+  );
 }
 
 export function isStopped(env: OnaEnvironment): boolean {

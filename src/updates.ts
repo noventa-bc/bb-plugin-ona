@@ -25,5 +25,12 @@ export function hostIsBusy(threadStatuses: readonly string[]): boolean {
 }
 
 export function parseProviderList(value: string): string[] {
-  return [...new Set(value.split(/[\s,]+/).map((part) => part.trim()).filter(Boolean))];
+  return [
+    ...new Set(
+      value
+        .split(/[\s,]+/)
+        .map((part) => part.trim())
+        .filter(Boolean),
+    ),
+  ];
 }
