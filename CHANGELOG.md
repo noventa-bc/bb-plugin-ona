@@ -5,6 +5,9 @@ made each change. The version is the one in `package.json`.
 
 ## Unreleased
 
+### Changed
+- Needs bb 0.48.1 or newer.
+
 ### Added
 - `bb ona keep-alive <box> <duration>` keeps a running devbox from Ona's
   inactivity timeout for up to 12h; `bb ona keep-alive <box> off` ends it.

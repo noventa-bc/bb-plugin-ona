@@ -56,7 +56,7 @@ rules, and troubleshooting stuck boxes: [docs/sync.md](docs/sync.md).
 
 On your Mac:
 
-- bb app **0.46 or newer**
+- bb app **0.48.1 or newer**
 - `ona` CLI installed and logged in (`ona login`). bb cannot install it for you,
   because plugin dependencies are npm packages only.
 - `ssh` (built into macOS at `/usr/bin/ssh`)

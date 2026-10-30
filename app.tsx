@@ -2,9 +2,22 @@
 // spent so far, and an Editor button that opens the box in the Ona editor.
 // bb's own terminal panel already covers shells.
 import { useEffect, useRef, useState } from "react";
-import type { PluginThreadHeaderActionProps } from "@get-bb/plugin-sdk/app";
+import type { ComponentProps } from "react";
+import type { LegacyThreadHeaderActionRegistration } from "@get-bb/plugin-sdk/internal/plugin-app-collector";
 import { definePluginApp, experimental_Icon as Icon, useRpc } from "@get-bb/plugin-sdk/app";
 import type { Devbox, rpcContract, ThreadCost } from "./src/rpc.ts";
+
+/**
+ * `@get-bb/plugin-sdk` 0.6.104 left `experimental_threadHeaderAction` out of
+ * its public types, but its app collector still accepts the slot (checked
+ * 2026-10-30). The slot types come from the SDK's `internal/` subpath on
+ * purpose: the nightly SDK typecheck fails once that legacy type goes away.
+ * `experimental_threadAction` takes no component, so it can't replace this yet.
+ */
+type ThreadHeaderActionProps = ComponentProps<LegacyThreadHeaderActionRegistration["component"]>;
+type ThreadHeaderActionSlot = {
+  experimental_threadHeaderAction(registration: LegacyThreadHeaderActionRegistration): void;
+};
 
 const editorButton = [
   "inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-muted-foreground shadow-sm",
@@ -116,7 +129,7 @@ function ThreadCostChip({ threadId }: { threadId: string }) {
   );
 }
 
-function DevboxEditor({ threadId, isCompactViewport }: PluginThreadHeaderActionProps) {
+function DevboxEditor({ threadId, isCompactViewport }: ThreadHeaderActionProps) {
   const rpc = useRpc<typeof rpcContract>();
   const [devbox, setDevbox] = useState<Devbox | null>(null);
   const root = useRef<HTMLButtonElement>(null);
@@ -171,7 +184,7 @@ function hideKnownWarnings() {
 
 export default definePluginApp((app) => {
   hideKnownWarnings();
-  app.slots.experimental_threadHeaderAction({
+  (app.slots as typeof app.slots & ThreadHeaderActionSlot).experimental_threadHeaderAction({
     id: "devbox",
     title: "Devbox editor",
     component: DevboxEditor,
