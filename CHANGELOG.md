@@ -15,6 +15,10 @@ made each change. The version is the one in `package.json`.
   report repairs instead of making them. (`bdc7e4b`)
 
 ### Fixed
+- When bb accepts a suspend but keeps the machine active (for example while it
+  blocks lifecycle changes after an interrupted environment hook), the plugin
+  no longer reports the idle release as done and retries every 2 minutes. It
+  records bb's reason in `bb ona status`, backs off, and stops after 3 tries.
 - An archived devbox is reported as archived in `bb ona status`, not gone.
   Archived environments drop out of `ona environment list`, so before reporting
   a box gone the plugin asks Ona about it once with `ona environment get`.
