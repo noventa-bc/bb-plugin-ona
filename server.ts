@@ -473,6 +473,13 @@ export default async function plugin(bb: BbPluginApi) {
   }
 
   const costInFlight = new Map<string, Promise<ThreadCost | null>>();
+  const costKey = (threadId: string) => `cost:${threadId}`;
+  // A deleted thread's cost is never asked for again; drop it so the keys don't pile up.
+  bb.events.on("thread.deleted", async ({ thread }) => {
+    await bb.storage.kv.delete(costKey(thread.id)).catch((error: unknown) => {
+      bb.log.warn(`thread cost for ${thread.id}: could not drop it: ${errorText(error)}`);
+    });
+  });
 
   /**
    * Spend so far for a devbox thread. Cached per thread and recomputed only
@@ -485,7 +492,7 @@ export default async function plugin(bb: BbPluginApi) {
     const thread = await bb.sdk.threads.get({ threadId });
     const provider = thread.providerId;
     if (provider !== "codex" && provider !== "claude-code") return null;
-    const key = `cost:${threadId}`;
+    const key = costKey(threadId);
     const stored = await bb.storage.kv.get<{ cost: ThreadCost | null; seq: number; checkedAt: number }>(key);
     if (devbox.status !== "connected") return stored?.cost ?? null;
     // Recompute once per finished turn, never mid-turn, and at most every 5

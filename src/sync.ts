@@ -95,7 +95,9 @@ export interface SyncDeps {
     refresh(): Promise<OnaListing>;
     readonly latest: OnaListing | null;
   };
-  ona: { getEnvironment(envId: string, signal?: AbortSignal): Promise<Parameters<typeof isArchived>[0]> };
+  ona: {
+    getEnvironmentIfExists(envId: string, signal?: AbortSignal): Promise<Parameters<typeof isArchived>[0] | null>;
+  };
   guard: HostGuard;
   tunnels: { status(envId: string): "up" | "connecting" | "off"; ensure(envId: string): void };
   provider: {
@@ -263,16 +265,17 @@ export function createSync(deps: SyncDeps) {
 
   /**
    * Archived environments drop out of `ona environment list`. Before a box is
-   * reported gone, ask Ona about it once. A failed lookup (a deleted box, or
-   * Ona unreachable) keeps the "gone" report, as before this check existed.
+   * reported gone, ask Ona about it once. An id Ona says doesn't exist is
+   * gone. A failed lookup is unknown (rule 4): nothing is settled and the next
+   * pass asks again.
    */
   async function checkArchived(envId: string): Promise<void> {
     const seen = missing.get(envId);
     if (!seen || seen.streak < 2 || seen.archived !== undefined) return;
     try {
-      seen.archived = isArchived(await ona.getEnvironment(envId, AbortSignal.timeout(30_000)));
+      const env = await ona.getEnvironmentIfExists(envId, AbortSignal.timeout(30_000));
+      seen.archived = env !== null && isArchived(env);
     } catch (error) {
-      seen.archived = false;
       bb.log.info(`${envId}: couldn't ask Ona whether it is archived: ${errorText(error)}`);
     }
   }
