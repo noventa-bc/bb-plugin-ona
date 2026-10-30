@@ -22,7 +22,12 @@ interface Box {
 
 function world(
   boxes: Box[],
-  options: { refuse?: string; daemonAlive?: boolean | null; archived?: boolean; listing?: "fail" | "empty" } = {},
+  options: {
+    refuse?: string;
+    daemonAlive?: boolean | null;
+    archived?: boolean | "not-found" | "fail";
+    listing?: "fail" | "empty";
+  } = {},
 ) {
   const calls: string[] = [];
   const kv = new Map<string, unknown>();
@@ -97,9 +102,10 @@ function world(
       () => (tick += 60_000),
     ),
     ona: {
-      getEnvironment: async (envId) => {
+      getEnvironmentIfExists: async (envId) => {
         calls.push(`ona get ${envId}`);
-        if (options.archived === undefined) throw new Error("environment not found");
+        if (options.archived === "fail") throw new Error("timed out");
+        if (options.archived === undefined || options.archived === "not-found") return null;
         return { id: envId, metadata: options.archived ? { archivedAt: "2026-10-01T00:00:00Z" } : {} };
       },
     },
@@ -170,7 +176,7 @@ test("status reports workspaces that need recovery", async () => {
 });
 
 test("a box missing from two listings is looked up once: archived or gone", async () => {
-  for (const archived of [true, false, undefined]) {
+  for (const archived of [true, false, "not-found"] as const) {
     const { sync, calls, guard } = world([idle("h1", { ona: null, status: "disconnected" }), idle("h2")], {
       archived,
     });
@@ -178,10 +184,16 @@ test("a box missing from two listings is looked up once: archived or gone", asyn
     for (let pass = 0; pass < 3; pass++) await sync.reconcile(new Set(["h1"]), { wait: true, force: true });
     assert.equal(calls.filter((call) => call === "ona get env-h1").length, 1, `archived=${archived}`);
     assert.ok(calls.includes("suspend h1"));
-    assert.match(guard.records.get("h1")!.reason, archived ? /archived/ : /gone/);
+    assert.match(guard.records.get("h1")!.reason, archived === true ? /archived/ : /gone/);
     const [row] = await sync.statusRows("h1");
-    assert.equal(row!.ona, archived ? "archived" : "missing");
+    assert.equal(row!.ona, archived === true ? "archived" : "missing");
   }
+});
+
+test("a failed archived lookup is unknown: asked again next pass, not settled as gone", async () => {
+  const { sync, calls } = world([idle("h1", { ona: null, status: "disconnected" }), idle("h2")], { archived: "fail" });
+  for (let pass = 0; pass < 3; pass++) await sync.reconcile(new Set(["h1"]), { wait: true, force: true });
+  assert.equal(calls.filter((call) => call === "ona get env-h1").length, 2, "passes 2 and 3 both ask");
 });
 
 test("Ona stopping a box with a thread waiting: suspended without stopping, then resumed", async () => {

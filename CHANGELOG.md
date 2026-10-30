@@ -22,6 +22,11 @@ made each change. The version is the one in `package.json`.
   report repairs instead of making them. (`bdc7e4b`)
 
 ### Fixed
+- Deleting a thread drops the cost figure the plugin stored for it, so stored
+  costs no longer pile up.
+- When the archived lookup (`ona environment get`) for a devbox missing from
+  Ona's listing fails, the next check asks again instead of settling on "not
+  archived", so an archived box shows as archived once Ona answers.
 - Suspend, resume, remove and the shell and terminal commands look a devbox up
   by id with `ona environment get` instead of searching
   `ona environment list`, so they also find archived boxes. A failed lookup is
