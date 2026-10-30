@@ -62,8 +62,10 @@ and lookups.
    out. Nothing from the "Security (private)" handoff section goes in the PR.
 8. **Wait for CI.** The `check` workflow must be green. A red run goes back to
    the builder; never merge around it.
-9. **Merge.** The owner merges. The orchestrator does not merge unless the
-   owner says so in the session.
+9. **Merge.** The orchestrator squash-merges as soon as CI is green and the
+   review has no open findings, and deletes the branch. PRs that touch the
+   same files merge one at a time: rebase the next one onto `main`, let CI run
+   again, then merge. Never merge a red or conflicting PR.
 10. **Sync the roadmap.** When a PR opens, set the item's status to In review.
     When it merges, set it to Done and note the gap if part of the item was left
     out. Fix any other status that the code shows to be stale.
@@ -115,7 +117,7 @@ Rules the owner gave in sessions, restated so they stay true. Checked 2026-10-30
 - Use subagents; the orchestrator supervises and holds the quality bar.
 - Every change goes through a PR, is code reviewed, and merges only when CI is
   green.
-- The owner merges.
+- Merge each PR as soon as its CI is green; do not leave green PRs waiting.
 - Do not expose the roadmap link anywhere.
 - Keep roadmap statuses up to date; update the roadmap whenever the code shows
   it is stale. Propose improvements and simplifications in it, and improve its
