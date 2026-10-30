@@ -125,9 +125,9 @@ This file is the memory of the flow. Keep it current:
 
 Rules the owner gave in sessions, restated so they stay true. Checked 2026-10-30.
 
-- Make the repo sustainable in the long term; it is not a one-weekend app.
-  Simplifications and optimisations matter as much as features for that.
-- Don't over-engineer: KISS and DRY, with a staff engineer's judgement.
+- Make the repo sustainable in the long term, not a one-weekend app:
+  simplifications and optimisations matter as much as features; KISS and DRY,
+  with a staff engineer's judgement of when the quick fix is right.
 - Every change goes through a reviewed PR and merges as soon as CI is green.
   Make CI able to catch issues and regressions, so merging on green is safe.
 - Delegate mechanical tasks to cheaper models such as Haiku, and supervise them.
