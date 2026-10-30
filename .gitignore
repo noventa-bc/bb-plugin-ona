@@ -3,3 +3,4 @@ node_modules/
 .agent/
 *.swp
 .DS_Store
+.claude/settings.local.json

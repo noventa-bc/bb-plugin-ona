@@ -92,7 +92,7 @@ function ThreadCostChip({ threadId }: { threadId: string }) {
         .then(({ cost }) => !cancelled && setCost(cost))
         .catch(() => undefined);
     void load();
-    const timer = setInterval(load, 60_000);
+    const timer = setInterval(() => void load(), 60_000);
     return () => {
       cancelled = true;
       clearInterval(timer);

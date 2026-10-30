@@ -438,7 +438,8 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:<bb port>/health      
 
 ```sh
 npm install
-npm run check                                                  # typecheck and tests
+npm run check                                                  # typecheck, lint, format check, tests
+npm run format                                                 # format the code
 bb plugin build                                                # bundle
 bb plugin install .                                            # install from this folder
 bb plugin reload ona                                           # after changes
