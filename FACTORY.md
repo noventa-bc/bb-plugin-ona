@@ -130,7 +130,6 @@ Rules the owner gave in sessions, restated so they stay true. Checked 2026-10-30
   with a staff engineer's judgement of when the quick fix is right.
 - Every change goes through a reviewed PR and merges as soon as CI is green.
   Make CI able to catch issues and regressions, so merging on green is safe.
-- Delegate mechanical tasks to cheaper models such as Haiku, and supervise them.
 - Semgrep rules may be added as guardrails when they fit, or proposed in the
   roadmap.
 - Do not expose the roadmap link anywhere.
