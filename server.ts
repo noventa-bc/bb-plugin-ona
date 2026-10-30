@@ -44,6 +44,7 @@ import { startDaemonProxy } from "./src/proxy.ts";
 import {
   lifecycleRefusal,
   machinesToRelease,
+  workspaceWork,
   parseDuration,
   RESUMED,
   SUSPENDED,
@@ -385,6 +386,8 @@ export default async function plugin(bb: BbPluginApi) {
           connectedAt,
           ...threads.map((thread) => Math.max(thread.updatedAt, thread.lastReadAt ?? 0)),
         ),
+        // Letting the box go mid-hook leaves bb unable to recover the workspace.
+        workspacesBlock: await workspaces(row.hostId).then((work) => work.busy || work.needsRecovery > 0),
       });
     }
     for (const hostId of machinesToRelease(activity, Date.now(), idleMs)) {
@@ -437,6 +440,16 @@ export default async function plugin(bb: BbPluginApi) {
     } catch (error) {
       seen.archived = false;
       bb.log.info(`${envId}: couldn't ask Ona whether it is archived: ${errorText(error)}`);
+    }
+  }
+
+  /** bb's workspace work on a machine; a failed lookup counts as none (the behaviour before this check). */
+  async function workspaces(hostId: string): Promise<{ busy: boolean; needsRecovery: number }> {
+    try {
+      return workspaceWork(await bb.sdk.environments.list({ hostId }));
+    } catch (error) {
+      bb.log.info(`couldn't list workspaces on ${hostId}: ${errorText(error)}`);
+      return { busy: false, needsRecovery: 0 };
     }
   }
 
@@ -538,6 +551,8 @@ export default async function plugin(bb: BbPluginApi) {
             row.phase === "active" && row.status !== "connected"
               ? await threadWaiting(row.hostId).catch(() => false)
               : false,
+          workspaceWaiting:
+            row.phase === "active" && row.status !== "connected" ? (await workspaces(row.hostId)).busy : false,
         };
         let onaState = onaView(row.resource.envId, listing);
         if (onaState.kind === "missing" && onaState.streak >= 2 && onaState.archived === undefined) {
@@ -1024,6 +1039,8 @@ export default async function plugin(bb: BbPluginApi) {
     retry: string | null;
     /** When a `bb ona keep-alive` ends, epoch ms. */
     keepAliveUntil: number | null;
+    /** Workspaces whose teardown failed for good; bb won't suspend the machine. */
+    needsRecovery: number;
   }
 
   async function statusRows(ref?: string): Promise<StatusRow[]> {
@@ -1031,42 +1048,45 @@ export default async function plugin(bb: BbPluginApi) {
       (r) => !ref || [r.hostId, r.machine, r.resource.envId, r.resource.envName].includes(ref),
     );
     const listing = await snapshot.get().catch(() => snapshot.latest);
-    return rows.map((row) => {
-      const env = listing?.envs.find((e) => e.id === row.resource.envId);
-      const record = guard.records.get(row.hostId);
-      const busy = guard.busyWith(row.hostId);
-      return {
-        machine: row.machine,
-        hostId: row.hostId,
-        bb: row.phase === "active" ? row.status : row.phase,
-        tunnel: tunnels.status(row.resource.envId),
-        ona: !listing
-          ? "unknown"
-          : env
-            ? (env.status?.phase ?? "?").replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase()
-            : missing.get(row.resource.envId)?.archived
-              ? "archived"
-              : "missing",
-        now: guard.seen.get(row.hostId) ?? null,
-        last: busy
-          ? { action: busy, reason: "in progress", at: Date.now() }
-          : record
-            ? {
-                action: record.action,
-                reason: record.reason,
-                at: record.at,
-                ...(record.error ? { error: record.error } : {}),
-              }
-            : null,
-        retry:
-          !record || record.failures === 0
-            ? null
-            : record.failures >= GIVE_UP_AFTER
-              ? `gave up after ${record.failures} failures; run \`bb ona sync ${row.machine}\``
-              : `retrying after ${new Date(record.quietUntil).toLocaleTimeString()}`,
-        keepAliveUntil: keepAlives.until(row.resource.envId),
-      };
-    });
+    return Promise.all(
+      rows.map(async (row) => {
+        const env = listing?.envs.find((e) => e.id === row.resource.envId);
+        const record = guard.records.get(row.hostId);
+        const busy = guard.busyWith(row.hostId);
+        return {
+          machine: row.machine,
+          hostId: row.hostId,
+          bb: row.phase === "active" ? row.status : row.phase,
+          tunnel: tunnels.status(row.resource.envId),
+          ona: !listing
+            ? "unknown"
+            : env
+              ? (env.status?.phase ?? "?").replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase()
+              : missing.get(row.resource.envId)?.archived
+                ? "archived"
+                : "missing",
+          now: guard.seen.get(row.hostId) ?? null,
+          last: busy
+            ? { action: busy, reason: "in progress", at: Date.now() }
+            : record
+              ? {
+                  action: record.action,
+                  reason: record.reason,
+                  at: record.at,
+                  ...(record.error ? { error: record.error } : {}),
+                }
+              : null,
+          retry:
+            !record || record.failures === 0
+              ? null
+              : record.failures >= GIVE_UP_AFTER
+                ? `gave up after ${record.failures} failures; run \`bb ona sync ${row.machine}\``
+                : `retrying after ${new Date(record.quietUntil).toLocaleTimeString()}`,
+          keepAliveUntil: keepAlives.until(row.resource.envId),
+          needsRecovery: (await workspaces(row.hostId)).needsRecovery,
+        };
+      }),
+    );
   }
 
   function formatStatus(rows: StatusRow[]): string {
@@ -1089,6 +1109,11 @@ export default async function plugin(bb: BbPluginApi) {
       }
       if (row.retry) lines.push(`  ${row.retry}`);
       if (row.keepAliveUntil) lines.push(`  keep-alive until ${clockTime(row.keepAliveUntil)}`);
+      if (row.needsRecovery > 0) {
+        lines.push(
+          `  ${row.needsRecovery} workspace(s) need recovery; bb won't suspend this machine, so the box stays awake. See \`bb environment list --host ${row.hostId}\``,
+        );
+      }
       return lines.join("\n");
     });
     return [header, ...lines].join("\n");

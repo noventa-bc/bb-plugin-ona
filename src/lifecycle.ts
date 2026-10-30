@@ -11,6 +11,32 @@ export interface MachineActivity {
   threadStatuses: readonly string[];
   /** Latest thread activity or (re)connect, epoch ms. */
   lastActivityAt: number;
+  /** bb is setting up or tearing down a workspace on it, or one needs recovery. */
+  workspacesBlock?: boolean;
+}
+
+/** The parts of a bb environment (a thread's workspace) this file reads. */
+export interface WorkspaceView {
+  status: string;
+  lifecycle: { phase: string; teardown: { status: string } | null };
+}
+
+/**
+ * What bb is doing with a machine's workspaces. `busy`: a setup or teardown
+ * is under way, and letting the box go now would interrupt its hook, which
+ * leaves bb unable to tell how it ended. `needsRecovery`: teardowns that
+ * failed for good; bb won't suspend the machine until someone recovers them.
+ */
+export function workspaceWork(workspaces: readonly WorkspaceView[]): { busy: boolean; needsRecovery: number } {
+  let busy = false;
+  let needsRecovery = 0;
+  for (const workspace of workspaces) {
+    if (workspace.status === "creating" || workspace.status === "provisioning") busy = true;
+    if (workspace.lifecycle.phase !== "teardown") continue;
+    if (workspace.lifecycle.teardown?.status === "failed") needsRecovery++;
+    else busy = true;
+  }
+  return { busy, needsRecovery };
 }
 
 /**
@@ -23,7 +49,10 @@ export function machinesToRelease(machines: readonly MachineActivity[], now: num
   return machines
     .filter(
       (machine) =>
-        machine.phase === "active" && !hostIsBusy(machine.threadStatuses) && now - machine.lastActivityAt >= idleMs,
+        machine.phase === "active" &&
+        !hostIsBusy(machine.threadStatuses) &&
+        !machine.workspacesBlock &&
+        now - machine.lastActivityAt >= idleMs,
     )
     .map((machine) => machine.hostId);
 }

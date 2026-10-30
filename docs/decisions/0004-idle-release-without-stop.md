@@ -11,6 +11,7 @@ After `idleDisconnect` (default `1h`) with no thread activity, the plugin closes
 - An open Ona editor is real use of the box, so the box keeps running while it is open.
 
 ## Consequences
+- A box isn't released while bb sets up or tears down one of its workspaces, or while one needs recovery; the release waits for the next check.
 - Setting `idleDisconnect` to empty or `0` keeps every box connected.
 - The next message on the machine resumes it as usual (see 0003).
 - An idle box keeps running until Ona's timeout stops it. Devboxes bb creates use `inactivityTimeout` (default `3h`); adopted ones keep their own.
