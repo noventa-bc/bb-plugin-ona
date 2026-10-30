@@ -5,6 +5,14 @@ this repo. `AGENTS.md` still applies to every agent in the flow, and
 `docs/owner.md` says how the owner starts agents; this file adds the
 orchestration rules on top and records the exceptions the owner granted.
 
+## Purpose
+
+The owner's goal is a repo that stays maintainable for years with one
+maintainer, not a one-weekend app. Every step below serves that: small
+reviewed PRs, a test for each bug, a guard for each hazard, docs that stay
+true, and complexity that pays for itself. When a shortcut would be faster
+today and costlier to keep, take the slower path and say so.
+
 ## Roles
 
 - **Orchestrator.** One agent that talks to the owner, reads the roadmap,
@@ -102,6 +110,8 @@ This file is the memory of the flow. Keep it current:
 
 Rules the owner gave in sessions, restated so they stay true. Checked 2026-10-30.
 
+- Make the repo sustainable in the long term; it is not a vibe-coded
+  one-weekend app.
 - Use subagents; the orchestrator supervises and holds the quality bar.
 - Every change goes through a PR, is code reviewed, and merges only when CI is
   green.
