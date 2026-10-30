@@ -48,7 +48,8 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 - SDK 0.6.104 leaves `experimental_threadHeaderAction` and
   `PluginThreadHeaderActionProps` out of its public types. Its app collector
   still accepts the slot, so `app.tsx` takes the slot's types from the SDK's
-  `internal/plugin-app-collector` subpath.
+  `internal/plugin-app-collector` subpath. bb 0.48 still draws header items registered
+  through that slot (owner checked 2026-10-30).
 - SDK 0.6.104 has `experimental_threadAction` with `placement: "header"`. A
   header action is a labelled button with an icon and a `run`, not a
   component, so it can't show the cost chip. It could replace the DOM
