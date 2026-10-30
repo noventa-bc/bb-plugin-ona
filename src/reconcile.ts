@@ -122,10 +122,13 @@ export class PassScheduler {
 
   private readonly run: (keys: Set<string>) => Promise<void>;
   private readonly clock: Clock;
+  private readonly onError: (error: unknown) => void;
 
-  constructor(run: (keys: Set<string>) => Promise<void>, clock: Clock = systemClock) {
+  /** A pass that throws is reported to `onError`; it never escapes as an unhandled rejection. */
+  constructor(run: (keys: Set<string>) => Promise<void>, clock: Clock = systemClock, onError: (error: unknown) => void = () => {}) {
     this.run = run;
     this.clock = clock;
+    this.onError = onError;
   }
 
   schedule(key: string, delayMs: number): void {
@@ -164,6 +167,8 @@ export class PassScheduler {
     this.running = true;
     try {
       if (keys.size > 0) await this.run(keys);
+    } catch (error) {
+      this.onError(error);
     } finally {
       this.running = false;
       this.arm();

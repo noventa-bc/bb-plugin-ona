@@ -169,6 +169,22 @@ test("scheduler runs one pass at a time and stops cleanly", async () => {
   assert.equal(maxRunning, 1);
 });
 
+test("scheduler reports a failing pass and keeps scheduling", async () => {
+  const { clock, advance } = fakeClock();
+  const errors: unknown[] = [];
+  const passes: string[][] = [];
+  const scheduler = new PassScheduler(async (keys) => {
+    passes.push([...keys]);
+    if (keys.has("h1")) throw new Error("boom");
+  }, clock, (error) => errors.push(error));
+  scheduler.schedule("h1", 0);
+  await advance(0);
+  assert.match(String(errors[0]), /boom/);
+  scheduler.schedule("h2", 0);
+  await advance(0);
+  assert.deepEqual(passes, [["h1"], ["h2"]]);
+});
+
 test("guard: one action per machine, cooldown after it", async () => {
   const { clock, advance } = fakeClock();
   const guard = new HostGuard(2, clock);
