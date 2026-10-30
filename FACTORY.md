@@ -127,6 +127,10 @@ Rules the owner gave in sessions, restated so they stay true. Checked 2026-10-30
 - The roadmap keeps status only in its Status tab table, one row per item,
   with the PR or commit named in the Item cell. The main tab carries no status
   words. Follow the structure the owner sets; do not add status elsewhere.
+- Several worktrees are open at once and the shell's working directory
+  drifts between them. Address every git command with `git -C <path>` and
+  every file with its absolute path; never rely on `cd`. A checkout in the
+  wrong worktree moves its branch and silently misplaces the next edit.
 - A subagent cannot see the owner's approvals. When a builder needs an approved
   install or commit, the orchestrator performs that step in the builder's
   worktree, then tells the builder to continue.
