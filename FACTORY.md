@@ -11,7 +11,11 @@ The owner's goal is a repo that stays maintainable for years with one
 maintainer, not a one-weekend app. Every step below serves that: small
 reviewed PRs, a test for each bug, a guard for each hazard, docs that stay
 true, and complexity that pays for itself. When a shortcut would be faster
-today and costlier to keep, take the slower path and say so.
+today and costlier to keep, take the slower path and say so. Removing code,
+settings, processes and steps counts as progress: every session looks for a
+simplification or an optimisation to propose, in the code and in this flow.
+Keep it simple and do not repeat yourself; judge like a staff engineer who
+knows when the quick fix is right and when it is not.
 
 ## Roles
 
@@ -24,8 +28,14 @@ today and costlier to keep, take the slower path and say so.
   the repo's `code-review` pass. Findings go back to the builder until clean.
 
 Pick the cheapest model that can do the task well: a strong model for code,
-review and anything touching a safety rule; a small model for mechanical edits
-and lookups.
+review and anything touching a safety rule; a small model (Haiku) for
+mechanical work such as merges, renames, fixture updates and lookups. The
+orchestrator checks a small model's output before using it, and gives it a
+brief with exact commands and a stop condition.
+
+Merging on green is only as safe as CI. Every PR adds a test for the behaviour
+it changes; a gap CI cannot see (untested module, missing lint, unchecked
+script) becomes a roadmap item and is named in the PR.
 
 ## Inputs
 
@@ -64,8 +74,11 @@ and lookups.
    the builder; never merge around it.
 9. **Merge.** The orchestrator squash-merges as soon as CI is green and the
    review has no open findings, and deletes the branch. PRs that touch the
-   same files merge one at a time: rebase the next one onto `main`, let CI run
-   again, then merge. Never merge a red or conflicting PR.
+   same files merge one at a time: merge `main` into the next branch (a merge
+   commit; force-pushing is blocked, so never rebase a pushed branch), fix
+   conflicts keeping both sides, run `npm run check`, let CI run again, then
+   merge. Two green PRs can still break each other once combined, so the
+   rerun after merging `main` is never skipped. Never merge a red PR.
 10. **Sync the roadmap.** When a PR opens, set the item's status to In review.
     When it merges, set it to Done and note the gap if part of the item was left
     out. Fix any other status that the code shows to be stale.
@@ -112,27 +125,26 @@ This file is the memory of the flow. Keep it current:
 
 Rules the owner gave in sessions, restated so they stay true. Checked 2026-10-30.
 
-- Make the repo sustainable in the long term; it is not a vibe-coded
-  one-weekend app.
-- Use subagents; the orchestrator supervises and holds the quality bar.
-- Every change goes through a PR, is code reviewed, and merges only when CI is
-  green.
-- Merge each PR as soon as its CI is green; do not leave green PRs waiting.
+- Make the repo sustainable in the long term, not a one-weekend app:
+  simplifications and optimisations matter as much as features; KISS and DRY,
+  with a staff engineer's judgement of when the quick fix is right.
+- Every change goes through a reviewed PR and merges as soon as CI is green.
+  Make CI able to catch issues and regressions, so merging on green is safe.
+- Semgrep rules may be added as guardrails when they fit, or proposed in the
+  roadmap.
 - Do not expose the roadmap link anywhere.
-- Keep roadmap statuses up to date; update the roadmap whenever the code shows
-  it is stale. Propose improvements and simplifications in it, and improve its
-  structure.
+- Keep roadmap statuses up to date and the roadmap in step with the code.
+  Propose improvements and simplifications in it, and improve its structure.
+  Status lives only in the Status tab table, one row per item, with the PR or
+  commit named in the Item cell; the main tab carries no status words.
 - Run slow commands in the background and keep working meanwhile.
 - Whenever something buggy, noisy or risky for the repo is seen, add
   guidelines, guardrails and harnesses so it does not happen again, and keep
   that rule documented in the repo.
-- The roadmap keeps status only in its Status tab table, one row per item,
-  with the PR or commit named in the Item cell. The main tab carries no status
-  words. Follow the structure the owner sets; do not add status elsewhere.
-- Several worktrees are open at once and the shell's working directory
-  drifts between them. Address every git command with `git -C <path>` and
-  every file with its absolute path; never rely on `cd`. A checkout in the
-  wrong worktree moves its branch and silently misplaces the next edit.
-- A subagent cannot see the owner's approvals. When a builder needs an approved
-  install or commit, the orchestrator performs that step in the builder's
-  worktree, then tells the builder to continue.
+- Several worktrees are open at once and the shell's working directory drifts
+  between them. Address every git command with `git -C <path>` and every file
+  with its absolute path; never rely on `cd`.
+- A subagent cannot see the owner's approvals and will often refuse to install,
+  commit or push. Brief builders to leave their work staged; the orchestrator
+  commits and pushes from the builder's worktree, and runs approved installs
+  there before telling the builder to continue.
