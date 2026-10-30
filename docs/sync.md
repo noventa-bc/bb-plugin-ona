@@ -123,3 +123,14 @@ keys (`forgetBox()` in `src/sync.ts`, called from the provider's `remove()`).
 To add or change a rule, update `decide()`, its test in
 `test/reconcile.test.ts`, and the table above, all in the same change.
 
+
+CI checks parts of these rules with Semgrep (`.semgrep.yml`):
+
+- `child-process-outside-runners`: only `src/ona.ts`, `src/setup.ts` and
+  `src/ssh.ts` start child processes.
+- `ona-lifecycle-outside-onacli`: `ona environment start`, `stop`, `delete` and
+  `ssh` run only through `OnaCli` in `src/ona.ts` (safety rules 1 and 2).
+- `remote-script-interpolation`: a script sent over SSH interpolates values
+  only through `shellQuote`.
+- `console-instead-of-bb-log`: plugin code logs through `bb.log`.
+- `secret-in-kv-key`: no storage key names a token, secret or password.

@@ -12,6 +12,7 @@ Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
 - Run `npm run check` (typecheck, lint, format check and tests) before you finish. `npm run format` fixes formatting.
 - CI: `check.yml` runs `npm run check` and skips changes that touch only Markdown; `docs.yml` runs on Markdown changes and is where a job that validates `.md` files goes.
 - CI also runs `shellcheck` on `scripts/*.sh` and `test/*.sh`; `npm run check` does not. After changing a `.sh` file, run `shellcheck` on it (`brew install shellcheck`), or say in the handoff that it was not run.
+- CI also runs the Semgrep rules in `.semgrep.yml` (fixtures in `.semgrep/tests/`). Locally: `brew install semgrep`, then `semgrep --test --config .semgrep.yml .semgrep/tests/` and `semgrep scan --config .semgrep.yml --error --metrics=off app.tsx server.ts src`.
 - Run one test file with `node --test --experimental-strip-types test/reconcile.test.ts`.
 - Inside the agent sandbox, tests that need local ports or other processes skip themselves. CI runs them.
 - Live reload of the plugin is owner-only. Do not run it.

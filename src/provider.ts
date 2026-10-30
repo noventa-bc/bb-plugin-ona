@@ -186,7 +186,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       signal.throwIfAborted();
       const probe = await sshCapture(
         executor,
-        `curl -sf -o /dev/null --max-time 5 ${url}`,
+        `curl -sf -o /dev/null --max-time 5 ${shellQuote(url)}`,
         signal,
         CHECK_TIMEOUT_MS,
       ).catch((error) => {

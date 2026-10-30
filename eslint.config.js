@@ -4,7 +4,8 @@
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist/", "node_modules/"] },
+  // .semgrep/ holds Semgrep test fixtures, which break rules on purpose.
+  { ignores: ["dist/", "node_modules/", ".semgrep/"] },
   {
     files: ["**/*.ts", "**/*.tsx"],
     extends: [tseslint.configs.base],

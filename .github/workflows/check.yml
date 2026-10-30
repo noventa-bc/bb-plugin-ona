@@ -33,3 +33,11 @@ jobs:
       # Preinstalled on the Ubuntu runner only.
       - if: runner.os == 'Linux'
         run: shellcheck scripts/*.sh test/*.sh
+      # The rules in .semgrep.yml: first their own fixtures, then the plugin code.
+      # pipx is preinstalled; Ubuntu 24.04's system Python refuses a bare pip install.
+      - if: runner.os == 'Linux'
+        run: pipx install semgrep==1.183.0
+      - if: runner.os == 'Linux'
+        run: semgrep --test --config .semgrep.yml .semgrep/tests/
+      - if: runner.os == 'Linux'
+        run: semgrep scan --config .semgrep.yml --error --metrics=off app.tsx server.ts src
