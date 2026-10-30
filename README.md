@@ -38,7 +38,7 @@ through (see [Security model](#security-model)). The server stays on loopback,
 and nothing goes through getbb.app or any other third-party relay. Tunnels only
 work while your Mac is awake and bb is running. An open tunnel counts as
 activity to Ona, so the plugin only keeps it open while you use the box. After
-`idleDisconnect` (30m by default) without thread activity, it closes the tunnel
+`idleDisconnect` (1h by default) without thread activity, it closes the tunnel
 and marks the bb machine suspended, but it doesn't stop the environment. Ona's
 own inactivity timeout stops it later, unless you still have an Ona editor open
 on it. The tunnel never reconnects to an environment that Ona has stopped or is
@@ -133,7 +133,7 @@ View them with `bb plugin config ona`, and change one with `bb plugin config ona
 | `sshPath` | `/usr/bin/ssh` | Path to `ssh`. |
 | `defaultProject` | *(empty)* | Ona project used when creating a devbox without one, e.g. `my-app`. |
 | `inactivityTimeout` | `3h` | Auto-stop timeout for devboxes bb creates. Adopted ones keep their own. |
-| `idleDisconnect` | `30m` | After this long with no thread activity, bb closes its tunnel to a devbox and marks the machine suspended so Ona's timeout can stop it. The next message wakes it. Empty or `0` keeps every box connected. |
+| `idleDisconnect` | `1h` | After this long with no thread activity, bb closes its tunnel to a devbox and marks the machine suspended so Ona's timeout can stop it. The next message wakes it. Empty or `0` keeps every box connected. |
 | `waitForSharedHome` | `true` | After a devbox starts, wait until its NFS home is mounted before starting bb's daemon and agents. Starting earlier lets Codex write threads into the container's own home, where the mount hides them ("no rollout found"). Turn off if your environments don't share a home. |
 | `codexSqliteHome` | `/workspaces/.codex-sqlite-bb` | Where Codex launched by bb keeps its SQLite state on the devbox's local disk. |
 | `machineDataDir` | `/workspaces/.bb-machines` | Local folder that `~/.bb-machines` is symlinked to on every devbox. Empty leaves `~/.bb-machines` alone. |

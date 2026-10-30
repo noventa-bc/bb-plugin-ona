@@ -8,7 +8,7 @@ made each change. The version is the one in `package.json`.
 ### Fixed
 - Every devbox stayed awake for as long as bb was open: bb's always-open SSH
   tunnel counted as activity, so Ona's inactivity timeout never fired. Now,
-  once a box has had no thread activity for `idleDisconnect` (default `30m`),
+  once a box has had no thread activity for `idleDisconnect` (default `1h`),
   the plugin closes its tunnel and marks the bb machine suspended. It leaves the
   Ona environment running, so Ona's own timeout stops it and an open Ona editor
   still keeps it alive. The next message on that machine resumes it as usual.
