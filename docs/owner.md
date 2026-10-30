@@ -12,9 +12,11 @@ Agents never commit or push; you review and commit.
 - `brew install nono` (profile checked with nono 0.81.0; re-run the checks
   below after upgrading, since nono is pre-1.0).
 - Claude Code keeps its login in the macOS keychain, which the sandbox blocks.
-  Run `claude setup-token` once and export the token as
-  `CLAUDE_CODE_OAUTH_TOKEN` in the shell you dispatch from. Don't write it into
-  a file in this repo.
+  Run `claude setup-token` once, then store the token where nono reads it
+  (paste it at the prompt):
+  `security add-generic-password -U -s nono -a claude_code_oauth_token -w`.
+  The scripts have nono pass it in as `CLAUDE_CODE_OAUTH_TOKEN`; an exported
+  `CLAUDE_CODE_OAUTH_TOKEN` takes precedence. Don't write it into a file.
 - GitHub repository settings: turn on secret scanning, push protection and
   Dependabot alerts.
 
