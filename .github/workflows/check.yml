@@ -33,11 +33,12 @@ jobs:
       # Preinstalled on the Ubuntu runner only.
       - if: runner.os == 'Linux'
         run: shellcheck scripts/*.sh test/*.sh
-      # The rules in .semgrep.yml: first their own fixtures, then the plugin code.
+      # The rules in .semgrep/rules.yml: first their own fixtures (.semgrep/rules.ts), then the plugin code.
       # pipx is preinstalled; Ubuntu 24.04's system Python refuses a bare pip install.
+      # 1.183.0 is the newest PyPI release at pin time (checked 2026-10-30); bump it by hand because Dependabot does not watch pipx pins.
       - if: runner.os == 'Linux'
         run: pipx install semgrep==1.183.0
       - if: runner.os == 'Linux'
-        run: semgrep --test --config .semgrep.yml .semgrep/tests/
+        run: semgrep --test --metrics=off .semgrep/
       - if: runner.os == 'Linux'
-        run: semgrep scan --config .semgrep.yml --error --metrics=off app.tsx server.ts src
+        run: semgrep scan --config .semgrep/rules.yml --error --metrics=off app.tsx server.ts src

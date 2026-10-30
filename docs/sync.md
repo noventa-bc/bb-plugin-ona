@@ -124,7 +124,7 @@ To add or change a rule, update `decide()`, its test in
 `test/reconcile.test.ts`, and the table above, all in the same change.
 
 
-CI checks parts of these rules with Semgrep (`.semgrep.yml`):
+CI checks parts of these rules with Semgrep (`.semgrep/rules.yml`):
 
 - `child-process-outside-runners`: only `src/ona.ts`, `src/setup.ts` and
   `src/ssh.ts` start child processes.

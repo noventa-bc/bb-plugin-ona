@@ -79,11 +79,6 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   - `bb.status.needsConfiguration`
   - `ephemeral: true` machines
 
-## CI tools
-
-- CI pins Semgrep 1.183.0, the newest release on PyPI when it was pinned
-  (checked 2026-10-30). Bump it by hand in `.github/workflows/check.yml`.
-
 ## Known gaps
 
 - Archived environments vanish from `ona environment list`, but

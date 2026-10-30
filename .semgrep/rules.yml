@@ -1,6 +1,6 @@
 # Structural checks from the Code Review Rules in AGENTS.md and the safety
-# rules in docs/sync.md. CI runs `semgrep --test` on .semgrep/tests/ and then
-# scans app.tsx, server.ts and src/.
+# rules in docs/sync.md. CI runs `semgrep --test` on .semgrep/ (fixtures in
+# .semgrep/rules.ts) and then scans app.tsx, server.ts and src/.
 rules:
   - id: child-process-outside-runners
     message: "Start child processes only in src/ona.ts, src/setup.ts or src/ssh.ts (Code Review Rules 1 and 5)."
