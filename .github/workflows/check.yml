@@ -1,8 +1,11 @@
 name: check
 on:
+  # Markdown-only changes skip this workflow; docs.yml checks them.
   push:
     branches: [main]
+    paths-ignore: ["**.md"]
   pull_request:
+    paths-ignore: ["**.md"]
 permissions:
   contents: read
 jobs:

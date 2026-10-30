@@ -10,6 +10,7 @@ Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
 ## Commands
 
 - Run `npm run check` (typecheck, lint, format check and tests) before you finish. `npm run format` fixes formatting.
+- CI: `check.yml` runs `npm run check` and skips changes that touch only Markdown; `docs.yml` runs on Markdown changes and is where a job that validates `.md` files goes.
 - CI also runs `shellcheck` on `scripts/*.sh` and `test/*.sh`; `npm run check` does not. After changing a `.sh` file, run `shellcheck` on it (`brew install shellcheck`), or say in the handoff that it was not run.
 - Run one test file with `node --test --experimental-strip-types test/reconcile.test.ts`.
 - Inside the agent sandbox, tests that need local ports or other processes skip themselves. CI runs them.
