@@ -25,7 +25,10 @@ orchestrator opens PRs.
   The scripts have nono pass it in as `CLAUDE_CODE_OAUTH_TOKEN`; an exported
   `CLAUDE_CODE_OAUTH_TOKEN` takes precedence. Don't write it into a file.
 - GitHub repository settings: turn on secret scanning, push protection and
-  Dependabot alerts.
+  Dependabot alerts. Add a ruleset on the default branch that blocks
+  deletion and force pushes and requires a pull request with squash merge
+  and no required reviews. Do not require status checks: `check.yml` skips
+  Markdown-only changes, so a required `check` would block docs PRs.
 
 ## Dispatch
 
