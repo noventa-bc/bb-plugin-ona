@@ -13,6 +13,11 @@ orchestrator opens PRs.
 
 - `brew install nono` (profile checked with nono 0.81.0; re-run the checks
   below after upgrading, since nono is pre-1.0).
+- Install the ponytail plugin in Claude Code (installed 5.3.3 on 2026-10-30):
+  `claude plugin marketplace add DietrichGebert/ponytail`, then
+  `claude plugin install ponytail@ponytail`. It needs `node` on `PATH` for its
+  hooks. Leave its optional webhook and ledger settings unset. Agents then
+  have `/ponytail`, `/ponytail-review`, `/ponytail-audit` and `/ponytail-debt`.
 - Claude Code keeps its login in the macOS keychain, which the sandbox blocks.
   Run `claude setup-token` once, then store the token where nono reads it
   (paste it at the prompt):

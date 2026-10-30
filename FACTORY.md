@@ -33,7 +33,9 @@ mechanical work such as merges, renames, fixture updates and lookups. The
 orchestrator checks a small model's output before using it, and gives it a
 brief with exact commands and a stop condition.
 
-Merging on green is only as safe as CI. Every PR adds a test for the behaviour
+Every session runs with the ponytail plugin on (`/ponytail full`, the
+default), so builders and reviewers write the least code that solves the whole
+task; `docs/owner.md` has the install. Merging on green is only as safe as CI. Every PR adds a test for the behaviour
 it changes; a gap CI cannot see (untested module, missing lint, unchecked
 script) becomes a roadmap item and is named in the PR.
 
@@ -64,8 +66,10 @@ script) becomes a roadmap item and is named in the PR.
    a failing test first where possible, keeps `npm run check` green, writes
    `.agent/HANDOFF.md`, and commits on its branch.
 6. **Review.** The orchestrator reads the handoff and the diff, runs a reviewer
-   agent and `code-review`, and sends findings back to the builder. Repeat until
-   there are no open findings. Check the ten Code Review Rules in `AGENTS.md`.
+   agent, `code-review` and `/ponytail-review branch`, and sends findings back
+   to the builder. Repeat until there are no open findings. Check the ten Code
+   Review Rules in `AGENTS.md`. A ponytail finding that the change is bigger
+   than the task needs is a finding like any other.
 7. **Open the PR.** Push the branch and open a pull request against `main`.
    The description carries: the roadmap labels, what changed and why, how it
    was tested, the owner live-test steps from the handoff, and anything left
@@ -123,24 +127,15 @@ This file is the memory of the flow. Keep it current:
 
 ## Owner instructions on record
 
-Rules the owner gave in sessions, restated so they stay true. Checked 2026-10-30.
+Rules the owner gave that the sections above do not already state. Checked
+2026-10-30. Purpose, Flow and Self-improvement hold the rest.
 
-- Make the repo sustainable in the long term, not a one-weekend app:
-  simplifications and optimisations matter as much as features; KISS and DRY,
-  with a staff engineer's judgement of when the quick fix is right.
-- Every change goes through a reviewed PR and merges as soon as CI is green.
-  Make CI able to catch issues and regressions, so merging on green is safe.
 - Semgrep rules may be added as guardrails when they fit, or proposed in the
   roadmap.
-- Do not expose the roadmap link anywhere.
 - Keep roadmap statuses up to date and the roadmap in step with the code.
-  Propose improvements and simplifications in it, and improve its structure.
   Status lives only in the Status tab table, one row per item, with the PR or
   commit named in the Item cell; the main tab carries no status words.
 - Run slow commands in the background and keep working meanwhile.
-- Whenever something buggy, noisy or risky for the repo is seen, add
-  guidelines, guardrails and harnesses so it does not happen again, and keep
-  that rule documented in the repo.
 - Several worktrees are open at once and the shell's working directory drifts
   between them. Address every git command with `git -C <path>` and every file
   with its absolute path; never rely on `cd`.
