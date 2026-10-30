@@ -7,7 +7,7 @@ This repo is public. Name only this plugin and public tools.
 
 ## Commands
 
-- Run `npm run check` (typecheck and tests) before you finish.
+- Run `npm run check` (typecheck, lint, format check and tests) before you finish. `npm run format` fixes formatting.
 - Run one test file with `node --test --experimental-strip-types test/reconcile.test.ts`.
 - Inside the agent sandbox, tests that need local ports or other processes skip themselves. CI runs them.
 - Live reload of the plugin is owner-only. Do not run it.
