@@ -45,6 +45,11 @@ Change these together, in the same edit.
 - Every SSH or `ona` call must name the safety rule that covers it, in the README section "How bb and Ona stay in sync".
 - Keep changes small. Do not refactor unrelated code.
 
+## Complexity
+
+- This plugin has one maintainer. Every piece of complexity you add (a dependency, module, abstraction, setting, command, background process, child process, cache or persisted state) must buy more than it costs to read, test and keep working. Prefer the smaller change that solves the problem, and say in the handoff what each addition costs and what it buys.
+- A big change needs the owner's review before it is built: a new dependency, command, setting, background or child process, persisted state, a change to a safety rule or an accepted decision, a refactor across modules, or anything that changes how users run the plugin. Attended: stop and ask. Unattended: don't build it; put the plan, its cost and the smallest alternative under "Needs owner review" in the handoff, and build only the parts that aren't big.
+
 ## Docs
 
 - Each file owns one thing. `README.md` is for users. `skills/ona-devboxes/SKILL.md` is for agents that use the plugin. `CHANGELOG.md` is for changes. `docs/decisions/` is for reasons.
@@ -67,14 +72,16 @@ The safety rules behind 1–4 are in the README section "How bb and Ona stay in 
 6. The tunnel goes only to the loopback proxy. Added proxy routes need a test and a line in the README "Security model" section.
 7. No secrets in logs, storage or errors.
 8. A call that changes state can be accepted without taking effect (bb suspend, resume and reconcile return the host). Check the result, treat "not done" as a failure so the guard backs off, and never report an action as done on the call alone. ESLint enforces this for the bb lifecycle calls.
-9. Public content: no company, client or person names, no personal paths, no real environment names or IDs, and no description of an unfixed weakness (those go under Security (private) in the handoff).
+9. Complexity the change doesn't justify is a finding: a simpler way to the same result, an unused option, or a big change (see "Complexity") made without the owner's review.
+10. Public content: no company, client or person names, no personal paths, no real environment names or IDs, and no description of an unfixed weakness (those go under Security (private) in the handoff).
 
 ## Handoff
 
 Write `.agent/HANDOFF.md` when a task ends. The file is git-ignored. Use these sections, in this order:
 
 - Goal
-- Changes
+- Changes, with what each added piece of complexity costs and buys
+- Needs owner review (big changes planned but not built)
 - `npm run check` output
 - Review findings, and what was done about each
 - Owner live-test steps
