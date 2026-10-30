@@ -17,6 +17,7 @@ case "$1 $2" in
     else
       case "$3" in
         env-*) echo "Error: not_found: environment not found" >&2 ;;
+        # shellcheck disable=SC2016  # the backticks are the real CLI text, not an expansion
         *) printf 'Error: no environment found matching "%s"\nPossible resolutions:\n  - Run `ona environment list`\n' "$3" >&2 ;;
       esac
       exit 1
