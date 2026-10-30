@@ -6,6 +6,10 @@ made each change. The version is the one in `package.json`.
 ## Unreleased
 
 ### Added
+- `bb ona keep-alive <box> <duration>` keeps a running devbox from Ona's
+  inactivity timeout for up to 12h; `bb ona keep-alive <box> off` ends it.
+  It is refused for a box that isn't running, never starts one, and ends when
+  the plugin reloads. `bb ona status` shows `keep-alive until HH:MM`.
 - `bb ona status [box]` shows bb's view of each devbox next to Ona's, the
   tunnel, what the latest check found (`now`), and the last repair the plugin
   made and why (`last action`). A repair stays listed after the box is healthy

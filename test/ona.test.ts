@@ -140,3 +140,29 @@ test("getEnvironment rejects when Ona doesn't know the box", async () => {
   setFake({});
   await assert.rejects(cli.getEnvironment("env-0000"), /ona environment get failed: .*not found/);
 });
+
+function exited(child: ReturnType<OnaCli["keepAlive"]>): Promise<string> {
+  return new Promise((resolve) => child.onExit(resolve));
+}
+
+test("keepAlive runs ona environment keep-alive on a sleep of the duration, values as separate argv", async () => {
+  const log = join(dir, "keep-alive.log");
+  setFake({ FAKE_ONA_LOG: log });
+  const detail = await exited(cli.keepAlive("env-0001", 1_000));
+  assert.equal(readFileSync(log, "utf8"), "environment keep-alive --environment-id env-0001 -q -- sleep 1\n");
+  assert.equal(detail, "exit code 0");
+});
+
+test("keepAlive's kill ends the child", async () => {
+  setFake({});
+  const started = Date.now();
+  const child = cli.keepAlive("env-0001", 600_000);
+  child.kill();
+  assert.match(await exited(child), /killed by SIGTERM/);
+  assert.ok(Date.now() - started < 5_000);
+});
+
+test("keepAlive reports the CLI's error when it fails", async () => {
+  setFake({ FAKE_ONA_FAIL: "environment is not running" });
+  assert.equal(await exited(cli.keepAlive("env-0001", 60_000)), "environment is not running");
+});

@@ -6,7 +6,17 @@
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { randomFriendlyName } from "./src/names.ts";
-import { isArchived, isRunning, isStopped, OnaCli, OnaSnapshot, sshHost, type OnaListing } from "./src/ona.ts";
+import { clockTime, KeepAlives, parseKeepAlive } from "./src/keepalive.ts";
+import {
+  isArchived,
+  isRunning,
+  isStopped,
+  matchEnvironment,
+  OnaCli,
+  OnaSnapshot,
+  sshHost,
+  type OnaListing,
+} from "./src/ona.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -164,6 +174,12 @@ export default async function plugin(bb: BbPluginApi) {
   // Settings path first, then PATH and common install locations.
   const resolveOna = () => findOnaBinary(onaPath) ?? onaPath;
   const ona = new OnaCli(resolveOna);
+  // `bb ona keep-alive` children, one per box. They end with the plugin.
+  const keepAlives = new KeepAlives(
+    (envId, ms) => ona.keepAlive(envId, ms),
+    (envId, detail) => bb.log.warn(`keep-alive for ${envId} ended early: ${detail}`),
+  );
+  bb.onDispose(() => keepAlives.stopAll());
 
   // `ona whoami` is a network call; cache it so availability stays fast.
   let loginCache: { at: number; login: OnaLogin } | null = null;
@@ -180,7 +196,17 @@ export default async function plugin(bb: BbPluginApi) {
   bb.onDispose(() => proxy.close());
   // One cached `ona environment list` for everything that can live with a
   // few seconds' staleness (see OnaSnapshot).
-  const snapshot = new OnaSnapshot(() => ona.listEnvironments());
+  // A good listing that shows a box not running ends its keep-alive; an empty
+  // one is unknown (safety rule 4) and changes nothing.
+  const snapshot = new OnaSnapshot(async () => {
+    const envs = await ona.listEnvironments();
+    if (envs.length > 0) {
+      for (const envId of keepAlives.endNotRunning(envs.map((env) => ({ id: env.id, running: isRunning(env) })))) {
+        bb.log.info(`keep-alive for ${envId} ended: Ona no longer lists the box as running`);
+      }
+    }
+    return envs;
+  });
   const guard = new HostGuard();
   const scheduler = new PassScheduler(
     (keys) => reconcile(keys),
@@ -996,6 +1022,8 @@ export default async function plugin(bb: BbPluginApi) {
     /** The last action the plugin took (or the one in flight). */
     last: { action: string; reason: string; at: number; error?: string } | null;
     retry: string | null;
+    /** When a `bb ona keep-alive` ends, epoch ms. */
+    keepAliveUntil: number | null;
   }
 
   async function statusRows(ref?: string): Promise<StatusRow[]> {
@@ -1036,6 +1064,7 @@ export default async function plugin(bb: BbPluginApi) {
             : record.failures >= GIVE_UP_AFTER
               ? `gave up after ${record.failures} failures; run \`bb ona sync ${row.machine}\``
               : `retrying after ${new Date(record.quietUntil).toLocaleTimeString()}`,
+        keepAliveUntil: keepAlives.until(row.resource.envId),
       };
     });
   }
@@ -1059,6 +1088,7 @@ export default async function plugin(bb: BbPluginApi) {
         );
       }
       if (row.retry) lines.push(`  ${row.retry}`);
+      if (row.keepAliveUntil) lines.push(`  keep-alive until ${clockTime(row.keepAliveUntil)}`);
       return lines.join("\n");
     });
     return [header, ...lines].join("\n");
@@ -1080,6 +1110,7 @@ export default async function plugin(bb: BbPluginApi) {
     "  bb ona reconnect <ref>        Reopen the tunnel and restart the bb daemon (applies new settings)",
     "  bb ona status [ref] [--json]  bb's view of each devbox next to Ona's, and what the plugin last did",
     "  bb ona sync [ref]             Re-check Ona now and repair (ignores cooldowns, keeps the safety rules)",
+    "  bb ona keep-alive <ref> <duration|off>  Keep a running devbox from Ona's inactivity timeout (at most 12h)",
     "  bb ona update [ref] [--force] Apply pending Claude Code / Codex updates now (also runs weekdays 09:00)",
     "",
     "<ref> is a bb machine name/id or an Ona environment name/id.",
@@ -1133,6 +1164,11 @@ export default async function plugin(bb: BbPluginApi) {
         name: "sync",
         summary: "Re-check Ona now and repair out-of-step devboxes",
         usage: "bb ona sync [ref]",
+      },
+      {
+        name: "keep-alive",
+        summary: "Keep a running devbox from Ona's inactivity timeout for a while",
+        usage: "bb ona keep-alive <ref> <duration|off>",
       },
     ],
     async run(rawArgv, ctx) {
@@ -1269,6 +1305,47 @@ export default async function plugin(bb: BbPluginApi) {
               wait: true,
             });
             return { exitCode: 0, stdout: formatStatus(await statusRows(ref)) };
+          }
+          case "keep-alive": {
+            if (!ref) break;
+            const request = parseKeepAlive(newName);
+            if (request.kind === "invalid") {
+              return { exitCode: 1, stderr: `${request.message}\nUsage: bb ona keep-alive <ref> <duration|off>` };
+            }
+            if (request.kind === "off") {
+              // A box Ona no longer lists can still have a keep-alive under its id.
+              const envId = await resolveEnvId(ref).catch(() => ref);
+              return {
+                exitCode: 0,
+                stdout: keepAlives.stop(envId) ? `Ended the keep-alive for ${ref}.` : `${ref} had no keep-alive.`,
+              };
+            }
+            // Safety rule 1: only a box a fresh listing says is RUNNING. The
+            // keep-alive runs on this Mac through the ona CLI, never over SSH.
+            const listing = await snapshot.refresh().catch(() => null);
+            if (!listing) {
+              return {
+                exitCode: 1,
+                stderr: `Can't ask Ona whether ${ref} is running (${snapshot.lastError ?? "no listing"}); nothing changed.`,
+              };
+            }
+            const row = await findMachine(ref);
+            const env = row
+              ? listing.envs.find((e) => e.id === row.resource.envId)
+              : matchEnvironment(listing.envs, ref);
+            if (!env) return { exitCode: 1, stderr: `Ona lists no devbox matching "${ref}"; nothing changed.` };
+            if (!isRunning(env)) {
+              const phase = (env.status?.phase ?? "unknown").replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase();
+              return {
+                exitCode: 1,
+                stderr: `${ref} is ${phase} in Ona. keep-alive only holds a running box and never starts one.`,
+              };
+            }
+            const until = keepAlives.start(env.id, request.ms);
+            return {
+              exitCode: 0,
+              stdout: `Keeping ${ref} alive until ${clockTime(until)}. End it early with: bb ona keep-alive ${ref} off`,
+            };
           }
           case "shell": {
             if (!ref) break;

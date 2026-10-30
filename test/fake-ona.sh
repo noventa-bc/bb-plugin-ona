@@ -1,5 +1,6 @@
 #!/bin/sh
-# Stand-in for the ona CLI: canned environment and project lists and one `get`, argv logged to $FAKE_ONA_LOG.
+# Stand-in for the ona CLI: canned environment and project lists, one `get`, and `keep-alive` running the
+# command after `--`; argv logged to $FAKE_ONA_LOG.
 if [ -n "${FAKE_ONA_FAIL:-}" ]; then
   printf '%s\n' "$FAKE_ONA_FAIL" >&2
   exit 1
@@ -14,5 +15,9 @@ case "$1 $2" in
     if [ -n "${FAKE_ONA_GET:-}" ]; then cat "$FAKE_ONA_GET"; else echo "environment not found" >&2; exit 1; fi ;;
   "project list")
     if [ -n "${FAKE_ONA_PROJECTS:-}" ]; then cat "$FAKE_ONA_PROJECTS"; else printf '[]\n'; fi ;;
+  "environment keep-alive")
+    while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done
+    shift
+    exec "$@" ;;
 esac
 exit 0

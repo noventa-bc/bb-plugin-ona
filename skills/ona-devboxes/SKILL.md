@@ -52,6 +52,10 @@ devbox. Use `bb` commands from a thread instead; bb routes them correctly.
 - `bb ona reconnect <ref>` — reopen the tunnel and restart the daemon (after changing settings).
 - `bb ona status [ref]` — bb's view of each devbox next to Ona's, and what the plugin last did and why.
   Use it first when bb and Ona disagree (box changed outside bb); `bb ona sync [ref]` re-checks and repairs now.
+- `bb ona keep-alive <ref> <duration>` — keep a running devbox from Ona's inactivity timeout
+  (e.g. `2h`, at most `12h`); `bb ona keep-alive <ref> off` ends it. Only when the user asks for it:
+  it costs money while the box runs. Refused for a box that isn't running; it never starts one.
+  It ends when the plugin reloads.
 
 ## Codex state
 `~/.codex` may live on a shared NFS home where SQLite WAL corrupts. bb's daemon
