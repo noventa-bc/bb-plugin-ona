@@ -33,7 +33,7 @@ const machine = (overrides: Partial<MachineView> = {}): MachineView => ({
 });
 const ona = (phase: string): OnaView => ({ kind: "env", phase: `ENVIRONMENT_PHASE_${phase}` });
 
-// --- decide: one test per rule (README "How bb and Ona stay in sync") ---
+// --- decide: one test per rule (docs/sync.md) ---
 
 test("R1: running in Ona, active but disconnected past the grace period -> heal the daemon", () => {
   assert.equal(decide(machine(), ona("RUNNING"), NOW).action, "heal-daemon");
