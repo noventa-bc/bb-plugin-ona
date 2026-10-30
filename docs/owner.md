@@ -28,8 +28,8 @@ Agents never commit or push; you review and commit.
   (default 5).
 - Attended: `scripts/agent-shell.sh [claude|codex]` from this checkout or a
   worktree. Prompts stay on.
-- bb threads opened on this repo run outside the sandbox and rely only on the
-  `ask` rules in `.claude/settings.json`. Prefer `agent-shell.sh`.
+- bb threads opened on this repo run outside the sandbox, with only the
+  agent's own permission prompts and `AGENTS.md`. Prefer `agent-shell.sh`.
 
 ### Task brief template
 
