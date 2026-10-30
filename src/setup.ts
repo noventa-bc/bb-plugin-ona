@@ -1,9 +1,10 @@
 // Prerequisite checks and one-time setup: find the ona CLI, confirm it is
 // logged in, and plan/apply the SSH and bb settings the tunnel design needs.
-import { execFile } from "node:child_process";
+import { execFile, type ExecFileException } from "node:child_process";
 import { accessSync, constants, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
+import { onaTimeoutArgs } from "./ona.ts";
 
 const COMMON_ONA_LOCATIONS = [
   "/opt/homebrew/bin/ona",
@@ -41,32 +42,63 @@ export function run(
   binary: string,
   args: string[],
   options: { timeoutMs?: number; env?: NodeJS.ProcessEnv } = {},
-): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+): Promise<{ ok: boolean; stdout: string; stderr: string; error: ExecFileException | null }> {
   return new Promise((resolve) => {
     execFile(
       binary,
       args,
       { timeout: options.timeoutMs ?? 60_000, env: options.env, maxBuffer: 8 * 1024 * 1024 },
-      (error, stdout, stderr) => resolve({ ok: !error, stdout, stderr: stderr || (error?.message ?? "") }),
+      (error, stdout, stderr) => resolve({ ok: !error, stdout, stderr: stderr || (error?.message ?? ""), error }),
     );
   });
 }
 
-export type OnaLogin = { ok: true; user: string; org: string } | { ok: false; message: string };
+/** Why `ona whoami` failed: a rejected login, Ona out of reach, or something else. */
+export type OnaLoginFailure = "auth" | "network" | "unknown";
+
+export type OnaLogin =
+  { ok: true; user: string; org: string } | { ok: false; message: string; reason: OnaLoginFailure };
+
+// Includes Ona telling the user to run `ona login`, and an expired token.
+const STRONG_AUTH_ERROR = /unauthenticated|unauthorized|\b401\b|not logged in|ona login|token expired|expired token/i;
+const NETWORK_ERROR = /connection|dial|timeout|timed out|deadline|unreachable|no such host|tls/i;
+const WEAK_AUTH_ERROR = /login|token/i;
+
+/**
+ * Strong auth markers, then network words, then weak auth words. So "session
+ * timed out, run `ona login`" is auth, while "failed to authenticate: context
+ * deadline exceeded" is network: it has no strong marker, and the deadline
+ * means Ona was not reached.
+ */
+export function classifyLoginFailure(error: ExecFileException | null, stderr: string): OnaLoginFailure {
+  if (error?.code === "ENOENT" || error?.code === "EACCES") return "unknown";
+  if (error?.killed) return "network";
+  if (STRONG_AUTH_ERROR.test(stderr)) return "auth";
+  if (NETWORK_ERROR.test(stderr)) return "network";
+  if (WEAK_AUTH_ERROR.test(stderr)) return "auth";
+  return "unknown";
+}
 
 export async function checkOnaLogin(binary: string, timeoutMs = 4_000): Promise<OnaLogin> {
-  const result = await run(binary, ["whoami", "-o", "json"], { timeoutMs });
+  // A short grace: availability waits on this call.
+  const result = await run(binary, ["whoami", "-o", "json", ...onaTimeoutArgs(timeoutMs)], {
+    timeoutMs: timeoutMs + 1_000,
+  });
   if (!result.ok) {
-    return { ok: false, message: result.stderr.trim().split("\n").slice(-1)[0] || "ona whoami failed" };
+    return {
+      ok: false,
+      message: result.stderr.trim().split("\n").slice(-1)[0] || "ona whoami failed",
+      reason: classifyLoginFailure(result.error, result.stderr),
+    };
   }
   try {
     const parsed = JSON.parse(result.stdout) as
       Array<{ name?: string; org?: string }> | { name?: string; org?: string };
     const me = Array.isArray(parsed) ? parsed[0] : parsed;
-    if (!me?.name) return { ok: false, message: "ona whoami returned no user" };
+    if (!me?.name) return { ok: false, message: "ona whoami returned no user", reason: "unknown" };
     return { ok: true, user: me.name, org: me.org ?? "" };
   } catch {
-    return { ok: false, message: "could not parse ona whoami output" };
+    return { ok: false, message: "could not parse ona whoami output", reason: "unknown" };
   }
 }
 
@@ -109,12 +141,19 @@ export function planSetup(input: {
     steps.push(
       input.login?.ok
         ? { id: "login", title: "Ona login", state: "ok", detail: `${input.login.user} (${input.login.org})` }
-        : {
-            id: "login",
-            title: "Ona login",
-            state: "blocked",
-            detail: `Run \`ona login\`${input.login && !input.login.ok ? ` (${input.login.message})` : ""}`,
-          },
+        : input.login?.reason === "network"
+          ? {
+              id: "login",
+              title: "Ona login",
+              state: "blocked",
+              detail: `Ona could not be reached (${input.login.message})`,
+            }
+          : {
+              id: "login",
+              title: "Ona login",
+              state: "blocked",
+              detail: `Run \`ona login\`${input.login && !input.login.ok ? ` (${input.login.message})` : ""}`,
+            },
     );
     steps.push(
       input.sshConfigured

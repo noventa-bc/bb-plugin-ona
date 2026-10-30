@@ -13,6 +13,11 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 
 ## Ona CLI
 
+- `ona --help` lists `--timeout <duration>`, "timeout for the operation
+  (default 30s)". Whether it bounds the whole command or each request is not
+  verified: `keep-alive` runs for hours without it. The plugin passes its own
+  wait as `--timeout` on every call (`onaTimeoutArgs` in `src/ona.ts`) except
+  `keep-alive` (its argv ends with `-- sleep …`) and `ssh-config`.
 - `ona environment list -o json` exposes these fields:
   - `status.activitySignal`
   - `spec.timeout.disconnected`
