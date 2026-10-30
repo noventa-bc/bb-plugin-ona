@@ -66,6 +66,13 @@ export interface ProviderDeps {
   port: () => number;
   rememberTunnel(envId: string): Promise<void>;
   forgetTunnel(envId: string): Promise<void>;
+  /** Record that the box just (re)connected; the idle window starts here. */
+  markConnected(envId: string): Promise<void>;
+  /**
+   * True (once) when this suspend is the plugin letting an idle box go: only
+   * the tunnel closes and Ona's own inactivity timeout stops the box.
+   */
+  takeRelease(envId: string): Promise<boolean>;
 }
 
 /** Deterministic Ona name for a creation key, so retries find the same environment. */
@@ -196,6 +203,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     if (deps.machineDataDir) await ensureLocalMachineRoot(executor, deps.machineDataDir, report, signal);
     tunnels.ensure(resource.envId);
     await deps.rememberTunnel(resource.envId);
+    await deps.markConnected(resource.envId);
     await waitForTunnel(executor, report, signal);
     await preflight(executor, report, signal);
     report.step("Installing and enrolling the bb daemon");
@@ -322,6 +330,9 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     async suspend({ resource, report, signal }) {
       const owned = resourceSchema.parse(resource);
       await disconnect(owned.envId);
+      // An idle box let go by the plugin keeps running until Ona's own timeout,
+      // so an open Ona editor still keeps it alive.
+      if (await deps.takeRelease(owned.envId)) return { resource };
       // Ona may have stopped it already (idle timeout); bb then only records the suspension.
       const env = await ona.findEnvironment(owned.envId, signal);
       if (env && !isStopped(env)) {
@@ -376,7 +387,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     },
   });
 
-  return { reconnect };
+  return { reconnect, takeRelease: deps.takeRelease };
 }
 
 export function registerOnaComposition(bb: BbPluginApi) {

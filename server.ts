@@ -31,7 +31,7 @@ import {
   type OnaResource,
 } from "./src/provider.ts";
 import { startDaemonProxy } from "./src/proxy.ts";
-import { machinesToSuspend } from "./src/lifecycle.ts";
+import { machinesToRelease, machinesToSuspend, parseDuration, type MachineActivity } from "./src/lifecycle.ts";
 import {
   CLAUDE_COLLECTOR,
   claudeCost,
@@ -75,6 +75,13 @@ export default async function plugin(bb: BbPluginApi) {
       description: "Auto-stop timeout passed to `ona environment create` (e.g. 3h). Adopted environments keep their own.",
       default: "3h",
     },
+    idleDisconnect: {
+      type: "string",
+      label: "Let idle devboxes sleep after",
+      description:
+        "With no thread activity for this long (e.g. 30m, 2h), bb closes its tunnel to the box and marks the machine suspended, so Ona's own inactivity timeout can stop it. The next message wakes it. Empty or 0 keeps every box connected.",
+      default: "30m",
+    },
     codexSqliteHome: {
       type: "string",
       label: "Codex SQLite home on devboxes",
@@ -116,6 +123,7 @@ export default async function plugin(bb: BbPluginApi) {
     sshPath,
     defaultProject,
     inactivityTimeout,
+    idleDisconnect,
     codexSqliteHome,
     machineDataDir,
     waitForSharedHome,
@@ -146,8 +154,13 @@ export default async function plugin(bb: BbPluginApi) {
     const env = await ona.findEnvironment(envId);
     const stopped = env !== null && isStopped(env);
     if (stopped) void syncStoppedMachines();
-    return env !== null && !stopped;
+    // Connecting to a box that is still stopping would start it again.
+    return env !== null && !stopped && env.status?.phase !== "ENVIRONMENT_PHASE_STOPPING";
   });
+
+  const RELEASING_KEY = "releasing";
+  const connectedAtKey = (envId: string) => `connectedAt:${envId}`;
+  const pluginStartedAt = Date.now();
 
   async function rememberedTunnels(): Promise<string[]> {
     return (await bb.storage.kv.get<string[]>(TUNNELS_KEY)) ?? [];
@@ -180,6 +193,15 @@ export default async function plugin(bb: BbPluginApi) {
     async forgetTunnel(envId) {
       const current = await rememberedTunnels();
       await bb.storage.kv.set(TUNNELS_KEY, current.filter((id) => id !== envId));
+    },
+    async markConnected(envId) {
+      await bb.storage.kv.set(connectedAtKey(envId), Date.now());
+    },
+    async takeRelease(envId) {
+      const current = (await bb.storage.kv.get<string[]>(RELEASING_KEY)) ?? [];
+      if (!current.includes(envId)) return false;
+      await bb.storage.kv.set(RELEASING_KEY, current.filter((id) => id !== envId));
+      return true;
     },
   });
 
@@ -252,10 +274,50 @@ export default async function plugin(bb: BbPluginApi) {
     return syncing;
   }
 
+  /**
+   * Let go of boxes with no thread activity for the idleDisconnect window.
+   * The tunnel bb keeps open counts as activity to Ona, so without this no
+   * box ever idles out while bb runs. The machine is marked suspended without
+   * stopping the environment (see takeRelease); Ona's own timeout stops it,
+   * and bb's resume reconnects or restarts it when a thread needs it.
+   */
+  const idleMs = parseDuration(idleDisconnect);
+  async function releaseIdleMachines(): Promise<void> {
+    if (idleMs <= 0) return;
+    try {
+      const rows = (await machines()).filter((row) => row.phase === "active");
+      const activity: MachineActivity[] = [];
+      for (const row of rows) {
+        const threads = await bb.sdk.threads.list({ hostId: row.hostId });
+        const connectedAt = (await bb.storage.kv.get<number>(connectedAtKey(row.resource.envId))) ?? pluginStartedAt;
+        activity.push({
+          hostId: row.hostId,
+          phase: row.phase,
+          threadStatuses: threads.map((thread) => (thread.queuedWork === "waiting" ? "pending" : thread.status)),
+          lastActivityAt: Math.max(connectedAt, ...threads.map((thread) => Math.max(thread.updatedAt, thread.lastReadAt ?? 0))),
+        });
+      }
+      for (const hostId of machinesToRelease(activity, Date.now(), idleMs)) {
+        const row = rows.find((r) => r.hostId === hostId)!;
+        bb.log.info(`${row.machine}: idle for ${idleDisconnect}; closing the tunnel so Ona's own timeout can stop the box`);
+        const releasing = (await bb.storage.kv.get<string[]>(RELEASING_KEY)) ?? [];
+        if (!releasing.includes(row.resource.envId)) await bb.storage.kv.set(RELEASING_KEY, [...releasing, row.resource.envId]);
+        await bb.sdk.hosts.experimental_suspend({ hostId }).catch(async (error) => {
+          // Don't leave the flag behind for a later user suspend, which should stop the box.
+          await provider.takeRelease(row.resource.envId);
+          bb.log.warn(`${row.machine}: could not let go: ${error instanceof Error ? error.message : String(error)}`);
+        });
+      }
+    } catch (error) {
+      bb.log.warn(`idle-machine check failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   bb.background.service("lifecycle-sync", {
     async start(signal) {
       while (!signal.aborted) {
         await syncStoppedMachines();
+        await releaseIdleMachines();
         await new Promise<void>((resolve) => {
           const timer = setTimeout(resolve, 2 * 60_000);
           signal.addEventListener("abort", () => {
