@@ -40,6 +40,7 @@ Change these together, in the same edit.
 ## How to work
 
 - Fix a bug with a failing test first, where a test is possible.
+- A change to what a sync pass does gets a scenario in `test/sync.test.ts` (fake bb calls, fake Ona listing).
 - For `server.ts` code without tests, list owner check steps in the handoff instead.
 - Put logic in `src/` as pure functions with tests.
 - Every SSH or `ona` call must name the safety rule that covers it, in the README section "How bb and Ona stay in sync".

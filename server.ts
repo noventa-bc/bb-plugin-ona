@@ -7,16 +7,7 @@ import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { randomFriendlyName } from "./src/names.ts";
 import { clockTime, KeepAlives, parseKeepAlive } from "./src/keepalive.ts";
-import {
-  isArchived,
-  isRunning,
-  isStopped,
-  matchEnvironment,
-  OnaCli,
-  OnaSnapshot,
-  sshHost,
-  type OnaListing,
-} from "./src/ona.ts";
+import { isRunning, isStopped, matchEnvironment, OnaCli, OnaSnapshot, sshHost } from "./src/ona.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -32,35 +23,10 @@ import {
   type OnaLogin,
   type SetupStep,
 } from "./src/setup.ts";
-import {
-  onaRef,
-  PROVIDER_ID,
-  registerOnaComposition,
-  registerOnaProvider,
-  resourceSchema,
-  type OnaResource,
-} from "./src/provider.ts";
+import { onaRef, PROVIDER_ID, registerOnaComposition, registerOnaProvider } from "./src/provider.ts";
 import { startDaemonProxy } from "./src/proxy.ts";
-import {
-  lifecycleRefusal,
-  machinesToRelease,
-  workspaceWork,
-  parseDuration,
-  RESUMED,
-  SUSPENDED,
-  type MachineActivity,
-} from "./src/lifecycle.ts";
-import {
-  ALL,
-  decide,
-  GIVE_UP_AFTER,
-  GRACE_MS,
-  HostGuard,
-  PassScheduler,
-  type Decision,
-  type MachineView,
-  type OnaView,
-} from "./src/reconcile.ts";
+import { connectedAtKey, createSync, RELEASING_KEY, type Row, type StatusRow } from "./src/sync.ts";
+import { ALL, GRACE_MS, HostGuard, PassScheduler } from "./src/reconcile.ts";
 import {
   CLAUDE_COLLECTOR,
   claudeCost,
@@ -236,8 +202,6 @@ export default async function plugin(bb: BbPluginApi) {
     (envId) => scheduler.schedule(hostByEnv.get(envId) ?? ALL, 30_000),
   );
 
-  const RELEASING_KEY = "releasing";
-  const connectedAtKey = (envId: string) => `connectedAt:${envId}`;
   const pluginStartedAt = Date.now();
 
   async function rememberedTunnels(): Promise<string[]> {
@@ -297,6 +261,22 @@ export default async function plugin(bb: BbPluginApi) {
 
   registerOnaComposition(bb);
 
+  const sync = createSync({
+    bb,
+    snapshot,
+    ona,
+    guard,
+    tunnels,
+    provider,
+    rememberTunnel,
+    keepAliveUntil: (envId) => keepAlives.until(envId),
+    hostByEnv,
+    autoRepair,
+    idleDisconnect,
+    pluginStartedAt,
+  });
+  const { machines, reconcile, statusRows } = sync;
+
   // Reopen tunnels for active machines after a reload or server restart.
   bb.background.service("tunnels", {
     async start(signal) {
@@ -306,275 +286,7 @@ export default async function plugin(bb: BbPluginApi) {
     },
   });
 
-  interface Row {
-    hostId: string;
-    machine: string;
-    status: string;
-    /** bb lifecycle phase (active, suspended, resuming, ...). */
-    phase: string;
-    /** When bb last heard from the daemon. */
-    lastSeenAt: number | null;
-    /** Last change to the host record; stands in for "phase entered at". */
-    updatedAt: number;
-    resource: OnaResource;
-  }
-
-  async function machines(): Promise<Row[]> {
-    const hosts = await bb.sdk.hosts.list();
-    const rows: Row[] = [];
-    for (const host of hosts) {
-      if (host.machineProviderId !== PROVIDER_ID) continue;
-      const parsed = resourceSchema.safeParse(await bb.experimental_machines.getResource(host.id));
-      if (!parsed.success) continue;
-      // A suspended machine reports "disconnected"; surface the suspension itself.
-      const status = host.lifecycle?.suspendedAt ? "suspended" : String(host.status);
-      rows.push({
-        hostId: host.id,
-        machine: host.name,
-        status,
-        phase: host.lifecycle?.phase ?? "active",
-        lastSeenAt: host.lastSeenAt ?? null,
-        updatedAt: host.updatedAt,
-        resource: parsed.data,
-      });
-    }
-    hostByEnv.clear();
-    for (const row of rows) hostByEnv.set(row.resource.envId, row.hostId);
-    return rows;
-  }
-
-  /**
-   * Mark a machine suspended in bb without stopping its box (the provider's
-   * suspend sees the flag in takeRelease). Used when Ona already stopped or
-   * lost the box, and when an idle box is let go for Ona's own timeout.
-   */
-  async function suspendWithoutStop(row: Row): Promise<void> {
-    const releasing = (await bb.storage.kv.get<string[]>(RELEASING_KEY)) ?? [];
-    if (!releasing.includes(row.resource.envId))
-      await bb.storage.kv.set(RELEASING_KEY, [...releasing, row.resource.envId]);
-    try {
-      const host = await bb.sdk.hosts.experimental_suspend({ hostId: row.hostId });
-      const refusal = lifecycleRefusal(host.lifecycle, SUSPENDED);
-      if (refusal) throw new Error(refusal);
-    } catch (error) {
-      // Don't leave the flag behind for a later user suspend, which should stop the box.
-      await provider.takeRelease(row.resource.envId);
-      throw error;
-    }
-  }
-
-  /**
-   * Let go of boxes with no thread activity for the idleDisconnect window.
-   * The tunnel bb keeps open counts as activity to Ona, so without this no
-   * box ever idles out while bb runs. The machine is marked suspended without
-   * stopping the environment; Ona's own timeout stops it, and bb's resume
-   * reconnects or restarts it when a thread needs it.
-   */
-  const idleMs = parseDuration(idleDisconnect);
-  async function releaseIdleMachines(rows: Row[]): Promise<void> {
-    if (idleMs <= 0) return;
-    const candidates = rows.filter((row) => row.phase === "active" && guard.mayAct(row.hostId));
-    const activity: MachineActivity[] = [];
-    for (const row of candidates) {
-      const threads = await bb.sdk.threads.list({ hostId: row.hostId });
-      const connectedAt = (await bb.storage.kv.get<number>(connectedAtKey(row.resource.envId))) ?? pluginStartedAt;
-      activity.push({
-        hostId: row.hostId,
-        phase: row.phase,
-        threadStatuses: threads.map((thread) => (thread.queuedWork === "waiting" ? "pending" : thread.status)),
-        lastActivityAt: Math.max(
-          connectedAt,
-          ...threads.map((thread) => Math.max(thread.updatedAt, thread.lastReadAt ?? 0)),
-        ),
-        // Letting the box go mid-hook leaves bb unable to recover the workspace.
-        workspacesBlock: await workspaces(row.hostId).then((work) => work.busy || work.needsRecovery > 0),
-      });
-    }
-    for (const hostId of machinesToRelease(activity, Date.now(), idleMs)) {
-      const row = candidates.find((r) => r.hostId === hostId)!;
-      const reason = `idle for ${idleDisconnect}; Ona's own timeout will stop the box`;
-      await guard
-        .run(
-          hostId,
-          "release-idle",
-          reason,
-          async () => {
-            bb.log.info(`${row.machine}: ${reason}; closing the tunnel`);
-            await suspendWithoutStop(row);
-          },
-          { cooldown: false },
-        )
-        .catch((error) => {
-          bb.log.warn(`${row.machine}: could not let go: ${errorText(error)}`);
-        });
-    }
-  }
-
-  /** Consecutive good listings each missing env was absent from (rule 4). */
-  const missing = new Map<string, { streak: number; at: number; archived?: boolean }>();
-
-  function onaView(envId: string, listing: OnaListing | null): OnaView {
-    // An empty list is as likely a CLI/context problem as "no environments".
-    if (!listing || listing.envs.length === 0) return { kind: "unknown" };
-    const env = listing.envs.find((e) => e.id === envId);
-    if (env) {
-      missing.delete(envId);
-      return { kind: "env", phase: env.status?.phase ?? "" };
-    }
-    const seen = missing.get(envId);
-    const streak = seen?.at === listing.at ? seen.streak : (seen?.streak ?? 0) + 1;
-    missing.set(envId, { streak, at: listing.at, archived: seen?.archived });
-    return { kind: "missing", streak, archived: seen?.archived };
-  }
-
-  /**
-   * Archived environments drop out of `ona environment list`. Before a box is
-   * reported gone, ask Ona about it once. A failed lookup (a deleted box, or
-   * Ona unreachable) keeps the "gone" report, as before this check existed.
-   */
-  async function checkArchived(envId: string): Promise<void> {
-    const seen = missing.get(envId);
-    if (!seen || seen.streak < 2 || seen.archived !== undefined) return;
-    try {
-      seen.archived = isArchived(await ona.getEnvironment(envId, AbortSignal.timeout(30_000)));
-    } catch (error) {
-      seen.archived = false;
-      bb.log.info(`${envId}: couldn't ask Ona whether it is archived: ${errorText(error)}`);
-    }
-  }
-
-  /** bb's workspace work on a machine; a failed lookup counts as none (the behaviour before this check). */
-  async function workspaces(hostId: string): Promise<{ busy: boolean; needsRecovery: number }> {
-    try {
-      return workspaceWork(await bb.sdk.environments.list({ hostId }));
-    } catch (error) {
-      bb.log.info(`couldn't list workspaces on ${hostId}: ${errorText(error)}`);
-      return { busy: false, needsRecovery: 0 };
-    }
-  }
-
-  async function threadWaiting(hostId: string): Promise<boolean> {
-    const threads = await bb.sdk.threads.list({ hostId });
-    return threads.some(
-      (thread) => thread.runtime.displayStatus === "waiting-for-host" || thread.queuedWork === "waiting",
-    );
-  }
-
   const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
-
-  /** Carry out one decision under the machine's guard (rule 5). */
-  async function act(row: Row, decision: Decision, force: boolean): Promise<void> {
-    const { hostId, machine, resource } = row;
-    const heavy = decision.action === "heal-daemon" || decision.action === "reconcile-stuck";
-    await guard
-      .run(
-        hostId,
-        decision.action,
-        decision.reason,
-        async () => {
-          bb.log.info(`${machine}: ${decision.action} (${decision.reason})`);
-          switch (decision.action) {
-            case "suspend-observed":
-              await suspendWithoutStop(row);
-              if (!decision.resumeAfter) return;
-              // A thread is waiting on it: that's you using the box, so let bb start it.
-              try {
-                const host = await bb.sdk.hosts.experimental_resume({ hostId });
-                const refusal = lifecycleRefusal(host.lifecycle, RESUMED);
-                return refusal
-                  ? `couldn't resume it for a waiting thread (${refusal})`
-                  : "resumed for a waiting thread";
-              } catch (error) {
-                return `bb will resume it on your next message (${errorText(error)})`;
-              }
-            case "ensure-tunnel":
-              tunnels.ensure(resource.envId);
-              await rememberTunnel(resource.envId);
-              return;
-            case "heal-daemon": {
-              // Rule 1: SSH starts stopped boxes, so re-check Ona right before it.
-              const env = (await snapshot.refresh()).envs.find((e) => e.id === resource.envId);
-              if (!env || !isRunning(env)) return "Ona no longer reports it running; nothing done";
-              // Rule 3: restarting a live daemon would kill running turns.
-              const alive = await provider.daemonAlive(resource, AbortSignal.timeout(30_000));
-              if (alive === true) return "daemon is running; not restarting";
-              if (alive === null) return "couldn't check the daemon over SSH; not restarting";
-              const report = { step: (text: string) => bb.log.info(`${machine}: ${text}`), log: () => {} };
-              await provider.reconnect(resource, report, AbortSignal.timeout(15 * 60_000));
-              return "daemon was down; restarted it";
-            }
-            case "reconcile-stuck": {
-              const host = await bb.sdk.hosts.experimental_reconcile({ hostId });
-              return `bb now shows it ${host.lifecycle.phase}${host.lifecycle.message ? ` (${host.lifecycle.message})` : ""}`;
-            }
-            case "none":
-              return;
-            default: {
-              const unhandled: never = decision.action;
-              throw new Error(`unhandled action ${unhandled}`);
-            }
-          }
-        },
-        { force, heavy, cooldown: heavy },
-      )
-      .catch((error) => {
-        bb.log.warn(`${machine}: ${decision.action} failed: ${errorText(error)}`);
-      });
-  }
-
-  /**
-   * One reconcile pass over `keys` (host ids, or ALL). Decisions come from
-   * `decide` (src/reconcile.ts); actions run in the background under the
-   * guard unless `wait` is set (`bb ona sync`).
-   */
-  async function reconcile(keys: Set<string>, options: { force?: boolean; wait?: boolean } = {}): Promise<void> {
-    try {
-      const rows = await machines();
-      const targets = keys.has(ALL) ? rows : rows.filter((row) => keys.has(row.hostId));
-      if (targets.length === 0) return;
-      // Host-specific passes come from events where someone may be waiting: keep them fresher.
-      const listing = await snapshot.get(keys.has(ALL) ? undefined : 5_000).catch((error) => {
-        bb.log.warn(`could not list Ona environments: ${errorText(error)}`);
-        return null;
-      });
-      const now = Date.now();
-      const actions: Promise<void>[] = [];
-      for (const row of targets) {
-        const view: MachineView = {
-          hostId: row.hostId,
-          phase: row.phase,
-          status: row.status,
-          lastSeenAt: row.lastSeenAt,
-          phaseSince: row.updatedAt,
-          tunnel: tunnels.status(row.resource.envId),
-          threadWaiting:
-            row.phase === "active" && row.status !== "connected"
-              ? await threadWaiting(row.hostId).catch(() => false)
-              : false,
-          workspaceWaiting:
-            row.phase === "active" && row.status !== "connected" ? (await workspaces(row.hostId)).busy : false,
-        };
-        let onaState = onaView(row.resource.envId, listing);
-        if (onaState.kind === "missing" && onaState.streak >= 2 && onaState.archived === undefined) {
-          await checkArchived(row.resource.envId);
-          onaState = onaView(row.resource.envId, listing);
-        }
-        const decision = decide(view, onaState, now);
-        // With autoRepair off, only observed stops and deletions reach bb.
-        const skipped = !autoRepair && decision.action !== "none" && decision.action !== "suspend-observed";
-        guard.note(
-          row.hostId,
-          skipped ? `${decision.reason} (would ${decision.action}; autoRepair is off)` : decision.reason,
-        );
-        if (decision.action === "none" || skipped) continue;
-        actions.push(act(row, decision, options.force ?? false));
-      }
-      if (keys.has(ALL)) await releaseIdleMachines(rows);
-      if (options.wait) await Promise.all(actions);
-    } catch (error) {
-      bb.log.warn(`reconcile failed: ${errorText(error)}`);
-    }
-  }
 
   /** The bb host a thread runs on, if it has one yet. */
   async function hostOfThread(threadId: string): Promise<string | null> {
@@ -1024,69 +736,6 @@ export default async function plugin(bb: BbPluginApi) {
       `Adding ${host.name} (${host.id}). This takes a few minutes.`,
       `Follow it with: bb machine show ${host.id}`,
     ].join("\n");
-  }
-
-  interface StatusRow {
-    machine: string;
-    hostId: string;
-    bb: string;
-    tunnel: string;
-    ona: string;
-    /** What the latest check concluded, and since when. */
-    now: { reason: string; since: number } | null;
-    /** The last action the plugin took (or the one in flight). */
-    last: { action: string; reason: string; at: number; error?: string } | null;
-    retry: string | null;
-    /** When a `bb ona keep-alive` ends, epoch ms. */
-    keepAliveUntil: number | null;
-    /** Workspaces whose teardown failed for good; bb won't suspend the machine. */
-    needsRecovery: number;
-  }
-
-  async function statusRows(ref?: string): Promise<StatusRow[]> {
-    const rows = (await machines()).filter(
-      (r) => !ref || [r.hostId, r.machine, r.resource.envId, r.resource.envName].includes(ref),
-    );
-    const listing = await snapshot.get().catch(() => snapshot.latest);
-    return Promise.all(
-      rows.map(async (row) => {
-        const env = listing?.envs.find((e) => e.id === row.resource.envId);
-        const record = guard.records.get(row.hostId);
-        const busy = guard.busyWith(row.hostId);
-        return {
-          machine: row.machine,
-          hostId: row.hostId,
-          bb: row.phase === "active" ? row.status : row.phase,
-          tunnel: tunnels.status(row.resource.envId),
-          ona: !listing
-            ? "unknown"
-            : env
-              ? (env.status?.phase ?? "?").replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase()
-              : missing.get(row.resource.envId)?.archived
-                ? "archived"
-                : "missing",
-          now: guard.seen.get(row.hostId) ?? null,
-          last: busy
-            ? { action: busy, reason: "in progress", at: Date.now() }
-            : record
-              ? {
-                  action: record.action,
-                  reason: record.reason,
-                  at: record.at,
-                  ...(record.error ? { error: record.error } : {}),
-                }
-              : null,
-          retry:
-            !record || record.failures === 0
-              ? null
-              : record.failures >= GIVE_UP_AFTER
-                ? `gave up after ${record.failures} failures; run \`bb ona sync ${row.machine}\``
-                : `retrying after ${new Date(record.quietUntil).toLocaleTimeString()}`,
-          keepAliveUntil: keepAlives.until(row.resource.envId),
-          needsRecovery: (await workspaces(row.hostId)).needsRecovery,
-        };
-      }),
-    );
   }
 
   function formatStatus(rows: StatusRow[]): string {
