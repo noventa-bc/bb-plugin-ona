@@ -133,8 +133,9 @@ Rules the owner gave that the sections above do not already state. Checked
 - Semgrep rules may be added as guardrails when they fit, or proposed in the
   roadmap.
 - Keep roadmap statuses up to date and the roadmap in step with the code.
-  Status lives only in the Status tab table, one row per item, with the PR or
-  commit named in the Item cell; the main tab carries no status words.
+  Status lives only in the Status table at the top of the roadmap, one row per
+  item linked to its section, with the landing commit named in the Item cell;
+  headings carry no status words.
 - Run slow commands in the background and keep working meanwhile.
 - Several worktrees are open at once and the shell's working directory drifts
   between them. Address every git command with `git -C <path>` and every file
