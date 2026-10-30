@@ -52,7 +52,8 @@ outside bb are covered in [How bb and Ona stay in sync](#how-bb-and-ona-stay-in-
 You can start, stop, restart or delete a devbox outside bb: in Ona's UI, with
 the `ona` CLI, or through Ona's own auto-stop. The plugin keeps bb's view of
 the box in step with Ona's. This section explains how, so the behaviour is
-predictable and the code is easy to pick up.
+predictable and the code is easy to pick up. The reasoning behind these rules
+is recorded in [docs/decisions](docs/decisions/README.md).
 
 **Who decides what.** Ona decides whether a box exists and is running. bb holds
 your intent: a machine is *active* (you're using it) or *suspended* (you're
@@ -409,8 +410,9 @@ The tunnel's port inside the devbox listens on loopback only (`127.0.0.1`,
   remote machine. The proxy ensures a devbox gets no more than a daemon's
   access, never your bb user's.
 - What a daemon credential can do on `/internal/*` is decided by bb, not by
-  this plugin. If bb doesn't scope a daemon to its own machine, a compromised
-  devbox could affect other machines' data in bb.
+  this plugin, which relies on bb limiting each daemon to its own machine. If
+  you connect devboxes you don't fully trust, check bb's documentation on how
+  it scopes machine credentials.
 - The proxy relies on its allowlist matching how bb routes requests. Upgrading
   bb can add routes, so re-check the allowlist when bb changes its routing.
 - Treat what an agent on a devbox reports (output, diffs, links) as untrusted
@@ -436,8 +438,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:<bb port>/health      
 
 ```sh
 npm install
-npx tsc --noEmit -p .                                          # typecheck
-node --test --experimental-strip-types test/*.test.ts          # tests
+npm run check                                                  # typecheck and tests
 bb plugin build                                                # bundle
 bb plugin install .                                            # install from this folder
 bb plugin reload ona                                           # after changes
@@ -449,3 +450,6 @@ provider), `src/proxy.ts` (daemon-only proxy), `src/ssh.ts` (executor, tunnels),
 listing), `src/reconcile.ts` (keeping bb in sync with Ona), `src/lifecycle.ts`
 (idle release),
 `src/names.ts` (fun names), `skills/ona-devboxes/SKILL.md` (agent docs).
+
+Working on the plugin, including with coding agents: see [AGENTS.md](AGENTS.md).
+Decision records are in [docs/decisions](docs/decisions/README.md).

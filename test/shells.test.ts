@@ -23,7 +23,6 @@ function fakeBackend(terminals: Record<string, TerminalInfo> = {}) {
 }
 
 const target = { hostId: "host_1", cwd: "/workspaces/app", boxName: "rapid-mango" };
-const size = { cols: 120, rows: 30 };
 
 const box = { hostId: "host_box", envId: "env-1", boxName: "rapid-mango" };
 const planArgs = {

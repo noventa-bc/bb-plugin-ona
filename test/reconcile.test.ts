@@ -267,7 +267,10 @@ test("snapshot keeps the last good list and reports the error", async () => {
 
 // --- daemon probe (rule 3), run locally ---
 
-test("daemon probe finds a process running from the data folder, and only that", async () => {
+// The agent sandbox hides other processes from `ps`; this runs in CI and outside the sandbox.
+const sandboxed = { skip: process.env.NONO_CAP_FILE ? "needs to see other processes, hidden in the agent sandbox" : false };
+
+test("daemon probe finds a process running from the data folder, and only that", sandboxed, async () => {
   const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
   const dir = join(home, "data", ".bb-machines");
   const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 10000)", `${dir}/daemon`], { stdio: "ignore" });

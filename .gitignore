@@ -1,4 +1,5 @@
-dist
 dist/
-node_modules
 node_modules/
+.agent/
+*.swp
+.DS_Store
