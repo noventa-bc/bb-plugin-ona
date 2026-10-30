@@ -41,12 +41,12 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 ## bb SDK
 
 - The plugin pins `@get-bb/plugin-sdk` 0.6.49, with `engines` set to bb
-  `>=0.46`. The bb installed at the time of the check was 0.48.0, so the SDK
-  pin lags behind bb.
-- The newer SDK has `experimental_threadAction` with `placement: "header"`.
-  That could replace the DOM workaround in `app.tsx` that hides bb's native
-  "Open in" button. Re-verify the SDK version before relying on it.
-- SDK surfaces the plugin does not use yet:
+  `>=0.46`. bb 0.48.0 ships a later SDK than that pin (checked 2026-10-30).
+- The SDK in bb 0.48.0 has `experimental_threadAction` with
+  `placement: "header"`, which 0.6.49 lacks. It could replace the DOM
+  workaround in `app.tsx` that hides bb's native "Open in" button. Check the
+  installed SDK version before relying on it.
+- SDK surfaces the plugin doesn't use (checked 2026-10-30):
   - host entries: `experimental_defineHostEntry` (plugin code on the daemon,
     fs watch, signals) and the `experimental_host.deleted` event
   - UI: `settingsSection` and `navPanel`
