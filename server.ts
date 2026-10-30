@@ -6,8 +6,8 @@
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { randomFriendlyName } from "./src/names.ts";
-import { clockTime, KeepAlives, parseKeepAlive } from "./src/keepalive.ts";
-import { isRunning, isStopped, matchEnvironment, OnaCli, OnaSnapshot, sshHost } from "./src/ona.ts";
+import { KeepAlives } from "./src/keepalive.ts";
+import { isRunning, isStopped, OnaCli, OnaSnapshot, sshHost } from "./src/ona.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -25,7 +25,8 @@ import {
 } from "./src/setup.ts";
 import { onaRef, PROVIDER_ID, registerOnaComposition, registerOnaProvider } from "./src/provider.ts";
 import { startDaemonProxy } from "./src/proxy.ts";
-import { connectedAtKey, createSync, RELEASING_KEY, type Row, type StatusRow } from "./src/sync.ts";
+import { formatStatus, keepAliveCommand, parseArgs } from "./src/commands.ts";
+import { connectedAtKey, createSync, RELEASING_KEY, type Row } from "./src/sync.ts";
 import { ALL, GRACE_MS, HostGuard, PassScheduler } from "./src/reconcile.ts";
 import {
   CLAUDE_COLLECTOR,
@@ -738,35 +739,11 @@ export default async function plugin(bb: BbPluginApi) {
     ].join("\n");
   }
 
-  function formatStatus(rows: StatusRow[]): string {
-    const ago = (at: number) => {
-      const s = Math.round((Date.now() - at) / 1000);
-      return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : `${Math.round(s / 3600)}h ago`;
-    };
-    const listing = snapshot.latest;
-    const header = snapshot.lastError
-      ? `Ona CLI: ERROR ${snapshot.lastError.split("\n")[0]} (run \`ona login\`?)`
-      : `Ona CLI: ok${listing ? `, listed ${ago(listing.at)}` : ""}${autoRepair ? "" : "  (autoRepair is off)"}`;
-    if (rows.length === 0) return `${header}\nNo Ona machines yet.`;
-    const lines = rows.map((row) => {
-      const lines = [`${row.machine}  bb:${row.bb}  tunnel:${row.tunnel}  ona:${row.ona}`];
-      if (row.now) lines.push(`  now: ${row.now.reason} (since ${ago(row.now.since)})`);
-      if (row.last) {
-        lines.push(
-          `  last action: ${row.last.action}: ${row.last.reason} (${ago(row.last.at)})${row.last.error ? ` ERROR ${row.last.error}` : ""}`,
-        );
-      }
-      if (row.retry) lines.push(`  ${row.retry}`);
-      if (row.keepAliveUntil) lines.push(`  keep-alive until ${clockTime(row.keepAliveUntil)}`);
-      if (row.needsRecovery > 0) {
-        lines.push(
-          `  ${row.needsRecovery} workspace(s) need recovery; bb won't suspend this machine, so the box stays awake. See \`bb environment list --host ${row.hostId}\``,
-        );
-      }
-      return lines.join("\n");
-    });
-    return [header, ...lines].join("\n");
-  }
+  const onaHealth = () => ({
+    lastError: snapshot.lastError,
+    listedAt: snapshot.latest?.at ?? null,
+    autoRepair,
+  });
 
   const usage = [
     "Usage:",
@@ -846,17 +823,7 @@ export default async function plugin(bb: BbPluginApi) {
       },
     ],
     async run(rawArgv, ctx) {
-      // Everything after a bare `--` is a command for `bb ona shell`.
-      const dash = rawArgv.indexOf("--");
-      const argv = dash === -1 ? rawArgv : rawArgv.slice(0, dash);
-      const commandArgv = dash === -1 ? [] : rawArgv.slice(dash + 1);
-      const json = argv.includes("--json");
-      // `--thread <id>` takes a value; pull it out before reading positionals.
-      const threadAt = argv.indexOf("--thread");
-      const threadId = threadAt === -1 ? undefined : argv[threadAt + 1];
-      const rest = threadAt === -1 ? argv : [...argv.slice(0, threadAt), ...argv.slice(threadAt + 2)];
-      const flags = new Set(rest.filter((arg) => arg.startsWith("--")));
-      const [command, ref, newName] = rest.filter((arg) => !arg.startsWith("--"));
+      const { command, ref, newName, json, threadFlag, threadId, flags, commandArgv } = parseArgs(rawArgv);
       try {
         switch (command) {
           case undefined:
@@ -889,7 +856,7 @@ export default async function plugin(bb: BbPluginApi) {
           case "host":
           case "ssh": {
             if (!ref) break;
-            if (command === "ssh" && threadAt !== -1) {
+            if (command === "ssh" && threadFlag) {
               if (!threadId) return { exitCode: 1, stderr: "Usage: bb ona ssh <ref> --thread <thread-id>" };
               const opened = await openThreadTerminal(threadId, ref, { cols: 120, rows: 32 });
               if (json) return { exitCode: 0, stdout: JSON.stringify(opened) };
@@ -967,7 +934,7 @@ export default async function plugin(bb: BbPluginApi) {
           case "status": {
             const rows = await statusRows(ref);
             if (json) return { exitCode: 0, stdout: JSON.stringify(rows) };
-            return { exitCode: 0, stdout: formatStatus(rows) };
+            return { exitCode: 0, stdout: formatStatus(rows, onaHealth()) };
           }
           case "sync": {
             const targets = ref ? [await findMachine(ref)] : await machines();
@@ -978,48 +945,11 @@ export default async function plugin(bb: BbPluginApi) {
               force: true,
               wait: true,
             });
-            return { exitCode: 0, stdout: formatStatus(await statusRows(ref)) };
+            return { exitCode: 0, stdout: formatStatus(await statusRows(ref), onaHealth()) };
           }
           case "keep-alive": {
             if (!ref) break;
-            const request = parseKeepAlive(newName);
-            if (request.kind === "invalid") {
-              return { exitCode: 1, stderr: `${request.message}\nUsage: bb ona keep-alive <ref> <duration|off>` };
-            }
-            if (request.kind === "off") {
-              // A box Ona no longer lists can still have a keep-alive under its id.
-              const envId = await resolveEnvId(ref).catch(() => ref);
-              return {
-                exitCode: 0,
-                stdout: keepAlives.stop(envId) ? `Ended the keep-alive for ${ref}.` : `${ref} had no keep-alive.`,
-              };
-            }
-            // Safety rule 1: only a box a fresh listing says is RUNNING. The
-            // keep-alive runs on this Mac through the ona CLI, never over SSH.
-            const listing = await snapshot.refresh().catch(() => null);
-            if (!listing) {
-              return {
-                exitCode: 1,
-                stderr: `Can't ask Ona whether ${ref} is running (${snapshot.lastError ?? "no listing"}); nothing changed.`,
-              };
-            }
-            const row = await findMachine(ref);
-            const env = row
-              ? listing.envs.find((e) => e.id === row.resource.envId)
-              : matchEnvironment(listing.envs, ref);
-            if (!env) return { exitCode: 1, stderr: `Ona lists no devbox matching "${ref}"; nothing changed.` };
-            if (!isRunning(env)) {
-              const phase = (env.status?.phase ?? "unknown").replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase();
-              return {
-                exitCode: 1,
-                stderr: `${ref} is ${phase} in Ona. keep-alive only holds a running box and never starts one.`,
-              };
-            }
-            const until = keepAlives.start(env.id, request.ms);
-            return {
-              exitCode: 0,
-              stdout: `Keeping ${ref} alive until ${clockTime(until)}. End it early with: bb ona keep-alive ${ref} off`,
-            };
+            return keepAliveCommand({ snapshot, findMachine, resolveEnvId, keepAlives }, ref, newName);
           }
           case "shell": {
             if (!ref) break;
