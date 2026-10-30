@@ -7,9 +7,10 @@ made each change. The version is the one in `package.json`.
 
 ### Added
 - `bb ona status [box]` shows bb's view of each devbox next to Ona's, the
-  tunnel, and what the plugin last did and why. It also reports when the `ona`
-  CLI can't be reached. `bb ona sync [box]` re-checks Ona and repairs right
-  away.
+  tunnel, what the latest check found (`now`), and the last repair the plugin
+  made and why (`last action`). A repair stays listed after the box is healthy
+  again. It also reports when the `ona` CLI can't be reached. `bb ona sync [box]`
+  re-checks Ona and repairs right away. (`bdc7e4b`, `bf7c161`)
 - `autoRepair` setting (on by default). Turn it off to have the plugin only
   report repairs instead of making them. (`bdc7e4b`)
 
