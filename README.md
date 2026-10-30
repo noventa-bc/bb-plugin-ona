@@ -377,7 +377,11 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
   bb's `bb environment cleanup <id> --recover` refuses on Ona boxes while
   they're connected, because it can't inspect Ona's SSH processes. For an
   adopted box: stop bb's daemon on the box, `bb machine remove <machine>
-  --force`, then `bb ona adopt <box>`; the Ona environment and its files stay.
+  --force`, rename bb's data folder on the box (`/workspaces/.bb-machines/<server>`,
+  for example to `<server>.old`), then `bb ona adopt <box>`. The Ona environment
+  and the workspace files stay. Without the rename, bb's installer takes the
+  systemd path, which Ona's containers only pretend to support, and the
+  adoption times out waiting for a daemon that never starts.
 - **bb and Ona disagree about a box** (bb says down but it's running, or the
   other way round): run `bb ona status <name>`. It shows both views and what
   the plugin last did about it. `bb ona sync <name>` re-checks now, and
