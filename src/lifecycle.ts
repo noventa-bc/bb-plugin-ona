@@ -28,6 +28,16 @@ export function machinesToRelease(machines: readonly MachineActivity[], now: num
     .map((machine) => machine.hostId);
 }
 
+/**
+ * Why bb didn't take a suspend it accepted, or null if it did. bb can answer a
+ * suspend request without suspending (for example while it blocks lifecycle
+ * changes on a host after an interrupted environment hook).
+ */
+export function suspendRefusal(lifecycle: { phase: string; message: string | null } | undefined): string | null {
+  if (!lifecycle || lifecycle.phase === "suspending" || lifecycle.phase === "suspended") return null;
+  return `bb kept the machine ${lifecycle.phase}${lifecycle.message ? `: ${lifecycle.message}` : ""}`;
+}
+
 /** "30m", "2h", "45s" or bare minutes to ms; empty, "0" or unparseable is 0 (off). */
 export function parseDuration(value: string): number {
   const match = /^\s*(\d+(?:\.\d+)?)\s*([smh]?)\s*$/i.exec(value);

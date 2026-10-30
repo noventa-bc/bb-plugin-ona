@@ -31,7 +31,7 @@ import {
   type OnaResource,
 } from "./src/provider.ts";
 import { startDaemonProxy } from "./src/proxy.ts";
-import { machinesToRelease, parseDuration, type MachineActivity } from "./src/lifecycle.ts";
+import { machinesToRelease, parseDuration, suspendRefusal, type MachineActivity } from "./src/lifecycle.ts";
 import {
   ALL,
   decide,
@@ -319,7 +319,9 @@ export default async function plugin(bb: BbPluginApi) {
     if (!releasing.includes(row.resource.envId))
       await bb.storage.kv.set(RELEASING_KEY, [...releasing, row.resource.envId]);
     try {
-      await bb.sdk.hosts.experimental_suspend({ hostId: row.hostId });
+      const host = await bb.sdk.hosts.experimental_suspend({ hostId: row.hostId });
+      const refusal = suspendRefusal(host.lifecycle);
+      if (refusal) throw new Error(refusal);
     } catch (error) {
       // Don't leave the flag behind for a later user suspend, which should stop the box.
       await provider.takeRelease(row.resource.envId);
