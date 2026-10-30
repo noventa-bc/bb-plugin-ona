@@ -42,6 +42,7 @@ Change these together, in the same edit.
 
 ## How to work
 
+- Write the least code that solves the whole task (the ponytail ruleset, installed as a Claude Code plugin; see `docs/owner.md`). A shortcut with a known limit gets a comment `shortcut: <the limit>, <when to upgrade>`; `/ponytail-debt` lists them.
 - Fix a bug with a failing test first, where a test is possible.
 - When you find a bug, a source of noise or anything that can damage the repo, add the guard that stops it recurring in the same change: a test, a lint rule, a CI step, a `.gitignore` line or a written rule here. Say in the handoff which guard you added.
 - A change to what a sync pass does gets a scenario in `test/sync.test.ts` (fake bb calls, fake Ona listing).
@@ -67,7 +68,7 @@ Change these together, in the same edit.
 
 ## Code Review Rules
 
-The safety rules behind 1–4 are in `docs/sync.md`. Cite `file:line` for each finding. Report at most 5 nits.
+The safety rules behind 1–4 are in `docs/sync.md`. Cite `file:line` for each finding. Report at most 5 nits. Run `/ponytail-review` on the diff as part of the review.
 
 1. No SSH, start or stop of a box unless an Ona listing from the same check says the box is RUNNING. A failed listing means "unknown".
 2. Automatic suspends never stop a box.
