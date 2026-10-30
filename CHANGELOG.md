@@ -5,7 +5,32 @@ made each change. The version is the one in `package.json`.
 
 ## Unreleased
 
+### Added
+- `bb ona status [box]` shows bb's view of each devbox next to Ona's, the
+  tunnel, and what the plugin last did and why. It also reports when the `ona`
+  CLI can't be reached. `bb ona sync [box]` re-checks Ona and repairs right
+  away.
+- `autoRepair` setting (on by default). Turn it off to have the plugin only
+  report repairs instead of making them. (`bdc7e4b`)
+
 ### Fixed
+- bb no longer gets stuck when a devbox is started, stopped, restarted or
+  deleted outside bb (Ona UI, `ona` CLI, auto-stop):
+  - a box that came back gets its bb daemon restarted, but only after an SSH
+    check finds the daemon gone, so running turns are never killed;
+  - a box Ona stopped or lost is marked suspended at once, and is resumed if a
+    thread is already waiting on it;
+  - resuming a box someone else is already starting now waits for it instead of
+    failing;
+  - machines stuck in *resuming* or *suspending* are handed back to bb.
+
+  The plugin now reacts to bb's realtime events (a thread waiting, a machine
+  dropping off, a tunnel coming back), and the 2-minute check remains as a
+  backstop. These repairs never start or stop a box. All checks share one cached
+  `ona environment list`, so tunnels no longer list every environment on each
+  reconnect. If Ona can't be asked, tunnels wait instead of connecting, because
+  connecting could wake a stopped box. The README's new "How bb and Ona stay in
+  sync" section documents every rule. (`bdc7e4b`)
 - Every devbox stayed awake for as long as bb was open: bb's always-open SSH
   tunnel counted as activity, so Ona's inactivity timeout never fired. Now,
   once a box has had no thread activity for `idleDisconnect` (default `1h`),
