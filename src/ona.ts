@@ -28,6 +28,16 @@ const projectSchema = z.object({
   metadata: z.object({ name: z.string().optional() }).passthrough(),
 });
 
+/**
+ * Ona's own `--timeout` (its default is 30s) for a call allowed `timeoutMs`.
+ * The process gets `ONA_TIMEOUT_GRACE_MS` more, so a slow call ends with
+ * Ona's message, not a kill.
+ */
+export function onaTimeoutArgs(timeoutMs: number): string[] {
+  return ["--timeout", `${Math.max(1, Math.ceil(timeoutMs / 1000))}s`];
+}
+export const ONA_TIMEOUT_GRACE_MS = 5_000;
+
 export class OnaCli {
   private readonly resolveBinary: () => string;
 
@@ -44,8 +54,8 @@ export class OnaCli {
     return new Promise((resolve, reject) => {
       execFile(
         this.binary,
-        args,
-        { signal, timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024 },
+        [...args, ...onaTimeoutArgs(timeoutMs)],
+        { signal, timeout: timeoutMs + ONA_TIMEOUT_GRACE_MS, maxBuffer: 32 * 1024 * 1024 },
         (error, stdout, stderr) => {
           if (error) {
             const detail = stderr.trim().split("\n").slice(-5).join("\n");
@@ -109,6 +119,16 @@ export class OnaCli {
 
   async delete(envId: string, signal?: AbortSignal): Promise<void> {
     await this.run(["environment", "delete", envId], signal, 15 * 60_000);
+  }
+
+  /**
+   * Opens the box in the user's editor. Callers need not wait, but should log a
+   * rejection. User-initiated only (Editor button, `bb ona open`), never from a
+   * sync pass: it may wake a stopped box, which the user asked for (see
+   * `docs/sync.md`, `ona environment open`).
+   */
+  async openEditor(envId: string): Promise<void> {
+    await this.run(["environment", "open", envId], undefined, 10 * 60_000);
   }
 
   /**
