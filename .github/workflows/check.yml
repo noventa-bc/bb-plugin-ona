@@ -7,18 +7,19 @@ permissions:
   contents: read
 jobs:
   check:
-    # Ubuntu for speed, macOS because that is where the plugin runs.
+    # Ubuntu for speed, macOS because that is where the plugin runs. Pinned images:
+    # the -latest labels move on their own (checked 2026-10-30); Dependabot bumps these.
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, macos-26]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Don't leave the job's token in .git/config for dependencies to read.
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
