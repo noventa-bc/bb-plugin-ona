@@ -11,7 +11,9 @@ The owner's goal is a repo that stays maintainable for years with one
 maintainer, not a one-weekend app. Every step below serves that: small
 reviewed PRs, a test for each bug, a guard for each hazard, docs that stay
 true, and complexity that pays for itself. When a shortcut would be faster
-today and costlier to keep, take the slower path and say so.
+today and costlier to keep, take the slower path and say so. Removing code,
+settings, processes and steps counts as progress: every session looks for a
+simplification or an optimisation to propose, in the code and in this flow.
 
 ## Roles
 
@@ -122,6 +124,7 @@ This file is the memory of the flow. Keep it current:
 Rules the owner gave in sessions, restated so they stay true. Checked 2026-10-30.
 
 - Make the repo sustainable in the long term; it is not a one-weekend app.
+  Simplifications and optimisations matter as much as features for that.
 - Every change goes through a reviewed PR and merges as soon as CI is green.
   Make CI able to catch issues and regressions, so merging on green is safe.
 - Delegate mechanical tasks to cheaper models such as Haiku, and supervise them.
