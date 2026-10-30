@@ -157,10 +157,12 @@ still marked suspended, and `bb ona status` shows what would have been done.
 - `HostGuard` enforces rule 5.
 - `DAEMON_PROBE` is the rule 3 check.
 
-The wiring (events, the backstop, `bb ona status/sync`) is in `server.ts`
-(`reconcile()`, `watchRealtime()`). The shared listing is `OnaSnapshot` in
-`src/ona.ts`. To add or change a rule, update `decide()`, its test in
-`test/reconcile.test.ts`, and the table above, all in the same change.
+A pass (which machines, carrying out each decision, idle release, the status
+rows) is `createSync()` in `src/sync.ts`; `test/sync.test.ts` drives it against
+a fake of the bb calls it makes. The events, the backstop and the `bb ona`
+commands are wired in `server.ts` (`watchRealtime()`). The shared listing is
+`OnaSnapshot` in `src/ona.ts`. To add or change a rule, update `decide()`, its
+test in `test/reconcile.test.ts`, and the table above, all in the same change.
 
 ## Prerequisites
 
@@ -478,8 +480,8 @@ bb plugin reload ona                                           # after changes
 Source: `server.ts` (settings, tunnels, CLI), `src/provider.ts` (machine
 provider), `src/proxy.ts` (daemon-only proxy), `src/ssh.ts` (executor, tunnels),
 `src/setup.ts` (prerequisite checks), `src/ona.ts` (ona CLI wrapper, shared
-listing), `src/reconcile.ts` (keeping bb in sync with Ona), `src/lifecycle.ts`
-(idle release),
+listing), `src/reconcile.ts` (sync rules), `src/sync.ts` (sync passes and
+status), `src/lifecycle.ts` (idle release), `src/keepalive.ts` (keep-alive),
 `src/names.ts` (fun names), `skills/ona-devboxes/SKILL.md` (agent docs).
 
 Working on the plugin, including with coding agents: see [AGENTS.md](AGENTS.md).
