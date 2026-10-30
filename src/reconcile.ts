@@ -1,7 +1,7 @@
 // Keep bb's view of each devbox in step with Ona's when the box changes
 // outside bb (Ona UI, `ona` CLI, auto-stop, restarts). Ona decides whether a
 // box runs; bb holds the intent (active or suspended). `decide` maps both to
-// one repair, and the README's "How bb and Ona stay in sync" documents every
+// one repair, and `docs/sync.md` documents every
 // rule: change both together.
 //
 // Safety rules every action here keeps:

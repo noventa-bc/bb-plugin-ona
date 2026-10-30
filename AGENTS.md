@@ -27,7 +27,7 @@ Change these together, in the same edit.
 
 - Plugin settings go with the settings table in `README.md`.
 - `bb ona` commands go with their usage text, `README.md`, `skills/ona-devboxes/SKILL.md` and `PLUGIN_OVERVIEW.md`.
-- `decide()` in `src/reconcile.ts` goes with its tests in `test/reconcile.test.ts` and the rules table in `README.md`.
+- `decide()` in `src/reconcile.ts` goes with its tests in `test/reconcile.test.ts` and the rules table in `docs/sync.md`.
 - A user-visible change gets a bullet under "Unreleased" in `CHANGELOG.md`. Leave out the commit hash. The owner adds it.
 
 ## Decisions
@@ -43,7 +43,7 @@ Change these together, in the same edit.
 - A change to what a sync pass does gets a scenario in `test/sync.test.ts` (fake bb calls, fake Ona listing).
 - For `server.ts` code without tests, list owner check steps in the handoff instead.
 - Put logic in `src/` as pure functions with tests.
-- Every SSH or `ona` call must name the safety rule that covers it, in the README section "How bb and Ona stay in sync".
+- Every SSH or `ona` call must name the safety rule that covers it, in `docs/sync.md`.
 - Keep changes small. Do not refactor unrelated code.
 
 ## Complexity
@@ -63,14 +63,14 @@ Change these together, in the same edit.
 
 ## Code Review Rules
 
-The safety rules behind 1–4 are in the README section "How bb and Ona stay in sync". Cite `file:line` for each finding. Report at most 5 nits.
+The safety rules behind 1–4 are in `docs/sync.md`. Cite `file:line` for each finding. Report at most 5 nits.
 
 1. No SSH, start or stop of a box unless an Ona listing from the same check says the box is RUNNING. A failed listing means "unknown".
 2. Automatic suspends never stop a box.
 3. Forcing (`bb ona sync`) only skips cooldowns. It never skips a safety rule.
 4. Removing a machine never deletes an adopted environment.
 5. Remote script text is a constant. Values are passed as arguments or through `shellQuote`.
-6. The tunnel goes only to the loopback proxy. Added proxy routes need a test and a line in the README "Security model" section.
+6. The tunnel goes only to the loopback proxy. Added proxy routes need a test and a line in `docs/security.md`.
 7. No secrets in logs, storage or errors.
 8. A call that changes state can be accepted without taking effect (bb suspend, resume and reconcile return the host). Check the result, treat "not done" as a failure so the guard backs off, and never report an action as done on the call alone. ESLint enforces this for the bb lifecycle calls.
 9. Complexity the change doesn't justify is a finding: a simpler way to the same result, an unused option, or a big change (see "Complexity") made without the owner's review.
