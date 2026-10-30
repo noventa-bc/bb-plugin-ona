@@ -1,7 +1,8 @@
 // Thin wrapper around the `ona` CLI. Every call shells out to the already
 // authenticated CLI on the server machine; no Ona credentials pass through bb.
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { z } from "zod";
+import { keepAliveArgs, type KeepAliveChild } from "./keepalive.ts";
 
 const environmentSchema = z.object({
   id: z.string(),
@@ -72,11 +73,7 @@ export class OnaCli {
 
   /** Match by exact id, exact name, or unambiguous id prefix. */
   async findEnvironment(ref: string, signal?: AbortSignal): Promise<OnaEnvironment | null> {
-    const envs = await this.listEnvironments(signal);
-    const exact = envs.find((env) => env.id === ref || env.metadata.name === ref);
-    if (exact) return exact;
-    const prefixed = envs.filter((env) => env.id.startsWith(ref));
-    return prefixed.length === 1 ? prefixed[0]! : null;
+    return matchEnvironment(await this.listEnvironments(signal), ref);
   }
 
   async resolveProjectId(ref: string, signal?: AbortSignal): Promise<string> {
@@ -113,6 +110,53 @@ export class OnaCli {
   async delete(envId: string, signal?: AbortSignal): Promise<void> {
     await this.run(["environment", "delete", envId], signal, 15 * 60_000);
   }
+
+  /**
+   * Runs `ona environment keep-alive` on this machine for `ms`. Caller must
+   * have a fresh listing that says the box is RUNNING (safety rule 1).
+   */
+  keepAlive(envId: string, ms: number): KeepAliveChild {
+    // Its own process group, so ending it also ends the `sleep` the CLI started.
+    const child = spawn(this.binary, keepAliveArgs(envId, ms), { stdio: ["ignore", "ignore", "pipe"], detached: true });
+    let stderr = "";
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr = (stderr + chunk.toString()).slice(-2_000);
+    });
+    let exited: string | null = null;
+    const listeners: Array<(detail: string) => void> = [];
+    const finish = (detail: string) => {
+      if (exited !== null) return;
+      exited = detail;
+      for (const listener of listeners) listener(detail);
+    };
+    child.on("error", (error) => finish(error.message));
+    child.on("close", (code, signal) => {
+      const tail = stderr.trim().split("\n").slice(-3).join("\n");
+      finish(tail || (signal ? `killed by ${signal}` : `exit code ${code}`));
+    });
+    return {
+      kill: () => {
+        if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) return;
+        try {
+          process.kill(-child.pid, "SIGTERM");
+        } catch {
+          child.kill();
+        }
+      },
+      onExit: (listener) => {
+        if (exited !== null) listener(exited);
+        else listeners.push(listener);
+      },
+    };
+  }
+}
+
+/** Match by exact id, exact name, or unambiguous id prefix. */
+export function matchEnvironment(envs: readonly OnaEnvironment[], ref: string): OnaEnvironment | null {
+  const exact = envs.find((env) => env.id === ref || env.metadata.name === ref);
+  if (exact) return exact;
+  const prefixed = envs.filter((env) => env.id.startsWith(ref));
+  return prefixed.length === 1 ? prefixed[0]! : null;
 }
 
 export function isRunning(env: OnaEnvironment): boolean {

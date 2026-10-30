@@ -77,6 +77,18 @@ The idle rule from [How it works](#how-it-works) sits alongside these: after
 `idleDisconnect` with no thread activity, an active box is marked suspended
 without being stopped.
 
+`bb ona keep-alive <name> <duration>` is the one way to hold a box past Ona's
+inactivity timeout, and only on your request; the plugin never starts one by
+itself. It runs `ona environment keep-alive --environment-id <id> -q -- sleep
+<seconds>` on the bb server machine, which sends Ona activity signals while the
+sleep runs. It needs no SSH. Safety rule 1 applies: it starts only when a fresh
+`ona environment list` says the box is running, and is refused otherwise
+(stopped, starting, or Ona can't be asked). It ends after the duration (at most
+`12h`), on `bb ona keep-alive <name> off`, when a new duration replaces it, when
+a listing shows the box not running, and when the plugin reloads or bb quits.
+Keep-alives are not restored after a reload. `bb ona status` shows
+`keep-alive until HH:MM` for a box that has one.
+
 **Safety rules.** Every automatic action keeps these:
 
 1. **Never wake a box.** Ona's SSH starts a stopped box, so the plugin only uses
@@ -337,6 +349,8 @@ bb ona open <name>                       # open the devbox in your Ona editor
 bb ona list                    # machines, Ona env, tunnel status
 bb ona status [name]           # bb's view next to Ona's, and what the plugin last did
 bb ona sync [name]             # re-check Ona now and repair out-of-step machines
+bb ona keep-alive <name> 2h    # keep a running box from Ona's idle timeout (at most 12h)
+bb ona keep-alive <name> off   # end it early
 bb ona rename <name> [new]     # rename env + bb machine (random fun name if omitted)
 bb ona reconnect <name>        # reopen the tunnel and restart the bb daemon
 bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
