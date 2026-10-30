@@ -38,6 +38,10 @@ Done when: <tests or behaviour>; `npm run check` passes.
 Constraints: <decisions or rules that matter here>
 ```
 
+Before dispatching, check the task against the accepted records in
+`docs/decisions/`. If it conflicts, decide first and say so in the brief, since
+an unattended agent skips a conflicting item.
+
 ## Review a handoff
 
 1. Read `.agent/HANDOFF.md` in the worktree, then the diff (`git -C <worktree> diff`).

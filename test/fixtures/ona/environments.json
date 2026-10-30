@@ -1,0 +1,22 @@
+[
+  {
+    "id": "env-0001",
+    "metadata": { "name": "brave-otter", "projectId": "proj-0001" },
+    "status": { "phase": "ENVIRONMENT_PHASE_RUNNING" }
+  },
+  {
+    "id": "env-0002",
+    "metadata": { "name": "quiet-heron", "projectId": "proj-0001" },
+    "status": { "phase": "ENVIRONMENT_PHASE_STARTING" }
+  },
+  {
+    "id": "env-9abc",
+    "metadata": { "name": "swift-lynx", "projectId": "proj-0002" },
+    "status": { "phase": "ENVIRONMENT_PHASE_STOPPING" }
+  },
+  {
+    "id": "env-7def",
+    "metadata": { "name": "calm-falcon", "projectId": "proj-0002" },
+    "status": { "phase": "ENVIRONMENT_PHASE_STOPPED" }
+  }
+]
