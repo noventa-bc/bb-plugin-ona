@@ -10,10 +10,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Don't leave the job's token in .git/config for dependencies to read.
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
+      # Exactly the lockfile, and no dependency install scripts: nothing here
+      # needs a native build, and install scripts are the usual supply-chain route.
+      - run: npm ci --ignore-scripts
       - run: npm run check
       - run: shellcheck scripts/*.sh test/*.sh

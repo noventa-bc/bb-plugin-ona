@@ -1,5 +1,5 @@
 {
   "permissions": {
-    "ask": ["Bash(git push:*)", "Bash(ona:*)", "Bash(ssh:*)"]
+    "ask": ["Bash(ona:*)", "Bash(ssh:*)"]
   }
 }
