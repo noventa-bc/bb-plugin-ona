@@ -148,14 +148,19 @@ export default async function plugin(bb: BbPluginApi) {
     (envId, detail) => bb.log.warn(`keep-alive for ${envId} ended early: ${detail}`),
   );
   bb.onDispose(() => keepAlives.stopAll());
+  // Fire and forget, as the editor may take a while; a failure goes to the log.
+  const openEditor = (envId: string) =>
+    void ona.openEditor(envId).catch((error: unknown) => bb.log.warn(`opening ${envId} failed: ${errorText(error)}`));
 
   // `ona whoami` is a network call; cache it so availability stays fast.
   let loginCache: { at: number; login: OnaLogin } | null = null;
-  async function onaLogin(binary: string): Promise<OnaLogin> {
-    if (loginCache && Date.now() - loginCache.at < 5 * 60_000) return loginCache.login;
+  async function onaLogin(binary: string, fresh = false): Promise<OnaLogin> {
+    if (!fresh && loginCache && Date.now() - loginCache.at < 5 * 60_000) return loginCache.login;
     const login = await checkOnaLogin(binary);
-    loginCache = { at: Date.now(), login };
-    return login;
+    // Ona out of reach says nothing about the login: keep the last good one.
+    const kept = !login.ok && login.reason === "network" && loginCache?.login.ok ? loginCache.login : login;
+    loginCache = { at: Date.now(), login: kept };
+    return kept;
   }
   const port = () => Number(new URL(bb.server.loopbackBaseUrl).port);
   // Tunnels land on this daemon-only proxy, never on the bb server's port:
@@ -219,6 +224,8 @@ export default async function plugin(bb: BbPluginApi) {
       const binary = findOnaBinary(onaPath);
       if (!binary) return { status: "setup-required", message: ONA_INSTALL_HINT };
       const login = await onaLogin(binary);
+      if (!login.ok && login.reason === "network")
+        return { status: "unavailable", message: `Ona could not be reached. (${login.message})` };
       if (!login.ok)
         return { status: "setup-required", message: `Ona CLI is not logged in: run \`ona login\`. (${login.message})` };
       if (!hasOnaSshConfig()) {
@@ -583,8 +590,7 @@ export default async function plugin(bb: BbPluginApi) {
     devbox_open_editor: async ({ hostId }) => {
       const row = await findMachine(hostId);
       if (!row) return { opened: false };
-      const { execFile } = await import("node:child_process");
-      execFile(resolveOna(), ["environment", "open", row.resource.envId]);
+      openEditor(row.resource.envId);
       return { opened: true };
     },
   });
@@ -679,10 +685,10 @@ export default async function plugin(bb: BbPluginApi) {
 
   async function planCurrentSetup(keepGitCredentials: boolean): Promise<SetupStep[]> {
     const binary = findOnaBinary(onaPath);
-    loginCache = null;
     return planSetup({
       onaBinary: binary,
-      login: binary ? await onaLogin(binary) : null,
+      // Checked now, but a network failure keeps the last good login (see onaLogin).
+      login: binary ? await onaLogin(binary, true) : null,
       sshConfigured: hasOnaSshConfig(),
       settings: await readGeneralSettings(),
       serverUrl: bb.server.loopbackBaseUrl.replace(/\/+$/, ""),
@@ -979,8 +985,7 @@ export default async function plugin(bb: BbPluginApi) {
           case "open": {
             if (!ref) break;
             const envId = await resolveEnvId(ref);
-            const { execFile } = await import("node:child_process");
-            execFile(onaPath, ["environment", "open", envId]);
+            openEditor(envId);
             return { exitCode: 0, stdout: `Opening ${envId}` };
           }
         }

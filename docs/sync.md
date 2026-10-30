@@ -43,6 +43,10 @@ a listing shows the box not running, and when the plugin reloads or bb quits.
 Keep-alives are not restored after a reload. `bb ona status` shows
 `keep-alive until HH:MM` for a box that has one.
 
+`ona environment open` runs only when you ask for it, with the Editor button or
+`bb ona open`; no sync pass calls it. It may wake a stopped box, which is what
+you asked for, so safety rule 1 does not gate it.
+
 **Safety rules.** Every automatic action keeps these:
 
 1. **Never wake a box.** Ona's SSH starts a stopped box, so the plugin only uses

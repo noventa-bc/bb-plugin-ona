@@ -105,21 +105,52 @@ test("start passes the expected argv", async () => {
   const log = join(dir, "start.log");
   setFake({ FAKE_ONA_LOG: log });
   await cli.start("env-0001");
-  assert.equal(readFileSync(log, "utf8"), "environment start env-0001\n");
+  assert.equal(readFileSync(log, "utf8"), "environment start env-0001 --timeout 1800s\n");
 });
 
 test("stop passes the expected argv", async () => {
   const log = join(dir, "stop.log");
   setFake({ FAKE_ONA_LOG: log });
   await cli.stop("env-0001");
-  assert.equal(readFileSync(log, "utf8"), "environment stop env-0001\n");
+  assert.equal(readFileSync(log, "utf8"), "environment stop env-0001 --timeout 900s\n");
 });
 
 test("rename passes the expected argv", async () => {
   const log = join(dir, "rename.log");
   setFake({ FAKE_ONA_LOG: log });
   await cli.rename("env-0001", "new-name");
-  assert.equal(readFileSync(log, "utf8"), "environment update env-0001 --name new-name\n");
+  assert.equal(readFileSync(log, "utf8"), "environment update env-0001 --name new-name --timeout 120s\n");
+});
+
+test("every call passes Ona's own --timeout, matching the wrapper's", async () => {
+  const log = join(dir, "timeout.log");
+  setFake({ FAKE_ONA_LOG: log, FAKE_ONA_PROJECTS: fixture("projects.json") });
+  await cli.listEnvironments();
+  await cli.resolveProjectId("proj-0001");
+  await cli.createEnvironment({ projectId: "proj-0001", name: "new-box" });
+  await cli.delete("env-0001");
+  assert.deepEqual(readFileSync(log, "utf8").trim().split("\n"), [
+    "environment list -o json --timeout 120s",
+    "project list -o json --timeout 120s",
+    "environment create proj-0001 --name new-box --timeout 1800s",
+    "environment delete env-0001 --timeout 900s",
+  ]);
+});
+
+test("openEditor runs ona environment open with the box id", async () => {
+  const log = join(dir, "open.log");
+  setFake({ FAKE_ONA_LOG: log });
+  await cli.openEditor("env-0001");
+  assert.match(readFileSync(log, "utf8"), /^environment open env-0001 /);
+});
+
+test("openEditor rejects with the CLI's error instead of dropping it", async () => {
+  setFake({ FAKE_ONA_FAIL: "environment not found" });
+  await assert.rejects(cli.openEditor("env-0000"), /ona environment open failed: environment not found/);
+});
+
+test("openEditor rejects when the CLI is missing", async () => {
+  await assert.rejects(new OnaCli(join(dir, "no-such-ona")).openEditor("env-0001"), /ENOENT/);
 });
 
 test("a CLI failure becomes a readable error", async () => {
@@ -145,7 +176,7 @@ test("getEnvironmentIfExists returns the box by id, including one the list leave
   const log = join(dir, "get.log");
   setFake({ FAKE_ONA_GET: fixture("archived-environment.json"), FAKE_ONA_LOG: log });
   assert.equal((await cli.getEnvironmentIfExists("env-5aaa"))?.id, "env-5aaa");
-  assert.equal(readFileSync(log, "utf8"), "environment get env-5aaa -o json\n");
+  assert.equal(readFileSync(log, "utf8"), "environment get env-5aaa -o json --timeout 120s\n");
 });
 
 test("getEnvironmentIfExists returns null only when Ona says the box doesn't exist", async () => {
