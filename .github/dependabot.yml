@@ -1,0 +1,14 @@
+# Opens a PR when a new @get-bb/plugin-sdk is published, so the normal `check`
+# workflow typechecks the plugin against it. Nothing else is watched here.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: daily
+    allow:
+      - dependency-name: "@get-bb/plugin-sdk"
+    versioning-strategy: increase
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: "Bump"
