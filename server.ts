@@ -171,7 +171,7 @@ export default async function plugin(bb: BbPluginApi) {
   // few seconds' staleness (see OnaSnapshot).
   const snapshot = new OnaSnapshot(() => ona.listEnvironments());
   const guard = new HostGuard();
-  const scheduler = new PassScheduler((keys) => reconcile(keys));
+  const scheduler = new PassScheduler((keys) => reconcile(keys), undefined, (error) => bb.log.warn(`reconcile pass failed: ${errorText(error)}`));
   /** Ona env id -> bb host id, refreshed on every pass. */
   const hostByEnv = new Map<string, string>();
 
