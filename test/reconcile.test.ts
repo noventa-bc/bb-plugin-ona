@@ -68,6 +68,14 @@ test("R3: deleted, or missing from two good listings -> suspend and report it go
   assert.equal(decide(machine(), { kind: "missing", streak: 2 }, NOW).action, "suspend-observed");
 });
 
+test("R3: an archived box is suspended and reported archived, not gone", () => {
+  const decision = decide(machine(), { kind: "missing", streak: 2, archived: true }, NOW);
+  assert.equal(decision.action, "suspend-observed");
+  assert.match(decision.reason, /archived/);
+  assert.doesNotMatch(decision.reason, /gone/);
+  assert.match(decide(machine(), { kind: "missing", streak: 2, archived: false }, NOW).reason, /gone/);
+});
+
 test("R4: suspended in bb stays suspended even when Ona runs the box", () => {
   const decision = decide(machine({ phase: "suspended" }), ona("RUNNING"), NOW);
   assert.equal(decision.action, "none");
