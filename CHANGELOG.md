@@ -22,6 +22,16 @@ made each change. The version is the one in `package.json`.
   report repairs instead of making them. (`bdc7e4b`)
 
 ### Fixed
+- `bb ona open` uses the same resolved `ona` binary as the Editor button, so it
+  works when `onaPath` is empty or a bare name. A failed open is logged instead
+  of dropped.
+- Every `ona` call passes `--timeout` matching the plugin's own wait: 120s;
+  1800s for create and start; 900s for stop and delete; 600s for open; 4s for
+  the login check. `keep-alive` and `ssh-config` are left as they were.
+- A slow or unreachable network no longer marks the plugin "setup required".
+  The last good Ona login is kept; without one, the plugin reports that Ona
+  could not be reached. `bb ona setup` says the same instead of asking for
+  `ona login`.
 - Idle release no longer lets a box go while bb is setting up or tearing down
   one of its thread workspaces; doing so could leave the workspace needing
   recovery and the machine impossible to suspend. A disconnected running box
