@@ -11,7 +11,8 @@ import type { Devbox, rpcContract, ThreadCost } from "./src/rpc.ts";
  * `@get-bb/plugin-sdk` 0.6.104 left `experimental_threadHeaderAction` out of
  * its public types, but its app collector still accepts the slot (checked
  * 2026-10-30). The slot types come from the SDK's `internal/` subpath on
- * purpose: the nightly SDK typecheck fails once that legacy type goes away.
+ * purpose: the typecheck on a Dependabot SDK bump PR fails once that legacy
+ * type goes away.
  * `experimental_threadAction` takes no component, so it can't replace this yet.
  */
 type ThreadHeaderActionProps = ComponentProps<LegacyThreadHeaderActionRegistration["component"]>;
