@@ -48,13 +48,19 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 
 ## bb SDK
 
-- The plugin pins `@get-bb/plugin-sdk` 0.6.49, with `engines` set to bb
-  `>=0.46`. bb 0.48.0 ships a later SDK than that pin (checked 2026-10-30).
-- The SDK in bb 0.48.0 has `experimental_threadAction` with
-  `placement: "header"`, which 0.6.49 lacks. It could replace the DOM
-  workaround in `app.tsx` that hides bb's native "Open in" button. Check the
-  installed SDK version before relying on it.
-- SDK surfaces the plugin doesn't use (checked 2026-10-30):
+- The plugin pins `@get-bb/plugin-sdk` 0.6.104, the SDK published with bb
+  0.48.1.
+- SDK 0.6.104 leaves `experimental_threadHeaderAction` and
+  `PluginThreadHeaderActionProps` out of its public types. Its app collector
+  still accepts the slot, so `app.tsx` takes the slot's types from the SDK's
+  `internal/plugin-app-collector` subpath. bb 0.48 still draws header items registered
+  through that slot (owner checked 2026-10-30).
+- SDK 0.6.104 has `experimental_threadAction` with `placement: "header"`. A
+  header action is a labelled button with an icon and a `run`, not a
+  component, so it can't show the cost chip. It could replace the DOM
+  workaround in `app.tsx` that hides bb's native "Open in" button.
+- SDK 0.6.104 has no `machine_busy` suspend error code.
+- SDK surfaces in 0.6.104 that the plugin doesn't use:
   - host entries: `experimental_defineHostEntry` (plugin code on the daemon,
     fs watch, signals) and the `experimental_host.deleted` event
   - UI: `settingsSection` and `navPanel`

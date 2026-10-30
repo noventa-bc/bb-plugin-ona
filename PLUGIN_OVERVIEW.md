@@ -37,7 +37,7 @@ disk, so devboxes that share an NFS-mounted home don't collide.
 
 ## Requirements
 
-- bb 0.46 or newer, and the Ona CLI installed and logged in (`ona login`) on
+- bb 0.48.1 or newer, and the Ona CLI installed and logged in (`ona login`) on
   the bb server machine.
 - Devboxes with node 22.19 or newer, npm, curl and git, plus Claude Code and/or
   Codex logged in.
