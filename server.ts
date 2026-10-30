@@ -26,7 +26,7 @@ import {
 import { onaRef, PROVIDER_ID, registerOnaComposition, registerOnaProvider } from "./src/provider.ts";
 import { startDaemonProxy } from "./src/proxy.ts";
 import { formatStatus, keepAliveCommand, parseArgs } from "./src/commands.ts";
-import { connectedAtKey, createSync, forgetBox, RELEASING_KEY, type Row } from "./src/sync.ts";
+import { connectedAtKey, createSync, forgetBox, matchesRef, RELEASING_KEY, type Row } from "./src/sync.ts";
 import { ALL, GRACE_MS, HostGuard, PassScheduler } from "./src/reconcile.ts";
 import {
   CLAUDE_COLLECTOR,
@@ -365,9 +365,7 @@ export default async function plugin(bb: BbPluginApi) {
 
   /** Resolve a bb machine name/id or an Ona environment name/id to an env id. */
   async function resolveEnvId(ref: string): Promise<string> {
-    const row = (await machines()).find((r) =>
-      [r.hostId, r.machine, r.resource.envId, r.resource.envName].includes(ref),
-    );
+    const row = await findMachine(ref);
     if (row) return row.resource.envId;
     const env = await ona.findEnvironment(ref);
     if (!env) throw new Error(`No bb machine or Ona environment matches "${ref}".`);
@@ -375,9 +373,7 @@ export default async function plugin(bb: BbPluginApi) {
   }
 
   async function findMachine(ref: string): Promise<Row | null> {
-    return (
-      (await machines()).find((r) => [r.hostId, r.machine, r.resource.envId, r.resource.envName].includes(ref)) ?? null
-    );
+    return (await machines()).find((r) => matchesRef(r, ref)) ?? null;
   }
 
   async function devboxes(): Promise<Devbox[]> {
@@ -922,9 +918,7 @@ export default async function plugin(bb: BbPluginApi) {
           }
           case "reconnect": {
             if (!ref) break;
-            const row = (await machines()).find((r) =>
-              [r.hostId, r.machine, r.resource.envId, r.resource.envName].includes(ref),
-            );
+            const row = await findMachine(ref);
             if (!row) return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${ref}".` };
             const steps: string[] = [];
             const report = { step: (text: string) => steps.push(text), log: () => {} };
