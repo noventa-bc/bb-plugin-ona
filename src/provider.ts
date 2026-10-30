@@ -3,7 +3,8 @@
 import type { BbPluginApi, MachineBootstrapRequest, MachineExecutor } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { friendlyName } from "./names.ts";
-import { isRunning, isStopped, type OnaCli, type OnaEnvironment } from "./ona.ts";
+import { isRunning, isStarting, isStopped, type OnaCli, type OnaEnvironment } from "./ona.ts";
+import { DAEMON_PROBE } from "./reconcile.ts";
 import type { PluginMachineProviderAvailability } from "./setup.ts";
 import { daemonEnv, shellQuote, sshCapture, sshExecutor, type TunnelManager } from "./ssh.ts";
 
@@ -94,6 +95,22 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
 
   async function ensureRunning(env: OnaEnvironment, report: PluginMachineProviderProgress, signal: AbortSignal) {
     if (isRunning(env)) return;
+    // Someone (Ona UI, CLI) is already starting it: wait instead of starting it again.
+    if (isStarting(env)) {
+      report.step(`Waiting for Ona to finish starting ${env.metadata.name ?? env.id}`);
+      const deadline = Date.now() + 15 * 60_000;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 5_000));
+        signal.throwIfAborted();
+        const current = await ona.findEnvironment(env.id, signal);
+        if (!current) throw new Error(`Ona environment ${env.metadata.name ?? env.id} disappeared while starting.`);
+        if (isRunning(current)) return;
+        if (!isStarting(current)) {
+          env = current;
+          break;
+        }
+      }
+    }
     // Ona refuses to start an environment that is still stopping; let it finish first.
     if (env.status?.phase === "ENVIRONMENT_PHASE_STOPPING") {
       report.step(`Waiting for Ona to finish stopping ${env.metadata.name ?? env.id}`);
@@ -343,6 +360,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     },
     async resume({ resource, checkpoint, report, signal }) {
       const owned = resourceSchema.parse(resource);
+      // Drop a no-stop flag a failed suspend may have left; the next suspend is the user's.
+      await deps.takeRelease(owned.envId);
       const env = await requireEnv(owned.envId, signal);
       await ensureRunning(env, report, signal);
       await checkpoint(resource);
@@ -387,7 +406,22 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     },
   });
 
-  return { reconnect, takeRelease: deps.takeRelease };
+  /**
+   * Whether bb's daemon runs on a box: true, false, or null when SSH couldn't
+   * tell. Only call it for a box Ona reports RUNNING (SSH starts stopped boxes).
+   */
+  async function daemonAlive(resource: OnaResource, signal: AbortSignal): Promise<boolean | null> {
+    const { exitCode } = await sshExecutor(deps.sshBinary, resource.envId, []).exec({
+      command: ["bash", "-c", DAEMON_PROBE, "bb-ona-probe", deps.machineDataDir, resource.dataDir ?? ""],
+      stdin: "",
+      timeoutMs: 15_000,
+      signal,
+      onOutput: () => {},
+    }).catch(() => ({ exitCode: -1 }));
+    return exitCode === 0 ? true : exitCode === 1 ? false : null;
+  }
+
+  return { reconnect, daemonAlive, takeRelease: deps.takeRelease };
 }
 
 export function registerOnaComposition(bb: BbPluginApi) {

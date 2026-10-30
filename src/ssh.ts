@@ -112,11 +112,14 @@ export class TunnelManager {
   private readonly localPort: () => number;
   private readonly log: PluginLogger;
   private readonly shouldConnect: (envId: string) => Promise<boolean>;
+  private readonly onConnected: (envId: string) => void;
 
   /**
    * `shouldConnect` is asked before every (re)connect. Ona's SSH starts a
    * stopped environment on connect, so reconnecting blindly would undo Ona's
-   * idle auto-stop; return false while the environment is stopped.
+   * idle auto-stop; return false while the environment is stopped. If it
+   * throws, the tunnel waits and asks again rather than risk waking the box.
+   * `onConnected` runs each time a tunnel comes up.
    */
   constructor(
     sshBinary: string,
@@ -124,12 +127,14 @@ export class TunnelManager {
     localPort: () => number,
     log: PluginLogger,
     shouldConnect: (envId: string) => Promise<boolean> = async () => true,
+    onConnected: (envId: string) => void = () => {},
   ) {
     this.sshBinary = sshBinary;
     this.remotePort = remotePort;
     this.localPort = localPort;
     this.log = log;
     this.shouldConnect = shouldConnect;
+    this.onConnected = onConnected;
   }
 
   ensure(envId: string): void {
@@ -158,7 +163,7 @@ export class TunnelManager {
     const signal = state.controller.signal;
     let backoff = 1_000;
     while (!signal.aborted) {
-      if (!(await this.shouldConnect(envId).catch(() => true))) {
+      if (!(await this.shouldConnect(envId).catch(() => false))) {
         await sleep(60_000, signal);
         continue;
       }
@@ -180,6 +185,7 @@ export class TunnelManager {
         // ssh -N prints nothing on success; treat surviving a few seconds as connected.
         const connectedTimer = setTimeout(() => {
           state.connectedAt = Date.now();
+          this.onConnected(envId);
         }, 3_000);
         const onAbort = () => child.kill("SIGTERM");
         signal.addEventListener("abort", onAbort, { once: true });

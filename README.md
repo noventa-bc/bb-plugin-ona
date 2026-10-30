@@ -27,7 +27,7 @@ bb server (your Mac, 127.0.0.1:<port>)
        ├─ machine provider "ona"   create / adopt / suspend / resume / remove
        ├─ daemon-only proxy        127.0.0.1:<random port>, forwards only daemon routes
        ├─ SSH reverse tunnel       ssh -N -R <port>:127.0.0.1:<proxy port> <envId>.ona.environment
-       └─ bb ona …                 list / host / ssh / open / rename / reconnect
+       └─ bb ona …                 list / status / sync / host / ssh / open / rename / reconnect
 Ona devbox ── bb daemon ──(tunnel)── proxy ── bb server
           └─ claude / codex run here
 ```
@@ -42,9 +42,102 @@ activity to Ona, so the plugin only keeps it open while you use the box. After
 and marks the bb machine suspended, but it doesn't stop the environment. Ona's
 own inactivity timeout stops it later, unless you still have an Ona editor open
 on it. The tunnel never reconnects to an environment that Ona has stopped or is
-stopping. When Ona stops a devbox, the plugin marks its bb machine suspended (within about two
-minutes). bb's machine list then shows Resume (▶), and starting a thread or
-sending a message on that devbox starts it first and waits until it's ready.
+stopping. When Ona stops a devbox, the plugin marks its bb machine suspended.
+bb's machine list then shows Resume (▶), and starting a thread or sending a
+message on that devbox starts it first and waits until it's ready. Changes made
+outside bb are covered in [How bb and Ona stay in sync](#how-bb-and-ona-stay-in-sync).
+
+## How bb and Ona stay in sync
+
+You can start, stop, restart or delete a devbox outside bb: in Ona's UI, with
+the `ona` CLI, or through Ona's own auto-stop. The plugin keeps bb's view of
+the box in step with Ona's. This section explains how, so the behaviour is
+predictable and the code is easy to pick up.
+
+**Who decides what.** Ona decides whether a box exists and is running. bb holds
+your intent: a machine is *active* (you're using it) or *suspended* (you're
+not). The plugin compares the two and repairs bb's side. Its automatic repairs
+never start or stop a box; only bb's own Resume and Pause do that.
+
+**What the plugin does** (`decide()` in `src/reconcile.ts`):
+
+| Ona says | bb shows | The plugin | Why |
+|---|---|---|---|
+| running | active, disconnected for 45s+ | checks over SSH whether bb's daemon runs on the box; restarts it only if it doesn't | the box was restarted outside bb and the daemon died with it |
+| running | active, no tunnel | reopens the tunnel | |
+| stopped / stopping | active | marks the machine suspended without stopping anything; if a thread is waiting, lets bb resume it | stopped in Ona's UI, by the CLI, or by Ona's idle timeout |
+| deleted, or missing from two listings in a row | active | marks it suspended and reports it gone in `bb ona status` | remove it with `bb machine remove` |
+| running | suspended | nothing: it stays suspended until you use it | starting a box in Ona (say, for its editor) doesn't attach it to bb |
+| anything | resuming / suspending for 10 min+ | asks bb to reconcile the machine (at most every 30 min) | bb or the plugin restarted mid-operation |
+| starting / creating | anything | nothing; a resume waits for Ona to finish instead of starting it again | |
+| unknown (`ona` failed or returned nothing) | anything | nothing; `bb ona status` reports the CLI problem | |
+
+The idle rule from [How it works](#how-it-works) sits alongside these: after
+`idleDisconnect` with no thread activity, an active box is marked suspended
+without being stopped.
+
+**Safety rules.** Every automatic action keeps these:
+
+1. **Never wake a box.** Ona's SSH starts a stopped box, so the plugin only uses
+   SSH (tunnel, daemon check) when Ona says the box is running. It re-checks
+   Ona right before each daemon check. If Ona can't be asked, tunnels wait
+   rather than connect. *Why: an accidental start costs money and keeps the box up.*
+2. **Never stop a box.** Suspends the plugin makes because of what it saw in Ona
+   skip the provider's stop. *Why: a wrong or stale listing must not stop a box with your work on it.*
+3. **Never restart a live daemon.** The daemon is restarted only when the check
+   finds no daemon process. If SSH can't tell, nothing is restarted.
+   *Why: a restart kills running agent turns.*
+4. **Unknown is not gone.** A failed or empty `ona environment list` changes
+   nothing, and "missing" needs two listings in a row.
+5. **One action per machine at a time.** After an action, the machine waits 5
+   minutes before the next one. Failures back off (5, 10, 20 min, …). After 3
+   failures in a row the plugin stops trying and says so in `bb ona status`.
+   Daemon checks and restarts run at most 2 at a time.
+
+**When the plugin checks.**
+
+- **Right away** when a thread is waiting for an Ona machine.
+- **45s after** an Ona machine disconnects, so a brief drop (Wi-Fi, Mac sleep) can recover on its own.
+- **30s after** a tunnel comes back up.
+- **After** bb's realtime connection reconnects.
+- **Every 2 minutes**, as a backstop.
+
+Bursts of events are merged into one check. All checks share one cached `ona
+environment list` (at most 15s old; 5s for event-driven checks), so a dozen
+boxes reconnecting after the Mac wakes cost one Ona call.
+
+**Seeing and fixing it yourself.**
+
+```sh
+bb ona status [name] [--json]  # bb's view, tunnel, Ona's view, and what the plugin last did and why
+bb ona sync [name]             # re-check Ona now and repair (skips cooldowns, never the safety rules)
+```
+
+Example `bb ona status` output:
+
+```
+Ona CLI: ok, listed 12s ago
+ona:amber-otter  bb:disconnected  tunnel:up  ona:running
+  last: heal-daemon: running in Ona but the daemon isn't connected; daemon was down; restarted it (3m ago)
+ona:brisk-heron  bb:suspended  tunnel:off  ona:running
+  last: none: suspended in bb, running in Ona (1m ago)
+```
+
+If the automatic repairs get in your way, turn them off with
+`bb plugin config ona set autoRepair false`. Stopped and deleted boxes are then
+still marked suspended, and `bb ona status` shows what would have been done.
+
+**For contributors.** The logic lives in `src/reconcile.ts`:
+
+- `decide()` is a pure function holding the table above.
+- `PassScheduler` merges triggers into checks.
+- `HostGuard` enforces rule 5.
+- `DAEMON_PROBE` is the rule 3 check.
+
+The wiring (events, the backstop, `bb ona status/sync`) is in `server.ts`
+(`reconcile()`, `watchRealtime()`). The shared listing is `OnaSnapshot` in
+`src/ona.ts`. To add or change a rule, update `decide()`, its test in
+`test/reconcile.test.ts`, and the table above, all in the same change.
 
 ## Prerequisites
 
@@ -133,6 +226,7 @@ View them with `bb plugin config ona`, and change one with `bb plugin config ona
 | `sshPath` | `/usr/bin/ssh` | Path to `ssh`. |
 | `defaultProject` | *(empty)* | Ona project used when creating a devbox without one, e.g. `my-app`. |
 | `inactivityTimeout` | `3h` | Auto-stop timeout for devboxes bb creates. Adopted ones keep their own. |
+| `autoRepair` | `true` | Repair bb's view of devboxes changed outside bb (see [How bb and Ona stay in sync](#how-bb-and-ona-stay-in-sync)). Off: stopped or deleted boxes are still marked suspended; everything else is only reported by `bb ona status`. |
 | `idleDisconnect` | `1h` | After this long with no thread activity, bb closes its tunnel to a devbox and marks the machine suspended so Ona's timeout can stop it. The next message wakes it. Empty or `0` keeps every box connected. |
 | `waitForSharedHome` | `true` | After a devbox starts, wait until its NFS home is mounted before starting bb's daemon and agents. Starting earlier lets Codex write threads into the container's own home, where the mount hides them ("no rollout found"). Turn off if your environments don't share a home. |
 | `codexSqliteHome` | `/workspaces/.codex-sqlite-bb` | Where Codex launched by bb keeps its SQLite state on the devbox's local disk. |
@@ -234,6 +328,8 @@ bb ona open <name>                       # open the devbox in your Ona editor
 
 ```sh
 bb ona list                    # machines, Ona env, tunnel status
+bb ona status [name]           # bb's view next to Ona's, and what the plugin last did
+bb ona sync [name]             # re-check Ona now and repair out-of-step machines
 bb ona rename <name> [new]     # rename env + bb machine (random fun name if omitted)
 bb ona reconnect <name>        # reopen the tunnel and restart the bb daemon
 bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
@@ -249,9 +345,15 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
   `mv ~/.bb-machines ~/.bb-machines.shared`, then add the machine again.
 - **Creation times out or fails:** check `bb plugin logs ona` and `bb machine show <id>`.
   Prerequisite failures name the missing tool.
-- **Machine disconnected:** if Ona stopped it, the plugin marks it suspended
-  within about two minutes and it resumes on demand. If it is running, use
-  `bb ona reconnect <name>`.
+- **bb and Ona disagree about a box** (bb says down but it's running, or the
+  other way round): run `bb ona status <name>`. It shows both views and what
+  the plugin last did about it. `bb ona sync <name>` re-checks now, and
+  `bb ona reconnect <name>` restarts the daemon outright. Two lines to look for:
+  - "ERROR … (run `ona login`?)" at the top: the plugin can't reach Ona, so it
+    changes nothing.
+  - "gave up after 3 failures": the last error is shown next to it.
+
+  See [How bb and Ona stay in sync](#how-bb-and-ona-stay-in-sync).
 - **Codex: "Unable to load codex models":** right after setup, Codex rebuilds its
   index from your session files (can take a minute). Retry shortly after.
 - **Shared `~/.codex` database corruption:** for Codex you run yourself on the
@@ -337,5 +439,7 @@ bb plugin reload ona                                           # after changes
 
 Source: `server.ts` (settings, tunnels, CLI), `src/provider.ts` (machine
 provider), `src/proxy.ts` (daemon-only proxy), `src/ssh.ts` (executor, tunnels),
-`src/setup.ts` (prerequisite checks), `src/ona.ts` (ona CLI wrapper),
+`src/setup.ts` (prerequisite checks), `src/ona.ts` (ona CLI wrapper, shared
+listing), `src/reconcile.ts` (keeping bb in sync with Ona), `src/lifecycle.ts`
+(idle release),
 `src/names.ts` (fun names), `skills/ona-devboxes/SKILL.md` (agent docs).

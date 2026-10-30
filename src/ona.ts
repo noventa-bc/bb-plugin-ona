@@ -114,6 +114,12 @@ export function isRunning(env: OnaEnvironment): boolean {
   return env.status?.phase === "ENVIRONMENT_PHASE_RUNNING";
 }
 
+/** On its way up (created, starting, ...): starting it again would fail. */
+export function isStarting(env: OnaEnvironment): boolean {
+  const phase = env.status?.phase;
+  return phase === "ENVIRONMENT_PHASE_CREATING" || phase === "ENVIRONMENT_PHASE_STARTING" || phase === "ENVIRONMENT_PHASE_PENDING";
+}
+
 export function isStopped(env: OnaEnvironment): boolean {
   const phase = env.status?.phase;
   return phase === "ENVIRONMENT_PHASE_STOPPED" || phase === "ENVIRONMENT_PHASE_DELETED";
@@ -122,4 +128,62 @@ export function isStopped(env: OnaEnvironment): boolean {
 /** Native SSH host alias written by `ona environment ssh-config`. */
 export function sshHost(envId: string): string {
   return `${envId}.ona.environment`;
+}
+
+export interface OnaListing {
+  envs: OnaEnvironment[];
+  at: number;
+}
+
+/**
+ * One cached `ona environment list` shared by everything that only needs a
+ * recent view (tunnel reconnects, the reconciler, status). Concurrent callers
+ * share a single CLI call, so a burst of reconnects after the Mac wakes costs
+ * one list, not one per box. Provider create/resume/suspend still ask Ona
+ * directly: they act on what they read.
+ */
+export class OnaSnapshot {
+  private last: OnaListing | null = null;
+  private inFlight: Promise<OnaListing> | null = null;
+  /** Message of the last failed list, cleared by the next good one. */
+  lastError: string | null = null;
+
+  private readonly fetch: () => Promise<OnaEnvironment[]>;
+  private readonly ttlMs: number;
+  private readonly now: () => number;
+
+  constructor(fetch: () => Promise<OnaEnvironment[]>, ttlMs = 15_000, now: () => number = Date.now) {
+    this.fetch = fetch;
+    this.ttlMs = ttlMs;
+    this.now = now;
+  }
+
+  /** The last good listing, however old (for display). */
+  get latest(): OnaListing | null {
+    return this.last;
+  }
+
+  /** A listing fetched now (shared with any list already in flight). */
+  refresh(): Promise<OnaListing> {
+    return this.get(-1);
+  }
+
+  /** A listing at most `maxAgeMs` old; throws if Ona can't be asked. */
+  get(maxAgeMs = this.ttlMs): Promise<OnaListing> {
+    if (this.last && this.now() - this.last.at <= maxAgeMs) return Promise.resolve(this.last);
+    this.inFlight ??= this.fetch()
+      .then((envs) => {
+        this.last = { envs, at: this.now() };
+        this.lastError = null;
+        return this.last;
+      })
+      .catch((error: unknown) => {
+        this.lastError = error instanceof Error ? error.message : String(error);
+        throw error;
+      })
+      .finally(() => {
+        this.inFlight = null;
+      });
+    return this.inFlight;
+  }
 }

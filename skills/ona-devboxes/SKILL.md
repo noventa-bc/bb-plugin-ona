@@ -50,6 +50,8 @@ devbox. Use `bb` commands from a thread instead; bb routes them correctly.
 - `ssh "$(bb ona host <machine-or-env>)"` — interactive shell; `bb ona ssh <ref>` prints the command.
 - `bb ona open <ref>` — open in your Ona editor.
 - `bb ona reconnect <ref>` — reopen the tunnel and restart the daemon (after changing settings).
+- `bb ona status [ref]` — bb's view of each devbox next to Ona's, and what the plugin last did and why.
+  Use it first when bb and Ona disagree (box changed outside bb); `bb ona sync [ref]` re-checks and repairs now.
 
 ## Codex state
 `~/.codex` may live on a shared NFS home where SQLite WAL corrupts. bb's daemon
