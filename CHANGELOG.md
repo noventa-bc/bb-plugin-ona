@@ -15,6 +15,9 @@ made each change. The version is the one in `package.json`.
   push the commits or delete the box in Ona, then run `bb machine retry-cleanup`.
 - After the Mac wakes from sleep the plugin re-checks Ona right away instead
   of waiting up to 2 minutes for its next check.
+- After a plugin reload, tunnels reopen from the plugin's first check, and only
+  to devboxes Ona lists as running. The plugin no longer stores a list of open
+  tunnels.
 
 ### Added
 - `bb ona keep-alive <box> <duration>` keeps a running devbox from Ona's

@@ -97,7 +97,6 @@ export interface SyncDeps {
       signal: AbortSignal,
     ): Promise<unknown>;
   };
-  rememberTunnel(envId: string): Promise<void>;
   keepAliveUntil(envId: string): number | null;
   /** Ona env id -> bb host id, refreshed on every pass; shared with the tunnels and events. */
   hostByEnv: Map<string, string>;
@@ -143,7 +142,7 @@ export interface StatusRow {
 export type Sync = ReturnType<typeof createSync>;
 
 export function createSync(deps: SyncDeps) {
-  const { bb, snapshot, ona, guard, tunnels, provider, rememberTunnel, hostByEnv, autoRepair, idleDisconnect } = deps;
+  const { bb, snapshot, ona, guard, tunnels, provider, hostByEnv, autoRepair, idleDisconnect } = deps;
   const pluginStartedAt = deps.pluginStartedAt;
   const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -321,7 +320,6 @@ export function createSync(deps: SyncDeps) {
               }
             case "ensure-tunnel":
               tunnels.ensure(resource.envId);
-              await rememberTunnel(resource.envId);
               return;
             case "heal-daemon": {
               // Rule 1: SSH starts stopped boxes, so re-check Ona right before it.
@@ -387,8 +385,8 @@ export function createSync(deps: SyncDeps) {
             row.phase === "active" && row.status !== "connected" ? (await workspaces(row.hostId)).busy : false,
         };
         const decision = decide(view, await onaView(row.resource.envId, listing), now);
-        // With autoRepair off, only observed stops and deletions reach bb.
-        const skipped = !autoRepair && decision.action !== "none" && decision.action !== "suspend-observed";
+        // With autoRepair off, only observed stops and deletions reach bb, and tunnels reopen after a reload.
+        const skipped = !autoRepair && !["none", "suspend-observed", "ensure-tunnel"].includes(decision.action);
         guard.note(
           row.hostId,
           skipped ? `${decision.reason} (would ${decision.action}; autoRepair is off)` : decision.reason,

@@ -16,7 +16,7 @@ never start or stop a box; only bb's own Resume and Pause do that.
 | Ona says | bb shows | The plugin | Why |
 |---|---|---|---|
 | running | active, disconnected for 45s+ | checks over SSH whether bb's daemon runs on the box; restarts it only if it doesn't | the box was restarted outside bb and the daemon died with it |
-| running | active, no tunnel | reopens the tunnel | |
+| running | active, no tunnel (even if still shown connected) | reopens the tunnel | the plugin reloaded or bb restarted; bb shows the old connection until it notices the drop |
 | stopped / stopping | active | marks the machine suspended without stopping anything; if a thread is waiting, lets bb resume it | stopped in Ona's UI, by the CLI, or by Ona's idle timeout |
 | deleted, or missing from two listings in a row | active | marks it suspended and reports it gone in `bb ona status`, or archived if `ona environment get` says so | remove it with `bb machine remove`, or unarchive it in Ona |
 | missing from two listings in a row, but found by `ona environment get` and not archived | anything | acts on the phase `get` reports, as for a listed box | the listing leaves out some boxes (another `ona context`, a long list, a box shared with you); a lookup by id counts as a listing ([0005](decisions/0005-lookup-by-id-counts-as-listing.md)) |
@@ -70,6 +70,7 @@ you asked for, so safety rule 1 does not gate it.
 
 **When the plugin checks.**
 
+- **When the plugin starts** (load, reload, bb restart). This check is what reopens the tunnels.
 - **Right away** when a thread is waiting for an Ona machine, or bb is setting
   up or tearing down a workspace on it (a running box only; this never starts one).
 - **45s after** an Ona machine disconnects, so a brief drop (Wi-Fi, Mac sleep) can recover on its own.
@@ -107,7 +108,8 @@ ona:brisk-heron  bb:suspended  tunnel:off  ona:running
 
 If the automatic repairs get in your way, turn them off with
 `bb plugin config ona set autoRepair false`. Stopped and deleted boxes are then
-still marked suspended, and `bb ona status` shows what would have been done.
+still marked suspended, tunnels still reopen, and `bb ona status` shows what
+would have been done.
 
 **For contributors.** The logic lives in `src/reconcile.ts`:
 
