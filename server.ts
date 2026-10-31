@@ -26,7 +26,7 @@ import {
 import { onaRef, PROVIDER_ID, registerOnaComposition, registerOnaProvider } from "./src/provider.ts";
 import { startDaemonProxy } from "./src/proxy.ts";
 import { formatStatus, keepAliveCommand, parseArgs } from "./src/commands.ts";
-import { connectedAtKey, createSync, forgetBox, matchesRef, RELEASING_KEY, type Row } from "./src/sync.ts";
+import { connectedAtKey, createSync, forgetBox, matchesRef, type Row } from "./src/sync.ts";
 import { ALL, GRACE_MS, HostGuard, PassScheduler } from "./src/reconcile.ts";
 import {
   CLAUDE_COLLECTOR,
@@ -209,6 +209,8 @@ export default async function plugin(bb: BbPluginApi) {
   );
 
   const pluginStartedAt = Date.now();
+  // Older versions kept the idle-release flag in this key; it now lives in memory.
+  void bb.storage.kv.delete("releasing").catch(() => {});
 
   async function rememberedTunnels(): Promise<string[]> {
     return (await bb.storage.kv.get<string[]>(TUNNELS_KEY)) ?? [];
@@ -256,15 +258,7 @@ export default async function plugin(bb: BbPluginApi) {
     async markConnected(envId) {
       await bb.storage.kv.set(connectedAtKey(envId), Date.now());
     },
-    async takeRelease(envId) {
-      const current = (await bb.storage.kv.get<string[]>(RELEASING_KEY)) ?? [];
-      if (!current.includes(envId)) return false;
-      await bb.storage.kv.set(
-        RELEASING_KEY,
-        current.filter((id) => id !== envId),
-      );
-      return true;
-    },
+    releasing: new Set(),
     forgetBox: (envId) => forgetBox(bb.storage.kv, envId),
   });
 

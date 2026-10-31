@@ -70,10 +70,10 @@ export interface ProviderDeps {
   /** Record that the box just (re)connected; the idle window starts here. */
   markConnected(envId: string): Promise<void>;
   /**
-   * True (once) when this suspend is the plugin letting an idle box go: only
-   * the tunnel closes and Ona's own inactivity timeout stops the box.
+   * Boxes the plugin is letting go while idle: their next suspend (consumed
+   * once) only closes the tunnel, and Ona's own inactivity timeout stops the box.
    */
-  takeRelease(envId: string): Promise<boolean>;
+  releasing: Set<string>;
   /** Drop the plugin's stored keys for a box whose machine is removed. */
   forgetBox(envId: string): Promise<void>;
 }
@@ -363,7 +363,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       await disconnect(owned.envId);
       // An idle box let go by the plugin keeps running until Ona's own timeout,
       // so an open Ona editor still keeps it alive.
-      if (await deps.takeRelease(owned.envId)) return { resource };
+      if (deps.releasing.delete(owned.envId)) return { resource };
       // Ona may have stopped it already (idle timeout); bb then only records the suspension.
       const env = await ona.getEnvironmentIfExists(owned.envId, signal);
       if (env && !isStopped(env)) {
@@ -375,7 +375,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     async resume({ resource, checkpoint, report, signal }) {
       const owned = resourceSchema.parse(resource);
       // Drop a no-stop flag a failed suspend may have left; the next suspend is the user's.
-      await deps.takeRelease(owned.envId);
+      deps.releasing.delete(owned.envId);
       const env = await ona.getEnvironmentIfExists(owned.envId, signal);
       if (!env) throw new Error(`Ona environment "${owned.envId}" not found. Run \`ona environment list\`.`);
       await ensureRunning(env, report, signal);
@@ -456,7 +456,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     return exitCode === 0 ? true : exitCode === 1 ? false : null;
   }
 
-  return { reconnect, daemonAlive, takeRelease: deps.takeRelease };
+  return { reconnect, daemonAlive, releasing: deps.releasing };
 }
 
 export function registerOnaComposition(bb: BbPluginApi) {
