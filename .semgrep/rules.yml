@@ -1,0 +1,69 @@
+# Structural checks from the Code Review Rules in AGENTS.md and the safety
+# rules in docs/sync.md. CI runs `semgrep --test` on .semgrep/ (fixtures in
+# .semgrep/rules.ts) and then scans app.tsx, server.ts and src/.
+rules:
+  - id: child-process-outside-runners
+    message: "Start child processes only in src/ona.ts, src/setup.ts or src/ssh.ts (Code Review Rules 1 and 5)."
+    severity: ERROR
+    languages: [typescript]
+    paths:
+      exclude:
+        - src/ona.ts
+        - src/setup.ts
+        - src/ssh.ts
+    patterns:
+      - pattern-either:
+          - pattern: import $X from "$MOD";
+          - pattern: import { $X } from "$MOD";
+          - pattern: import * as $X from "$MOD";
+          - pattern: require("$MOD")
+          - pattern: import("$MOD")
+      - metavariable-regex:
+          metavariable: $MOD
+          regex: ^(node:)?child_process$
+
+  - id: ona-lifecycle-outside-onacli
+    message: "Start, stop, delete and SSH a box only through OnaCli in src/ona.ts (Code Review Rules 1 to 3, docs/sync.md safety rules 1 and 2)."
+    severity: ERROR
+    languages: [typescript]
+    paths:
+      exclude:
+        - src/ona.ts
+    pattern-either:
+      - pattern: '[..., "environment", "start", ...]'
+      - pattern: '[..., "environment", "stop", ...]'
+      - pattern: '[..., "environment", "delete", ...]'
+      - pattern: '[..., "environment", "ssh", ...]'
+
+  - id: remote-script-interpolation
+    message: "Remote script text is a constant: pass values as arguments or through shellQuote (Code Review Rule 5)."
+    severity: ERROR
+    languages: [typescript]
+    patterns:
+      - pattern-either:
+          - pattern: sshCapture($EXEC, $SCRIPT, ...)
+          - pattern: '["bash", $FLAG, $SCRIPT, ...]'
+      # An interpolation that is not a shellQuote call. Not anchored on the
+      # backtick, so a literal "${" in a plain string also matches: write the
+      # shell variable as "$NAME" there.
+      - metavariable-regex:
+          metavariable: $SCRIPT
+          regex: (?s)^.*\$\{(?!shellQuote\()
+
+  - id: console-instead-of-bb-log
+    message: "Log through bb.log, not console (Code Review Rule 7: logs go where secrets are kept out)."
+    severity: ERROR
+    languages: [typescript]
+    pattern: console.$FN(...)
+
+  - id: secret-in-kv-key
+    message: "No secrets in plugin storage (Code Review Rule 7)."
+    severity: ERROR
+    languages: [typescript]
+    patterns:
+      - pattern-either:
+          - pattern: $BB.storage.kv.set($KEY, ...)
+          - pattern: kv.set($KEY, ...)
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i)^.*(token|secret|password)
