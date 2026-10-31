@@ -250,10 +250,17 @@ export function createSync(deps: SyncDeps) {
     }
   }
 
-  /** Consecutive good listings each missing env was absent from (rule 4). */
-  const missing = new Map<string, { streak: number; at: number; archived?: boolean }>();
+  /** Consecutive good listings each missing env was absent from (rule 4), and the phase a lookup by id found. */
+  const missing = new Map<string, { streak: number; at: number; archived?: boolean; phase?: string }>();
 
-  function onaView(envId: string, listing: OnaListing | null): OnaView {
+  /**
+   * Ona's view of one box. The listing leaves some boxes out (archived, another
+   * `ona context`, a long list, shared with you), so a box missing from two
+   * listings is looked up by id, which counts as a listing (decision 0005).
+   * Only an id Ona says doesn't exist is gone. A failed lookup is unknown
+   * (rule 4): nothing is settled and the next pass asks again.
+   */
+  async function onaView(envId: string, listing: OnaListing | null): Promise<OnaView> {
     // An empty list is as likely a CLI/context problem as "no environments".
     if (!listing || listing.envs.length === 0) return { kind: "unknown" };
     const env = listing.envs.find((e) => e.id === envId);
@@ -263,24 +270,24 @@ export function createSync(deps: SyncDeps) {
     }
     const seen = missing.get(envId);
     const streak = seen?.at === listing.at ? seen.streak : (seen?.streak ?? 0) + 1;
-    missing.set(envId, { streak, at: listing.at, archived: seen?.archived });
-    return { kind: "missing", streak, archived: seen?.archived };
-  }
-
-  /**
-   * Archived environments drop out of `ona environment list`. Before a box is
-   * reported gone, ask Ona about it once. An id Ona says doesn't exist is
-   * gone. A failed lookup is unknown (rule 4): nothing is settled and the next
-   * pass asks again.
-   */
-  async function checkArchived(envId: string): Promise<void> {
-    const seen = missing.get(envId);
-    if (!seen || seen.streak < 2 || seen.archived !== undefined) return;
+    const entry: { streak: number; at: number; archived?: boolean; phase?: string } = {
+      streak,
+      at: listing.at,
+      archived: seen?.archived,
+    };
+    missing.set(envId, entry);
+    if (streak < 2 || entry.archived !== undefined) return { kind: "missing", streak, archived: entry.archived };
     try {
-      const env = await ona.getEnvironmentIfExists(envId, AbortSignal.timeout(30_000));
-      seen.archived = env !== null && isArchived(env);
+      const found = await ona.getEnvironmentIfExists(envId, AbortSignal.timeout(30_000));
+      if (found && !isArchived(found)) {
+        entry.phase = found.status?.phase ?? "";
+        return { kind: "env", phase: entry.phase };
+      }
+      entry.archived = found !== null;
+      return { kind: "missing", streak, archived: entry.archived };
     } catch (error) {
-      bb.log.info(`${envId}: couldn't ask Ona whether it is archived: ${errorText(error)}`);
+      bb.log.info(`${envId}: couldn't look it up in Ona: ${errorText(error)}`);
+      return { kind: "unknown" };
     }
   }
 
@@ -393,12 +400,7 @@ export function createSync(deps: SyncDeps) {
           workspaceWaiting:
             row.phase === "active" && row.status !== "connected" ? (await workspaces(row.hostId)).busy : false,
         };
-        let onaState = onaView(row.resource.envId, listing);
-        if (onaState.kind === "missing" && onaState.streak >= 2 && onaState.archived === undefined) {
-          await checkArchived(row.resource.envId);
-          onaState = onaView(row.resource.envId, listing);
-        }
-        const decision = decide(view, onaState, now);
+        const decision = decide(view, await onaView(row.resource.envId, listing), now);
         // With autoRepair off, only observed stops and deletions reach bb.
         const skipped = !autoRepair && decision.action !== "none" && decision.action !== "suspend-observed";
         guard.note(
@@ -421,6 +423,8 @@ export function createSync(deps: SyncDeps) {
     return Promise.all(
       rows.map(async (row) => {
         const env = listing?.envs.find((e) => e.id === row.resource.envId);
+        const seen = missing.get(row.resource.envId);
+        const phase = env ? (env.status?.phase ?? "?") : seen?.phase;
         const record = guard.records.get(row.hostId);
         const busy = guard.busyWith(row.hostId);
         return {
@@ -430,9 +434,9 @@ export function createSync(deps: SyncDeps) {
           tunnel: tunnels.status(row.resource.envId),
           ona: !listing
             ? "unknown"
-            : env
-              ? (env.status?.phase ?? "?").replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase()
-              : missing.get(row.resource.envId)?.archived
+            : phase !== undefined
+              ? (phase || "?").replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase()
+              : seen?.archived
                 ? "archived"
                 : "missing",
           now: guard.seen.get(row.hostId) ?? null,
