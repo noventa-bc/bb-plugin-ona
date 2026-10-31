@@ -7,6 +7,8 @@ made each change. The version is the one in `package.json`.
 
 ### Changed
 - Needs bb 0.48.1 or newer.
+- After the Mac wakes from sleep the plugin re-checks Ona right away instead
+  of waiting up to 2 minutes for its next check.
 
 ### Added
 - `bb ona keep-alive <box> <duration>` keeps a running devbox from Ona's
