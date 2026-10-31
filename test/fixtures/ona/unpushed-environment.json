@@ -1,0 +1,8 @@
+{
+  "id": "env-6bbb",
+  "metadata": { "name": "eager-marten", "projectId": "proj-0001" },
+  "status": {
+    "phase": "ENVIRONMENT_PHASE_STOPPED",
+    "content": { "git": { "branch": "feature-x", "totalUnpushedCommits": 3, "totalUncommittedFiles": 1 } }
+  }
+}

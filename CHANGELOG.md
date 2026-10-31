@@ -7,6 +7,9 @@ made each change. The version is the one in `package.json`.
 
 ### Changed
 - Needs bb 0.48.1 or newer.
+- Removing a machine no longer deletes a devbox bb created when Ona reports
+  unpushed commits on it. The remove fails with the box, branch and count;
+  push the commits or delete the box in Ona, then run `bb machine retry-cleanup`.
 - After the Mac wakes from sleep the plugin re-checks Ona right away instead
   of waiting up to 2 minutes for its next check.
 

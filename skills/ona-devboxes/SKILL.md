@@ -28,7 +28,8 @@ devbox. Use `bb` commands from a thread instead; bb routes them correctly.
 - Shortcuts: `bb ona adopt <environment>`, `bb ona new [project]`.
 - Adopt an existing environment (never deleted by bb):
   `bb machine create --provider ona --inputs '{"mode":"adopt","environment":"box-1"}'`
-- Create a new one from an Ona project (deleted on `bb machine remove`):
+- Create a new one from an Ona project (deleted on `bb machine remove`, which
+  fails and keeps the box while Ona reports unpushed commits on it):
   `bb machine create --provider ona --inputs '{"mode":"create","project":"my-app"}'`
   (optional `"classId"` from `ona environment list-classes`). New devboxes get
   the plugin's `inactivityTimeout` (default `3h`; `bb plugin config ona set inactivityTimeout 6h`).

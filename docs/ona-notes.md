@@ -23,7 +23,10 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   - `spec.timeout.disconnected`
   - `spec.desiredPhase`
   - `spec.machine.class`
-  - `status.content.git.totalUnpushedCommits`
+  - `status.content.git`: `branch`, `cloneUrl`, `latestCommit`,
+    `totalUnpushedCommits` (a number) and `unpushedCommits` (one string per
+    commit). Absent when the box has no git content (checked 2026-10-30 on a
+    live listing).
   - `status.devcontainer.phase`
   - `status.environmentUrls.*`
   - `metadata.lastStartedAt`

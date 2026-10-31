@@ -3,7 +3,7 @@
 import type { BbPluginApi, MachineBootstrapRequest, MachineExecutor } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { friendlyName } from "./names.ts";
-import { isDeleted, isRunning, isStarting, isStopped, type OnaCli, type OnaEnvironment } from "./ona.ts";
+import { isDeleted, isRunning, isStarting, isStopped, unpushedWork, type OnaCli, type OnaEnvironment } from "./ona.ts";
 import { DAEMON_PROBE } from "./reconcile.ts";
 import type { PluginMachineProviderAvailability } from "./setup.ts";
 import { daemonEnv, shellQuote, sshCapture, sshExecutor, type TunnelManager } from "./ssh.ts";
@@ -414,11 +414,24 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         await deps.forgetBox(owned.envId);
         return { status: "removed" };
       }
+      // `get` also returns boxes Ona already deleted or is deleting, which `list` hid.
+      // It runs first so a refused remove leaves the machine connected and its state kept.
+      const env = await ona.getEnvironmentIfExists(owned.envId, signal);
+      const live = env && !isDeleted(env) ? env : null;
+      const unpushed = live && unpushedWork(live);
+      if (unpushed) {
+        const where = unpushed.branch ? `on branch ${unpushed.branch}` : "on its current branch";
+        return {
+          status: "failed",
+          message:
+            `Not deleting Ona environment ${owned.envName}: it has ${unpushed.count} unpushed commit(s) ${where}. ` +
+            `Push them, or delete the box in Ona with \`ona environment delete ${owned.envId}\`, ` +
+            "then run `bb machine retry-cleanup` again.",
+        };
+      }
       await disconnect(owned.envId);
       await deps.forgetBox(owned.envId);
-      // `get` also returns boxes Ona already deleted or is deleting, which `list` hid.
-      const env = await ona.getEnvironmentIfExists(owned.envId, signal);
-      if (env && !isDeleted(env)) {
+      if (live) {
         report.step(`Deleting Ona environment ${owned.envName}`);
         await ona.delete(owned.envId, signal);
       }
