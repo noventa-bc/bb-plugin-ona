@@ -30,6 +30,10 @@ made each change. The version is the one in `package.json`.
   report repairs instead of making them. (`bdc7e4b`)
 
 ### Fixed
+- A devbox that Ona's listing leaves out (another `ona context`, more than
+  1,000 environments, a box shared with you) is no longer marked suspended
+  while it runs: the plugin acts on the phase `ona environment get` reports,
+  and `bb ona status` shows it. A failed lookup changes nothing.
 - Deleting a thread drops the cost figure the plugin stored for it, so stored
   costs no longer pile up.
 - When the archived lookup (`ona environment get`) for a devbox missing from

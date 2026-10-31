@@ -118,7 +118,11 @@ function world(
         calls.push(`ona get ${envId}`);
         if (options.archived === "fail") throw new Error("timed out");
         if (options.archived === undefined || options.archived === "not-found") return null;
-        return { id: envId, metadata: options.archived ? { archivedAt: "2026-10-01T00:00:00Z" } : {} };
+        return {
+          id: envId,
+          metadata: options.archived ? { archivedAt: "2026-10-01T00:00:00Z" } : {},
+          status: { phase: "ENVIRONMENT_PHASE_RUNNING" },
+        };
       },
     },
     guard,
@@ -181,7 +185,7 @@ test("status reports workspaces that need recovery", async () => {
 });
 
 test("a box missing from two listings is looked up once: archived or gone", async () => {
-  for (const archived of [true, false, "not-found"] as const) {
+  for (const archived of [true, "not-found"] as const) {
     const { sync, calls, guard } = world([idle("h1", { ona: null, status: "disconnected" }), idle("h2")], {
       archived,
     });
@@ -199,6 +203,16 @@ test("a failed archived lookup is unknown: asked again next pass, not settled as
   const { sync, calls } = world([idle("h1", { ona: null, status: "disconnected" }), idle("h2")], { archived: "fail" });
   for (let pass = 0; pass < 3; pass++) await sync.reconcile(new Set(["h1"]), { wait: true, force: true });
   assert.equal(calls.filter((call) => call === "ona get env-h1").length, 2, "passes 2 and 3 both ask");
+  assert.ok(!calls.includes("suspend h1"));
+});
+
+test("a running box the listing misses but a lookup finds is not suspended", async () => {
+  const { sync, calls } = world([idle("h1", { ona: null }), idle("h2")], { archived: false });
+  for (let pass = 0; pass < 3; pass++) await sync.reconcile(new Set(["h1"]), { wait: true, force: true });
+  assert.equal(calls.filter((call) => call === "ona get env-h1").length, 2, "passes 2 and 3 both ask");
+  assert.ok(!calls.includes("suspend h1"));
+  const [row] = await sync.statusRows("h1");
+  assert.equal(row!.ona, "running");
 });
 
 test("Ona stopping a box with a thread waiting: suspended without stopping, then resumed", async () => {

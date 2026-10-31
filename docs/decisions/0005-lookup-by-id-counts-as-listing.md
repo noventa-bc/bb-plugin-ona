@@ -14,5 +14,7 @@ Where 0002 asks for a fresh Ona listing that says the box is `RUNNING` before SS
 
 ## Consequences
 - Remove of an adopted box runs its SSH cleanup only when `get`, made just before, says `RUNNING`.
-- Automatic repairs keep using the shared listing; this record changes no repair.
+- Automatic repairs read a box's phase from `get` when two listings in a row
+  miss it, so a running box the listing misses is not suspended as gone. Heals
+  that SSH still gate on the shared listing.
 - 0002 counts a box as gone only after two good listings without it. That stays for the shared listing. For a box looked up by id, one `get` answer that says the id does not exist is enough, because Ona states the absence instead of leaving the box out of a list.

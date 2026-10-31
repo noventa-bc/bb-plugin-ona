@@ -19,6 +19,7 @@ never start or stop a box; only bb's own Resume and Pause do that.
 | running | active, no tunnel | reopens the tunnel | |
 | stopped / stopping | active | marks the machine suspended without stopping anything; if a thread is waiting, lets bb resume it | stopped in Ona's UI, by the CLI, or by Ona's idle timeout |
 | deleted, or missing from two listings in a row | active | marks it suspended and reports it gone in `bb ona status`, or archived if `ona environment get` says so | remove it with `bb machine remove`, or unarchive it in Ona |
+| missing from two listings in a row, but found by `ona environment get` and not archived | anything | acts on the phase `get` reports, as for a listed box | the listing leaves out some boxes (another `ona context`, a long list, a box shared with you); a lookup by id counts as a listing ([0005](decisions/0005-lookup-by-id-counts-as-listing.md)) |
 | running | suspended | nothing: it stays suspended until you use it | starting a box in Ona (say, for its editor) doesn't attach it to bb |
 | anything | resuming / suspending for 10 min+ | asks bb to reconcile the machine (at most every 30 min) | bb or the plugin restarted mid-operation |
 | starting / creating | anything | nothing; a resume waits for Ona to finish instead of starting it again | |
