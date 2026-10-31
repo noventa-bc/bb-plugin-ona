@@ -94,9 +94,9 @@ those and the "skipped or not checked" lines ponytail ends with.
    rerun after merging `main` is never skipped. Never merge a red PR.
 10. **Sync the roadmap.** Status lives only in the table at the top of the
     roadmap, one linked row per item, with the landing commit in the Item cell.
-    When a PR opens, set the item to In review.
-    When it merges, set it to Done and note the gap if part of the item was left
-    out. Fix any other status that the code shows to be stale.
+    When a PR opens, set the item to In review; when it merges, set it to Done,
+    note any part left out, and put the owner's live-test steps in the Live
+    checks tab. Fix any other status that the code shows to be stale.
 11. **Improve the roadmap.** The orchestrator may add items (fixes,
     simplifications, tests, features) it found while reading the code, revise
     an item whose text the code has overtaken, re-order phases, and tighten
