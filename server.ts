@@ -356,8 +356,21 @@ export default async function plugin(bb: BbPluginApi) {
       // Backstop for anything the events miss.
       scheduler.schedule(ALL, 0);
       const timer = setInterval(() => scheduler.schedule(ALL, 0), 2 * 60_000);
+      // No wake event in the SDK: a 15s tick that comes 60s+ late means the Mac slept.
+      let lastTick = Date.now();
+      const wakeTimer = setInterval(() => {
+        const gap = Date.now() - lastTick;
+        lastTick += gap;
+        if (gap <= 60_000) return;
+        bb.log.info(`woke after ${Math.round(gap / 1000)}s asleep, re-checking Ona`);
+        void snapshot
+          .refresh()
+          .catch((error: unknown) => bb.log.warn(`Ona listing after wake failed: ${errorText(error)}`))
+          .then(() => scheduler.schedule(ALL, 0));
+      }, 15_000);
       await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
       clearInterval(timer);
+      clearInterval(wakeTimer);
       unsubscribe();
       scheduler.stop();
     },

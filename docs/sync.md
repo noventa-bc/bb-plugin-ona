@@ -75,6 +75,7 @@ you asked for, so safety rule 1 does not gate it.
 - **30s after** a tunnel comes back up.
 - **After** bb's realtime connection reconnects.
 - **Every 2 minutes**, as a backstop.
+- **Right after the Mac wakes**: a 15s timer that fires 60s+ late means the process slept, so the plugin re-reads Ona and checks every machine once.
 
 Bursts of events are merged into one check. All checks share one cached `ona
 environment list` (at most 15s old; 5s for event-driven checks), so a dozen

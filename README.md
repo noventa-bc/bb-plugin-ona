@@ -298,10 +298,10 @@ How devboxes are kept to the bb daemon's routes and what remains to trust:
 
 ## Development
 
+To contribute a change, start with [CONTRIBUTING.md](CONTRIBUTING.md). To run
+the plugin from this folder:
+
 ```sh
-npm install
-npm run check                                                  # typecheck, lint, format check, tests
-npm run format                                                 # format the code
 bb plugin build                                                # bundle
 bb plugin install .                                            # install from this folder
 bb plugin reload ona                                           # after changes
