@@ -23,6 +23,7 @@ import {
   type MachineView,
   type OnaView,
 } from "./reconcile.ts";
+import { threadStatuses } from "./updates.ts";
 
 export const connectedAtKey = (envId: string) => `connectedAt:${envId}`;
 
@@ -206,7 +207,7 @@ export function createSync(deps: SyncDeps) {
       activity.push({
         hostId: row.hostId,
         phase: row.phase,
-        threadStatuses: threads.map((thread) => (thread.queuedWork === "waiting" ? "pending" : thread.status)),
+        threadStatuses: threadStatuses(threads),
         lastActivityAt: Math.max(
           connectedAt,
           ...threads.map((thread) => Math.max(thread.updatedAt, thread.lastReadAt ?? 0)),

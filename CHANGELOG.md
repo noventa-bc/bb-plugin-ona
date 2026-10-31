@@ -6,6 +6,9 @@ made each change. The version is the one in `package.json`.
 ## Unreleased
 
 ### Changed
+- `bb ona update` and the weekday update job now also skip a devbox whose thread
+  has queued work waiting to start, not only one with a running turn. `--force`
+  still applies the update.
 - Needs bb 0.48.1 or newer.
 - Removing a machine no longer deletes a devbox bb created when Ona reports
   unpushed commits on it. The remove fails with the box, branch and count;

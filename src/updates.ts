@@ -24,6 +24,11 @@ export function hostIsBusy(threadStatuses: readonly string[]): boolean {
   return threadStatuses.some((status) => BUSY_THREAD_STATES.has(status));
 }
 
+/** What `hostIsBusy` reads from bb's thread list: queued work waiting for the host counts as pending. */
+export function threadStatuses(threads: readonly { status: string; queuedWork?: string | null }[]): string[] {
+  return threads.map((thread) => (thread.queuedWork === "waiting" ? "pending" : thread.status));
+}
+
 export function parseProviderList(value: string): string[] {
   return [
     ...new Set(

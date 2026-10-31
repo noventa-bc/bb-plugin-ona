@@ -39,7 +39,7 @@ import {
 import { rpcContract, type Devbox, type ThreadCost } from "./src/rpc.ts";
 import { runOnce, threadTerminalPlan, type ShellBackend, type ShellTarget } from "./src/shells.ts";
 import { sshExecutor, TunnelManager } from "./src/ssh.ts";
-import { hostIsBusy, parseProviderList, updatesToApply, type CliStatus } from "./src/updates.ts";
+import { hostIsBusy, parseProviderList, threadStatuses, updatesToApply, type CliStatus } from "./src/updates.ts";
 
 const TUNNELS_KEY = "tunnels";
 
@@ -640,11 +640,7 @@ export default async function plugin(bb: BbPluginApi) {
         continue;
       }
       if (!options.force) {
-        const listed = await bb.sdk.threads.list({ hostId: row.hostId });
-        const threads = (
-          Array.isArray(listed) ? listed : ((listed as { threads?: unknown[] }).threads ?? [])
-        ) as Array<{ status: string }>;
-        if (hostIsBusy(threads.map((thread) => thread.status))) {
+        if (hostIsBusy(threadStatuses(await bb.sdk.threads.list({ hostId: row.hostId })))) {
           lines.push(`${name}: skipped (an agent is running; retry with --force)`);
           continue;
         }
