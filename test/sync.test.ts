@@ -8,7 +8,6 @@ import {
   createSync,
   forgetBox,
   matchesRef,
-  RELEASING_KEY,
   type BbHost,
   type Row,
   type ThreadRecord,
@@ -40,6 +39,7 @@ function world(
 ) {
   const calls: string[] = [];
   const kv = new Map<string, unknown>();
+  const releasing = new Set<string>();
   const hosts = new Map<string, BbHost>(
     boxes.map((box) => [
       box.hostId,
@@ -64,6 +64,9 @@ function world(
         ? { ...host.lifecycle, message: options.refuse }
         : { ...host.lifecycle, phase, message: null };
       if (!options.refuse) host.updatedAt = Date.now();
+      // Like the provider's suspend: a box without the no-stop flag gets stopped.
+      const envId = byHost.get(hostId)!.envId;
+      if (name === "suspend" && !options.refuse && !releasing.delete(envId)) calls.push(`stop ${envId}`);
       return host;
     };
   const envs = (): OnaEnvironment[] =>
@@ -125,14 +128,7 @@ function world(
     guard,
     tunnels: { status: () => "up", ensure: (envId) => void calls.push(`tunnel ${envId}`) },
     provider: {
-      takeRelease: async (envId) => {
-        const releasing = (kv.get(RELEASING_KEY) as string[] | undefined) ?? [];
-        kv.set(
-          RELEASING_KEY,
-          releasing.filter((id) => id !== envId),
-        );
-        return releasing.includes(envId);
-      },
+      releasing,
       daemonAlive: async () => {
         calls.push("probe");
         return options.daemonAlive ?? true;
@@ -146,26 +142,26 @@ function world(
     idleDisconnect: "1h",
     pluginStartedAt: NOW - 2 * HOUR,
   });
-  return { sync, calls, guard, kv, hosts };
+  return { sync, calls, guard, kv, hosts, releasing };
 }
 
 const idle = (hostId: string, extra: Partial<Box> = {}): Box => ({ hostId, envId: `env-${hostId}`, ...extra });
 
-test("an idle box is released: bb suspends it and the no-stop flag is set", async () => {
-  const { sync, calls, kv } = world([idle("h1")]);
+test("an idle box is released: bb suspends it without stopping the box, and the flag is used once", async () => {
+  const { sync, calls, releasing } = world([idle("h1")]);
   await sync.reconcile(new Set([ALL]), { wait: true });
   assert.deepEqual(calls, ["suspend h1"]);
-  assert.deepEqual(kv.get(RELEASING_KEY), ["env-h1"]);
+  assert.equal(releasing.size, 0);
 });
 
 test("bb accepting a suspend without acting on it is a failure, not a release", async () => {
-  const { sync, calls, guard, kv } = world([idle("h1")], { refuse: "Automatic cleanup is blocked" });
+  const { sync, calls, guard, releasing } = world([idle("h1")], { refuse: "Automatic cleanup is blocked" });
   await sync.reconcile(new Set([ALL]), { wait: true });
   assert.deepEqual(calls, ["suspend h1"]);
   const record = guard.records.get("h1")!;
   assert.equal(record.failures, 1);
   assert.match(record.error ?? "", /bb kept the machine active: Automatic cleanup is blocked/);
-  assert.deepEqual(kv.get(RELEASING_KEY), [], "the no-stop flag doesn't outlive the failed suspend");
+  assert.equal(releasing.size, 0, "the no-stop flag doesn't outlive the failed suspend");
   assert.ok(GIVE_UP_AFTER > 1);
 });
 
@@ -247,19 +243,13 @@ test("removing a machine drops its box's stored keys and leaves other boxes' alo
   const kv = new Map<string, unknown>([
     [connectedAtKey("env-h1"), NOW],
     [connectedAtKey("env-h2"), NOW],
-    [RELEASING_KEY, ["env-h1", "env-h2"]],
   ]);
-  const store = {
-    get: async <T>(key: string) => kv.get(key) as T | undefined,
-    set: async (key: string, value: unknown) => void kv.set(key, value),
-    delete: async (key: string) => void kv.delete(key),
-  };
+  const store = { delete: async (key: string) => void kv.delete(key) };
   await forgetBox(store, "env-h1");
   assert.equal(kv.has(connectedAtKey("env-h1")), false);
   assert.equal(kv.get(connectedAtKey("env-h2")), NOW);
-  assert.deepEqual(kv.get(RELEASING_KEY), ["env-h2"]);
   await forgetBox(store, "env-h9");
-  assert.equal(kv.size, 2, "an unknown box changes nothing");
+  assert.equal(kv.size, 1, "an unknown box changes nothing");
 });
 
 test("a ref matches a row by host id, machine name, env id or env name, and nothing else", () => {
