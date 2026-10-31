@@ -23,15 +23,14 @@ knows when the quick fix is right and when it is not.
   splits items into PR-sized tasks, briefs builders, reviews their output, opens
   PRs, keeps the roadmap in step and updates this file.
 - **Builder.** One subagent per task, in its own git worktree and branch. It
-  writes the code, tests and handoff, and commits on its branch. It never pushes.
+  writes the code, tests and handoff and leaves them staged; it never pushes.
 - **Reviewer.** A fresh agent (not the builder) that reads the diff cold, plus
   the repo's `code-review` pass. Findings go back to the builder until clean.
 
 Pick the cheapest model that can do the task well: a strong model for code,
 review and anything touching a safety rule; a small model (Haiku) for
-mechanical work such as merges, renames, fixture updates and lookups. The
-orchestrator checks a small model's output before using it, and gives it a
-brief with exact commands and a stop condition.
+mechanical work (merges, renames, fixtures, lookups); the orchestrator checks
+a small model's output and briefs it with exact commands and a stop condition.
 
 Merging on green is only as safe as CI. Every PR adds a test for the behaviour
 it changes; a gap CI cannot see (untested module, missing lint, unchecked
@@ -40,14 +39,12 @@ script) becomes a roadmap item and is named in the PR.
 ## Ponytail
 
 The ponytail plugin (`docs/owner.md` has the install) is the "least code"
-ruleset for every agent in the flow. The orchestrator checks at session start
-that its skills are listed (`/ponytail-help`; after an install, run
-`/reload-plugins`) and runs at level `full`. Its hooks inject the ruleset into
+ruleset for every agent in the flow. At session start the orchestrator checks
+its skills are listed (`/reload-plugins` after an install) and sets `/ponytail full`. Its hooks inject the ruleset into
 subagents, so briefs state the scope and need not repeat it. Reviews run
 `/ponytail-review` on a named target (`staged`, `branch`, or the PR link). A
 builder marks a known limit with a `shortcut:` comment; its handoff carries
 those and the "skipped or not checked" lines ponytail ends with.
-`/ponytail-debt` runs before a release and its ledger goes to the roadmap.
 
 ## Inputs
 
@@ -55,12 +52,16 @@ those and the "skipped or not checked" lines ponytail ends with.
   hands its link to the orchestrator in the session. Never write that link, the
   document's ids or its text into any file in this repo. Refer to items by their
   roadmap label only (for example "T2", "R9").
-- Items carry a size (S, M, L) and a status. Work only on items the owner names.
+- Items carry a size and a status. Work only on items the owner names.
 
 ## Flow
 
-1. **Read** the named items in full, then the code they touch. Confirm the
-   repo still matches the roadmap text; the roadmap may lag the code.
+1. **Research** before anything is built. Read the named items in full and
+   the code they touch; confirm the repo still matches the roadmap text. List
+   the alternatives, look at the task from the user's, the safety rules' and
+   the maintainer's angle, and check current best practice on the web when
+   the task touches a tool, protocol or platform. Execute only once sure;
+   until then, ask.
 2. **Size.** A task is one PR a reviewer can read in one sitting: one roadmap
    item, or a group of its bullets that share files. Split anything larger.
    Independent tasks run in parallel; tasks that touch the same files run in
@@ -96,7 +97,8 @@ those and the "skipped or not checked" lines ponytail ends with.
     roadmap, one linked row per item, with the landing commit in the Item cell.
     When a PR opens, set the item to In review; when it merges, set it to Done,
     note any part left out, and put the owner's live-test steps in the Live
-    checks tab. Fix any other status that the code shows to be stale.
+    checks tab. Fix any status the code shows to be stale. Done items move to
+    the Done tab and leave the table only when the owner asks.
 11. **Improve the roadmap.** The orchestrator may add items (fixes,
     simplifications, tests, features) it found while reading the code, revise
     an item whose text the code has overtaken, re-order phases, and tighten
@@ -119,10 +121,9 @@ those and the "skipped or not checked" lines ponytail ends with.
 
 This file is the memory of the flow. Keep it current:
 
-- When the owner gives an instruction in a session that would be useful next
-  time (a rule, a preference, a permission, a thing to avoid), add it here in the
-  same session, in the section it belongs to. Edit an existing rule rather than
-  adding a near-duplicate.
+- When the owner gives an instruction worth keeping (a rule, a preference, a
+  permission, a thing to avoid), add it here in the same session, in the
+  section it belongs to. Edit an existing rule rather than adding one.
 - When a step failed or wasted time, record what to do instead, next to the
   step.
 - When a bug, a source of noise or a repo hazard shows up (in the code, in CI,
@@ -138,8 +139,7 @@ This file is the memory of the flow. Keep it current:
 
 ## Owner instructions on record
 
-Rules the owner gave that the sections above do not already state. Checked
-2026-10-30. Purpose, Flow and Self-improvement hold the rest.
+Rules the owner gave that no section above states. Checked 2026-10-30.
 
 - Several worktrees are open at once and the shell's working directory drifts
   between them. Address every git command with `git -C <path>` and every file
