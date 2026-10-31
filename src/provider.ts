@@ -65,8 +65,6 @@ export interface ProviderDeps {
   /** Hold off starting anything until $HOME is a mount point (shared NFS home). */
   waitForSharedHome: boolean;
   port: () => number;
-  rememberTunnel(envId: string): Promise<void>;
-  forgetTunnel(envId: string): Promise<void>;
   /** Record that the box just (re)connected; the idle window starts here. */
   markConnected(envId: string): Promise<void>;
   /**
@@ -233,7 +231,6 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     }
     if (deps.machineDataDir) await ensureLocalMachineRoot(executor, deps.machineDataDir, report, signal);
     tunnels.ensure(resource.envId);
-    await deps.rememberTunnel(resource.envId);
     await deps.markConnected(resource.envId);
     await waitForTunnel(executor, report, signal);
     await preflight(executor, report, signal);
@@ -290,7 +287,6 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
 
   async function disconnect(envId: string) {
     tunnels.stop(envId);
-    await deps.forgetTunnel(envId);
   }
 
   bb.experimental_machines.register({

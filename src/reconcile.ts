@@ -96,6 +96,9 @@ export function decide(machine: MachineView, ona: OnaView, now: number): Decisio
           : "the Ona environment is gone; remove the machine with `bb machine remove`",
     };
   }
+  // Before "connected": after a reload bb shows the host connected until it notices the old tunnel is gone.
+  if (ona.phase === RUNNING && machine.tunnel === "off")
+    return { action: "ensure-tunnel", reason: "running in Ona but no tunnel" };
   if (machine.status === "connected") return { action: "none", reason: "connected" };
   if (STOPPED.has(ona.phase)) {
     return {
@@ -105,7 +108,6 @@ export function decide(machine: MachineView, ona: OnaView, now: number): Decisio
     };
   }
   if (ona.phase !== RUNNING) return { action: "none", reason: `Ona is ${short(ona.phase)}` };
-  if (machine.tunnel === "off") return { action: "ensure-tunnel", reason: "running in Ona but no tunnel" };
   const disconnectedFor = machine.lastSeenAt === null ? Infinity : now - machine.lastSeenAt;
   if (machine.threadWaiting || machine.workspaceWaiting || disconnectedFor >= GRACE_MS) {
     return {

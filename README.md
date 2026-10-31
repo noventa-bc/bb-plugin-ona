@@ -139,7 +139,7 @@ View them with `bb plugin config ona`, and change one with `bb plugin config ona
 | `sshPath` | `/usr/bin/ssh` | Path to `ssh`. |
 | `defaultProject` | *(empty)* | Ona project used when creating a devbox without one, e.g. `my-app`. |
 | `inactivityTimeout` | `3h` | Auto-stop timeout for devboxes bb creates. Adopted ones keep their own. |
-| `autoRepair` | `true` | Repair bb's view of devboxes changed outside bb (see [How bb and Ona stay in sync](docs/sync.md)). Off: stopped or deleted boxes are still marked suspended; everything else is only reported by `bb ona status`. |
+| `autoRepair` | `true` | Repair bb's view of devboxes changed outside bb (see [How bb and Ona stay in sync](docs/sync.md)). Off: stopped or deleted boxes are still marked suspended and tunnels still reopen; everything else is only reported by `bb ona status`. |
 | `idleDisconnect` | `1h` | After this long with no thread activity, bb closes its tunnel to a devbox and marks the machine suspended so Ona's timeout can stop it. The next message wakes it. Empty or `0` keeps every box connected. |
 | `waitForSharedHome` | `true` | After a devbox starts, wait until its NFS home is mounted before starting bb's daemon and agents. Starting earlier lets Codex write threads into the container's own home, where the mount hides them ("no rollout found"). Turn off if your environments don't share a home. |
 | `codexSqliteHome` | `/workspaces/.codex-sqlite-bb` | Where Codex launched by bb keeps its SQLite state on the devbox's local disk. |

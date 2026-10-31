@@ -26,6 +26,7 @@ interface Box {
   threads?: ThreadRecord[];
   workspaces?: WorkspaceView[];
   ona?: string | null;
+  tunnel?: "up" | "off";
 }
 
 function world(
@@ -35,6 +36,7 @@ function world(
     daemonAlive?: boolean | null;
     archived?: boolean | "not-found" | "fail";
     listing?: "fail" | "empty";
+    autoRepair?: boolean;
   } = {},
 ) {
   const calls: string[] = [];
@@ -126,7 +128,10 @@ function world(
       },
     },
     guard,
-    tunnels: { status: () => "up", ensure: (envId) => void calls.push(`tunnel ${envId}`) },
+    tunnels: {
+      status: (envId) => boxes.find((box) => box.envId === envId)?.tunnel ?? "up",
+      ensure: (envId) => void calls.push(`tunnel ${envId}`),
+    },
     provider: {
       releasing,
       daemonAlive: async () => {
@@ -135,10 +140,9 @@ function world(
       },
       reconnect: async () => void calls.push("restart daemon"),
     },
-    rememberTunnel: async () => {},
     keepAliveUntil: () => null,
     hostByEnv: new Map(),
-    autoRepair: true,
+    autoRepair: options.autoRepair ?? true,
     idleDisconnect: "1h",
     pluginStartedAt: NOW - 2 * HOUR,
   });
@@ -220,6 +224,16 @@ test("Ona stopping a box with a thread waiting: suspended without stopping, then
   const { sync, calls } = world([idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waiting] })]);
   await sync.reconcile(new Set(["h1"]), { wait: true });
   assert.deepEqual(calls, ["suspend h1", "resume h1"]);
+});
+
+test("the first pass after a reload reopens the tunnel of a running box bb still shows connected", async () => {
+  const recent: ThreadRecord = { status: "idle", updatedAt: NOW, runtime: { displayStatus: "idle" } };
+  // The reconciler is the only thing that reopens tunnels after a reload, so autoRepair off doesn't skip it.
+  for (const autoRepair of [true, false]) {
+    const { sync, calls } = world([idle("h1", { tunnel: "off", threads: [recent] })], { autoRepair });
+    await sync.reconcile(new Set([ALL]), { wait: true });
+    assert.deepEqual(calls, ["tunnel env-h1"], `autoRepair=${autoRepair}`);
+  }
 });
 
 test("a failed or empty Ona listing changes nothing", async () => {

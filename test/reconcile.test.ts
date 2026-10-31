@@ -52,8 +52,11 @@ test("R1: bb working on a workspace skips the grace period, but never resumes a 
   assert.equal(decide(brief, ona("STOPPED"), NOW).resumeAfter, false);
 });
 
-test("R1: running in Ona with no tunnel -> open the tunnel", () => {
+test("R1: running in Ona with no tunnel -> open the tunnel, even while bb still shows it connected", () => {
   assert.equal(decide(machine({ tunnel: "off" }), ona("RUNNING"), NOW).action, "ensure-tunnel");
+  // Right after a reload: the old tunnel is gone but bb hasn't seen the daemon drop yet.
+  assert.equal(decide(machine({ status: "connected", tunnel: "off" }), ona("RUNNING"), NOW).action, "ensure-tunnel");
+  assert.equal(decide(machine({ status: "connected", tunnel: "off" }), ona("STOPPED"), NOW).action, "none");
 });
 
 test("connected machines are left alone", () => {

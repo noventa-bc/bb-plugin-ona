@@ -41,8 +41,6 @@ import { runOnce, threadTerminalPlan, type ShellBackend, type ShellTarget } from
 import { sshExecutor, TunnelManager } from "./src/ssh.ts";
 import { hostIsBusy, parseProviderList, threadStatuses, updatesToApply, type CliStatus } from "./src/updates.ts";
 
-const TUNNELS_KEY = "tunnels";
-
 /** Devbox folder settings end up in remote commands: plain absolute paths only. */
 const devboxPath = z
   .string()
@@ -211,15 +209,8 @@ export default async function plugin(bb: BbPluginApi) {
   const pluginStartedAt = Date.now();
   // Older versions kept the idle-release flag in this key; it now lives in memory.
   void bb.storage.kv.delete("releasing").catch(() => {});
-
-  async function rememberedTunnels(): Promise<string[]> {
-    return (await bb.storage.kv.get<string[]>(TUNNELS_KEY)) ?? [];
-  }
-
-  async function rememberTunnel(envId: string) {
-    const current = await rememberedTunnels();
-    if (!current.includes(envId)) await bb.storage.kv.set(TUNNELS_KEY, [...current, envId]);
-  }
+  // Older versions remembered open tunnels in this key; the first reconcile pass reopens them now.
+  void bb.storage.kv.delete("tunnels").catch(() => {});
 
   const provider = registerOnaProvider(bb, {
     async availability() {
@@ -247,14 +238,6 @@ export default async function plugin(bb: BbPluginApi) {
     machineDataDir,
     waitForSharedHome,
     port,
-    rememberTunnel,
-    async forgetTunnel(envId) {
-      const current = await rememberedTunnels();
-      await bb.storage.kv.set(
-        TUNNELS_KEY,
-        current.filter((id) => id !== envId),
-      );
-    },
     async markConnected(envId) {
       await bb.storage.kv.set(connectedAtKey(envId), Date.now());
     },
@@ -271,7 +254,6 @@ export default async function plugin(bb: BbPluginApi) {
     guard,
     tunnels,
     provider,
-    rememberTunnel,
     keepAliveUntil: (envId) => keepAlives.until(envId),
     hostByEnv,
     autoRepair,
@@ -279,15 +261,6 @@ export default async function plugin(bb: BbPluginApi) {
     pluginStartedAt,
   });
   const { machines, reconcile, statusRows } = sync;
-
-  // Reopen tunnels for active machines after a reload or server restart.
-  bb.background.service("tunnels", {
-    async start(signal) {
-      for (const envId of await rememberedTunnels()) tunnels.ensure(envId);
-      await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
-      tunnels.stopAll();
-    },
-  });
 
   const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
