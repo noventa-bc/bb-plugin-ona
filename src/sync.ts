@@ -24,25 +24,11 @@ import {
   type OnaView,
 } from "./reconcile.ts";
 
-export const RELEASING_KEY = "releasing";
 export const connectedAtKey = (envId: string) => `connectedAt:${envId}`;
 
 /** Drop the plugin's stored keys for one box; the provider's remove() calls it. */
-export async function forgetBox(
-  kv: {
-    get<T>(key: string): Promise<T | null | undefined>;
-    set(key: string, value: unknown): Promise<void>;
-    delete(key: string): Promise<void>;
-  },
-  envId: string,
-): Promise<void> {
+export async function forgetBox(kv: { delete(key: string): Promise<void> }, envId: string): Promise<void> {
   await kv.delete(connectedAtKey(envId));
-  const releasing = (await kv.get<string[]>(RELEASING_KEY)) ?? [];
-  if (releasing.includes(envId))
-    await kv.set(
-      RELEASING_KEY,
-      releasing.filter((id) => id !== envId),
-    );
 }
 
 interface HostLifecycle {
@@ -101,7 +87,8 @@ export interface SyncDeps {
   guard: HostGuard;
   tunnels: { status(envId: string): "up" | "connecting" | "off"; ensure(envId: string): void };
   provider: {
-    takeRelease(envId: string): Promise<boolean>;
+    /** Boxes whose next suspend must not stop them; the provider's suspend consumes the entry. */
+    releasing: Set<string>;
     daemonAlive(resource: OnaResource, signal: AbortSignal): Promise<boolean | null>;
     reconnect(
       resource: OnaResource,
@@ -185,20 +172,18 @@ export function createSync(deps: SyncDeps) {
 
   /**
    * Mark a machine suspended in bb without stopping its box (the provider's
-   * suspend sees the flag in takeRelease). Used when Ona already stopped or
+   * suspend sees the flag in `releasing`). Used when Ona already stopped or
    * lost the box, and when an idle box is let go for Ona's own timeout.
    */
   async function suspendWithoutStop(row: Row): Promise<void> {
-    const releasing = (await bb.storage.kv.get<string[]>(RELEASING_KEY)) ?? [];
-    if (!releasing.includes(row.resource.envId))
-      await bb.storage.kv.set(RELEASING_KEY, [...releasing, row.resource.envId]);
+    provider.releasing.add(row.resource.envId);
     try {
       const host = await bb.sdk.hosts.experimental_suspend({ hostId: row.hostId });
       const refusal = lifecycleRefusal(host.lifecycle, SUSPENDED);
       if (refusal) throw new Error(refusal);
     } catch (error) {
       // Don't leave the flag behind for a later user suspend, which should stop the box.
-      await provider.takeRelease(row.resource.envId);
+      provider.releasing.delete(row.resource.envId);
       throw error;
     }
   }
