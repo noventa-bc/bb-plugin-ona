@@ -16,7 +16,19 @@ const environmentSchema = z.object({
   status: z
     .object({
       phase: z.string().optional(),
-      content: z.object({ contentLocationInMachine: z.string().optional() }).passthrough().optional(),
+      content: z
+        .object({
+          contentLocationInMachine: z.string().optional(),
+          git: z
+            .object({
+              branch: z.string().optional(),
+              totalUnpushedCommits: z.union([z.number(), z.string()]).optional(),
+            })
+            .passthrough()
+            .optional(),
+        })
+        .passthrough()
+        .optional(),
     })
     .passthrough()
     .optional(),
@@ -220,6 +232,17 @@ export function isArchived(env: OnaEnvironment): boolean {
 export function isDeleted(env: OnaEnvironment): boolean {
   const phase = env.status?.phase;
   return phase === "ENVIRONMENT_PHASE_DELETED" || phase === "ENVIRONMENT_PHASE_DELETING";
+}
+
+/**
+ * Commits on the box that were never pushed, or null when there are none or
+ * Ona doesn't say (older Ona, no git content): unknown must not block a remove.
+ */
+export function unpushedWork(env: OnaEnvironment): { branch?: string; count: number } | null {
+  const git = env.status?.content?.git;
+  const count = Number(git?.totalUnpushedCommits ?? 0);
+  if (!(count > 0)) return null;
+  return git?.branch ? { branch: git.branch, count } : { count };
 }
 
 export function isStopped(env: OnaEnvironment): boolean {

@@ -4,7 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, after, test } from "node:test";
-import { isArchived, isDeleted, isRunning, isStarting, isStopped, OnaCli, type OnaEnvironment } from "../src/ona.ts";
+import {
+  isArchived,
+  isDeleted,
+  isRunning,
+  isStarting,
+  isStopped,
+  OnaCli,
+  unpushedWork,
+  type OnaEnvironment,
+} from "../src/ona.ts";
 
 const fakeOna = fileURLToPath(new URL("./fake-ona.sh", import.meta.url));
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/ona/${name}`, import.meta.url));
@@ -203,6 +212,22 @@ test("isDeleted is true for a box Ona deleted or is deleting, so remove doesn't 
   assert.equal(isDeleted(env("ENVIRONMENT_PHASE_DELETING")), true);
   assert.equal(isDeleted(env("ENVIRONMENT_PHASE_STOPPED")), false);
   assert.equal(isDeleted(env("ENVIRONMENT_PHASE_RUNNING")), false);
+});
+
+test("unpushedWork reports unpushed commits so remove keeps the box", async () => {
+  setFake({ FAKE_ONA_GET: fixture("unpushed-environment.json") });
+  assert.deepEqual(unpushedWork(await cli.getEnvironment("env-6bbb")), { branch: "feature-x", count: 3 });
+});
+
+test("unpushedWork is null for zero commits and when Ona doesn't say", async () => {
+  type Git = NonNullable<NonNullable<NonNullable<OnaEnvironment["status"]>["content"]>["git"]>;
+  const env = (git?: Git): OnaEnvironment => ({ id: "env-0001", metadata: {}, status: { content: { git } } });
+  assert.equal(unpushedWork(env({ branch: "main", totalUnpushedCommits: 0 })), null, "zero");
+  assert.equal(unpushedWork(env({ branch: "main" })), null, "no count");
+  assert.equal(unpushedWork(env()), null, "no git content");
+  setFake({});
+  assert.equal(unpushedWork((await cli.listEnvironments())[0]!), null, "no content at all");
+  assert.deepEqual(unpushedWork(env({ totalUnpushedCommits: "2" })), { count: 2 }, "count as a string, no branch");
 });
 
 function exited(child: ReturnType<OnaCli["keepAlive"]>): Promise<string> {

@@ -161,7 +161,7 @@ after you change them.
 
 ```sh
 bb ona adopt <ona-environment>   # existing environment; bb never deletes it
-bb ona new [ona-project]         # new devbox; deleted when you remove the machine
+bb ona new [ona-project]         # new devbox; deleted when you remove the machine, unless it has unpushed commits
 ```
 
 These are shortcuts for `bb machine create`. Adopt an existing environment;
@@ -172,7 +172,10 @@ bb machine create --provider ona --inputs '{"mode":"adopt","environment":"<name-
 ```
 
 Create a new one from an Ona project. It gets a fun name such as
-`nimble-badger-ca1b`, and bb deletes it when you remove the machine:
+`nimble-badger-ca1b`, and bb deletes it when you remove the machine. If Ona
+reports unpushed commits on the box, the remove fails and the box is kept: push
+them, or delete the box with `ona environment delete <id>`, then run
+`bb machine retry-cleanup`:
 
 ```sh
 bb machine create --provider ona --inputs '{"mode":"create","project":"my-app"}'

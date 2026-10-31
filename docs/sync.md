@@ -120,6 +120,8 @@ a fake of the bb calls it makes. The events, the backstop and the `bb ona`
 commands are wired in `server.ts` (`watchRealtime()`). The shared listing is
 `OnaSnapshot` in `src/ona.ts`. Removing an Ona machine drops the box's stored
 keys (`forgetBox()` in `src/sync.ts`, called from the provider's `remove()`).
+`remove()` refuses to delete a created box that Ona reports unpushed commits
+on (`unpushedWork()` in `src/ona.ts`), before it disconnects or forgets anything.
 To add or change a rule, update `decide()`, its test in
 `test/reconcile.test.ts`, and the table above, all in the same change.
 
