@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hostIsBusy, parseProviderList, updatesToApply, type CliStatus } from "../src/updates.ts";
+import { hostIsBusy, parseProviderList, threadStatuses, updatesToApply, type CliStatus } from "../src/updates.ts";
 
 const status = (overrides: Partial<CliStatus>): CliStatus => ({
   installed: true,
@@ -23,6 +23,7 @@ test("only installed CLIs with a pending update are updated", () => {
 test("a host with an agent turn in flight is busy", () => {
   assert.equal(hostIsBusy(["idle", "error"]), false);
   assert.equal(hostIsBusy(["idle", "active"]), true);
+  assert.equal(hostIsBusy(threadStatuses([{ status: "idle", queuedWork: "waiting" }, { status: "idle" }])), true);
 });
 
 test("provider lists accept commas and spaces", () => {
