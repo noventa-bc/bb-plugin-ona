@@ -28,15 +28,8 @@ import { startDaemonProxy } from "./src/proxy.ts";
 import { formatStatus, keepAliveCommand, parseArgs } from "./src/commands.ts";
 import { connectedAtKey, createSync, forgetBox, matchesRef, type Row } from "./src/sync.ts";
 import { ALL, GRACE_MS, HostGuard, PassScheduler } from "./src/reconcile.ts";
-import {
-  CLAUDE_COLLECTOR,
-  claudeCost,
-  CODEX_COLLECTOR,
-  codexCost,
-  providerSessions,
-  type ClaudeUsageBucket,
-} from "./src/cost.ts";
-import { rpcContract, type Devbox, type ThreadCost } from "./src/rpc.ts";
+import { createThreadCost } from "./src/cost-service.ts";
+import { rpcContract, type Devbox } from "./src/rpc.ts";
 import { runOnce, threadTerminalPlan, type ShellBackend, type ShellTarget } from "./src/shells.ts";
 import { TunnelManager } from "./src/ssh.ts";
 import { hostIsBusy, parseProviderList, threadStatuses, updatesToApply, type CliStatus } from "./src/updates.ts";
@@ -419,106 +412,8 @@ export default async function plugin(bb: BbPluginApi) {
     return (await devboxes()).find((box) => box.hostId === environment.hostId) ?? null;
   }
 
-  const costInFlight = new Map<string, Promise<ThreadCost | null>>();
-  const costKey = (threadId: string) => `cost:${threadId}`;
-  // A deleted thread's cost is never asked for again; drop it so the keys don't pile up.
-  bb.events.on("thread.deleted", async ({ thread }) => {
-    await bb.storage.kv.delete(costKey(thread.id)).catch((error: unknown) => {
-      bb.log.warn(`thread cost for ${thread.id}: could not drop it: ${errorText(error)}`);
-    });
-  });
-
-  /**
-   * Spend so far for a devbox thread. Cached per thread and recomputed only
-   * after a new turn finishes; a box that isn't connected is never woken,
-   * its last known figure is returned instead.
-   */
-  async function threadCost(threadId: string): Promise<ThreadCost | null> {
-    const devbox = await threadDevbox(threadId);
-    if (!devbox) return null;
-    const thread = await bb.sdk.threads.get({ threadId });
-    const agentProvider = thread.providerId;
-    if (agentProvider !== "codex" && agentProvider !== "claude-code") return null;
-    const key = costKey(threadId);
-    const stored = await bb.storage.kv.get<{ cost: ThreadCost | null; seq: number; checkedAt: number }>(key);
-    if (devbox.status !== "connected") return stored?.cost ?? null;
-    // Recompute once per finished turn, never mid-turn, and at most every 5
-    // minutes: each check is an SSH round trip, and for Codex a short-lived
-    // app-server that talks to OpenAI and reads the box's Codex login.
-    const [latest] = await bb.sdk.threads.events.list({
-      threadId,
-      types: ["turn/completed"],
-      order: "desc",
-      limit: "1",
-    });
-    const seq = Number(latest?.seq ?? 0);
-    if (stored && (stored.seq === seq || Date.now() - stored.checkedAt < 5 * 60_000)) return stored.cost;
-
-    let running = costInFlight.get(threadId);
-    if (!running) {
-      running = (async () => {
-        // bb pages events at most 100 at a time.
-        const identity: Array<{ seq: number | string; data?: unknown }> = [];
-        for (let afterSeq: string | undefined; ;) {
-          const page = await bb.sdk.threads.events.list({
-            threadId,
-            types: ["thread/identity", "turn/started"],
-            limit: "100",
-            ...(afterSeq ? { afterSeq } : {}),
-          });
-          identity.push(...page);
-          if (page.length < 100) break;
-          afterSeq = String(page.at(-1)!.seq);
-        }
-        const sessions = providerSessions(identity);
-        let cost: ThreadCost | null = null;
-        if (sessions.length > 0) {
-          if (agentProvider === "codex") {
-            const reply = (await provider.runCollector(devbox.envId, CODEX_COLLECTOR, sessions)) as {
-              results?: Parameters<typeof codexCost>[0];
-              error?: string;
-            };
-            if (!reply.results) throw new Error(`Codex usage unavailable: ${reply.error ?? "no result"}`);
-            const { usd, missing } = codexCost(reply.results);
-            if (missing.length < sessions.length) {
-              cost = {
-                provider: agentProvider,
-                usd,
-                basis: "openai-estimate",
-                partial: missing.length > 0,
-                updatedAt: Date.now(),
-              };
-            }
-          } else {
-            const reply = (await provider.runCollector(devbox.envId, CLAUDE_COLLECTOR, sessions)) as {
-              buckets: ClaudeUsageBucket[];
-            };
-            if (reply.buckets.length > 0) {
-              const { usd, unknownModels } = claudeCost(reply.buckets);
-              cost = {
-                provider: agentProvider,
-                usd,
-                basis: "list-price",
-                partial: unknownModels.length > 0,
-                updatedAt: Date.now(),
-              };
-            }
-          }
-        }
-        // Keep the last good figure if this round had nothing to price.
-        const result = cost ?? stored?.cost ?? null;
-        await bb.storage.kv.set(key, { cost: result, seq, checkedAt: Date.now() });
-        return result;
-      })().finally(() => costInFlight.delete(threadId));
-      costInFlight.set(threadId, running);
-    }
-    try {
-      return await running;
-    } catch (error) {
-      bb.log.warn(`thread cost for ${threadId}: ${error instanceof Error ? error.message : String(error)}`);
-      return stored?.cost ?? null;
-    }
-  }
+  const costs = createThreadCost({ bb, runCollector: provider.runCollector, threadDevbox });
+  bb.events.on("thread.deleted", ({ thread }) => costs.forget(thread.id));
 
   /**
    * A new terminal in a thread's own terminal panel, connected to a devbox.
@@ -552,7 +447,7 @@ export default async function plugin(bb: BbPluginApi) {
   bb.rpc.register(rpcContract, {
     devboxes_list: async () => ({ devboxes: await devboxes() }),
     thread_devbox: async ({ threadId }) => ({ devbox: await threadDevbox(threadId) }),
-    thread_cost: async ({ threadId }) => ({ cost: await threadCost(threadId) }),
+    thread_cost: async ({ threadId }) => ({ cost: await costs.threadCost(threadId) }),
     devbox_open_editor: async ({ hostId }) => {
       const row = await findMachine(hostId);
       if (!row) return { opened: false };

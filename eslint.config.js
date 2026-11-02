@@ -48,6 +48,6 @@ export default tseslint.config(
   {
     files: ["server.ts"],
     // shortcut: server.ts is at its current size, the limit only lets it shrink; lower it as code moves to src/
-    rules: { "max-lines": ["error", { max: 864, skipBlankLines: true, skipComments: true }] },
+    rules: { "max-lines": ["error", { max: 772, skipBlankLines: true, skipComments: true }] },
   },
 );
