@@ -16,12 +16,13 @@ git log --format=%s "$base..HEAD" | while IFS= read -r subject; do
 done
 
 bump=none
-case ${PR_TITLE%%[(!:]*} in feat) bump=minor ;; fix | perf) bump=patch ;; esac
+case ${PR_TITLE%%[(!:]*} in feat) bump="minor" ;; fix | perf) bump="patch" ;; esac
 printf '%s\n' "$PR_TITLE" | grep -Eq '^[a-z]+(\([^)]*\))?!: ' && bump=major
 printf '%s\n' "${PR_BODY-}" | grep -q '^BREAKING CHANGE:' && bump=major
 
 was=$(git show "$base:package.json" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
 now=$(node -p "require('./package.json').version")
+# shellcheck disable=SC2016  # the ${} below are JavaScript template literals
 node -e '
   const [was, now, bump] = process.argv.slice(1);
   const [a, b, c] = was.split(".").map(Number);
