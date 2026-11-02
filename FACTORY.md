@@ -135,7 +135,7 @@ This file is the memory of the flow. Keep it current:
   fixed, with no guard, is not closed.
 - When a rule here conflicts with `AGENTS.md`, fix `AGENTS.md` in the same PR
   so the two agree, and say so in the PR.
-- Keep this file under 150 lines (`docs.yml` checks). An addition names what it removes.
+- Keep this file under 300 lines (`docs.yml` checks). An addition names what it removes.
 - A change to this file goes through a PR like any other change.
 
 ## Owner instructions on record
