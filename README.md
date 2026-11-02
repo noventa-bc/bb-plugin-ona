@@ -223,8 +223,9 @@ bb's native **Open in** menu can't reach devboxes, so the plugin hides it on dev
 ### Spend per thread
 
 A devbox thread's header shows what the thread has cost so far (for example `$3.50`); hover it
-for the source. It updates when a turn finishes (at most every 5 minutes per thread), not while
-the agent is still working. A paused box shows its last figure and isn't woken.
+for the source. It updates when a turn finishes, at most every 5 minutes per thread; a turn
+whose usage was not written yet is checked once more after that. A paused box shows its last
+figure and isn't woken.
 
 - **Codex:** OpenAI's own per-thread estimate, the number behind Codex's `estimated-thread-cost`
   status item. The plugin asks a short-lived `codex app-server` on the box (`account/usage/read`),
