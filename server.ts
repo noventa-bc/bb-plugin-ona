@@ -184,6 +184,8 @@ export default async function plugin(bb: BbPluginApi) {
     undefined,
     (error) => bb.log.warn(`reconcile pass failed: ${errorText(error)}`),
   );
+  // Passes can be scheduled before the service starts (a tunnel coming up); a reload must not leave one armed.
+  bb.onDispose(() => scheduler.stop());
   /** Ona env id -> bb host id, refreshed on every pass. */
   const hostByEnv = new Map<string, string>();
 

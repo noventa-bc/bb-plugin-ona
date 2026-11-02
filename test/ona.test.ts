@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,7 +15,7 @@ import {
   type OnaEnvironment,
 } from "../src/ona.ts";
 
-const fakeOna = fileURLToPath(new URL("./fake-ona.sh", import.meta.url));
+const fakeOna = fileURLToPath(new URL("./fake-ona.mjs", import.meta.url));
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/ona/${name}`, import.meta.url));
 const cli = new OnaCli(fakeOna);
 const dir = mkdtempSync(join(tmpdir(), "bb-ona-fake-"));
@@ -28,7 +28,9 @@ const FAKE_KEYS = [
 ] as const;
 
 function setFake(vars: Partial<Record<(typeof FAKE_KEYS)[number], string>>): void {
-  process.env.FAKE_ONA_ENVIRONMENTS = fixture("environments.json");
+  // The fake rewrites this file on create/start/stop, so each test gets a fresh copy of the fixture.
+  copyFileSync(fixture("environments.json"), join(dir, "environments.json"));
+  process.env.FAKE_ONA_ENVIRONMENTS = join(dir, "environments.json");
   for (const [key, value] of Object.entries(vars)) process.env[key] = value;
 }
 

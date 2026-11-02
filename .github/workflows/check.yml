@@ -26,9 +26,11 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      # Exactly the lockfile, and no dependency install scripts: nothing here
-      # needs a native build, and install scripts are the usual supply-chain route.
+      # Exactly the lockfile, and no dependency install scripts (the usual supply-chain
+      # route), except better-sqlite3's: the SDK's fake plugin host imports it at load, so
+      # `rebuild` runs that one package's install (prebuild-install) and nothing else's.
       - run: npm ci --ignore-scripts
+      - run: npm rebuild better-sqlite3
       - run: npm run check
       # Preinstalled on the Ubuntu runner only.
       - if: runner.os == 'Linux'
