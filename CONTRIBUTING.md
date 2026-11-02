@@ -54,8 +54,9 @@ npm run check        # typecheck, lint, format check, tests
    Semgrep commands from `AGENTS.md` if you have Semgrep.
 6. Open a pull request against `main`. Say what changed and why, how you tested
    it, and what a maintainer should check live. CI must be green: `check`
-   (Ubuntu, with Semgrep and shellcheck) and, for Markdown,
-   `docs`. `main` only changes through squash-merged pull requests.
+   (Ubuntu, with Semgrep, shellcheck and a test file per `src/` module) and,
+   for Markdown, `docs` (formatting, line limits and dead relative links).
+   `main` only changes through squash-merged pull requests.
 
 ## Working with a coding agent
 
