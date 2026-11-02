@@ -5,7 +5,13 @@ made each change. The version is the one in `package.json`.
 
 ## Unreleased
 
+## 0.3.0 (2026-11-02)
+
 ### Changed
+- Install from the public repository by semver range
+  (`bb plugin install git:https://github.com/noventa-bc/bb-plugin-ona.git@^0.3.0`);
+  releases are tagged `vX.Y.Z` and get a GitHub release with the changelog
+  section.
 - `bb ona update` and the weekday update job now also skip a devbox whose thread
   has queued work waiting to start, not only one with a running turn. `--force`
   still applies the update.
