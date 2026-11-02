@@ -66,7 +66,8 @@ Change these together, in the same edit.
 - Put commands and settings in backticks.
 - Write facts that stay true over time. Avoid words that depend on when the text is read.
 - A dated fact carries the words "checked YYYY-MM-DD".
-- Do not document what the code shows. Point to the code instead.
+- Do not document what the code shows. Point to the code instead. Comments and docs
+  describe what exists; nothing about what was removed or is absent (git history has that).
 - `docs/ona-notes.md` holds facts about Ona and bb. A fact about a build or CI tool lives as a comment next to its pin.
 
 ## Code Review Rules

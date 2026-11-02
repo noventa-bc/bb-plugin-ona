@@ -26,11 +26,8 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      # Exactly the lockfile, and no dependency install scripts: nothing here needs a
-      # native build, and install scripts are the usual supply-chain route. The SDK's fake
-      # bb host imports better-sqlite3 but loads its binding only on storage.database(),
-      # which this plugin never calls; if that changes, the e2e tests fail here with
-      # "Could not locate the bindings file", and the fix is to decide, not to rebuild.
+      # Exactly the lockfile, and no dependency install scripts: nothing here
+      # needs a native build, and install scripts are the usual supply-chain route.
       - run: npm ci --ignore-scripts
       - run: npm run check
       # Preinstalled on the Ubuntu runner only.
