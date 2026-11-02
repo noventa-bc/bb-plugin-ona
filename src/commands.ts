@@ -98,21 +98,21 @@ export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()
     : `Ona CLI: ok${ona.listedAt !== null ? `, listed ${ago(ona.listedAt)}` : ""}${ona.autoRepair ? "" : "  (autoRepair is off)"}`;
   if (rows.length === 0) return `${header}\nNo Ona machines yet.`;
   const lines = rows.map((row) => {
-    const lines = [`${row.machine}  bb:${row.bb}  tunnel:${row.tunnel}  ona:${row.ona}`];
-    if (row.now) lines.push(`  now: ${row.now.reason} (since ${ago(row.now.since)})`);
+    const rowLines = [`${row.machine}  bb:${row.bb}  tunnel:${row.tunnel}  ona:${row.ona}`];
+    if (row.now) rowLines.push(`  now: ${row.now.reason} (since ${ago(row.now.since)})`);
     if (row.last) {
-      lines.push(
+      rowLines.push(
         `  last action: ${row.last.action}: ${row.last.reason} (${ago(row.last.at)})${row.last.error ? ` ERROR ${row.last.error}` : ""}`,
       );
     }
-    if (row.retry) lines.push(`  ${row.retry}`);
-    if (row.keepAliveUntil) lines.push(`  keep-alive until ${clockTime(row.keepAliveUntil)}`);
+    if (row.retry) rowLines.push(`  ${row.retry}`);
+    if (row.keepAliveUntil) rowLines.push(`  keep-alive until ${clockTime(row.keepAliveUntil)}`);
     if (row.needsRecovery > 0) {
-      lines.push(
+      rowLines.push(
         `  ${row.needsRecovery} workspace(s) need recovery; bb won't suspend this machine, so the box stays awake. See \`bb environment list --host ${row.hostId}\``,
       );
     }
-    return lines.join("\n");
+    return rowLines.join("\n");
   });
   return [header, ...lines].join("\n");
 }

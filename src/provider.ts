@@ -159,7 +159,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     const probe = () =>
       sshCapture(executor, 'mountpoint -q "$HOME"', signal, CHECK_TIMEOUT_MS)
         .then((result) => result.exitCode === 0)
-        .catch((error) => {
+        .catch((error: unknown) => {
           if (signal.aborted) throw error;
           return false;
         });
@@ -187,7 +187,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         `curl -sf -o /dev/null --max-time 5 ${shellQuote(url)}`,
         signal,
         CHECK_TIMEOUT_MS,
-      ).catch((error) => {
+      ).catch((error: unknown) => {
         if (signal.aborted) throw error;
         return { exitCode: 1, output: "" };
       });
@@ -452,7 +452,41 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     return exitCode === 0 ? true : exitCode === 1 ? false : null;
   }
 
-  return { reconnect, daemonAlive, releasing: deps.releasing };
+  /**
+   * Run a cost collector script on a devbox and parse the JSON line it prints.
+   * Only call it for a box bb reports connected (SSH starts stopped boxes).
+   */
+  async function runCollector(envId: string, script: string, ids: string[]): Promise<unknown> {
+    // Login shell for the user's PATH (node, codex); Codex keeps bb's local SQLite home.
+    const command = [
+      "bash",
+      "-lc",
+      '[ -n "$1" ] && export CODEX_SQLITE_HOME="$1"; script="$2"; shift 2; exec node -e "$script" "$@"',
+      "bb-ona-cost",
+      deps.codexSqliteHome,
+      script,
+      ...ids,
+    ];
+    let output = "";
+    const { exitCode } = await sshExecutor(deps.sshBinary, envId, []).exec({
+      command,
+      stdin: "",
+      timeoutMs: 90_000,
+      signal: AbortSignal.timeout(95_000),
+      onOutput: (chunk) => {
+        output += chunk;
+      },
+    });
+    const line = output
+      .split("\n")
+      .reverse()
+      .find((l) => l.trim().startsWith("{"));
+    if (exitCode !== 0 || !line)
+      throw new Error(`cost collector failed (exit ${exitCode}): ${output.trim().slice(-300)}`);
+    return JSON.parse(line);
+  }
+
+  return { reconnect, daemonAlive, runCollector, releasing: deps.releasing };
 }
 
 export function registerOnaComposition(bb: BbPluginApi) {

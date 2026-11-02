@@ -48,7 +48,7 @@ export function sshExecutor(sshBinary: string, envId: string, env: string[] = da
         }, timeoutMs);
         const onAbort = () => {
           child.kill("SIGKILL");
-          finish(() => reject(signal.reason ?? new Error("aborted")));
+          finish(() => reject(signal.reason instanceof Error ? signal.reason : new Error("aborted")));
         };
         if (signal.aborted) return onAbort();
         signal.addEventListener("abort", onAbort, { once: true });

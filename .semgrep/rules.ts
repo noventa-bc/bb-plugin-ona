@@ -54,16 +54,18 @@ async function fixture2(run: (argv: string[]) => Promise<string>, envId: string)
 
 // --- remote-script-interpolation.ts ---
 // Fixtures for semgrep --test. Not compiled, linted or formatted.
+// Every sshCapture call here is also a hit for ssh-outside-runners (this file
+// is outside src/ssh.ts and src/provider.ts); an annotation covers one line.
 async function fixture3(executor: any, signal: AbortSignal, dir: string, url: string) {
-  // ruleid: remote-script-interpolation
+  // ruleid: remote-script-interpolation, ssh-outside-runners
   await sshCapture(executor, `mkdir -p ${dir}`, signal);
-  // ruleid: remote-script-interpolation
+  // ruleid: remote-script-interpolation, ssh-outside-runners
   await sshCapture(executor, `mkdir -p ${shellQuote(dir)} && curl ${url}`, signal);
-  // ok: remote-script-interpolation
+  // ruleid: ssh-outside-runners
   await sshCapture(executor, `mkdir -p ${shellQuote(dir)}`, signal);
-  // ok: remote-script-interpolation
+  // ruleid: ssh-outside-runners
   await sshCapture(executor, 'mountpoint -q "$HOME"', signal);
-  // ok: remote-script-interpolation
+  // ruleid: ssh-outside-runners
   await sshCapture(executor, `true`, signal);
   await executor.exec({
     // ruleid: remote-script-interpolation
@@ -73,6 +75,20 @@ async function fixture3(executor: any, signal: AbortSignal, dir: string, url: st
     // ok: remote-script-interpolation
     command: ["bash", "-c", 'rm -rf "$1"', "bb-ona-fixture", dir],
   });
+}
+
+// --- ssh-outside-runners.ts ---
+// Fixtures for semgrep --test. Not compiled, linted or formatted.
+async function fixture5(sshPath: string, envId: string, signal: AbortSignal, provider: any) {
+  // ruleid: ssh-outside-runners
+  const executor = sshExecutor(sshPath, envId, []);
+  // ruleid: ssh-outside-runners
+  await sshExecutor(sshPath, envId, []).exec({ command: ["true"], stdin: "", timeoutMs: 1, signal, onOutput() {} });
+  // ok: ssh-outside-runners
+  await provider.runCollector(envId, "true", []);
+  // ok: ssh-outside-runners
+  await provider.daemonAlive({ envId }, signal);
+  void executor;
 }
 
 // --- secret-in-kv-key.ts ---

@@ -38,7 +38,7 @@ import {
 } from "./src/cost.ts";
 import { rpcContract, type Devbox, type ThreadCost } from "./src/rpc.ts";
 import { runOnce, threadTerminalPlan, type ShellBackend, type ShellTarget } from "./src/shells.ts";
-import { sshExecutor, TunnelManager } from "./src/ssh.ts";
+import { TunnelManager } from "./src/ssh.ts";
 import { hostIsBusy, parseProviderList, threadStatuses, updatesToApply, type CliStatus } from "./src/updates.ts";
 
 /** Devbox folder settings end up in remote commands: plain absolute paths only. */
@@ -419,37 +419,6 @@ export default async function plugin(bb: BbPluginApi) {
     return (await devboxes()).find((box) => box.hostId === environment.hostId) ?? null;
   }
 
-  /** Run a cost collector script on a devbox and parse the JSON line it prints. */
-  async function runCollector(envId: string, script: string, ids: string[]): Promise<unknown> {
-    // Login shell for the user's PATH (node, codex); Codex keeps bb's local SQLite home.
-    const command = [
-      "bash",
-      "-lc",
-      '[ -n "$1" ] && export CODEX_SQLITE_HOME="$1"; script="$2"; shift 2; exec node -e "$script" "$@"',
-      "bb-ona-cost",
-      codexSqliteHome,
-      script,
-      ...ids,
-    ];
-    let output = "";
-    const { exitCode } = await sshExecutor(sshPath, envId, []).exec({
-      command,
-      stdin: "",
-      timeoutMs: 90_000,
-      signal: AbortSignal.timeout(95_000),
-      onOutput: (chunk) => {
-        output += chunk;
-      },
-    });
-    const line = output
-      .split("\n")
-      .reverse()
-      .find((l) => l.trim().startsWith("{"));
-    if (exitCode !== 0 || !line)
-      throw new Error(`cost collector failed (exit ${exitCode}): ${output.trim().slice(-300)}`);
-    return JSON.parse(line);
-  }
-
   const costInFlight = new Map<string, Promise<ThreadCost | null>>();
   const costKey = (threadId: string) => `cost:${threadId}`;
   // A deleted thread's cost is never asked for again; drop it so the keys don't pile up.
@@ -468,8 +437,8 @@ export default async function plugin(bb: BbPluginApi) {
     const devbox = await threadDevbox(threadId);
     if (!devbox) return null;
     const thread = await bb.sdk.threads.get({ threadId });
-    const provider = thread.providerId;
-    if (provider !== "codex" && provider !== "claude-code") return null;
+    const agentProvider = thread.providerId;
+    if (agentProvider !== "codex" && agentProvider !== "claude-code") return null;
     const key = costKey(threadId);
     const stored = await bb.storage.kv.get<{ cost: ThreadCost | null; seq: number; checkedAt: number }>(key);
     if (devbox.status !== "connected") return stored?.cost ?? null;
@@ -504,23 +473,35 @@ export default async function plugin(bb: BbPluginApi) {
         const sessions = providerSessions(identity);
         let cost: ThreadCost | null = null;
         if (sessions.length > 0) {
-          if (provider === "codex") {
-            const reply = (await runCollector(devbox.envId, CODEX_COLLECTOR, sessions)) as {
+          if (agentProvider === "codex") {
+            const reply = (await provider.runCollector(devbox.envId, CODEX_COLLECTOR, sessions)) as {
               results?: Parameters<typeof codexCost>[0];
               error?: string;
             };
             if (!reply.results) throw new Error(`Codex usage unavailable: ${reply.error ?? "no result"}`);
             const { usd, missing } = codexCost(reply.results);
             if (missing.length < sessions.length) {
-              cost = { provider, usd, basis: "openai-estimate", partial: missing.length > 0, updatedAt: Date.now() };
+              cost = {
+                provider: agentProvider,
+                usd,
+                basis: "openai-estimate",
+                partial: missing.length > 0,
+                updatedAt: Date.now(),
+              };
             }
           } else {
-            const reply = (await runCollector(devbox.envId, CLAUDE_COLLECTOR, sessions)) as {
+            const reply = (await provider.runCollector(devbox.envId, CLAUDE_COLLECTOR, sessions)) as {
               buckets: ClaudeUsageBucket[];
             };
             if (reply.buckets.length > 0) {
               const { usd, unknownModels } = claudeCost(reply.buckets);
-              cost = { provider, usd, basis: "list-price", partial: unknownModels.length > 0, updatedAt: Date.now() };
+              cost = {
+                provider: agentProvider,
+                usd,
+                basis: "list-price",
+                partial: unknownModels.length > 0,
+                updatedAt: Date.now(),
+              };
             }
           }
         }
@@ -628,17 +609,21 @@ export default async function plugin(bb: BbPluginApi) {
         );
         continue;
       }
-      for (const provider of pending) {
-        const from = statuses[provider]?.currentVersion ?? "?";
-        const to = statuses[provider]?.latestVersion ?? "latest";
-        const events = await bb.sdk.hosts.installProviderCli({ hostId: row.hostId, provider, actionKind: "update" });
+      for (const cli of pending) {
+        const from = statuses[cli]?.currentVersion ?? "?";
+        const to = statuses[cli]?.latestVersion ?? "latest";
+        const events = await bb.sdk.hosts.installProviderCli({
+          hostId: row.hostId,
+          provider: cli,
+          actionKind: "update",
+        });
         const failed = events.find(
           (event) => event.type === "error" || (event.type === "completed" && event.exitCode !== 0),
         );
         lines.push(
           failed
-            ? `${name}: ${provider} update failed (${"message" in failed ? failed.message : `exit ${"exitCode" in failed ? failed.exitCode : "?"}`})`
-            : `${name}: ${provider} ${from} -> ${to}`,
+            ? `${name}: ${cli} update failed (${"message" in failed ? failed.message : `exit ${"exitCode" in failed ? failed.exitCode : "?"}`})`
+            : `${name}: ${cli} ${from} -> ${to}`,
         );
       }
     }
