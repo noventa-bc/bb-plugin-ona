@@ -44,6 +44,7 @@ Change these together, in the same edit.
 
 ## How to work
 
+- Rule 1: simplicity, always. The simplest thing that fully works beats the clever, the general and the defensive.
 - Write the least code that solves the whole task (the ponytail ruleset, installed as a Claude Code plugin; see `docs/owner.md`). A shortcut with a known limit gets a comment `shortcut: <the limit>, <when to upgrade>`; `/ponytail-debt` lists them.
 - Fix a bug with a failing test first, where a test is possible.
 - When you find a bug, a source of noise or anything that can damage the repo, add the guard that stops it recurring in the same change: a test, a lint rule, a CI step, a `.gitignore` line or a written rule here. Say in the handoff which guard you added.
