@@ -59,7 +59,8 @@ export function createThreadCost({ bb, runCollector, threadDevbox }: CostDeps) {
     const agentProvider = thread.providerId;
     if (agentProvider !== "codex" && agentProvider !== "claude-code") return null;
     const key = costKey(threadId);
-    const stored = await bb.storage.kv.get<{ cost: ThreadCost | null; seq: number; checkedAt: number }>(key);
+    // Older records hold `seq` as a number; it is compared as a string.
+    const stored = await bb.storage.kv.get<{ cost: ThreadCost | null; seq: number | string; checkedAt: number }>(key);
     if (devbox.status !== "connected") return stored?.cost ?? null;
     // Recompute once per finished turn, never mid-turn, and at most every 5
     // minutes: each check is an SSH round trip, and for Codex a short-lived
@@ -70,8 +71,9 @@ export function createThreadCost({ bb, runCollector, threadDevbox }: CostDeps) {
       order: "desc",
       limit: "1",
     });
-    const seq = Number(latest?.seq ?? 0);
-    if (stored && (stored.seq === seq || Date.now() - stored.checkedAt < 5 * 60_000)) return stored.cost;
+    // bb's seq may be a non-numeric string, so it is compared as given, never as a number.
+    const seq = String(latest?.seq ?? 0);
+    if (stored && (String(stored.seq) === seq || Date.now() - stored.checkedAt < 5 * 60_000)) return stored.cost;
 
     let running = costInFlight.get(threadId);
     if (!running) {
@@ -124,9 +126,15 @@ export function createThreadCost({ bb, runCollector, threadDevbox }: CostDeps) {
             }
           }
         }
-        // Keep the last good figure if this round had nothing to price.
+        // Keep the last good figure if this round had nothing to price. An empty
+        // round stores no seq, so the next poll past the 5-minute floor tries this
+        // turn once more; a second empty round settles it until the next turn.
         const result = cost ?? stored?.cost ?? null;
-        await bb.storage.kv.set(key, { cost: result, seq, checkedAt: Date.now() });
+        await bb.storage.kv.set(key, {
+          cost: result,
+          seq: cost || stored?.seq === "" ? seq : "",
+          checkedAt: Date.now(),
+        });
         return result;
       })().finally(() => costInFlight.delete(threadId));
       costInFlight.set(threadId, running);
@@ -135,6 +143,8 @@ export function createThreadCost({ bb, runCollector, threadDevbox }: CostDeps) {
       return await running;
     } catch (error) {
       bb.log.warn(`thread cost for ${threadId}: ${errorText(error)}`);
+      // A failed round counts as checked, so the 5-minute floor applies to the retry too.
+      await bb.storage.kv.set(key, { cost: stored?.cost ?? null, seq: stored?.seq ?? "", checkedAt: Date.now() });
       return stored?.cost ?? null;
     }
   }

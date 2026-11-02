@@ -22,9 +22,10 @@ const ONE_DOLLAR_BUCKET: ClaudeUsageBucket = {
 
 function world(options: {
   status?: string;
-  turnSeq?: number;
-  stored?: { cost: ThreadCost | null; seq: number; checkedAt: number };
+  turnSeq?: number | string;
+  stored?: { cost: ThreadCost | null; seq: number | string; checkedAt: number };
   collect?: () => Promise<unknown>;
+  provider?: "claude-code" | "codex";
 }) {
   const kv = new Map<string, unknown>(options.stored ? [["cost:t1", options.stored]] : []);
   const warnings: string[] = [];
@@ -34,7 +35,7 @@ function world(options: {
     bb: {
       sdk: {
         threads: {
-          get: async () => ({ providerId: "claude-code" }),
+          get: async () => ({ providerId: options.provider ?? "claude-code" }),
           events: {
             list: async ({ types }) =>
               types?.[0] === "turn/completed"
@@ -79,7 +80,7 @@ test("a new finished turn collects once for two callers at the same time, and st
   assert.deepEqual(w.collectorRuns, ["env-1"]);
   assert.equal(a?.usd, 1);
   assert.deepEqual(a, b);
-  assert.equal((w.kv.get("cost:t1") as { seq: number }).seq, 8);
+  assert.equal((w.kv.get("cost:t1") as { seq: string }).seq, "8");
 });
 
 test("a figure checked less than 5 minutes ago is returned without collecting, even after a new turn", async () => {
@@ -88,7 +89,13 @@ test("a figure checked less than 5 minutes ago is returned without collecting, e
   assert.deepEqual(w.collectorRuns, []);
 });
 
-test("a collector error warns, returns the stored figure, and the next call collects again", async () => {
+// Moves the stored check past the 5-minute floor, as if the next poll came later.
+function pastFloor(w: ReturnType<typeof world>) {
+  (w.kv.get("cost:t1") as { checkedAt: number }).checkedAt = OLD;
+}
+
+test("a collector error warns, returns the stored figure, and retries only after the floor", async () => {
+  // Bug: a failed round stored nothing, so a failing collector was retried on every poll, once a minute.
   const w = world({
     turnSeq: 8,
     stored: { cost: FIGURE, seq: 7, checkedAt: OLD },
@@ -96,20 +103,68 @@ test("a collector error warns, returns the stored figure, and the next call coll
   });
   assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
   assert.deepEqual(w.warnings, ["thread cost for t1: ssh failed"]);
+  assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
+  assert.deepEqual(w.collectorRuns, ["env-1"]);
+  pastFloor(w);
   await w.costs.threadCost("t1");
   assert.deepEqual(w.collectorRuns, ["env-1", "env-1"]);
 });
 
-test("a round with nothing to price keeps the last good figure", async () => {
+test("a round with nothing to price keeps the last good figure and collects again after the floor", async () => {
+  // Bug: the empty round stored the new turn's seq, so the seq check skipped every retry until the next turn.
   const w = world({
     turnSeq: 8,
     stored: { cost: FIGURE, seq: 7, checkedAt: OLD },
     collect: async () => ({ buckets: [] }),
   });
   assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
-  const saved = w.kv.get("cost:t1") as { cost: ThreadCost; seq: number };
-  assert.deepEqual([saved.cost, saved.seq], [FIGURE, 8]);
-  assert.deepEqual(w.collectorRuns, ["env-1"]);
+  pastFloor(w);
+  assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
+  assert.deepEqual(w.collectorRuns, ["env-1", "env-1"]);
+});
+
+test("a first round with nothing to price collects again after the floor", async () => {
+  // Bug: the empty chip stayed empty for a whole turn although a retry would price it.
+  let buckets: ClaudeUsageBucket[] = [];
+  const w = world({ turnSeq: 8, collect: async () => ({ buckets }) });
+  assert.equal(await w.costs.threadCost("t1"), null);
+  buckets = [ONE_DOLLAR_BUCKET];
+  pastFloor(w);
+  assert.equal((await w.costs.threadCost("t1"))?.usd, 1);
+  assert.deepEqual(w.collectorRuns, ["env-1", "env-1"]);
+});
+
+test("a second empty round settles the turn: no third collect until a new turn finishes", async () => {
+  // Bug: an unpriceable thread would otherwise run a collector every 5 minutes for as long as it is open.
+  const w = world({ turnSeq: 8, collect: async () => ({ buckets: [] }) });
+  await w.costs.threadCost("t1");
+  pastFloor(w);
+  await w.costs.threadCost("t1");
+  pastFloor(w);
+  assert.equal(await w.costs.threadCost("t1"), null);
+  assert.deepEqual(w.collectorRuns, ["env-1", "env-1"]);
+});
+
+test("a Codex round where every session is missing is retried once, then settled", async () => {
+  // Bug: all-missing stored the new seq (no retry) before R13; an unbounded retry would SSH every 5 minutes after it.
+  const w = world({
+    turnSeq: 8,
+    provider: "codex",
+    collect: async () => ({ results: { "session-1": { error: "no usage" } } }),
+  });
+  assert.equal(await w.costs.threadCost("t1"), null);
+  pastFloor(w);
+  assert.equal(await w.costs.threadCost("t1"), null);
+  pastFloor(w);
+  assert.equal(await w.costs.threadCost("t1"), null);
+  assert.deepEqual(w.collectorRuns, ["env-1", "env-1"]);
+});
+
+test("a string seq equal to the stored one returns the stored figure without collecting", async () => {
+  // Bug: Number("abc") is NaN, NaN never equals the stored seq, so every poll past the floor ran a collector.
+  const w = world({ turnSeq: "abc", stored: { cost: FIGURE, seq: "abc", checkedAt: OLD } });
+  assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
+  assert.deepEqual(w.collectorRuns, []);
 });
 
 test("forgetting a thread drops its stored figure", async () => {
