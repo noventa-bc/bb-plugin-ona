@@ -111,7 +111,7 @@ test("create a box and connect it; bb ona list --json shows the machine", local,
 test("bb ona sync lets an idle box go: bb suspends the machine and the box is not stopped", local, async () => {
   // Connected and last active two hours ago, past the default idleDisconnect of 1h.
   await host.bb.storage.kv.set(connectedAtKey(resource.envId), Date.now() - 2 * HOUR);
-  threads.push({ status: "idle", updatedAt: Date.now() - 2 * HOUR, runtime: { displayStatus: "idle" } });
+  threads.push({ id: "t1", status: "idle", updatedAt: Date.now() - 2 * HOUR, runtime: { displayStatus: "idle" } });
   const result = await host.harness.behavior.runCli(["sync"]);
   assert.equal(result.exitCode, 0, result.stderr);
   assert.deepEqual(suspends(), [[{ hostId: "host-1" }]]);

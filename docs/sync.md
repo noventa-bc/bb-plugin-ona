@@ -30,7 +30,12 @@ The idle rule from [How it works](../README.md#how-it-works) sits alongside thes
 without being stopped. A box isn't let go while bb is setting up or tearing
 down one of its thread workspaces: closing the tunnel mid-hook leaves bb unable
 to tell how the hook ended, and it then refuses to suspend the machine until
-the workspace is recovered.
+the workspace is recovered. A thread with a turn in flight also holds the box,
+but an archived thread counts for neither busyness nor activity, whatever
+status bb still shows for it.
+`bb ona status` names each unarchived thread that has been busy with no
+update for more than 6 hours, since such a thread holds the box until it ends
+or is archived.
 
 `bb ona keep-alive <name> <duration>` is the one way to hold a box past Ona's
 inactivity timeout, and only on your request; the plugin never starts one by
