@@ -10,13 +10,8 @@ permissions:
   contents: read
 jobs:
   check:
-    # Ubuntu for speed, macOS because that is where the plugin runs. Pinned images:
-    # the -latest labels move on their own (checked 2026-10-30); Dependabot bumps these.
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-26]
-    runs-on: ${{ matrix.os }}
+    # Pinned image: the -latest label moves on its own (checked 2026-10-30); Dependabot bumps it.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -30,15 +25,10 @@ jobs:
       # needs a native build, and install scripts are the usual supply-chain route.
       - run: npm ci --ignore-scripts
       - run: npm run check
-      # Preinstalled on the Ubuntu runner only.
-      - if: runner.os == 'Linux'
-        run: shellcheck scripts/*.sh test/*.sh
+      - run: shellcheck scripts/*.sh test/*.sh
       # The rules in .semgrep/rules.yml: first their own fixtures (.semgrep/rules.ts), then the plugin code.
       # pipx is preinstalled; Ubuntu 24.04's system Python refuses a bare pip install.
       # 1.183.0 is the newest PyPI release at pin time (checked 2026-10-30); bump it by hand because Dependabot does not watch pipx pins.
-      - if: runner.os == 'Linux'
-        run: pipx install semgrep==1.183.0
-      - if: runner.os == 'Linux'
-        run: semgrep --test --metrics=off .semgrep/
-      - if: runner.os == 'Linux'
-        run: semgrep scan --config .semgrep/rules.yml --error --metrics=off app.tsx server.ts src
+      - run: pipx install semgrep==1.183.0
+      - run: semgrep --test --metrics=off .semgrep/
+      - run: semgrep scan --config .semgrep/rules.yml --error --metrics=off app.tsx server.ts src
