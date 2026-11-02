@@ -26,6 +26,8 @@ interface Box {
   status?: string;
   lastSeenAt?: number;
   threads?: ThreadRecord[] | "fail";
+  /** The name Ona lists, when it differs from the stored one. */
+  name?: string;
   workspaces?: WorkspaceView[];
   ona?: string | null;
   tunnel?: "up" | "off";
@@ -80,7 +82,7 @@ function world(
           .filter((box) => box.ona !== null)
           .map((box) => ({
             id: box.envId,
-            metadata: {},
+            metadata: box.name ? { name: box.name } : {},
             status: { phase: `ENVIRONMENT_PHASE_${box.ona ?? "RUNNING"}` },
           }));
   const guard = new HostGuard();
@@ -202,6 +204,16 @@ test("an idle box isn't released while bb tears down a workspace, or one needs r
     await sync.reconcile(new Set([ALL]), { wait: true });
     assert.deepEqual(calls, [], JSON.stringify(workspace));
   }
+});
+
+// Bug: after `bb ona rename`, every line kept the name stored when the box was created.
+test("rows carry the name Ona lists, not the one stored at creation", async () => {
+  const { sync } = world([idle("h1", { name: "renamed" }), idle("h2")]);
+  assert.equal((await sync.statusRows("renamed")).length, 1);
+  assert.deepEqual(
+    (await sync.machines()).map((row) => row.resource.envName),
+    ["renamed", "box"],
+  );
 });
 
 test("status reports workspaces that need recovery", async () => {

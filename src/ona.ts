@@ -288,8 +288,9 @@ export class OnaSnapshot {
     return this.last;
   }
 
-  /** A listing fetched now (shared with any list already in flight). */
-  refresh(): Promise<OnaListing> {
+  /** A listing fetched after this call: a list already in flight may predate what the caller just changed or what Ona changed meanwhile. */
+  async refresh(): Promise<OnaListing> {
+    await this.inFlight?.catch(() => undefined);
     return this.get(-1);
   }
 

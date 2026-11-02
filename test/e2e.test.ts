@@ -102,7 +102,16 @@ test("a user-initiated suspend closes the tunnel and stops the box", local, asyn
 
 test("resume after an Ona auto-stop starts the box once and bootstraps bb again", local, async () => {
   patchBox(resource.envId, { phase: "ENVIRONMENT_PHASE_STOPPED" });
-  await provider.resume!({ ...ctx, resource, hostId: "host-1" });
+  writeFileSync(
+    state,
+    JSON.stringify(
+      envs().map((e) => (e.id === resource.envId ? { ...e, metadata: { ...e.metadata, name: "renamed" } } : e)),
+    ),
+  );
+  const result = await provider.resume!({ ...ctx, resource, hostId: "host-1" });
+  // Bug: the stored resource kept the creation name for good after a rename.
+  assert.deepEqual(result.resource, { ...resource, envName: "renamed" });
+  assert.deepEqual(checkpoints.at(-1), result.resource);
   const calls = onaCalls();
   assert.equal(calls.filter((call) => call.startsWith("environment start")).length, 1, calls.join("\n"));
   assert.ok(calls.includes(`environment start ${resource.envId}`), calls.join("\n"));

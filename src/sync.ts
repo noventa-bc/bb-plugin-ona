@@ -154,6 +154,8 @@ export function createSync(deps: SyncDeps) {
 
   async function machines(): Promise<Row[]> {
     const hosts = await bb.sdk.hosts.list();
+    // The stored resource keeps the name the box was created or adopted with; the last listing has the current one.
+    const listing = snapshot.latest;
     const rows: Row[] = [];
     for (const host of hosts) {
       if (host.machineProviderId !== PROVIDER_ID) continue;
@@ -168,7 +170,10 @@ export function createSync(deps: SyncDeps) {
         phase: host.lifecycle.phase,
         lastSeenAt: host.lastSeenAt ?? null,
         updatedAt: host.updatedAt,
-        resource: parsed.data,
+        resource: {
+          ...parsed.data,
+          envName: listing?.envs.find((env) => env.id === parsed.data.envId)?.metadata.name ?? parsed.data.envName,
+        },
       });
     }
     hostByEnv.clear();
@@ -413,8 +418,8 @@ export function createSync(deps: SyncDeps) {
   }
 
   async function statusRows(ref?: string): Promise<StatusRow[]> {
-    const rows = (await machines()).filter((r) => !ref || matchesRef(r, ref));
     const listing = await snapshot.get().catch(() => snapshot.latest);
+    const rows = (await machines()).filter((r) => !ref || matchesRef(r, ref));
     return Promise.all(
       rows.map(async (row) => {
         const env = listing?.envs.find((e) => e.id === row.resource.envId);

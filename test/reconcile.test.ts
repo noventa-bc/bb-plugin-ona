@@ -299,6 +299,19 @@ test("snapshot shares one list between concurrent callers and caches it", async 
   assert.equal(calls, 3);
 });
 
+// Bug: `bb ona rename` refreshed into a list that started before the rename and cached the old name.
+test("snapshot refresh during a list in flight fetches again after it", async () => {
+  let name = "old";
+  const snapshot = new OnaSnapshot(async () => [
+    { id: "e1", metadata: { name }, status: { phase: "ENVIRONMENT_PHASE_RUNNING" } },
+  ]);
+  const inFlight = snapshot.get();
+  name = "new";
+  const refreshed = await snapshot.refresh();
+  assert.equal((await inFlight).envs[0]!.metadata.name, "old");
+  assert.equal(refreshed.envs[0]!.metadata.name, "new");
+});
+
 test("snapshot keeps the last good list and reports the error", async () => {
   let fail = false;
   const snapshot = new OnaSnapshot(async () => {
