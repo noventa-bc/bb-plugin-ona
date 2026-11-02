@@ -79,7 +79,9 @@ those and the "skipped or not checked" lines ponytail ends with.
    write first, the coupled changes from `AGENTS.md`, and what to report back.
 5. **Build** in a worktree (slow commands in the background). The builder runs
    `npm ci --ignore-scripts`, writes
-   a failing test first where possible, keeps `npm run check` green, writes
+   a failing test first where possible (each test names, in its title or the
+   handoff, the bug it fails on; a test that still passes with the rule
+   deleted is not done), keeps `npm run check` green, writes
    `.agent/HANDOFF.md`, and leaves the work staged for the orchestrator.
 6. **Review.** The orchestrator reads the handoff and the diff, runs the
    adversarial reviewer (brief: the diff, the files it touches, the specific
