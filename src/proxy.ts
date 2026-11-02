@@ -6,21 +6,48 @@
 // and only the routes a bb host daemon and its installer use are forwarded:
 //
 //   GET  /health, /install.sh, /install/version, /install/bb-app.tgz
-//   ANY  /internal/*   (bb requires daemon credentials on these)
+//   the /internal routes in DAEMON_INTERNAL_ROUTES, by method and path
+//        (bb requires daemon credentials on these)
 //   WS   /internal/ws  (daemon socket; bb authenticates it)
 //
 // The WebSocket path is spliced only after bb answers 101; a rejected
 // handshake is answered and closed, so it can't carry follow-up requests.
-//
-// Blocked inside /internal: `hosts/enroll-key` and `server-move/*`, which bb
-// trusts for any loopback caller. Headers that could forge identity or origin
-// (`x-bb-*`, `x-forwarded-*`, `forwarded`, `x-real-ip`) are stripped.
+// Headers that could forge identity or origin (`x-bb-*`, `x-forwarded-*`,
+// `forwarded`, `x-real-ip`) are stripped.
 import http, { type IncomingHttpHeaders } from "node:http";
 import net from "node:net";
 import type { PluginLogger } from "@get-bb/plugin-sdk";
 
 const PUBLIC_GET_PATHS = new Set(["/health", "/install.sh", "/install/version", "/install/bb-app.tgz"]);
-const LOOPBACK_TRUSTED_INTERNAL = ["/internal/hosts/enroll-key", "/internal/server-move"];
+/**
+ * Method and path of the calls a bb host daemon makes under /internal (docs/ona-notes.md
+ * says which bb version and where bb keeps them). A route bb adds later is blocked and
+ * logged until it is listed here. Left out on purpose: `hosts/enroll-key`, which bb trusts
+ * for any loopback caller, and `server-move/*`, since moving the bb server onto a devbox
+ * through the tunnel is not supported.
+ */
+const DAEMON_INTERNAL_ROUTES = [
+  "POST /internal/hosts/enroll",
+  "POST /internal/session/open",
+  "POST /internal/session/events",
+  "POST /internal/session/tool-call",
+  "POST /internal/session/interactive-request",
+  "POST /internal/session/interactive-request/interrupt",
+  "GET /internal/session/project-attachment-content",
+  "GET /internal/plugins/:pluginId/host/:digest",
+  "GET /internal/skills/tree/:hash",
+  "POST /internal/skills/tree/:hash/content",
+].map((route) => {
+  const [method, path] = route.split(" ") as [string, string];
+  return { method, segments: path.split("/") };
+});
+
+/** Segment by segment: a `:param` matches any one segment (`safePathname` leaves no empty ones), the rest exactly. */
+function matchesRoute(segments: string[], pathname: string): boolean {
+  const parts = pathname.split("/");
+  return parts.length === segments.length && segments.every((s, i) => s.startsWith(":") || s === parts[i]);
+}
+
 const HOP_BY_HOP = new Set([
   "connection",
   "keep-alive",
@@ -47,9 +74,7 @@ export function isAllowedRequest(method: string, rawUrl: string): boolean {
   const pathname = safePathname(rawUrl);
   if (pathname === null) return false;
   if (PUBLIC_GET_PATHS.has(pathname)) return method === "GET" || method === "HEAD";
-  if (!pathname.startsWith("/internal/")) return false;
-  const lower = pathname.toLowerCase();
-  return !LOOPBACK_TRUSTED_INTERNAL.some((blocked) => lower === blocked || lower.startsWith(`${blocked}/`));
+  return DAEMON_INTERNAL_ROUTES.some((route) => route.method === method && matchesRoute(route.segments, pathname));
 }
 
 export function isAllowedUpgrade(rawUrl: string): boolean {

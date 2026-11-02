@@ -4,15 +4,23 @@ import net from "node:net";
 import { after, before, test } from "node:test";
 import { filterHeaders, isAllowedRequest, isAllowedUpgrade, startDaemonProxy } from "../src/proxy.ts";
 
-test("allows only daemon and installer routes", () => {
+// Bug: every path under /internal was forwarded, so a route bb added later was reachable from a devbox.
+test("allows only the installer routes and the daemon's /internal routes", () => {
   for (const [method, url] of [
     ["GET", "/health"],
     ["GET", "/install.sh"],
     ["HEAD", "/install/bb-app.tgz"],
     ["GET", "/install/version"],
-    ["POST", "/internal/threads/events"],
-    ["GET", "/internal/plugins/x/host/abc"],
     ["POST", "/internal/hosts/enroll"],
+    ["POST", "/internal/session/open"],
+    ["POST", "/internal/session/events?x=1"],
+    ["POST", "/internal/session/tool-call"],
+    ["POST", "/internal/session/interactive-request"],
+    ["POST", "/internal/session/interactive-request/interrupt"],
+    ["GET", "/internal/session/project-attachment-content"],
+    ["GET", "/internal/plugins/x/host/abc"],
+    ["GET", "/internal/skills/tree/abc"],
+    ["POST", "/internal/skills/tree/abc/content"],
   ])
     assert.equal(isAllowedRequest(method!, url!), true, `${method} ${url}`);
 
@@ -24,8 +32,16 @@ test("allows only daemon and installer routes", () => {
     ["POST", "/install.sh"],
     ["POST", "/internal/hosts/enroll-key"],
     ["POST", "/internal/hosts/enroll-key/"],
-    ["POST", "/internal/Hosts/Enroll-Key"],
     ["GET", "/internal/server-move/pending"],
+    ["GET", "/internal/server-move/m1/archive"],
+    ["GET", "/internal/session/events"],
+    ["POST", "/internal/Session/Events"],
+    ["POST", "/internal/threads/events"],
+    ["GET", "/internal/plugins/x/host"],
+    ["GET", "/internal/plugins/x/host/abc/more"],
+    ["GET", "/internal/skills/tree"],
+    ["GET", "/internal/skills/tree/a.b/c"],
+    ["POST", "/api/internal/session/open"],
     ["GET", "/internal/%2e%2e/api/v1/projects"],
     ["GET", "/internal/../api/v1/projects"],
     ["GET", "/internal//api"],
@@ -111,8 +127,11 @@ test("proxy forwards allowed routes and blocks the user API", local, async () =>
     assert.equal((await get(proxy.port, "/internal/hosts/enroll-key")).status, 403);
     assert.equal(seen.length, 0, "blocked requests never reach bb");
 
-    const ok = await get(proxy.port, "/internal/x?y=1", { "x-bb-gate-auth": "machine", authorization: "Bearer d" });
-    assert.deepEqual(ok, { status: 200, body: "ok /internal/x?y=1" });
+    const ok = await get(proxy.port, "/internal/skills/tree/x?y=1", {
+      "x-bb-gate-auth": "machine",
+      authorization: "Bearer d",
+    });
+    assert.deepEqual(ok, { status: 200, body: "ok /internal/skills/tree/x?y=1" });
     assert.equal(seen[0]!.headers["x-bb-gate-auth"], undefined);
     assert.equal(seen[0]!.headers.authorization, "Bearer d");
   } finally {

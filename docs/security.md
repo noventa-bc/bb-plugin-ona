@@ -12,14 +12,15 @@ on a proxy the plugin runs on `127.0.0.1` (random port), which forwards only:
 | Allowed | Why |
 |---|---|
 | `GET /health`, `/install.sh`, `/install/version`, `/install/bb-app.tgz` | Installing and health-checking the daemon (same files bb serves to any machine) |
-| `/internal/*` | Daemon API; bb requires the daemon's credentials on it |
+| The daemon's `/internal` routes, by method and path (the list in `src/proxy.ts`) | Daemon API; bb requires the daemon's credentials on it |
 | WebSocket `/internal/ws` | Daemon connection; bb authenticates it |
 
 Everything else gets `403` and never reaches bb, including the user API
 (`/api/*`), the app and terminal sockets (`/ws`, `/ws/terminals/*`) and the web
-app. Two `/internal` routes that bb trusts for any loopback caller are blocked
-too: `/internal/hosts/enroll-key` (mints machine enrollment keys) and
-`/internal/server-move/*`. The proxy also:
+app. Any other `/internal` route is blocked too, among them
+`/internal/hosts/enroll-key` (mints machine enrollment keys; bb trusts it for any
+loopback caller) and `/internal/server-move/*` (moving the bb server onto a
+devbox through the tunnel is not supported). The proxy also:
 
 - refuses encoded or unusual paths (`%`, `..`, `//`, backslashes, absolute URLs)
   so routing can't be tricked;
@@ -43,8 +44,10 @@ The tunnel's port inside the devbox listens on loopback only (`127.0.0.1`,
   this plugin, which relies on bb limiting each daemon to its own machine. If
   you connect devboxes you don't fully trust, check bb's documentation on how
   it scopes machine credentials.
-- The proxy relies on its allowlist matching how bb routes requests. Upgrading
-  bb can add routes, so re-check the allowlist when bb changes its routing.
+- A bb upgrade can add or rename daemon routes. A route missing from the list
+  is blocked and logged (`bb plugin logs ona` shows `ona proxy blocked`), so a
+  daemon that misbehaves after an upgrade is the signal to re-read bb's routes
+  (`docs/ona-notes.md` says where bb keeps them) and update the list.
 - Treat what an agent on a devbox reports (output, diffs, links) as untrusted
   input, as with any remote agent.
 
