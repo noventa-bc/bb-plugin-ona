@@ -43,6 +43,6 @@
     "format": "prettier --write .",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --experimental-strip-types test/*.test.ts"
+    "test": "node --test --experimental-strip-types --test-timeout=60000 test/*.test.ts"
   }
 }

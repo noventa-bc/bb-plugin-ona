@@ -1,9 +1,10 @@
 // The sleep and the poll loop the plugin's waits share, both abortable.
-import { setTimeout as delay } from "node:timers/promises";
+// The default import, not the named one: node:test's mock.timers patches this object.
+import timers from "node:timers/promises";
 
 /** Wait `ms`, or less if `signal` aborts. Resolves either way: callers check the signal after. */
 export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return delay(ms, undefined, { signal }).catch((error: unknown) => {
+  return timers.setTimeout(ms, undefined, { signal }).catch((error: unknown) => {
     if (!signal?.aborted) throw error;
   });
 }

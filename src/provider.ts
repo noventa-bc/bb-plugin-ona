@@ -75,6 +75,8 @@ export interface ProviderDeps {
   releasing: Set<string>;
   /** Drop the plugin's stored keys for a box whose machine is removed. */
   forgetBox(envId: string): Promise<void>;
+  /** Opens the command channel to a box; `sshExecutor` unless a test passes a fake. */
+  executorFor?: typeof sshExecutor;
 }
 
 /** Deterministic Ona name for a creation key, so retries find the same environment. */
@@ -86,7 +88,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
   const reconnect = (resource: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal) =>
     connect(resource, resource.key, report, signal);
 
-  const { ona, tunnels } = deps;
+  const { ona, tunnels, executorFor = sshExecutor } = deps;
 
   async function requireEnv(ref: string, signal: AbortSignal): Promise<OnaEnvironment> {
     const env = await ona.findEnvironment(ref, signal);
@@ -216,7 +218,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     report: PluginMachineProviderProgress,
     signal: AbortSignal,
   ) {
-    const executor = sshExecutor(deps.sshBinary, resource.envId, daemonEnv(deps.codexSqliteHome));
+    const executor = executorFor(deps.sshBinary, resource.envId, daemonEnv(deps.codexSqliteHome));
     await waitForSsh(executor, report, signal);
     if (deps.waitForSharedHome) await waitForSharedHome(executor, report, signal);
     if (deps.codexSqliteHome) {
@@ -391,7 +393,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
             '  [ -f "$f" ] && bash "$f" --uninstall --host-id "$host" || true',
             "done",
           ].join("\n");
-          await sshExecutor(deps.sshBinary, owned.envId)
+          await executorFor(deps.sshBinary, owned.envId)
             .exec({
               command: ["bash", "-c", script, "bb-ona-remove", dataDir, hostId],
               stdin: "",
@@ -435,7 +437,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
    * tell. Only call it for a box Ona reports RUNNING (SSH starts stopped boxes).
    */
   async function daemonAlive(resource: OnaResource, signal: AbortSignal): Promise<boolean | null> {
-    const { exitCode } = await sshExecutor(deps.sshBinary, resource.envId, [])
+    const { exitCode } = await executorFor(deps.sshBinary, resource.envId, [])
       .exec({
         command: ["bash", "-c", DAEMON_PROBE, "bb-ona-probe", deps.machineDataDir, resource.dataDir ?? ""],
         stdin: "",
@@ -463,7 +465,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       ...ids,
     ];
     let output = "";
-    const { exitCode } = await sshExecutor(deps.sshBinary, envId, []).exec({
+    const { exitCode } = await executorFor(deps.sshBinary, envId, []).exec({
       command,
       stdin: "",
       timeoutMs: 90_000,
