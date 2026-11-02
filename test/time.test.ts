@@ -1,57 +1,71 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import { pollUntil, sleep } from "../src/time.ts";
+import { settle, tick, useFakeClock } from "./fake-clock.ts";
 
 const never = new AbortController().signal;
+/** For tests that wait on an abort: a sleep that ignores it would hang, so fail it instead. */
+const fast = { timeout: 1_000 };
 
-test("pollUntil returns the first truthy probe result", async () => {
+useFakeClock();
+
+/** A probe that is false once, then throws: a loop that probes past an abort fails instead of spinning. */
+function onceThenThrow() {
   let calls = 0;
-  const result = await pollUntil(async () => (++calls === 3 ? "ready" : false), {
+  return async () => {
+    if (++calls > 1) throw new Error("probed after abort");
+    return false;
+  };
+}
+
+test("pollUntil returns the first truthy probe result (fails if it keeps probing past it)", async () => {
+  let calls = 0;
+  const waiting = pollUntil(async () => (++calls === 3 ? "ready" : false), {
     deadlineMs: 1_000,
-    intervalMs: 1,
+    intervalMs: 10,
     signal: never,
   });
-  assert.equal(result, "ready");
+  // Ticks past the deadline too, so a loop that ignores the result fails rather than hangs.
+  await tick(10, 100);
+  assert.equal(await waiting, "ready");
   assert.equal(calls, 3);
 });
 
-test("pollUntil returns undefined once the deadline passes, probing once per interval", async () => {
+test("pollUntil probes once per interval until the deadline (fails on a probe after the deadline)", async () => {
   let calls = 0;
-  const result = await pollUntil(async () => void calls++, { deadlineMs: 100, intervalMs: 30, signal: never });
-  assert.equal(result, undefined);
-  assert.ok(calls >= 3 && calls <= 5, `one probe per 30ms round in 100ms, got ${calls}`);
+  const waiting = pollUntil(async () => void calls++, { deadlineMs: 100, intervalMs: 30, signal: never });
+  await tick(30, 5);
+  assert.equal(await waiting, undefined);
+  assert.equal(calls, 4, "probes at 0, 30, 60 and 90ms");
 });
 
-test("an abort ends the wait without another probe", async () => {
+test("an abort ends the wait without waiting out the interval or probing again", fast, async () => {
   const controller = new AbortController();
-  let calls = 0;
-  const started = Date.now();
-  const waiting = pollUntil(
-    async () => {
-      calls++;
-      return false;
-    },
-    { deadlineMs: 60_000, intervalMs: 10_000, signal: controller.signal },
-  );
-  setTimeout(() => controller.abort(new Error("cancelled")), 5);
-  await assert.rejects(waiting, /cancelled/);
-  assert.equal(calls, 1);
-  assert.ok(Date.now() - started < 1_000);
-});
-
-test("an abort during the sleep that outlasts the deadline still rejects", async () => {
-  const controller = new AbortController();
-  const waiting = pollUntil(async () => false, { deadlineMs: 10, intervalMs: 50, signal: controller.signal });
-  setTimeout(() => controller.abort(new Error("cancelled")), 20);
+  const waiting = pollUntil(onceThenThrow(), { deadlineMs: 60_000, intervalMs: 10_000, signal: controller.signal });
+  await tick(5);
+  controller.abort(new Error("cancelled"));
+  // No further tick: the rejection must not depend on the 10s interval passing.
   await assert.rejects(waiting, /cancelled/);
 });
 
-test("sleep resolves early on abort, at once on an aborted signal, and runs with no signal", async () => {
+test("an abort during the sleep that outlasts the deadline rejects (fails if it returns undefined)", fast, async () => {
   const controller = new AbortController();
-  const started = Date.now();
-  setTimeout(() => controller.abort(), 5);
-  await sleep(10_000, controller.signal);
-  assert.ok(Date.now() - started < 1_000);
+  const waiting = pollUntil(onceThenThrow(), { deadlineMs: 10, intervalMs: 50, signal: controller.signal });
+  await tick(20);
+  controller.abort(new Error("cancelled"));
+  await assert.rejects(waiting, /cancelled/);
+});
+
+test("sleep resolves early on abort, at once on an aborted signal, and after `ms` with no signal", fast, async () => {
+  const controller = new AbortController();
+  const early = sleep(10_000, controller.signal);
+  controller.abort();
+  await early;
   await sleep(10_000, AbortSignal.abort());
-  await sleep(1);
+  let done = false;
+  const plain = sleep(1).then(() => (done = true));
+  await settle();
+  assert.equal(done, false);
+  mock.timers.tick(1);
+  await plain;
 });

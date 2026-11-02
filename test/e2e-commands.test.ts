@@ -1,7 +1,7 @@
 // The real server.ts inside the SDK's fake bb host (test/e2e-host.ts), for
 // what a sync pass and the `bb ona` commands do to a box: the idle release and
-// the observed stop (neither may stop the box), keep-alive, and the thread
-// event. One story in file order: run the whole file.
+// the observed stop (neither may stop the box), keep-alive, reconnect, rename,
+// update and the thread event. One story in file order: run the whole file.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { after, before, test } from "node:test";
@@ -24,12 +24,23 @@ let close: E2eHost["close"];
 let resource: OnaResource;
 const hosts: BbHost[] = [];
 const threads: ThreadRecord[] = [];
+const bootstraps: string[] = [];
 const suspends = () => host.harness.inspection.sdk.callsTo("hosts.experimental_suspend");
+
+function cli(currentVersion: string, latestVersion: string) {
+  const needsUpdate = currentVersion !== latestVersion;
+  return { installed: true, currentVersion, latestVersion, needsUpdate, installAction: { kind: "update" } };
+}
 
 before(async () => {
   if (local.skip) return;
   ({ host, provider, log, envs, patchBox, onaCalls, close } = await startHost({
-    machineBootstrap: { bootstrap: async () => ({ hostId: "host-1" }) },
+    machineBootstrap: {
+      async bootstrap({ key }) {
+        bootstraps.push(key);
+        return { hostId: "host-1" };
+      },
+    },
     machineResource: async (hostId) => (hostId === "host-1" ? resource : null),
     sdk: {
       hosts: {
@@ -40,6 +51,17 @@ before(async () => {
           bbHost.lifecycle = { ...bbHost.lifecycle, phase: "suspending" };
           return bbHost;
         },
+        update: async ({ hostId, name }) =>
+          Object.assign(
+            hosts.find((h) => h.id === hostId)!,
+            { name },
+          ),
+        // Claude Code has an update pending, Codex is current.
+        providerCliStatus: async () => ({
+          "claude-code": cli("1.0.0", "1.1.0"),
+          codex: cli("0.5.0", "0.5.0"),
+        }),
+        installProviderCli: async () => [{ type: "completed", exitCode: 0 }],
       },
       threads: { list: async () => threads },
       environments: { list: async () => [] },
@@ -141,6 +163,39 @@ test("bb ona keep-alive refuses a stopped box, holds a running one and ends on `
   // The `sleep 60` the fake `ona` ran dies with its process group on `off`; a second `off` finds nothing.
   assert.equal((await host.harness.behavior.runCli(["keep-alive", ref, "off"])).stdout, `${ref} had no keep-alive.`);
   assert.deepEqual(onaCalls(), [`environment keep-alive --environment-id ${ref} -q -- sleep 60`]);
+});
+
+test("bb ona reconnect bootstraps the daemon again (fails if it skips the bootstrap or calls Ona)", local, async () => {
+  bootstraps.length = 0;
+  const result = await host.harness.behavior.runCli(["reconnect", resource.envId]);
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.ok(
+    result.stdout?.endsWith(`Installing and enrolling the bb daemon\nReconnected ona:${resource.envName}`),
+    result.stdout,
+  );
+  assert.deepEqual(bootstraps, ["key-1"]);
+  assert.deepEqual(onaCalls(), []);
+});
+
+test("bb ona rename renames the box in Ona and its bb machine (fails if bb keeps the old name)", local, async () => {
+  const result = await host.harness.behavior.runCli(["rename", resource.envId, "new-name"]);
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.equal(result.stdout, `Renamed ${resource.envId} -> new-name (bb machine ona:new-name)`);
+  assert.deepEqual(onaCalls(), [`environment update ${resource.envId} --name new-name`]);
+  assert.equal(envs()[0]!.metadata.name, "new-name");
+  assert.deepEqual(host.harness.inspection.sdk.callsTo("hosts.update"), [[{ hostId: "host-1", name: "ona:new-name" }]]);
+});
+
+test("bb ona update installs only the pending CLI (fails if a current CLI is reinstalled)", local, async () => {
+  Object.assign(hosts[0]!, { status: "connected", lifecycle: { phase: "active", message: null, suspendedAt: null } });
+  const result = await host.harness.behavior.runCli(["update"]);
+  assert.equal(result.exitCode, 0, result.stderr);
+  // shortcut: rename leaves resource.envName stale, so output shows the old name; drop this note when the roadmap item that re-checkpoints the resource lands
+  assert.equal(result.stdout, `${resource.envName}: claude-code 1.0.0 -> 1.1.0`);
+  assert.deepEqual(host.harness.inspection.sdk.callsTo("hosts.installProviderCli"), [
+    [{ hostId: "host-1", provider: "claude-code", actionKind: "update" }],
+  ]);
+  assert.deepEqual(onaCalls(), []);
 });
 
 test("thread.deleted drops the thread's stored cost", local, async () => {
