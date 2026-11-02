@@ -25,8 +25,10 @@ the quick fix is right and when it is not.
   PRs, keeps the roadmap in step and updates this file.
 - **Builder.** One subagent per task, in its own git worktree and branch. It
   writes the code, tests and handoff and leaves them staged; it never pushes.
-- **Reviewer.** A fresh agent (not the builder) that reads the diff cold, plus
-  the repo's `code-review` pass. Findings go back to the builder until clean.
+- **Reviewer.** A fresh agent (not the builder) briefed to break the change:
+  it hunts for the input, timing or state that makes it wrong, and reports
+  only findings with a concrete failing case. Plus the repo's `code-review`
+  pass. Findings go back to the builder until clean.
 
 Pick the cheapest model that can do the task well: a strong model for code,
 review and anything touching a safety rule; a small model (Haiku) for
@@ -77,10 +79,12 @@ those and the "skipped or not checked" lines ponytail ends with.
    `npm ci --ignore-scripts`, writes
    a failing test first where possible, keeps `npm run check` green, writes
    `.agent/HANDOFF.md`, and leaves the work staged for the orchestrator.
-6. **Review.** The orchestrator reads the handoff and the diff, runs a reviewer
-   agent, `code-review` and `/ponytail-review branch`, and sends findings back
-   to the builder. Repeat until there are no open findings. Check the ten Code
-   Review Rules in `AGENTS.md`.
+6. **Review.** The orchestrator reads the handoff and the diff, runs the
+   adversarial reviewer (brief: the diff, the files it touches, the specific
+   ways it could fail, never the orchestrator's own verdict), `code-review`
+   and `/ponytail-review branch`, and sends findings back to the builder.
+   Repeat until there are no open findings. Check the ten Code Review Rules
+   in `AGENTS.md`.
 7. **Open the PR.** Push the branch and open a pull request against `main`.
    The description carries: the roadmap labels, what changed and why, how it
    was tested, the owner live-test steps from the handoff, and anything left
@@ -113,10 +117,8 @@ those and the "skipped or not checked" lines ponytail ends with.
 
 - Builders may commit on `agent/*` branches. The orchestrator may push those
   branches and open PRs. Nobody commits to `main` directly.
-- Installing or bumping a dependency inside a task is allowed when the owner
-  approved that task. Say in the PR which packages changed.
-- These permissions cover the PRs the owner approved in the session. Anything
-  outside that list needs a new approval.
+- Installing or bumping a dependency inside an owner-approved task is allowed;
+  say in the PR which packages changed. Anything else needs a new approval.
 
 ## Self-improvement
 
@@ -133,8 +135,7 @@ This file is the memory of the flow. Keep it current:
   fixed, with no guard, is not closed.
 - When a rule here conflicts with `AGENTS.md`, fix `AGENTS.md` in the same PR
   so the two agree, and say so in the PR.
-- Keep this file under 150 lines. An addition that goes over names what it
-  removes.
+- Keep this file under 150 lines (`docs.yml` checks). An addition names what it removes.
 - A change to this file goes through a PR like any other change.
 
 ## Owner instructions on record
@@ -144,7 +145,6 @@ Rules the owner gave that no section above states. Checked 2026-10-30.
 - Several worktrees are open at once and the shell's working directory drifts
   between them. Address every git command with `git -C <path>` and every file
   with its absolute path; never rely on `cd`.
-- A subagent cannot see the owner's approvals and will often refuse to install,
-  commit or push. Brief builders to leave their work staged; the orchestrator
-  commits and pushes from the builder's worktree, and runs approved installs
-  there before telling the builder to continue.
+- A subagent cannot see the owner's approvals and refuses to install, commit or
+  push. Builders leave work staged; the orchestrator commits, pushes and runs
+  approved installs in the builder's worktree, then tells it to continue.

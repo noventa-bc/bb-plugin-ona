@@ -21,6 +21,11 @@ let patchBox: E2eHost["patchBox"];
 let onaCalls: E2eHost["onaCalls"];
 let close: E2eHost["close"];
 let resource: OnaResource;
+const bootstraps: string[] = [];
+const hosts: BbHost[] = [];
+const disconnectHost = () =>
+  Object.assign(hosts[0]!, { status: "disconnected", lastSeenAt: Date.now() - GRACE_MS - 1_000 });
+/** The process that stands in for a live bb daemon in the rule-3 test. */
 let daemon: ChildProcess | undefined;
 /** Kill the fake daemon and its sleep: the group, or the sleep would outlive its sh and hold the test process open. */
 const stopDaemon = () => {
@@ -29,10 +34,6 @@ const stopDaemon = () => {
   } catch {}
   daemon = undefined;
 };
-const bootstraps: string[] = [];
-const hosts: BbHost[] = [];
-const disconnected = () =>
-  Object.assign(hosts[0]!, { status: "disconnected", lastSeenAt: Date.now() - GRACE_MS - 1_000 });
 
 before(async () => {
   if (local.skip) return;
@@ -89,7 +90,7 @@ test("create a box and connect it", local, async () => {
 });
 
 test("bb ona sync on a running box whose daemon is gone restarts the daemon without touching Ona", local, async () => {
-  disconnected();
+  disconnectHost();
   const result = await host.harness.behavior.runCli(["sync"]);
   assert.equal(result.exitCode, 0, result.stderr);
   assert.match(result.stdout ?? "", /last action: heal-daemon: .*daemon was down; restarted it/);
@@ -101,7 +102,7 @@ test("bb ona sync leaves a live daemon alone (rule 3)", local, async () => {
   // DAEMON_PROBE looks for a process whose command line carries the box's data folder.
   // Two commands, or sh would exec the sleep alone and the folder would leave the argv.
   daemon = spawn("sh", ["-c", `sleep 60; : ${dir}/.bb-machines/x`], { stdio: "ignore", detached: true });
-  disconnected();
+  disconnectHost();
   const result = await host.harness.behavior.runCli(["sync"]);
   stopDaemon();
   assert.equal(result.exitCode, 0, result.stderr);
