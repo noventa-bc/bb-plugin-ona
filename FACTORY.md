@@ -28,7 +28,8 @@ the quick fix is right and when it is not.
 - **Reviewer.** A fresh agent (not the builder) briefed to break the change:
   it hunts for the input, timing or state that makes it wrong, and reports
   only findings with a concrete failing case. Plus the repo's `code-review`
-  pass. Findings go back to the builder until clean.
+  pass and `/ponytail-review`: three passes on every PR this flow opens.
+  Findings go back to the builder until clean.
 
 Pick the cheapest model that can do the task well: a strong model for code,
 review and anything touching a safety rule; a small model (Haiku) for
@@ -87,16 +88,19 @@ those and the "skipped or not checked" lines ponytail ends with.
    adversarial reviewer (brief: the diff, the files it touches, the specific
    ways it could fail, never the orchestrator's own verdict), `code-review`
    and `/ponytail-review branch`, and sends findings back to the builder.
-   Repeat until there are no open findings. Check the ten Code Review Rules
-   in `AGENTS.md`.
+   All three passes run on every PR this flow opens, with no exception for a
+   small or docs-only change, and a pass that did not run blocks the PR.
+   Each round of fixes runs all three again; the PR opens after a round with
+   no open findings. Check the ten Code Review Rules in `AGENTS.md`.
 7. **Open the PR.** Push the branch and open a pull request against `main`.
    The title is a Conventional Commit (`type(scope): subject`, see
    `AGENTS.md`): the squash merge makes it the commit on `main`, and it
    decides the release. Run `scripts/bump.sh "<title>"` first: it bumps
    `package.json` as the title requires (or does nothing), and CI checks the
    same rule. The description carries: the roadmap labels, what changed and why, how it
-   was tested, the owner live-test steps from the handoff, and anything left
-   out. Nothing from the "Security (private)" handoff section goes in the PR.
+   was tested, the three review passes and what each found, the owner
+   live-test steps from the handoff, and anything left out. Nothing from the
+   "Security (private)" handoff section goes in the PR.
 8. **Wait for CI.** The `check` workflow must be green. A red run goes back to
    the builder; never merge around it. A PR with no checks at all after a
    minute (GitHub sometimes drops the event when the branch and the PR appear
