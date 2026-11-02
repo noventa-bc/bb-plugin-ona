@@ -23,3 +23,9 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npx prettier --check "**/*.md"
+      # The limits AGENTS.md and FACTORY.md set for themselves.
+      - run: |
+          for f in AGENTS.md FACTORY.md; do
+            n=$(wc -l < "$f")
+            [ "$n" -le 150 ] || { echo "$f has $n lines; the limit is 150"; exit 1; }
+          done

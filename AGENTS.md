@@ -44,6 +44,7 @@ Change these together, in the same edit.
 
 ## How to work
 
+- Rule 1: simplicity, always. The simplest thing that fully works beats the clever, the general and the defensive.
 - Write the least code that solves the whole task (the ponytail ruleset, installed as a Claude Code plugin; see `docs/owner.md`). A shortcut with a known limit gets a comment `shortcut: <the limit>, <when to upgrade>`; `/ponytail-debt` lists them.
 - Fix a bug with a failing test first, where a test is possible.
 - When you find a bug, a source of noise or anything that can damage the repo, add the guard that stops it recurring in the same change: a test, a lint rule, a CI step, a `.gitignore` line or a written rule here. Say in the handoff which guard you added.
@@ -66,7 +67,8 @@ Change these together, in the same edit.
 - Put commands and settings in backticks.
 - Write facts that stay true over time. Avoid words that depend on when the text is read.
 - A dated fact carries the words "checked YYYY-MM-DD".
-- Do not document what the code shows. Point to the code instead.
+- Do not document what the code shows. Point to the code instead. Comments and docs
+  describe what exists; nothing about what was removed or is absent (git history has that).
 - `docs/ona-notes.md` holds facts about Ona and bb. A fact about a build or CI tool lives as a comment next to its pin.
 
 ## Code Review Rules

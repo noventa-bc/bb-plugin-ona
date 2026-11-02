@@ -7,15 +7,16 @@ orchestration rules on top and records the exceptions the owner granted.
 
 ## Purpose
 
-The owner's goal is a repo that stays maintainable for years with one
-maintainer, not a one-weekend app. Every step below serves that: small
-reviewed PRs, a test for each bug, a guard for each hazard, docs that stay
-true, and complexity that pays for itself. When a shortcut would be faster
-today and costlier to keep, take the slower path and say so. Removing code,
-settings, processes and steps counts as progress: every session looks for a
-simplification or an optimisation to propose, in the code and in this flow.
-Keep it simple and do not repeat yourself; judge like a staff engineer who
-knows when the quick fix is right and when it is not.
+Rule 1 of this repo: simplicity, always. The simplest thing that fully
+works beats the clever, the general and the defensive, in code, tests, CI,
+docs and this flow. The goal is a repo that stays maintainable for years
+with one maintainer, not a one-weekend app: small reviewed PRs, a test for
+each bug, a guard for each hazard, docs that stay true, and complexity that
+pays for itself. When a shortcut would be faster today and costlier to keep,
+take the slower path and say so. Removing code, settings, processes and
+steps counts as progress: every session looks for a simplification to
+propose. Do not repeat yourself; judge like a staff engineer who knows when
+the quick fix is right and when it is not.
 
 ## Roles
 
@@ -124,8 +125,7 @@ This file is the memory of the flow. Keep it current:
 - When the owner gives an instruction worth keeping (a rule, a preference, a
   permission, a thing to avoid), add it here in the same session, in the
   section it belongs to. Edit an existing rule rather than adding one.
-- When a step failed or wasted time, record what to do instead, next to the
-  step.
+- When a step failed or wasted time, record what to do instead, next to the step.
 - When a bug, a source of noise or a repo hazard shows up (in the code, in CI,
   in a review or in the flow itself), add the guardrail that stops it recurring
   before the PR opens: a test with the failing case, a lint rule, a CI step, a
