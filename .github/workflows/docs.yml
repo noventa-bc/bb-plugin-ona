@@ -29,12 +29,13 @@ jobs:
             n=$(wc -l < "$f")
             [ "$n" -le 300 ] || { echo "$f has $n lines; the limit is 300"; exit 1; }
           done
-      # Relative Markdown links point at files that exist.
+      # Relative Markdown links point at files that exist. Fenced blocks and inline code are
+      # skipped so link examples do not count. Paths with parentheses are not supported.
       - run: |
           dead=0
-          for f in $(find . -name '*.md' -not -path './node_modules/*' -not -path './.claude/*'); do
-            for t in $(grep -oE '\]\([^)#]+' "$f" | sed 's/^](//' | grep -vE '^(https?:|mailto:)'); do
+          while IFS= read -r f; do
+            while IFS= read -r t; do
               [ -e "$(dirname "$f")/$t" ] || { echo "$f: dead link $t"; dead=1; }
-            done
-          done
+            done < <(sed '/^```/,/^```/d; s/`[^`]*`//g' "$f" | grep -oE '\]\([^)#]+' | sed 's/^](//' | grep -vE '^(https?:|mailto:)')
+          done < <(find . -name '*.md' -not -path './node_modules/*' -not -path './.claude/*')
           exit $dead
