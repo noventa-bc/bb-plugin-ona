@@ -7,7 +7,9 @@ person, so the rules below exist to keep it maintainable, not to slow you down.
 ## What you need
 
 - Node at the version in `.nvmrc`, npm and git. Nothing else is needed to
-  build or test: the tests fake bb and the `ona` CLI.
+  build or test: the tests fake bb and the `ona` CLI. After `npm ci
+  --ignore-scripts`, run `npm rebuild better-sqlite3` once: the SDK's fake bb
+  host loads it.
 - Optional, for the checks CI also runs: `shellcheck` (shell scripts) and
   `semgrep` (`brew install semgrep`; rules in `.semgrep/rules.yml`).
 - Only for trying a change live: a Mac with the bb app and the `ona` CLI, as in
@@ -19,6 +21,7 @@ person, so the rules below exist to keep it maintainable, not to slow you down.
 git clone <this repository>
 cd bb-plugin-ona
 npm ci --ignore-scripts
+npm rebuild better-sqlite3
 npm run check        # typecheck, lint, format check, tests
 ```
 
@@ -38,6 +41,10 @@ npm run check        # typecheck, lint, format check, tests
 1. Branch from `main`. Agent-made branches are named `agent/<slug>`.
 2. Fix a bug with a failing test first. Put logic in `src/` as pure functions
    with tests; a change to a sync pass gets a scenario in `test/sync.test.ts`.
+   Offline end-to-end: `test/e2e.test.ts` loads the real `server.ts` in the
+   SDK's fake bb host with the fake `ona` (`test/fake-ona.mjs`, stateful) and
+   fake `ssh`, and drives the provider's create, suspend, resume and remove.
+   It needs a loopback port, so it skips itself inside the agent sandbox.
 3. Write the least code that solves the whole task. Mark a known limit with a
    `shortcut: <the limit>, <when to upgrade>` comment.
 4. Make the coupled changes `AGENTS.md` lists (README settings table, usage

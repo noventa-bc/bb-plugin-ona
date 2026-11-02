@@ -7,9 +7,10 @@ export default tseslint.config(
   // .semgrep/ holds Semgrep test fixtures, which break rules on purpose.
   { ignores: ["dist/", "node_modules/", ".semgrep/"] },
   {
-    files: ["**/*.ts", "**/*.tsx"],
+    // test/*.mjs is the fake ona CLI; shellcheck no longer covers it, this does.
+    files: ["**/*.ts", "**/*.tsx", "test/*.mjs"],
     extends: [tseslint.configs.base],
-    languageOptions: { parserOptions: { projectService: true } },
+    languageOptions: { parserOptions: { projectService: { allowDefaultProject: ["test/*.mjs"] } } },
     rules: {
       "@typescript-eslint/no-floating-promises": [
         "error",
