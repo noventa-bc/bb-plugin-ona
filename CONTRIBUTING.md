@@ -7,9 +7,7 @@ person, so the rules below exist to keep it maintainable, not to slow you down.
 ## What you need
 
 - Node at the version in `.nvmrc`, npm and git. Nothing else is needed to
-  build or test: the tests fake bb and the `ona` CLI. After `npm ci
-  --ignore-scripts`, run `npm rebuild better-sqlite3` once: the SDK's fake bb
-  host loads it.
+  build or test: the tests fake bb and the `ona` CLI.
 - Optional, for the checks CI also runs: `shellcheck` (shell scripts) and
   `semgrep` (`brew install semgrep`; rules in `.semgrep/rules.yml`).
 - Only for trying a change live: a Mac with the bb app and the `ona` CLI, as in
@@ -21,7 +19,6 @@ person, so the rules below exist to keep it maintainable, not to slow you down.
 git clone <this repository>
 cd bb-plugin-ona
 npm ci --ignore-scripts
-npm rebuild better-sqlite3
 npm run check        # typecheck, lint, format check, tests
 ```
 
