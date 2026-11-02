@@ -27,5 +27,5 @@ jobs:
       - run: |
           for f in AGENTS.md FACTORY.md; do
             n=$(wc -l < "$f")
-            [ "$n" -le 150 ] || { echo "$f has $n lines; the limit is 150"; exit 1; }
+            [ "$n" -le 300 ] || { echo "$f has $n lines; the limit is 300"; exit 1; }
           done

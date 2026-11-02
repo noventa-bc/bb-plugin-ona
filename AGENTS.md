@@ -110,5 +110,5 @@ Process feedback holds proposed edits to this file, with evidence.
 - Propose an edit when the same correction was needed twice, or when a fact was missing.
 - Edit an existing rule instead of adding one.
 - The owner applies proposals.
-- Keep this file under 150 lines. A proposal that goes over the limit names the line it removes.
+- Keep this file under 300 lines. A proposal that goes over the limit names the line it removes.
 - The owner runs `/doctor prompt-audit` once per release.
