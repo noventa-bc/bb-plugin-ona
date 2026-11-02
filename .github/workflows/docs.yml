@@ -17,11 +17,20 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # The base branch, for the title and version gate below.
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci --ignore-scripts
+      # Same gate as check.yml: a Conventional Commit title and no version bump for a Markdown-only change.
+      - if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE: ${{ github.base_ref }}
+        run: scripts/release-check.sh "origin/$BASE"
       - run: npx prettier --check "**/*.md"
       # The limits AGENTS.md and FACTORY.md set for themselves.
       - run: |

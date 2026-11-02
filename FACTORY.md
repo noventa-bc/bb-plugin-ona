@@ -88,7 +88,9 @@ those and the "skipped or not checked" lines ponytail ends with.
 7. **Open the PR.** Push the branch and open a pull request against `main`.
    The title is a Conventional Commit (`type(scope): subject`, see
    `AGENTS.md`): the squash merge makes it the commit on `main`, and it
-   decides the release. The description carries: the roadmap labels, what changed and why, how it
+   decides the release. Run `scripts/bump.sh "<title>"` first: it bumps
+   `package.json` as the title requires (or does nothing), and CI checks the
+   same rule. The description carries: the roadmap labels, what changed and why, how it
    was tested, the owner live-test steps from the handoff, and anything left
    out. Nothing from the "Security (private)" handoff section goes in the PR.
 8. **Wait for CI.** The `check` workflow must be green. A red run goes back to
