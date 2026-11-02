@@ -4,6 +4,7 @@
 import { spawn } from "node:child_process";
 import type { MachineExecutor, PluginLogger } from "@get-bb/plugin-sdk";
 import { sshHost } from "./ona.ts";
+import { sleep } from "./time.ts";
 
 const SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3"];
 
@@ -82,21 +83,6 @@ export async function sshCapture(
     },
   });
   return { exitCode, output };
-}
-
-function sleep(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    if (signal.aborted) return resolve();
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        resolve();
-      },
-      { once: true },
-    );
-  });
 }
 
 /**

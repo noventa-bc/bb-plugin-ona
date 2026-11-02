@@ -105,3 +105,30 @@ async function fixture4(bb: any, kv: any, envId: string, value: string) {
   // ok: secret-in-kv-key
   await kv.set(`connected-at:${envId}`, Date.now());
 }
+
+// --- raw-sleep-promise.ts ---
+// Fixtures for semgrep --test. Not compiled, linted or formatted.
+async function fixture6(signal: AbortSignal) {
+  // ruleid: raw-sleep-promise
+  await new Promise((resolve) => setTimeout(resolve, 5_000));
+  // ruleid: raw-sleep-promise
+  await new Promise<void>((done) => setTimeout(done, 10));
+  // ruleid: raw-sleep-promise
+  await new Promise((r) => {
+    setTimeout(r, 5_000);
+  });
+  // ok: raw-sleep-promise
+  await sleep(5_000, signal);
+  // ok: raw-sleep-promise
+  await new Promise<void>((resolve) => {
+    child.on("close", () => resolve());
+  });
+  // ok: raw-sleep-promise
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(() => resolve(), 3_000);
+    child.on("close", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}

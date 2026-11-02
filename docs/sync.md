@@ -144,3 +144,5 @@ CI checks parts of these rules with Semgrep (`.semgrep/rules.yml`):
   only through `shellQuote`.
 - `console-instead-of-bb-log`: plugin code logs through `bb.log`.
 - `secret-in-kv-key`: no storage key names a token, secret or password.
+- `raw-sleep-promise`: waits go through `sleep` and `pollUntil` in `src/time.ts`,
+  which honour the abort signal.
