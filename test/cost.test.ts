@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import {
   CLAUDE_COLLECTOR,
+  CLAUDE_PRICES_CHECKED,
   claudeCost,
   claudePriceFor,
   codexCost,
@@ -111,4 +112,12 @@ test("the Claude collector counts each API response once, including subagents", 
     { input: 20, output: 10, cacheRead: 200, cacheWrite1h: 40 },
   );
   assert.equal(buckets.find((b) => b.model === "claude-haiku-5-5")?.input, 10);
+});
+
+test("the Anthropic price table was checked within the last 90 days", () => {
+  const ageDays = (Date.now() - Date.parse(CLAUDE_PRICES_CHECKED)) / 86_400_000;
+  assert.ok(
+    ageDays <= 90,
+    `Anthropic prices were last checked on ${CLAUDE_PRICES_CHECKED}; re-check them against Anthropic's pricing page and update CLAUDE_PRICES_CHECKED in src/cost.ts`,
+  );
 });

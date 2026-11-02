@@ -18,10 +18,13 @@ interface ClaudePrice {
 
 const price = (input: number, output: number, cacheRead = input * 0.1): ClaudePrice => ({ input, output, cacheRead });
 
+/** The day CLAUDE_PRICES was last compared with Anthropic's price list. A test fails once it is 90 days old. */
+export const CLAUDE_PRICES_CHECKED = "2026-10-23";
+
 /**
- * Anthropic list prices (first-party API), checked 2026-10-23. Update when
- * Anthropic changes prices. Keys are model ids or id prefixes; the longest
- * matching key wins.
+ * Anthropic list prices (first-party API). When Anthropic changes prices,
+ * update the table and CLAUDE_PRICES_CHECKED together. Keys are model ids or
+ * id prefixes; the longest matching key wins.
  */
 export const CLAUDE_PRICES: Record<string, ClaudePrice> = {
   "claude-fable-5-1": price(10, 50, 0.25),

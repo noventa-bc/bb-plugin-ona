@@ -54,9 +54,9 @@ npm run check        # typecheck, lint, format check, tests
    Semgrep commands from `AGENTS.md` if you have Semgrep.
 6. Open a pull request against `main`. Say what changed and why, how you tested
    it, and what a maintainer should check live. CI must be green: `check`
-   (Ubuntu and macOS, with Semgrep, shellcheck and a test file per `src/`
-   module on Ubuntu) and, for Markdown, `docs` (formatting, line limits and
-   dead relative links). `main` only changes through squash-merged pull requests.
+   (Ubuntu, with Semgrep, shellcheck and a test file per `src/` module) and,
+   for Markdown, `docs` (formatting, line limits and dead relative links).
+   `main` only changes through squash-merged pull requests.
 
 ## Working with a coding agent
 
@@ -89,7 +89,7 @@ npm run check        # typecheck, lint, format check, tests
 | `skills/ona-devboxes/SKILL.md` | Agents that use the plugin inside bb |
 | `AGENTS.md` | Rules for changing the plugin |
 | `FACTORY.md` | The maintainer's orchestrated agent flow |
-| `docs/owner.md` | How the maintainer runs agents and promotes a build |
+| `docs/owner.md` | How the maintainer runs agents, verifies a build and releases |
 | `docs/sync.md`, `docs/security.md` | Safety rules and the security model |
 | `docs/ona-notes.md` | Facts about Ona and bb, each with a checked date |
 | `docs/decisions/` | Why the rules are what they are |

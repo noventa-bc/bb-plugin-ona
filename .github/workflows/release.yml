@@ -1,0 +1,29 @@
+# On a `v*` tag: create the GitHub release with that version's CHANGELOG.md
+# section as the notes. Fails if the tag does not match package.json's version.
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json version $version"; exit 1
+          fi
+          # The lines from "## <version> (" up to the next "## " heading.
+          awk -v v="$version" '/^## /{p = index($0, "## " v " (") == 1} p' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "CHANGELOG.md has no section '## $version (...)'"; exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md
