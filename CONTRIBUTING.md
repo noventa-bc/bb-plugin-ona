@@ -43,8 +43,10 @@ npm run check        # typecheck, lint, format check, tests
    with tests; a change to a sync pass gets a scenario in `test/sync.test.ts`.
    Offline end-to-end: `test/e2e.test.ts` loads the real `server.ts` in the
    SDK's fake bb host with the fake `ona` (`test/fake-ona.mjs`, stateful) and
-   fake `ssh`, and drives the provider's create, suspend, resume and remove.
-   It needs a loopback port, so it skips itself inside the agent sandbox.
+   fake `ssh`, and drives the provider's create, suspend, resume and remove;
+   `test/e2e-commands.test.ts` does the same for the sync pass and the `bb ona`
+   commands. Both need a loopback port, so they skip themselves inside the
+   agent sandbox.
 3. Write the least code that solves the whole task. Mark a known limit with a
    `shortcut: <the limit>, <when to upgrade>` comment.
 4. Make the coupled changes `AGENTS.md` lists (README settings table, usage
