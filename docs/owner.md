@@ -64,12 +64,33 @@ an unattended agent skips a conflicting item.
 4. Apply "Process feedback" proposals to `AGENTS.md` yourself, if they hold up.
 5. Remove the worktree: `git worktree remove <worktree>` and `git branch -D agent/<slug>`.
 
-## Promote to live
+## Verify after upgrading bb (or reloading the plugin)
 
-bb loads the plugin from this folder. After merging into this checkout, run
-`~/.bb/bin/bb plugin reload ona`, then `bb ona status` and the handoff's
-live-test steps. A few minutes later, check `bb plugin logs ona` for the same
-action repeating every pass: a repair that never sticks shows up there first.
+bb loads the plugin from this folder. After merging into this checkout, or
+after a bb upgrade, run through this list:
+
+1. `~/.bb/bin/bb plugin reload ona`, then `bb ona status`.
+2. From inside a devbox, the two probes under "Check it yourself" in
+   `docs/security.md` (403 on `/api/v1/projects`, 200 on `/health`).
+3. One `bb ona new <project>` and one resume of a stopped box, plus the
+   handoff's live-test steps.
+4. A few minutes later, `bb plugin logs ona`: the same action repeating every
+   pass means a repair that never sticks.
+
+## Release
+
+1. Bump `version` in `package.json`.
+2. In `CHANGELOG.md`, turn `## Unreleased` into `## X.Y.Z (YYYY-MM-DD)` and
+   add a fresh, empty `## Unreleased` above it.
+3. Land that through a PR.
+4. `git tag vX.Y.Z <merge commit> && git push origin vX.Y.Z`. The `release`
+   workflow (`.github/workflows/release.yml`) creates the GitHub release from
+   that changelog section and refuses a tag that does not match `package.json`.
+
+Never move a tag: bb's `git:` installs resolve a semver range to tags, so a
+fix ships as a new version. The one exception is a tag the workflow refused
+and nobody has installed: delete it (`git push origin :vX.Y.Z`) and push it
+again once fixed.
 
 ## Sandbox checks (nono 0.81.0, checked 2026-10-30)
 

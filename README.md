@@ -8,12 +8,12 @@ all run in the devbox.
 ## Quick start
 
 ```sh
-bb plugin install git:<plugin-repo-url>   # 1. install (needs the ona CLI, logged in)
-bb ona setup                              # 2. see what's missing
-bb ona setup --yes                        # 3. apply the one-time settings
-bb ona adopt <ona-environment>            # 4a. use an environment you already have
-bb ona new <ona-project>                  # 4b. or create a fresh devbox
-bb ona list                               # 5. wait until it says "connected"
+bb plugin install git:https://github.com/noventa-bc/bb-plugin-ona.git@^0.3.0   # 1. install (needs the ona CLI, logged in)
+bb ona setup                                                                   # 2. see what's missing
+bb ona setup --yes                                                             # 3. apply the one-time settings
+bb ona adopt <ona-environment>                                                 # 4a. use an environment you already have
+bb ona new <ona-project>                                                       # 4b. or create a fresh devbox
+bb ona list                                                                    # 5. wait until it says "connected"
 ```
 
 Then pick the machine in bb's composer. Threads running on a devbox show what
@@ -69,8 +69,12 @@ On each devbox:
 ## Install
 
 ```sh
-bb plugin install git:<internal-repo-url>
+bb plugin install git:https://github.com/noventa-bc/bb-plugin-ona.git@^0.3.0
 ```
+
+The `^0.3.0` range installs the highest matching release tag, and `bb plugin
+update` follows it; `bb plugin install https://github.com/noventa-bc/bb-plugin-ona`
+tracks `main` instead.
 
 bb installs the npm dependencies and builds the plugin itself, so you don't need
 Node on your Mac's PATH. Plugins are full-trust code inside bb; only install
