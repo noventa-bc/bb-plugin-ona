@@ -19,6 +19,7 @@ person, so the rules below exist to keep it maintainable, not to slow you down.
 git clone <this repository>
 cd bb-plugin-ona
 npm ci --ignore-scripts
+git config core.hooksPath .githooks   # rejects commit messages that are not Conventional Commits
 npm run check        # typecheck, lint, format check, tests
 ```
 
@@ -35,7 +36,9 @@ npm run check        # typecheck, lint, format check, tests
 
 ## Make a change
 
-1. Branch from `main`. Agent-made branches are named `agent/<slug>`.
+1. Branch from `main`. Agent-made branches are named `agent/<slug>`. Commit
+   messages are Conventional Commits, `type(scope): subject` (the hook from
+   "Set up" checks them; `scripts/conventional.sh` has the rule).
 2. Fix a bug with a failing test first. Put logic in `src/` as pure functions
    with tests; a change to a sync pass gets a scenario in `test/sync.test.ts`.
    Offline end-to-end: `test/e2e.test.ts` loads the real `server.ts` in the
@@ -48,14 +51,18 @@ npm run check        # typecheck, lint, format check, tests
 3. Write the least code that solves the whole task. Mark a known limit with a
    `shortcut: <the limit>, <when to upgrade>` comment.
 4. Make the coupled changes `AGENTS.md` lists (README settings table, usage
-   text, `docs/sync.md` rules table, CHANGELOG "Unreleased" bullet without a
-   hash).
+   text, `docs/sync.md` rules table).
 5. Run `npm run check`, plus `shellcheck` on any `.sh` you touched and the two
    Semgrep commands from `AGENTS.md` if you have Semgrep.
-6. Open a pull request against `main`. Say what changed and why, how you tested
-   it, and what a maintainer should check live. CI must be green: `check`
-   (Ubuntu, with Semgrep and shellcheck) and, for Markdown,
-   `docs`. `main` only changes through squash-merged pull requests.
+6. Open a pull request against `main`. The title is a Conventional Commit too:
+   the squash merge puts it on `main`, and CI reads the bump from it (`feat`
+   minor, `fix` and `perf` patch, `!` major; other types none). A PR that bumps
+   also sets `version` in `package.json`; merging it releases it, with notes
+   generated from the merged PR titles, so a user-visible change gets a title
+   in user-facing wording. In the body, say what changed and why, how you
+   tested it, and what a maintainer should check live. CI must be green: `check` (Ubuntu, with Semgrep and shellcheck) and,
+   for Markdown, `docs`. `main` only changes through squash-merged pull
+   requests.
 
 ## Working with a coding agent
 
@@ -92,5 +99,4 @@ npm run check        # typecheck, lint, format check, tests
 | `docs/sync.md`, `docs/security.md` | Safety rules and the security model |
 | `docs/ona-notes.md` | Facts about Ona and bb, each with a checked date |
 | `docs/decisions/` | Why the rules are what they are |
-| `CHANGELOG.md` | What changed, with the commit that made it |
 | `SECURITY.md` | How to report a vulnerability |
