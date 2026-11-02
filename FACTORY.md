@@ -125,8 +125,7 @@ This file is the memory of the flow. Keep it current:
 - When the owner gives an instruction worth keeping (a rule, a preference, a
   permission, a thing to avoid), add it here in the same session, in the
   section it belongs to. Edit an existing rule rather than adding one.
-- When a step failed or wasted time, record what to do instead, next to the
-  step.
+- When a step failed or wasted time, record what to do instead, next to the step.
 - When a bug, a source of noise or a repo hazard shows up (in the code, in CI,
   in a review or in the flow itself), add the guardrail that stops it recurring
   before the PR opens: a test with the failing case, a lint rule, a CI step, a
