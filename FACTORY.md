@@ -152,11 +152,20 @@ This file is the memory of the flow. Keep it current:
 
 ## Owner instructions on record
 
-Rules the owner gave that no section above states. Checked 2026-10-30.
+Rules the owner gave that no section above states. Checked 2026-11-02.
 
 - Several worktrees are open at once and the shell's working directory drifts
   between them. Address every git command with `git -C <path>` and every file
-  with its absolute path; never rely on `cd`.
+  with its absolute path; never rely on `cd`. Run npm as
+  `sh -c "cd <worktree> && npm run check"`: a `cd` at the start of a compound
+  command can be dropped, and `npm` run from a folder without `package.json`
+  walks up and installs into the live checkout.
 - A subagent cannot see the owner's approvals and refuses to install, commit or
   push. Builders leave work staged; the orchestrator commits, pushes and runs
   approved installs in the builder's worktree, then tells it to continue.
+- A builder that was stopped (the owner's credits ran out, the session ended)
+  cannot be resumed. Its worktree keeps the staged work: review it, finish the
+  handoff and the PR from there instead of starting the task again.
+- The owner may stop the session when the weekly usage limit nears 99%. The
+  orchestrator cannot see the limit; when the owner says to halt, finish the
+  step in hand, write the handoffs and report, and open no new PR.
