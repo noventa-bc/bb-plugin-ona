@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths: ["**.md"]
   pull_request:
+    types: [opened, synchronize, reopened, edited]
     paths: ["**.md"]
 permissions:
   contents: read
