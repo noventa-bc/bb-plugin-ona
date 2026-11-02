@@ -1,7 +1,9 @@
 // One sync pass between bb and Ona, and the status it reports: which machines
 // the plugin manages, what each needs (decide() in reconcile.ts), carrying
-// that out under the guard, and letting idle boxes go. server.ts wires it to
-// bb's events and commands; tests drive it with a fake of the bb calls below.
+// that out under the guard, and letting idle boxes go, plus the bb events that
+// schedule a pass (watchRealtime). server.ts wires them to bb's commands and
+// the lifecycle-sync service; tests drive them with a fake of the bb calls below.
+import type { BbPluginApi, PluginLogger } from "@get-bb/plugin-sdk";
 import { isArchived, isRunning, type OnaListing } from "./ona.ts";
 import { PROVIDER_ID, resourceSchema, type OnaResource } from "./provider.ts";
 import {
@@ -18,12 +20,16 @@ import {
   ALL,
   decide,
   GIVE_UP_AFTER,
+  GRACE_MS,
   type Decision,
   type HostGuard,
   type MachineView,
   type OnaView,
+  type PassScheduler,
 } from "./reconcile.ts";
 import { threadStatuses } from "./updates.ts";
+
+export const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export const connectedAtKey = (envId: string) => `connectedAt:${envId}`;
 
@@ -144,7 +150,6 @@ export type Sync = ReturnType<typeof createSync>;
 export function createSync(deps: SyncDeps) {
   const { bb, snapshot, ona, guard, tunnels, provider, hostByEnv, autoRepair, idleDisconnect } = deps;
   const pluginStartedAt = deps.pluginStartedAt;
-  const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
   async function machines(): Promise<Row[]> {
     const hosts = await bb.sdk.hosts.list();
@@ -448,4 +453,72 @@ export function createSync(deps: SyncDeps) {
   }
 
   return { machines, reconcile, statusRows, missing, workspaces, suspendWithoutStop };
+}
+
+/** The parts of bb's plugin API the realtime events use; the real `bb` satisfies it. */
+export interface RealtimeBb {
+  sdk: Pick<BbPluginApi["sdk"], "subscribe"> & {
+    threads: { get(args: { threadId: string }): Promise<{ environmentId: string | null }> };
+    environments: { get(args: { environmentId: string }): Promise<{ hostId: string }> };
+  };
+  log: Pick<PluginLogger, "warn">;
+}
+
+export interface RealtimeDeps {
+  bb: RealtimeBb;
+  scheduler: Pick<PassScheduler, "schedule">;
+  /** Ona env id -> bb host id, the same map the sync pass refreshes. */
+  hostByEnv: ReadonlyMap<string, string>;
+}
+
+/**
+ * React when it matters instead of waiting for the poll: a thread waiting
+ * for an Ona machine, an Ona machine dropping off, or a realtime reconnect
+ * (events may have been missed). Every other event is dropped at the first
+ * check; thread events fire constantly while a turn streams.
+ */
+export function watchRealtime({ bb, scheduler, hostByEnv }: RealtimeDeps): () => void {
+  /** The bb host a thread runs on, if it has one yet. */
+  async function hostOfThread(threadId: string): Promise<string | null> {
+    const thread = await bb.sdk.threads.get({ threadId });
+    if (!thread.environmentId) return null;
+    return (await bb.sdk.environments.get({ environmentId: thread.environmentId })).hostId;
+  }
+
+  const unsubscribers: Array<() => void> = [];
+  const onaHost = (hostId: string | undefined): hostId is string =>
+    hostId !== undefined && [...hostByEnv.values()].includes(hostId);
+  try {
+    unsubscribers.push(
+      bb.sdk.subscribe({
+        event: "thread:changed",
+        callback: (event) => {
+          if (event.metadata?.statusChange?.runtime.displayStatus !== "waiting-for-host" || !event.id) return;
+          void hostOfThread(event.id)
+            .then((hostId) => {
+              if (hostId && onaHost(hostId)) scheduler.schedule(hostId, 500);
+            })
+            .catch(() => {});
+        },
+      }),
+      bb.sdk.subscribe({
+        event: "host:changed",
+        callback: (event) => {
+          if (!onaHost(event.id)) return;
+          // Give a dropped daemon the grace period to come back on its own first.
+          if (event.changes.includes("host-disconnected")) scheduler.schedule(event.id, GRACE_MS + 1_000);
+          else if (event.changes.includes("host-connected")) scheduler.schedule(event.id, 2_000);
+        },
+      }),
+      bb.sdk.subscribe({
+        event: "realtime:connection",
+        callback: (event) => {
+          if (event.reconnected) scheduler.schedule(ALL, 2_000);
+        },
+      }),
+    );
+  } catch (error) {
+    bb.log.warn(`realtime events unavailable, relying on the 2-minute check: ${errorText(error)}`);
+  }
+  return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
 }

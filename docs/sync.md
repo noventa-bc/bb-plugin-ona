@@ -121,8 +121,9 @@ would have been done.
 
 A pass (which machines, carrying out each decision, idle release, the status
 rows) is `createSync()` in `src/sync.ts`; `test/sync.test.ts` drives it against
-a fake of the bb calls it makes. The events and the backstop are wired in
-`server.ts` (`watchRealtime()`); the `bb ona` commands are in `src/commands.ts`.
+a fake of the bb calls it makes. The events are `watchRealtime()` in
+`src/sync.ts`; `server.ts` wires them and the backstop to the `lifecycle-sync`
+service. The `bb ona` commands are in `src/commands.ts`.
 The shared listing is `OnaSnapshot` in `src/ona.ts`. Removing an Ona machine
 drops the box's stored keys (`forgetBox()` in `src/sync.ts`, called from the provider's `remove()`).
 `remove()` refuses to delete a created box that Ona reports unpushed commits

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
-import { checkOnaLogin, findOnaBinary, planSetup } from "../src/setup.ts";
+import { checkOnaLogin, createSetup, findOnaBinary, planSetup, type GeneralSettings } from "../src/setup.ts";
 
 test("findOnaBinary prefers the configured path, then PATH", () => {
   const dir = mkdtempSync(join(tmpdir(), "ona-bin-"));
@@ -138,4 +138,102 @@ test("planSetup says Ona could not be reached instead of asking for a login", ()
   assert.equal(login.state, "blocked");
   assert.match(login.detail, /could not be reached/);
   assert.doesNotMatch(login.detail, /ona login/);
+});
+
+/**
+ * `bb ona setup` against a fake bb CLI and ona: `run` keeps bb's settings in
+ * memory and never spawns. A bb CLI file exists only so setup finds one.
+ */
+function setupWorld(
+  t: TestContext,
+  start: Partial<GeneralSettings>,
+  options: { failing?: string; onaMissing?: boolean; bbCli?: string } = {},
+) {
+  const dataDir = mkdtempSync(join(tmpdir(), "bb-data-"));
+  t.after(() => rmSync(dataDir, { recursive: true, force: true }));
+  mkdirSync(join(dataDir, "bin"));
+  const cliPath = join(dataDir, "bin", "bb");
+  writeFileSync(cliPath, options.bbCli ?? "#!/bin/sh\n");
+  const settings: GeneralSettings = { ...ready.settings, ...start };
+  let sshConfigured = true;
+  const calls: string[] = [];
+  const runs: Array<{ binary: string; args: string[]; env?: NodeJS.ProcessEnv }> = [];
+  const setup = createSetup({
+    server: { loopbackBaseUrl: "http://127.0.0.1:38886/", experimental_dataDir: dataDir },
+    findOna: () => (options.onaMissing ? null : "/bin/ona"),
+    onaPath: "ona",
+    onaLogin: async () => ready.login,
+    hasOnaSshConfig: () => sshConfigured,
+    run: async (binary, args, runOptions) => {
+      runs.push({ binary, args, env: runOptions?.env });
+      const call = [binary, ...args].join(" ");
+      const ok = { ok: true, stdout: "", stderr: "", error: null };
+      if (call.endsWith("settings show --json"))
+        return { ...ok, stdout: JSON.stringify({ data: { generalSettings: settings } }) };
+      calls.push(call.replace(/^.* (settings|environment) /, "$1 "));
+      if (options.failing && call.includes(options.failing)) return { ...ok, ok: false, stderr: "first line\nrefused" };
+      if (call.endsWith("environment ssh-config")) sshConfigured = true;
+      const [key, value] = args.slice(-2) as [keyof GeneralSettings, string];
+      if (args.includes("general")) Object.assign(settings, { [key]: value === "false" ? false : value });
+      return ok;
+    },
+  });
+  return { setup, calls, runs, cliPath, setSsh: (value: boolean) => (sshConfigured = value) };
+}
+
+test("setup without --yes shows the plan with a footer for blocked, changes and all set", async (t) => {
+  const done = setupWorld(t, {});
+  const ok = await done.setup(false, false);
+  assert.equal(ok.exitCode, 0);
+  assert.match(ok.stdout, /All set\./);
+
+  const changes = setupWorld(t, { defaultMachineAccess: "connect" });
+  const planned = await changes.setup(false, false);
+  assert.equal(planned.exitCode, 0);
+  assert.match(planned.stdout, /→ Default machine access: connect -> direct/);
+  assert.match(planned.stdout, /Run `bb ona setup --yes`/);
+  assert.deepEqual(changes.calls, [], "a plan changes nothing");
+
+  const blocked = setupWorld(t, {}, { onaMissing: true });
+  const stuck = await blocked.setup(false, false);
+  assert.equal(stuck.exitCode, 1);
+  assert.match(stuck.stdout, /✗ Ona CLI/);
+  assert.match(stuck.stdout, /Fix the ✗ items above/);
+});
+
+test("setup --yes applies only the → steps, then re-plans", async (t) => {
+  const world = setupWorld(t, { defaultMachineAccess: "connect", machineServerUrl: null });
+  world.setSsh(false);
+  const result = await world.setup(true, false);
+  assert.deepEqual(world.calls, [
+    "environment ssh-config",
+    "settings general defaultMachineAccess direct",
+    "settings general machineServerUrl http://127.0.0.1:38886",
+  ]);
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /All set\./);
+  assert.equal(result.stderr, undefined);
+});
+
+test("setup --yes reports the last line of a failed step and exits 1", async (t) => {
+  const world = setupWorld(t, { defaultMachineAccess: "connect" }, { failing: "defaultMachineAccess" });
+  const result = await world.setup(true, false);
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.stderr, "Default machine access: refused");
+  assert.match(result.stdout, /→ Default machine access/);
+});
+
+test("setup runs a node bb CLI with the plugin's own runtime", async (t) => {
+  const world = setupWorld(t, {}, { bbCli: "#!/usr/bin/env node\n" });
+  await world.setup(false, false);
+  const [first] = world.runs;
+  assert.equal(first?.binary, process.execPath);
+  assert.equal(first?.args[0], world.cliPath);
+  assert.equal(first?.env?.ELECTRON_RUN_AS_NODE, "1");
+});
+
+test("setup --yes turns machine git credentials off unless kept", async (t) => {
+  const world = setupWorld(t, { machineGitCredentialsEnabled: true });
+  await world.setup(true, false);
+  assert.deepEqual(world.calls, ["settings general machineGitCredentialsEnabled false"]);
 });
