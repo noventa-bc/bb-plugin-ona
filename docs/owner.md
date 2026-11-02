@@ -77,7 +77,9 @@ after a bb upgrade, run through this list:
 3. One `bb ona new <project>` and one resume of a stopped box, plus the
    handoff's live-test steps.
 4. A few minutes later, `bb plugin logs ona`: the same action repeating every
-   pass means a repair that never sticks.
+   pass means a repair that never sticks, and an `ona proxy blocked` line for an
+   `/internal` path other than `/internal/server-move/*` means the new bb has a
+   daemon route `src/proxy.ts` must list.
 
 ## Release
 

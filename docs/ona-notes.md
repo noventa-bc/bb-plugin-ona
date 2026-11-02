@@ -70,6 +70,13 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   component, so it can't show the cost chip. It could replace the DOM
   workaround in `app.tsx` that hides bb's native "Open in" button.
 - SDK 0.6.104 has no `machine_busy` suspend error code.
+- bb 0.48.1 registers the daemon's `/internal` routes in the `registerInternal*`
+  functions of `server/dist/start-server.js` and calls them from
+  `host-daemon/dist/daemon-bundle.mjs` (its route-string calls, plus
+  `/internal/hosts/enroll`, `/internal/ws` and the server-move downloads built
+  from `downloadPath`), both under the app's
+  `node_modules/bb-app` (on macOS inside `bb.app/Contents/Resources/app.asar.unpacked`).
+  `src/proxy.ts` lists them (checked 2026-11-02).
 - In SDK 0.6.104 a provider resource is written by the provider's own lifecycle
   hooks (`create`, `suspend`, `resume`, through `checkpoint` or the returned
   resource) and read with `getResource` (checked 2026-11-02).

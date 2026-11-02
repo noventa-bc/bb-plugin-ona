@@ -13,10 +13,10 @@ lands on a daemon-only proxy, so the server stays on loopback. Agents
 
 ## Security
 Inside a devbox, `http://127.0.0.1:<bb port>` is the proxy, not bb. It forwards
-only the daemon's routes (`/internal/*`, `/internal/ws`, the installer files and
-`/health`) and answers 403 to everything else, including bb's user API `/api/*`,
-`/ws` and `/internal/hosts/enroll-key`. Do not try to work around it from a
-devbox. Use `bb` commands from a thread instead; bb routes them correctly.
+only the daemon's routes (its `/internal` calls, `/internal/ws`, the installer
+files and `/health`) and answers 403 to everything else, including bb's user
+API `/api/*`, `/ws` and `/internal/hosts/enroll-key`. Do not try to work around
+it from a devbox. Use `bb` commands from a thread instead; bb routes them correctly.
 
 ## One-time setup
 - `bb ona setup` lists what is missing; `bb ona setup --yes` applies the Ona SSH
