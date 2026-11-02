@@ -63,8 +63,10 @@ those and the "skipped or not checked" lines ponytail ends with.
    the code they touch; confirm the repo still matches the roadmap text. List
    the alternatives, look at the task from the user's, the safety rules' and
    the maintainer's angle, and check current best practice on the web when
-   the task touches a tool, protocol or platform. Execute only once sure;
-   until then, ask.
+   the task touches a tool, protocol or platform. A tooling or process item
+   (lint, CI, hooks, release flow) starts with a measured survey: run the
+   candidate rules on the code, count the hits, propose only what pays, and
+   let the owner pick. Execute only once sure; until then, ask.
 2. **Size.** A task is one PR a reviewer can read in one sitting: one roadmap
    item, or a group of its bullets that share files. Split anything larger.
    Independent tasks run in parallel; tasks that touch the same files run in
