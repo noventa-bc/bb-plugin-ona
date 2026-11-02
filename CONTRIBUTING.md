@@ -56,8 +56,10 @@ npm run check        # typecheck, lint, format check, tests
    Semgrep commands from `AGENTS.md` if you have Semgrep.
 6. Open a pull request against `main`. The title is a Conventional Commit too:
    the squash merge puts it on `main`, and CI reads the bump from it (`feat`
-   minor, `fix` and `perf` patch, `!` major; other types none). A PR that bumps
-   also sets `version` in `package.json`; merging it releases it, with notes
+   minor, `fix` and `perf` patch, `!` major; other types none; a Markdown-only
+   change never bumps, so give it `docs:`). Run `scripts/bump.sh "<title>"`
+   before opening the PR; it sets `version` in `package.json` as the title
+   requires, and merging the PR releases it, with notes
    generated from the merged PR titles, so a user-visible change gets a title
    in user-facing wording. In the body, say what changed and why, how you
    tested it, and what a maintainer should check live. CI must be green:
