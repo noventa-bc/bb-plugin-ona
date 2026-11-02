@@ -92,7 +92,10 @@ those and the "skipped or not checked" lines ponytail ends with.
    was tested, the owner live-test steps from the handoff, and anything left
    out. Nothing from the "Security (private)" handoff section goes in the PR.
 8. **Wait for CI.** The `check` workflow must be green. A red run goes back to
-   the builder; never merge around it.
+   the builder; never merge around it. A PR with no checks at all after a
+   minute (GitHub sometimes drops the event when the branch and the PR appear
+   together) is not green: push a merge of `main` or an empty commit to
+   retrigger, and merge only once runs exist.
 9. **Merge.** The orchestrator squash-merges with
    `gh pr merge --squash --delete-branch --subject "<PR title>"` (the title is
    the commit subject whatever the repository's squash setting) as soon as CI
