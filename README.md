@@ -311,13 +311,13 @@ bb plugin install .                                            # install from th
 bb plugin reload ona                                           # after changes
 ```
 
-Source: `server.ts` (settings, tunnels, CLI), `src/provider.ts` (machine
-provider), `src/proxy.ts` (daemon-only proxy), `src/ssh.ts` (executor, tunnels),
-`src/setup.ts` (prerequisite checks), `src/ona.ts` (ona CLI wrapper, shared
-listing), `src/reconcile.ts` (sync rules), `src/sync.ts` (sync passes and
-status), `src/commands.ts` (`bb ona` argument parsing, keep-alive checks, status
-text), `src/lifecycle.ts` (idle release), `src/keepalive.ts` (keep-alive),
-`src/names.ts` (fun names), `skills/ona-devboxes/SKILL.md` (agent docs).
+Source: `server.ts` (settings, tunnels, wiring), `src/provider.ts` (machine
+provider), `src/proxy.ts` (daemon-only proxy), `src/ssh.ts` (executor,
+tunnels), `src/setup.ts` (prerequisite checks), `src/ona.ts` (ona CLI wrapper,
+shared listing), `src/reconcile.ts` (sync rules), `src/sync.ts` (sync passes
+and status), `src/commands.ts` (`bb ona` commands), `src/lifecycle.ts` (idle
+release), `src/keepalive.ts` (keep-alive), `src/names.ts` (fun names),
+`skills/ona-devboxes/SKILL.md` (agent docs).
 
 Working on the plugin, including with coding agents: see [AGENTS.md](AGENTS.md).
 Decision records are in [docs/decisions](docs/decisions/README.md).
