@@ -25,7 +25,7 @@ interface Box {
   phase?: string;
   status?: string;
   lastSeenAt?: number;
-  threads?: ThreadRecord[];
+  threads?: ThreadRecord[] | "fail";
   workspaces?: WorkspaceView[];
   ona?: string | null;
   tunnel?: "up" | "off";
@@ -94,7 +94,13 @@ function world(
           experimental_resume: lifecycleCall("resume", "resuming"),
           experimental_reconcile: lifecycleCall("reconcile", "active"),
         },
-        threads: { list: async ({ hostId }) => byHost.get(hostId)?.threads ?? [] },
+        threads: {
+          list: async ({ hostId }) => {
+            const threads = byHost.get(hostId)?.threads ?? [];
+            if (threads === "fail") throw new Error("bb is down");
+            return threads;
+          },
+        },
         environments: { list: async ({ hostId }) => byHost.get(hostId)?.workspaces ?? [] },
       },
       experimental_machines: {
@@ -160,6 +166,21 @@ test("an idle box is released: bb suspends it without stopping the box, and the 
   assert.equal(releasing.size, 0);
 });
 
+// Bug: bb left an archived thread "active", and the box was never released.
+test("an idle box whose only active thread is archived is released without stopping the box", async () => {
+  const archived: ThreadRecord = {
+    id: "t1",
+    status: "active",
+    archivedAt: NOW - 2 * HOUR,
+    updatedAt: NOW - 2 * HOUR,
+    runtime: { displayStatus: "active" },
+  };
+  const { sync, calls, releasing } = world([idle("h1", { threads: [archived] })]);
+  await sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(calls, ["suspend h1"]);
+  assert.equal(releasing.size, 0);
+});
+
 test("bb accepting a suspend without acting on it is a failure, not a release", async () => {
   const { sync, calls, guard, releasing } = world([idle("h1")], { refuse: "Automatic cleanup is blocked" });
   await sync.reconcile(new Set([ALL]), { wait: true });
@@ -188,6 +209,25 @@ test("status reports workspaces that need recovery", async () => {
   const { sync } = world([idle("h1", { workspaces: [failed, failed] })]);
   const [row] = await sync.statusRows();
   assert.equal(row!.needsRecovery, 2);
+});
+
+test("status lists a busy thread with no update for over 6h", async () => {
+  const stuck: ThreadRecord = {
+    id: "t1",
+    status: "starting",
+    updatedAt: NOW - 9 * HOUR,
+    runtime: { displayStatus: "starting" },
+  };
+  const { sync } = world([idle("h1", { threads: [stuck] })]);
+  const [row] = await sync.statusRows();
+  assert.deepEqual(row!.stuckThreads, [{ id: "t1", status: "starting", updatedAt: NOW - 9 * HOUR }]);
+});
+
+// A failed thread listing must not fail the whole status command.
+test("status still lists a machine whose thread listing fails", async () => {
+  const { sync } = world([idle("h1", { threads: "fail" })]);
+  const [row] = await sync.statusRows();
+  assert.deepEqual(row!.stuckThreads, []);
 });
 
 test("a box missing from two listings is looked up once: archived or gone", async () => {
@@ -222,14 +262,33 @@ test("a running box the listing misses but a lookup finds is not suspended", asy
 });
 
 test("Ona stopping a box with a thread waiting: suspended without stopping, then resumed", async () => {
-  const waiting: ThreadRecord = { status: "idle", updatedAt: NOW, runtime: { displayStatus: "waiting-for-host" } };
+  const waiting: ThreadRecord = {
+    id: "t1",
+    status: "idle",
+    updatedAt: NOW,
+    runtime: { displayStatus: "waiting-for-host" },
+  };
   const { sync, calls } = world([idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waiting] })]);
   await sync.reconcile(new Set(["h1"]), { wait: true });
   assert.deepEqual(calls, ["suspend h1", "resume h1"]);
 });
 
+// Bug: an archived thread bb left "waiting-for-host" woke its stopped box on every pass.
+test("Ona stopping a box whose only waiting thread is archived: suspended, not resumed", async () => {
+  const waiting: ThreadRecord = {
+    id: "t1",
+    status: "idle",
+    archivedAt: NOW - HOUR,
+    updatedAt: NOW,
+    runtime: { displayStatus: "waiting-for-host" },
+  };
+  const { sync, calls } = world([idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waiting] })]);
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.deepEqual(calls, ["suspend h1"]);
+});
+
 test("the first pass after a reload reopens the tunnel of a running box bb still shows connected", async () => {
-  const recent: ThreadRecord = { status: "idle", updatedAt: NOW, runtime: { displayStatus: "idle" } };
+  const recent: ThreadRecord = { id: "t1", status: "idle", updatedAt: NOW, runtime: { displayStatus: "idle" } };
   // The reconciler is the only thing that reopens tunnels after a reload, so autoRepair off doesn't skip it.
   for (const autoRepair of [true, false]) {
     const { sync, calls } = world([idle("h1", { tunnel: "off", threads: [recent] })], { autoRepair });

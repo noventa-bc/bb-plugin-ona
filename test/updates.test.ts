@@ -5,9 +5,13 @@ import {
   createUpdateClis,
   hostIsBusy,
   parseProviderList,
+  STUCK_THREAD_MS,
+  stuckThreads,
   threadStatuses,
+  unarchived,
   updatesToApply,
   type CliStatus,
+  type ThreadState,
   type UpdatesBb,
 } from "../src/updates.ts";
 
@@ -35,6 +39,33 @@ test("a host with an agent turn in flight is busy", () => {
   assert.equal(hostIsBusy(threadStatuses([{ status: "idle", queuedWork: "waiting" }, { status: "idle" }])), true);
 });
 
+// Bug: an archived thread bb left stuck "active" kept its box busy forever.
+test("unarchived drops an archived thread whatever its status", () => {
+  assert.deepEqual(
+    unarchived([
+      { status: "active", archivedAt: 1 },
+      { status: "idle", archivedAt: null },
+    ]),
+    [{ status: "idle", archivedAt: null }],
+  );
+});
+
+// Bug: the owner couldn't see why a box was never released.
+test("stuckThreads flags busy threads with no update for over 6h", () => {
+  const now = 100 * STUCK_THREAD_MS;
+  const old = now - STUCK_THREAD_MS - 1;
+  const threads = [
+    { id: "stuck", status: "active", updatedAt: old },
+    { id: "queued", status: "idle", queuedWork: "waiting", updatedAt: old },
+    { id: "recent", status: "active", updatedAt: now - 1 },
+    { id: "idle", status: "idle", updatedAt: old },
+  ];
+  assert.deepEqual(
+    stuckThreads(threads, now).map((thread) => `${thread.id} ${thread.status}`),
+    ["stuck active", "queued pending"],
+  );
+});
+
 test("provider lists accept commas and spaces", () => {
   assert.deepEqual(parseProviderList(" claude-code, codex  codex "), ["claude-code", "codex"]);
 });
@@ -43,7 +74,7 @@ type InstallEvents = Awaited<ReturnType<UpdatesBb["sdk"]["hosts"]["installProvid
 
 /** One machine per entry; installs answer with `install[hostId]`. */
 function updater(
-  boxes: Array<{ hostId: string; status?: string; threads?: string[]; codex?: Partial<CliStatus> }>,
+  boxes: Array<{ hostId: string; status?: string; threads?: ThreadState[]; codex?: Partial<CliStatus> }>,
   install: Record<string, InstallEvents> = {},
 ) {
   const installs: string[] = [];
@@ -61,8 +92,7 @@ function updater(
     bb: {
       sdk: {
         threads: {
-          list: async ({ hostId }) =>
-            (byHost.get(hostId)!.threads ?? []).map((threadState) => ({ status: threadState })),
+          list: async ({ hostId }) => byHost.get(hostId)!.threads ?? [],
         },
         hosts: {
           providerCliStatus: async ({ hostId }) => ({ codex: status(byHost.get(hostId)!.codex ?? {}) }),
@@ -89,7 +119,9 @@ test("updateClis reports one line per box, one outcome each", async () => {
   const { updateClis, installs } = updater(
     [
       { hostId: "off", status: "disconnected", codex: pending },
-      { hostId: "busy", threads: ["idle", "active"], codex: pending },
+      { hostId: "busy", threads: [{ status: "idle" }, { status: "active" }], codex: pending },
+      // Bug: a thread bb left "active" after archiving blocked the update forever.
+      { hostId: "stale", threads: [{ status: "active", archivedAt: 1 }], codex: pending },
       { hostId: "current" },
       { hostId: "updated", codex: pending },
       { hostId: "failed", codex: pending },
@@ -103,17 +135,18 @@ test("updateClis reports one line per box, one outcome each", async () => {
   assert.deepEqual(await updateClis(), [
     "box-off: skipped (disconnected)",
     "box-busy: skipped (an agent is running; retry with --force)",
+    "box-stale: codex 1.0.0 -> 2.0.0",
     "box-current: up to date (codex 1.0.0)",
     "box-updated: codex 1.0.0 -> 2.0.0",
     "box-failed: codex update failed (npm said no)",
     "box-exited: codex update failed (exit 3)",
   ]);
-  assert.deepEqual(installs, ["updated codex", "failed codex", "exited codex"]);
+  assert.deepEqual(installs, ["stale codex", "updated codex", "failed codex", "exited codex"]);
 });
 
 test("updateClis with force updates a busy box; a ref picks one box or none", async () => {
   const { updateClis, installs } = updater([
-    { hostId: "busy", threads: ["active"], codex: pending },
+    { hostId: "busy", threads: [{ status: "active" }], codex: pending },
     { hostId: "other", codex: pending },
   ]);
   // A ref is a bb host id, bb machine name, Ona env id or Ona env name.

@@ -27,9 +27,34 @@ export function hostIsBusy(statuses: readonly string[]): boolean {
   return statuses.some((status) => BUSY_THREAD_STATES.has(status));
 }
 
+export interface ThreadState {
+  status: string;
+  queuedWork?: string | null;
+  archivedAt?: number | null;
+}
+
+/**
+ * bb can leave an archived thread stuck "active"; every reader of a thread list drops those first.
+ * shortcut: the listing is paged, so a host with a page of archived threads can hide a live one;
+ * pass `archived: false` to `threads.list` once bb documents it.
+ */
+export function unarchived<T extends ThreadState>(threads: readonly T[]): T[] {
+  return threads.filter((thread) => thread.archivedAt == null);
+}
+
 /** What `hostIsBusy` reads from bb's thread list: queued work waiting for the host counts as pending. */
-export function threadStatuses(threads: readonly { status: string; queuedWork?: string | null }[]): string[] {
+export function threadStatuses(threads: readonly ThreadState[]): string[] {
   return threads.map((thread) => (thread.queuedWork === "waiting" ? "pending" : thread.status));
+}
+
+/** How long a busy thread goes without an update before `bb ona status` flags it. */
+export const STUCK_THREAD_MS = 6 * 3_600_000;
+
+/** Busy threads with no update for `STUCK_THREAD_MS`: they hold the box until they end. */
+export function stuckThreads(threads: readonly (ThreadState & { id: string; updatedAt: number })[], now: number) {
+  return threads
+    .map((thread) => ({ id: thread.id, status: threadStatuses([thread])[0]!, updatedAt: thread.updatedAt }))
+    .filter((thread) => hostIsBusy([thread.status]) && now - thread.updatedAt > STUCK_THREAD_MS);
 }
 
 export function parseProviderList(value: string): string[] {
@@ -48,7 +73,7 @@ type Hosts = BbPluginApi["sdk"]["hosts"];
 /** The parts of bb's plugin API a CLI update uses; the real `bb` satisfies it. */
 export interface UpdatesBb {
   sdk: {
-    threads: { list(args: { hostId: string }): Promise<readonly { status: string; queuedWork?: string | null }[]> };
+    threads: { list(args: { hostId: string }): Promise<readonly ThreadState[]> };
     hosts: {
       providerCliStatus(args: { hostId: string }): Promise<unknown>;
       installProviderCli(args: Parameters<Hosts["installProviderCli"]>[0]): ReturnType<Hosts["installProviderCli"]>;
@@ -80,7 +105,7 @@ export function createUpdateClis({ bb, machines, autoUpdateProviders }: UpdatesD
         continue;
       }
       if (!options.force) {
-        if (hostIsBusy(threadStatuses(await bb.sdk.threads.list({ hostId: row.hostId })))) {
+        if (hostIsBusy(threadStatuses(unarchived(await bb.sdk.threads.list({ hostId: row.hostId }))))) {
           lines.push(`${name}: skipped (an agent is running; retry with --force)`);
           continue;
         }

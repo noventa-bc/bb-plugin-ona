@@ -268,6 +268,10 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
   `mv ~/.bb-machines ~/.bb-machines.shared`, then add the machine again.
 - **Creation times out or fails:** check `bb plugin logs ona` and `bb machine show <id>`.
   Prerequisite failures name the missing tool.
+- **"thread … holds this box" in `bb ona status`:** bb still shows that thread
+  busy after more than 6 hours with no update, so the plugin won't release the
+  box or update its agent CLIs. Open the thread; if nothing is running in it,
+  archive it. Archived threads never hold a box.
 - **"workspace(s) need recovery" in `bb ona status`:** a thread workspace's
   teardown failed for good, and bb won't suspend the machine until it's
   recovered, so the box stays awake. Check what's left in it

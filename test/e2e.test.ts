@@ -43,7 +43,11 @@ before(async () => {
       },
     },
     machineResource: async (hostId) => (hostId === "host-1" ? resource : null),
-    sdk: { hosts: { list: async () => hosts }, environments: { list: async () => [] } },
+    sdk: {
+      hosts: { list: async () => hosts },
+      environments: { list: async () => [] },
+      threads: { list: async () => [] },
+    },
   }));
 });
 

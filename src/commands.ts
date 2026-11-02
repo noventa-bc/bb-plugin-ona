@@ -118,6 +118,11 @@ export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()
         `  ${row.needsRecovery} workspace(s) need recovery; bb won't suspend this machine, so the box stays awake. See \`bb environment list --host ${row.hostId}\``,
       );
     }
+    for (const thread of row.stuckThreads) {
+      rowLines.push(
+        `  thread ${thread.id} is ${thread.status}, last updated ${ago(thread.updatedAt)}; it holds this box until it ends or is archived`,
+      );
+    }
     return rowLines.join("\n");
   });
   return [header, ...lines].join("\n");
