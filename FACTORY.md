@@ -101,15 +101,22 @@ those and the "skipped or not checked" lines ponytail ends with.
    was tested, the three review passes and what each found, the owner
    live-test steps from the handoff, and anything left out. Nothing from the
    "Security (private)" handoff section goes in the PR.
-8. **Wait for CI.** The `check` workflow must be green. A red run goes back to
-   the builder; never merge around it. A PR with no checks at all after a
-   minute (GitHub sometimes drops the event when the branch and the PR appear
-   together) is not green: push a merge of `main` or an empty commit to
-   retrigger, and merge only once runs exist.
-9. **Merge.** The orchestrator squash-merges with
-   `gh pr merge --squash --delete-branch --subject "<PR title>"` (the title is
-   the commit subject whatever the repository's squash setting) as soon as CI
-   is green and the review has no open findings. A push to `main` then tags
+8. **Wait for CI.** The workflows the PR needs must be green: `check` for
+   code, `docs` for Markdown, both for a PR with both. A red run goes back to
+   the builder; never merge around it. A PR whose run has not appeared after
+   5 minutes (GitHub sometimes drops the event when the branch and the PR
+   appear together) is not green: push a merge of `main` or an empty commit
+   to retrigger, and merge only once the runs exist. `gh pr checks --watch`
+   can return before every check exists, so never chain it straight into a
+   merge. A title edited after CI ran is checked again by CI (`edited` is in
+   the workflows' `pull_request` types).
+9. **Merge.** The orchestrator merges with
+   `scripts/pr-merge.sh <pr>` from the main checkout (the branch is deleted
+   on merge, which fails from a worktree that has it checked out). It waits
+   for the runs the PR needs, watches the checks, and squash-merges the head
+   they ran on with the PR title as the commit subject, only when every
+   check passed. It runs as
+   soon as the review has no open findings. A push to `main` then tags
    and releases the version in `package.json` on its own (`release.yml`); no
    step here does it. PRs that touch the same files merge one at a time: merge `main` into the next branch (a merge
    commit; force-pushing is blocked, so never rebase a pushed branch), fix
