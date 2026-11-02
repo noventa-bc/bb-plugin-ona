@@ -96,8 +96,8 @@ those and the "skipped or not checked" lines ponytail ends with.
 10. **Sync the roadmap.** Status lives only in the table at the top of the
     roadmap, one linked row per item, with the landing commit in the Item cell.
     When a PR opens, set the item to In review; when it merges, set it to Done,
-    note any part left out, and put the owner's live-test steps in the Live
-    checks tab. Fix any status the code shows to be stale. Done items move to
+    note any part left out, and put the owner's live-test steps in the Pending
+    Manual Tests tab. Fix any status the code shows to be stale. Done items move to
     the Done tab and leave the table only when the owner asks.
 11. **Improve the roadmap.** The orchestrator may add items (fixes,
     simplifications, tests, features) it found while reading the code, revise
