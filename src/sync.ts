@@ -154,12 +154,12 @@ export function createSync(deps: SyncDeps) {
       const parsed = resourceSchema.safeParse(await bb.experimental_machines.getResource(host.id));
       if (!parsed.success) continue;
       // A suspended machine reports "disconnected"; surface the suspension itself.
-      const status = host.lifecycle?.suspendedAt ? "suspended" : String(host.status);
+      const status = host.lifecycle.suspendedAt ? "suspended" : String(host.status);
       rows.push({
         hostId: host.id,
         machine: host.name,
         status,
-        phase: host.lifecycle?.phase ?? "active",
+        phase: host.lifecycle.phase,
         lastSeenAt: host.lastSeenAt ?? null,
         updatedAt: host.updatedAt,
         resource: parsed.data,

@@ -30,6 +30,14 @@ jobs:
       # needs a native build, and install scripts are the usual supply-chain route.
       - run: npm ci --ignore-scripts
       - run: npm run check
+      # Every src module has a test file. rpc.ts is a zod contract with no logic;
+      # provider.ts is covered by test/e2e*.test.ts.
+      - run: |
+          for f in src/*.ts; do
+            n=$(basename "$f" .ts)
+            case "$n" in rpc|provider) continue ;; esac
+            [ -f "test/$n.test.ts" ] || { echo "src/$n.ts has no test/$n.test.ts"; exit 1; }
+          done
       # Preinstalled on the Ubuntu runner only.
       - if: runner.os == 'Linux'
         run: shellcheck scripts/*.sh test/*.sh

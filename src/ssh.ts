@@ -208,7 +208,6 @@ export class TunnelManager {
           resolve();
         });
       });
-      if (signal.aborted) break;
       backoff = Date.now() - started > 60_000 ? 1_000 : Math.min(backoff * 2, 10_000);
       await sleep(backoff, signal);
     }
