@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { OnaSnapshot, type OnaEnvironment } from "../src/ona.ts";
 import type { WorkspaceView } from "../src/lifecycle.ts";
-import { ALL, GIVE_UP_AFTER, HostGuard } from "../src/reconcile.ts";
+import { ALL, GIVE_UP_AFTER, GRACE_MS, HostGuard } from "../src/reconcile.ts";
 import {
   connectedAtKey,
   createSync,
@@ -10,6 +10,8 @@ import {
   matchesRef,
   type BbHost,
   type Row,
+  watchRealtime,
+  type RealtimeBb,
   type ThreadRecord,
 } from "../src/sync.ts";
 
@@ -270,4 +272,88 @@ test("a ref matches a row by host id, machine name, env id or env name, and noth
   const row = { hostId: "h1", machine: "box-one", resource: { envId: "env-1", envName: "one" } } as Row;
   for (const ref of ["h1", "box-one", "env-1", "one"]) assert.equal(matchesRef(row, ref), true, ref);
   assert.equal(matchesRef(row, "two"), false);
+});
+
+/** watchRealtime against a fake bb: thread t1 runs on Ona host h1, thread t2 on a non-Ona host. */
+function realtime(options: { subscribeThrows?: boolean; hostByEnv?: Map<string, string> } = {}) {
+  const scheduled: string[] = [];
+  const warnings: string[] = [];
+  const callbacks = new Map<string, (event: unknown) => void>();
+  let unsubscribed = 0;
+  const subscribe = ({ event, callback }: { event: string; callback: (event: never) => void }) => {
+    if (options.subscribeThrows) throw new Error("no realtime");
+    callbacks.set(event, callback as (event: unknown) => void);
+    return () => void unsubscribed++;
+  };
+  const hostOfEnvironment: Record<string, string> = { e1: "h1", e2: "other" };
+  const environmentOfThread: Record<string, string | null> = { t1: "e1", t2: "e2", t3: null };
+  const bb: RealtimeBb = {
+    sdk: {
+      subscribe: subscribe as RealtimeBb["sdk"]["subscribe"],
+      threads: { get: async ({ threadId }) => ({ environmentId: environmentOfThread[threadId] ?? null }) },
+      environments: { get: async ({ environmentId }) => ({ hostId: hostOfEnvironment[environmentId]! }) },
+    },
+    log: { warn: (message) => void warnings.push(message) },
+  };
+  const unsubscribe = watchRealtime({
+    bb,
+    scheduler: { schedule: (key, delayMs) => void scheduled.push(`${key} ${delayMs}`) },
+    hostByEnv: options.hostByEnv ?? new Map([["env-1", "h1"]]),
+  });
+  const fire = async (event: string, payload: unknown) => {
+    callbacks.get(event)!(payload);
+    // Let the thread -> host lookup settle.
+    await new Promise((resolve) => setImmediate(resolve));
+  };
+  return { scheduled, warnings, fire, unsubscribe, unsubscribed: () => unsubscribed };
+}
+
+const threadEvent = (id: string, displayStatus: string) => ({
+  id,
+  metadata: { statusChange: { runtime: { displayStatus } } },
+});
+
+test("a thread waiting for an Ona host schedules that host; other threads and statuses don't", async () => {
+  const { scheduled, fire } = realtime();
+  await fire("thread:changed", threadEvent("t1", "waiting-for-host"));
+  assert.deepEqual(scheduled, ["h1 500"]);
+  await fire("thread:changed", threadEvent("t1", "running"));
+  await fire("thread:changed", threadEvent("t2", "waiting-for-host"));
+  await fire("thread:changed", threadEvent("t3", "waiting-for-host"));
+  assert.deepEqual(scheduled, ["h1 500"]);
+});
+
+test("an Ona host dropping off waits out the grace period; one coming back is checked soon", async () => {
+  const { scheduled, fire } = realtime();
+  await fire("host:changed", { id: "h1", changes: ["host-disconnected"] });
+  await fire("host:changed", { id: "h1", changes: ["host-connected"] });
+  await fire("host:changed", { id: "other", changes: ["host-disconnected"] });
+  assert.deepEqual(scheduled, [`h1 ${GRACE_MS + 1_000}`, "h1 2000"]);
+});
+
+test("realtime reads the host map live, so a box adopted after start is watched", async () => {
+  const hostByEnv = new Map<string, string>();
+  const { scheduled, fire } = realtime({ hostByEnv });
+  hostByEnv.set("env-1", "h1");
+  await fire("host:changed", { id: "h1", changes: ["host-disconnected"] });
+  assert.deepEqual(scheduled, [`h1 ${GRACE_MS + 1_000}`]);
+});
+
+test("a realtime reconnect checks every machine", async () => {
+  const { scheduled, fire } = realtime();
+  await fire("realtime:connection", { reconnected: false });
+  await fire("realtime:connection", { reconnected: true });
+  assert.deepEqual(scheduled, [`${ALL} 2000`]);
+});
+
+test("unsubscribe ends every subscription", () => {
+  const { unsubscribe, unsubscribed } = realtime();
+  unsubscribe();
+  assert.equal(unsubscribed(), 3);
+});
+
+test("realtime that can't subscribe logs a warning and leaves a no-op unsubscribe", () => {
+  const { warnings, unsubscribe } = realtime({ subscribeThrows: true });
+  assert.match(warnings.join("\n"), /realtime events unavailable.*no realtime/);
+  unsubscribe();
 });

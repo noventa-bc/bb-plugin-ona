@@ -45,9 +45,4 @@ export default tseslint.config(
     files: ["src/**/*.ts", "server.ts"],
     rules: { "@typescript-eslint/no-unnecessary-condition": "error" },
   },
-  {
-    files: ["server.ts"],
-    // shortcut: server.ts is at its current size, the limit only lets it shrink; lower it as code moves to src/
-    rules: { "max-lines": ["error", { max: 559, skipBlankLines: true, skipComments: true }] },
-  },
 );

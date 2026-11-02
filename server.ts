@@ -7,31 +7,25 @@ import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { KeepAlives } from "./src/keepalive.ts";
 import { isRunning, isStopped, OnaCli, OnaSnapshot, sshHost } from "./src/ona.ts";
-import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import {
   checkOnaLogin,
+  createSetup,
   findOnaBinary,
-  formatSteps,
   hasOnaSshConfig,
   ONA_INSTALL_HINT,
-  planSetup,
   run,
-  type GeneralSettings,
   type OnaLogin,
-  type SetupStep,
 } from "./src/setup.ts";
 import { PROVIDER_ID, registerOnaComposition, registerOnaProvider } from "./src/provider.ts";
 import { startDaemonProxy } from "./src/proxy.ts";
 import { commands, onaCommands } from "./src/commands.ts";
-import { connectedAtKey, createSync, forgetBox, matchesRef, type Row } from "./src/sync.ts";
-import { ALL, GRACE_MS, HostGuard, PassScheduler } from "./src/reconcile.ts";
+import { connectedAtKey, createSync, errorText, forgetBox, matchesRef, watchRealtime, type Row } from "./src/sync.ts";
+import { ALL, HostGuard, PassScheduler } from "./src/reconcile.ts";
 import { createThreadCost } from "./src/cost-service.ts";
 import { rpcContract, type Devbox } from "./src/rpc.ts";
 import { threadTerminalPlan, type ShellBackend, type ShellTarget } from "./src/shells.ts";
 import { TunnelManager } from "./src/ssh.ts";
-import { hostIsBusy, parseProviderList, threadStatuses, updatesToApply, type CliStatus } from "./src/updates.ts";
+import { createUpdateClis } from "./src/updates.ts";
 
 /** Devbox folder settings end up in remote commands: plain absolute paths only. */
 const devboxPath = z
@@ -256,64 +250,10 @@ export default async function plugin(bb: BbPluginApi) {
   });
   const { machines, reconcile, statusRows } = sync;
 
-  const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
-
-  /** The bb host a thread runs on, if it has one yet. */
-  async function hostOfThread(threadId: string): Promise<string | null> {
-    const thread = await bb.sdk.threads.get({ threadId });
-    if (!thread.environmentId) return null;
-    return (await bb.sdk.environments.get({ environmentId: thread.environmentId })).hostId;
-  }
-
-  /**
-   * React when it matters instead of waiting for the poll: a thread waiting
-   * for an Ona machine, an Ona machine dropping off, or a realtime reconnect
-   * (events may have been missed). Every other event is dropped at the first
-   * check; thread events fire constantly while a turn streams.
-   */
-  function watchRealtime(): () => void {
-    const unsubscribers: Array<() => void> = [];
-    const onaHost = (hostId: string | undefined): hostId is string =>
-      hostId !== undefined && [...hostByEnv.values()].includes(hostId);
-    try {
-      unsubscribers.push(
-        bb.sdk.subscribe({
-          event: "thread:changed",
-          callback: (event) => {
-            if (event.metadata?.statusChange?.runtime.displayStatus !== "waiting-for-host" || !event.id) return;
-            void hostOfThread(event.id)
-              .then((hostId) => {
-                if (hostId && onaHost(hostId)) scheduler.schedule(hostId, 500);
-              })
-              .catch(() => {});
-          },
-        }),
-        bb.sdk.subscribe({
-          event: "host:changed",
-          callback: (event) => {
-            if (!onaHost(event.id)) return;
-            // Give a dropped daemon the grace period to come back on its own first.
-            if (event.changes.includes("host-disconnected")) scheduler.schedule(event.id, GRACE_MS + 1_000);
-            else if (event.changes.includes("host-connected")) scheduler.schedule(event.id, 2_000);
-          },
-        }),
-        bb.sdk.subscribe({
-          event: "realtime:connection",
-          callback: (event) => {
-            if (event.reconnected) scheduler.schedule(ALL, 2_000);
-          },
-        }),
-      );
-    } catch (error) {
-      bb.log.warn(`realtime events unavailable, relying on the 2-minute check: ${errorText(error)}`);
-    }
-    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
-  }
-
   bb.background.service("lifecycle-sync", {
     async start(signal) {
       scheduler.start();
-      const unsubscribe = watchRealtime();
+      const unsubscribe = watchRealtime({ bb, scheduler, hostByEnv });
       // Backstop for anything the events miss.
       scheduler.schedule(ALL, 0);
       const timer = setInterval(() => scheduler.schedule(ALL, 0), 2 * 60_000);
@@ -455,148 +395,21 @@ export default async function plugin(bb: BbPluginApi) {
     },
   });
 
-  // bb's settings are changed through its own CLI, one key at a time, so
-  // unrelated settings are never rewritten.
-  function bbCli(args: string[]) {
-    const env = { ...process.env, BB_SERVER_URL: bb.server.loopbackBaseUrl };
-    const cli = [
-      process.env.BB_CLI,
-      join(bb.server.experimental_dataDir, "bin", "bb"),
-      join(homedir(), ".bb", "bin", "bb"),
-    ].find((path): path is string => Boolean(path) && existsSync(path!));
-    if (!cli) return Promise.resolve({ ok: false, stdout: "", stderr: "bb CLI not found" });
-    // A `#!/usr/bin/env node` CLI needs a node runtime; PATH may have none, so
-    // run it with the runtime hosting this plugin (Node, or bb's Electron).
-    const shebang = readFileSync(cli, "utf8").slice(0, 120).split("\n")[0] ?? "";
-    if (shebang.includes("node")) {
-      return run(process.execPath, [cli, ...args], { timeoutMs: 60_000, env: { ...env, ELECTRON_RUN_AS_NODE: "1" } });
-    }
-    return run(cli, args, { timeoutMs: 60_000, env });
-  }
-
-  /**
-   * Apply pending agent-CLI updates on connected Ona devboxes. Returns one
-   * line per box for the CLI and the plugin log.
-   */
-  async function updateClis(options: { ref?: string; force?: boolean } = {}): Promise<string[]> {
-    const wanted = parseProviderList(autoUpdateProviders);
-    const lines: string[] = [];
-    for (const row of await machines()) {
-      if (options.ref && ![row.hostId, row.machine, row.resource.envId, row.resource.envName].includes(options.ref))
-        continue;
-      const name = row.resource.envName;
-      if (row.status !== "connected") {
-        lines.push(`${name}: skipped (${row.status})`);
-        continue;
-      }
-      if (!options.force) {
-        if (hostIsBusy(threadStatuses(await bb.sdk.threads.list({ hostId: row.hostId })))) {
-          lines.push(`${name}: skipped (an agent is running; retry with --force)`);
-          continue;
-        }
-      }
-      const statuses = (await bb.sdk.hosts.providerCliStatus({ hostId: row.hostId })) as Record<string, CliStatus>;
-      const pending = updatesToApply(statuses, wanted);
-      if (pending.length === 0) {
-        lines.push(
-          `${name}: up to date (${wanted.map((p) => `${p} ${statuses[p]?.currentVersion ?? "not installed"}`).join(", ")})`,
-        );
-        continue;
-      }
-      for (const cli of pending) {
-        const from = statuses[cli]?.currentVersion ?? "?";
-        const to = statuses[cli]?.latestVersion ?? "latest";
-        const events = await bb.sdk.hosts.installProviderCli({
-          hostId: row.hostId,
-          provider: cli,
-          actionKind: "update",
-        });
-        const failed = events.find(
-          (event) => event.type === "error" || (event.type === "completed" && event.exitCode !== 0),
-        );
-        lines.push(
-          failed
-            ? `${name}: ${cli} update failed (${"message" in failed ? failed.message : `exit ${"exitCode" in failed ? failed.exitCode : "?"}`})`
-            : `${name}: ${cli} ${from} -> ${to}`,
-        );
-      }
-    }
-    return lines.length > 0 ? lines : ["No matching Ona devboxes."];
-  }
-
+  const updateClis = createUpdateClis({ bb, machines, autoUpdateProviders });
   if (autoUpdateClis) {
     bb.background.schedule("cli-updates", "0 9 * * 1-5", async () => {
       for (const line of await updateClis()) bb.log.info(`cli update: ${line}`);
     });
   }
 
-  async function readGeneralSettings(): Promise<GeneralSettings> {
-    const result = await bbCli(["settings", "show", "--json"]);
-    if (!result.ok) throw new Error(`Could not read bb settings: ${result.stderr.trim()}`);
-    const parsed = JSON.parse(result.stdout) as { data?: unknown; generalSettings?: unknown };
-    const root = (parsed.data ?? parsed) as { generalSettings?: Partial<GeneralSettings> };
-    const general = root.generalSettings ?? {};
-    return {
-      defaultMachineAccess: general.defaultMachineAccess ?? null,
-      machineServerUrl: general.machineServerUrl ?? null,
-      machineGitCredentialsEnabled: general.machineGitCredentialsEnabled ?? true,
-    };
-  }
-
-  async function planCurrentSetup(keepGitCredentials: boolean): Promise<SetupStep[]> {
-    const binary = findOnaBinary(onaPath);
-    return planSetup({
-      onaBinary: binary,
-      // Checked now, but a network failure keeps the last good login (see onaLogin).
-      login: binary ? await onaLogin(binary, true) : null,
-      sshConfigured: hasOnaSshConfig(),
-      settings: await readGeneralSettings(),
-      serverUrl: bb.server.loopbackBaseUrl.replace(/\/+$/, ""),
-      keepGitCredentials,
-    });
-  }
-
-  async function applyStep(step: SetupStep): Promise<string | null> {
-    const result =
-      step.id === "ssh-config"
-        ? await run(resolveOna(), ["environment", "ssh-config"])
-        : step.id === "access"
-          ? await bbCli(["settings", "general", "defaultMachineAccess", "direct"])
-          : step.id === "server-url"
-            ? await bbCli(["settings", "general", "machineServerUrl", bb.server.loopbackBaseUrl.replace(/\/+$/, "")])
-            : step.id === "git-credentials"
-              ? await bbCli(["settings", "general", "machineGitCredentialsEnabled", "false"])
-              : null;
-    if (result === null || result.ok) return null;
-    return `${step.title}: ${result.stderr.trim().split("\n").slice(-1)[0]}`;
-  }
-
-  async function setup(apply: boolean, keepGitCredentials: boolean) {
-    const before = await planCurrentSetup(keepGitCredentials);
-    const changes = before.filter((step) => step.state === "change");
-    const blocked = before.filter((step) => step.state === "blocked");
-    if (!apply || changes.length === 0) {
-      const footer =
-        blocked.length > 0
-          ? "\nFix the ✗ items above, then run `bb ona setup` again."
-          : changes.length > 0
-            ? "\nRun `bb ona setup --yes` to apply the → changes."
-            : "\nAll set. Add a devbox with `bb ona adopt <environment>` or `bb ona new [project]`.";
-      return { exitCode: blocked.length > 0 ? 1 : 0, stdout: formatSteps(before) + footer };
-    }
-    const errors: string[] = [];
-    for (const step of changes) {
-      const error = await applyStep(step);
-      if (error) errors.push(error);
-    }
-    const after = await planCurrentSetup(keepGitCredentials);
-    const done = after.every((step) => step.state === "ok");
-    return {
-      exitCode: done ? 0 : 1,
-      stdout: `${formatSteps(after)}\n${done ? "\nAll set. Add a devbox with `bb ona adopt <environment>` or `bb ona new [project]`." : ""}`,
-      ...(errors.length > 0 ? { stderr: errors.join("\n") } : {}),
-    };
-  }
+  const setup = createSetup({
+    server: bb.server,
+    run,
+    findOna: () => findOnaBinary(onaPath),
+    onaPath,
+    onaLogin,
+    hasOnaSshConfig,
+  });
 
   async function addMachine(inputs: Record<string, string>) {
     const host = await bb.sdk.hosts.experimental_create({ machineProviderId: PROVIDER_ID, inputs, wait: false });

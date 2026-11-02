@@ -11,6 +11,7 @@ import {
   type ClaudeUsageBucket,
 } from "./cost.ts";
 import type { Devbox, ThreadCost } from "./rpc.ts";
+import { errorText } from "./sync.ts";
 
 /** The parts of bb's plugin API the cost check uses; the real `bb` satisfies it. */
 export interface CostBb {
@@ -36,8 +37,6 @@ export interface CostDeps {
 }
 
 const costKey = (threadId: string) => `cost:${threadId}`;
-const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
-
 export function createThreadCost({ bb, runCollector, threadDevbox }: CostDeps) {
   const costInFlight = new Map<string, Promise<ThreadCost | null>>();
 

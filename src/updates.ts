@@ -1,5 +1,8 @@
 // Keep agent CLIs (Claude Code, Codex) current on Ona devboxes: apply the
 // updates bb already detects, never install a CLI that isn't there.
+// server.ts schedules updateClis; tests drive it with a fake of the bb calls below.
+import type { BbPluginApi } from "@get-bb/plugin-sdk";
+import type { Row } from "./sync.ts";
 
 export interface CliStatus {
   installed: boolean;
@@ -38,4 +41,76 @@ export function parseProviderList(value: string): string[] {
         .filter(Boolean),
     ),
   ];
+}
+
+type Hosts = BbPluginApi["sdk"]["hosts"];
+
+/** The parts of bb's plugin API a CLI update uses; the real `bb` satisfies it. */
+export interface UpdatesBb {
+  sdk: {
+    threads: { list(args: { hostId: string }): Promise<readonly { status: string; queuedWork?: string | null }[]> };
+    hosts: {
+      providerCliStatus(args: { hostId: string }): Promise<unknown>;
+      installProviderCli(args: Parameters<Hosts["installProviderCli"]>[0]): ReturnType<Hosts["installProviderCli"]>;
+    };
+  };
+}
+
+export interface UpdatesDeps {
+  bb: UpdatesBb;
+  machines(): Promise<Row[]>;
+  /** The `autoUpdateProviders` setting. */
+  autoUpdateProviders: string;
+}
+
+export function createUpdateClis({ bb, machines, autoUpdateProviders }: UpdatesDeps) {
+  /**
+   * Apply pending agent-CLI updates on connected Ona devboxes. Returns one
+   * line per box for the CLI and the plugin log.
+   */
+  return async function updateClis(options: { ref?: string; force?: boolean } = {}): Promise<string[]> {
+    const wanted = parseProviderList(autoUpdateProviders);
+    const lines: string[] = [];
+    for (const row of await machines()) {
+      if (options.ref && ![row.hostId, row.machine, row.resource.envId, row.resource.envName].includes(options.ref))
+        continue;
+      const name = row.resource.envName;
+      if (row.status !== "connected") {
+        lines.push(`${name}: skipped (${row.status})`);
+        continue;
+      }
+      if (!options.force) {
+        if (hostIsBusy(threadStatuses(await bb.sdk.threads.list({ hostId: row.hostId })))) {
+          lines.push(`${name}: skipped (an agent is running; retry with --force)`);
+          continue;
+        }
+      }
+      const statuses = (await bb.sdk.hosts.providerCliStatus({ hostId: row.hostId })) as Record<string, CliStatus>;
+      const pending = updatesToApply(statuses, wanted);
+      if (pending.length === 0) {
+        lines.push(
+          `${name}: up to date (${wanted.map((p) => `${p} ${statuses[p]?.currentVersion ?? "not installed"}`).join(", ")})`,
+        );
+        continue;
+      }
+      for (const cli of pending) {
+        const from = statuses[cli]?.currentVersion ?? "?";
+        const to = statuses[cli]?.latestVersion ?? "latest";
+        const events = await bb.sdk.hosts.installProviderCli({
+          hostId: row.hostId,
+          provider: cli,
+          actionKind: "update",
+        });
+        const failed = events.find(
+          (event) => event.type === "error" || (event.type === "completed" && event.exitCode !== 0),
+        );
+        lines.push(
+          failed
+            ? `${name}: ${cli} update failed (${"message" in failed ? failed.message : `exit ${"exitCode" in failed ? failed.exitCode : "?"}`})`
+            : `${name}: ${cli} ${from} -> ${to}`,
+        );
+      }
+    }
+    return lines.length > 0 ? lines : ["No matching Ona devboxes."];
+  };
 }

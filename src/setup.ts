@@ -1,7 +1,8 @@
 // Prerequisite checks and one-time setup: find the ona CLI, confirm it is
 // logged in, and plan/apply the SSH and bb settings the tunnel design needs.
+import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { execFile, type ExecFileException } from "node:child_process";
-import { accessSync, constants, existsSync } from "node:fs";
+import { accessSync, constants, existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import { onaTimeoutArgs } from "./ona.ts";
@@ -205,4 +206,118 @@ export function planSetup(input: {
 export function formatSteps(steps: SetupStep[]): string {
   const mark = { ok: "✓", change: "→", blocked: "✗" } as const;
   return steps.map((step) => `${mark[step.state]} ${step.title}: ${step.detail}`).join("\n");
+}
+
+export interface SetupDeps {
+  server: Pick<BbPluginApi["server"], "loopbackBaseUrl" | "experimental_dataDir">;
+  run: typeof run;
+  /** The ona CLI if found (`findOnaBinary` with the settings path). */
+  findOna(): string | null;
+  /** The `onaPath` setting, run as is when the CLI is not found. */
+  onaPath: string;
+  onaLogin(binary: string, fresh?: boolean): Promise<OnaLogin>;
+  hasOnaSshConfig(): boolean;
+}
+
+/** `bb ona setup`: show the plan, or apply its "change" steps and show the result. */
+// `run` and `hasOnaSshConfig` are renamed: the module's own functions have those names.
+export function createSetup({
+  server,
+  run: runCommand,
+  findOna,
+  onaPath,
+  onaLogin,
+  hasOnaSshConfig: sshConfigExists,
+}: SetupDeps) {
+  const resolveOna = () => findOna() ?? onaPath;
+
+  // bb's settings are changed through its own CLI, one key at a time, so
+  // unrelated settings are never rewritten.
+  function bbCli(args: string[]) {
+    const env = { ...process.env, BB_SERVER_URL: server.loopbackBaseUrl };
+    const cli = [
+      process.env.BB_CLI,
+      join(server.experimental_dataDir, "bin", "bb"),
+      join(homedir(), ".bb", "bin", "bb"),
+    ].find((path): path is string => Boolean(path) && existsSync(path!));
+    if (!cli) return Promise.resolve({ ok: false, stdout: "", stderr: "bb CLI not found" });
+    // A `#!/usr/bin/env node` CLI needs a node runtime; PATH may have none, so
+    // run it with the runtime hosting this plugin (Node, or bb's Electron).
+    const shebang = readFileSync(cli, "utf8").slice(0, 120).split("\n")[0] ?? "";
+    if (shebang.includes("node")) {
+      return runCommand(process.execPath, [cli, ...args], {
+        timeoutMs: 60_000,
+        env: { ...env, ELECTRON_RUN_AS_NODE: "1" },
+      });
+    }
+    return runCommand(cli, args, { timeoutMs: 60_000, env });
+  }
+
+  async function readGeneralSettings(): Promise<GeneralSettings> {
+    const result = await bbCli(["settings", "show", "--json"]);
+    if (!result.ok) throw new Error(`Could not read bb settings: ${result.stderr.trim()}`);
+    const parsed = JSON.parse(result.stdout) as { data?: unknown; generalSettings?: unknown };
+    const root = (parsed.data ?? parsed) as { generalSettings?: Partial<GeneralSettings> };
+    const general = root.generalSettings ?? {};
+    return {
+      defaultMachineAccess: general.defaultMachineAccess ?? null,
+      machineServerUrl: general.machineServerUrl ?? null,
+      machineGitCredentialsEnabled: general.machineGitCredentialsEnabled ?? true,
+    };
+  }
+
+  async function planCurrentSetup(keepGitCredentials: boolean): Promise<SetupStep[]> {
+    const binary = findOna();
+    return planSetup({
+      onaBinary: binary,
+      // Checked now, but a network failure keeps the last good login (see onaLogin).
+      login: binary ? await onaLogin(binary, true) : null,
+      sshConfigured: sshConfigExists(),
+      settings: await readGeneralSettings(),
+      serverUrl: server.loopbackBaseUrl.replace(/\/+$/, ""),
+      keepGitCredentials,
+    });
+  }
+
+  async function applyStep(step: SetupStep): Promise<string | null> {
+    const result =
+      step.id === "ssh-config"
+        ? await runCommand(resolveOna(), ["environment", "ssh-config"])
+        : step.id === "access"
+          ? await bbCli(["settings", "general", "defaultMachineAccess", "direct"])
+          : step.id === "server-url"
+            ? await bbCli(["settings", "general", "machineServerUrl", server.loopbackBaseUrl.replace(/\/+$/, "")])
+            : step.id === "git-credentials"
+              ? await bbCli(["settings", "general", "machineGitCredentialsEnabled", "false"])
+              : null;
+    if (result === null || result.ok) return null;
+    return `${step.title}: ${result.stderr.trim().split("\n").slice(-1)[0]}`;
+  }
+
+  return async function setup(apply: boolean, keepGitCredentials: boolean) {
+    const before = await planCurrentSetup(keepGitCredentials);
+    const changes = before.filter((step) => step.state === "change");
+    const blocked = before.filter((step) => step.state === "blocked");
+    if (!apply || changes.length === 0) {
+      const footer =
+        blocked.length > 0
+          ? "\nFix the ✗ items above, then run `bb ona setup` again."
+          : changes.length > 0
+            ? "\nRun `bb ona setup --yes` to apply the → changes."
+            : "\nAll set. Add a devbox with `bb ona adopt <environment>` or `bb ona new [project]`.";
+      return { exitCode: blocked.length > 0 ? 1 : 0, stdout: formatSteps(before) + footer };
+    }
+    const errors: string[] = [];
+    for (const step of changes) {
+      const error = await applyStep(step);
+      if (error) errors.push(error);
+    }
+    const after = await planCurrentSetup(keepGitCredentials);
+    const done = after.every((step) => step.state === "ok");
+    return {
+      exitCode: done ? 0 : 1,
+      stdout: `${formatSteps(after)}\n${done ? "\nAll set. Add a devbox with `bb ona adopt <environment>` or `bb ona new [project]`." : ""}`,
+      ...(errors.length > 0 ? { stderr: errors.join("\n") } : {}),
+    };
+  };
 }
