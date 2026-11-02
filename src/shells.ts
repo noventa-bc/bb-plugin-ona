@@ -2,6 +2,7 @@
 // the Mac, or a local shell when the thread is on the box) or one-off commands
 // run through the devbox's bb daemon.
 import { shellQuote } from "./ssh.ts";
+import { sleep } from "./time.ts";
 
 export interface TerminalInfo {
   id: string;
@@ -68,21 +69,6 @@ export function threadTerminalPlan(args: {
   }
   const remote = args.cwd ? `cd ${shellQuote(args.cwd)} && exec "$SHELL" -l` : `exec "$SHELL" -l`;
   return { via: "ssh", title: `ssh · ${target.boxName}`, argv: [args.sshBinary, "-t", args.sshHost, remote] };
-}
-
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    if (signal?.aborted) return resolve();
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        resolve();
-      },
-      { once: true },
-    );
-  });
 }
 
 /** Run one command in a fresh terminal on the box and collect its output. */

@@ -7,6 +7,7 @@ import { isDeleted, isRunning, isStarting, isStopped, unpushedWork, type OnaCli,
 import { DAEMON_PROBE } from "./reconcile.ts";
 import type { PluginMachineProviderAvailability } from "./setup.ts";
 import { daemonEnv, shellQuote, sshCapture, sshExecutor, type TunnelManager } from "./ssh.ts";
+import { pollUntil } from "./time.ts";
 
 type PluginMachineProviderProgress = MachineBootstrapRequest["report"];
 
@@ -98,29 +99,28 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     // Someone (Ona UI, CLI) is already starting it: wait instead of starting it again.
     if (isStarting(env)) {
       report.step(`Waiting for Ona to finish starting ${env.metadata.name ?? env.id}`);
-      const deadline = Date.now() + 15 * 60_000;
-      while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 5_000));
-        signal.throwIfAborted();
-        const current = await ona.getEnvironmentIfExists(env.id, signal);
-        if (!current) throw new Error(`Ona environment ${env.metadata.name ?? env.id} disappeared while starting.`);
-        if (isRunning(current)) return;
-        if (!isStarting(current)) {
-          env = current;
-          break;
-        }
-      }
+      const settled = await pollUntil(
+        async () => {
+          const current = await ona.getEnvironmentIfExists(env.id, signal);
+          if (!current) throw new Error(`Ona environment ${env.metadata.name ?? env.id} disappeared while starting.`);
+          return isStarting(current) ? undefined : current;
+        },
+        { deadlineMs: 15 * 60_000, intervalMs: 5_000, signal },
+      );
+      if (settled && isRunning(settled)) return;
+      if (settled) env = settled;
     }
     // Ona refuses to start an environment that is still stopping; let it finish first.
     if (env.status?.phase === "ENVIRONMENT_PHASE_STOPPING") {
       report.step(`Waiting for Ona to finish stopping ${env.metadata.name ?? env.id}`);
-      const deadline = Date.now() + 10 * 60_000;
-      while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 5_000));
-        signal.throwIfAborted();
-        const current = await ona.getEnvironmentIfExists(env.id, signal);
-        if (!current || current.status?.phase !== "ENVIRONMENT_PHASE_STOPPING") break;
-      }
+      await pollUntil(
+        async () => {
+          const current = await ona.getEnvironmentIfExists(env.id, signal);
+          if (!current) throw new Error(`Ona environment ${env.metadata.name ?? env.id} disappeared while stopping.`);
+          return current.status?.phase !== "ENVIRONMENT_PHASE_STOPPING";
+        },
+        { deadlineMs: 10 * 60_000, intervalMs: 5_000, signal },
+      );
     }
     report.step(`Starting Ona environment ${env.metadata.name ?? env.id}`);
     await ona.start(env.id, signal);
@@ -128,20 +128,22 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
 
   async function waitForSsh(executor: MachineExecutor, report: PluginMachineProviderProgress, signal: AbortSignal) {
     report.step("Waiting for the dev container to accept SSH");
-    const deadline = Date.now() + 10 * 60_000;
     let last = "";
-    while (Date.now() < deadline) {
-      signal.throwIfAborted();
-      try {
-        const probe = await sshCapture(executor, "true", signal, CHECK_TIMEOUT_MS);
-        if (probe.exitCode === 0) return;
-        last = probe.output.trim().split("\n").slice(-1)[0] ?? "";
-      } catch (error) {
-        if (signal.aborted) throw error;
-        last = error instanceof Error ? error.message : String(error);
-      }
-      await new Promise((resolve) => setTimeout(resolve, 5_000));
-    }
+    const reached = await pollUntil(
+      async () => {
+        try {
+          const probe = await sshCapture(executor, "true", signal, CHECK_TIMEOUT_MS);
+          if (probe.exitCode === 0) return true;
+          last = probe.output.trim().split("\n").slice(-1)[0] ?? "";
+        } catch (error) {
+          if (signal.aborted) throw error;
+          last = error instanceof Error ? error.message : String(error);
+        }
+        return false;
+      },
+      { deadlineMs: 10 * 60_000, intervalMs: 5_000, signal },
+    );
+    if (reached) return;
     throw new Error(`Could not SSH into the devbox within 10 minutes: ${last}`);
   }
 
@@ -165,12 +167,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         });
     if (await probe()) return;
     report.step("Waiting for the shared home folder to be mounted");
-    const deadline = Date.now() + 5 * 60_000;
-    while (Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 5_000));
-      signal.throwIfAborted();
-      if (await probe()) return;
-    }
+    if (await pollUntil(probe, { deadlineMs: 5 * 60_000, intervalMs: 5_000, signal })) return;
     throw new Error(
       "The devbox's home folder was not mounted within 5 minutes. If your Ona environments don't share a home folder, turn off the plugin's waitForSharedHome setting.",
     );
@@ -179,21 +176,17 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
   async function waitForTunnel(executor: MachineExecutor, report: PluginMachineProviderProgress, signal: AbortSignal) {
     report.step("Opening SSH reverse tunnel to bb server");
     const url = `http://127.0.0.1:${deps.port()}/health`;
-    const deadline = Date.now() + 10 * 60_000;
-    while (Date.now() < deadline) {
-      signal.throwIfAborted();
-      const probe = await sshCapture(
-        executor,
-        `curl -sf -o /dev/null --max-time 5 ${shellQuote(url)}`,
-        signal,
-        CHECK_TIMEOUT_MS,
-      ).catch((error: unknown) => {
-        if (signal.aborted) throw error;
-        return { exitCode: 1, output: "" };
-      });
-      if (probe.exitCode === 0) return;
-      await new Promise((resolve) => setTimeout(resolve, 3_000));
-    }
+    const reached = await pollUntil(
+      () =>
+        sshCapture(executor, `curl -sf -o /dev/null --max-time 5 ${shellQuote(url)}`, signal, CHECK_TIMEOUT_MS)
+          .then((probe) => probe.exitCode === 0)
+          .catch((error: unknown) => {
+            if (signal.aborted) throw error;
+            return false;
+          }),
+      { deadlineMs: 10 * 60_000, intervalMs: 3_000, signal },
+    );
+    if (reached) return;
     throw new Error(
       "The devbox could not reach the bb server through the SSH tunnel within 10 minutes. Check `bb plugin logs ona`.",
     );
@@ -264,24 +257,26 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     // Right after an Ona start the shared home may not be mounted yet, and the
     // container's own ~/.bb-machines shows through. Re-check for a while
     // before treating a real folder (exit 6) as the user's to move.
-    const deadline = Date.now() + 2 * 60_000;
-    for (;;) {
-      let output = "";
-      const { exitCode } = await executor.exec({
-        command: ["bash", "-c", script, "bb-ona-root", target],
-        stdin: "",
-        timeoutMs: CHECK_TIMEOUT_MS,
-        signal,
-        onOutput: (chunk) => {
-          output += chunk;
-        },
-      });
-      if (exitCode === 0) return;
-      if (exitCode !== 6 || Date.now() > deadline) {
-        throw new Error(`Could not set up ~/.bb-machines: ${output.trim() || `exit ${exitCode}`}`);
-      }
-      await new Promise((resolve) => setTimeout(resolve, 10_000));
-      signal.throwIfAborted();
+    let last = { exitCode: 6, output: "" };
+    await pollUntil(
+      async () => {
+        let output = "";
+        const { exitCode } = await executor.exec({
+          command: ["bash", "-c", script, "bb-ona-root", target],
+          stdin: "",
+          timeoutMs: CHECK_TIMEOUT_MS,
+          signal,
+          onOutput: (chunk) => {
+            output += chunk;
+          },
+        });
+        last = { exitCode, output };
+        return exitCode !== 6;
+      },
+      { deadlineMs: 2 * 60_000, intervalMs: 10_000, signal },
+    );
+    if (last.exitCode !== 0) {
+      throw new Error(`Could not set up ~/.bb-machines: ${last.output.trim() || `exit ${last.exitCode}`}`);
     }
   }
 

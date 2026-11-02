@@ -79,3 +79,15 @@ rules:
       - metavariable-regex:
           metavariable: $KEY
           regex: (?i)^.*(token|secret|password)
+
+  - id: raw-sleep-promise
+    message: "Wait with sleep or pollUntil from src/time.ts: a raw setTimeout promise ignores the abort signal."
+    severity: ERROR
+    languages: [typescript]
+    pattern-either:
+      - pattern: new Promise(($R) => setTimeout(...))
+      - pattern: new Promise<$T>(($R) => setTimeout(...))
+      - pattern: |
+          new Promise(($R) => { setTimeout(...); })
+      - pattern: |
+          new Promise<$T>(($R) => { setTimeout(...); })
