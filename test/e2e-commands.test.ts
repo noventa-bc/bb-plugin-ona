@@ -1,9 +1,9 @@
 // The real server.ts inside the SDK's fake bb host (test/e2e-host.ts), for
 // what a sync pass and the `bb ona` commands do to a box: the idle release and
 // the observed stop (neither may stop the box), keep-alive, reconnect, rename,
-// update and the thread event. One story in file order: run the whole file.
+// update, sync by the Ona name and the thread event. One story in file order: run the whole file.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { after, before, test } from "node:test";
 import { makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import type { OnaResource } from "../src/provider.ts";
@@ -18,6 +18,7 @@ let host: E2eHost["host"];
 let provider: E2eHost["provider"];
 let log: string;
 let envs: E2eHost["envs"];
+let state: E2eHost["state"];
 let patchBox: E2eHost["patchBox"];
 let onaCalls: E2eHost["onaCalls"];
 let close: E2eHost["close"];
@@ -34,7 +35,7 @@ function cli(currentVersion: string, latestVersion: string) {
 
 before(async () => {
   if (local.skip) return;
-  ({ host, provider, log, envs, patchBox, onaCalls, close } = await startHost({
+  ({ host, provider, log, envs, state, patchBox, onaCalls, close } = await startHost({
     machineBootstrap: {
       async bootstrap({ key }) {
         bootstraps.push(key);
@@ -190,12 +191,25 @@ test("bb ona update installs only the pending CLI (fails if a current CLI is rei
   Object.assign(hosts[0]!, { status: "connected", lifecycle: { phase: "active", message: null, suspendedAt: null } });
   const result = await host.harness.behavior.runCli(["update"]);
   assert.equal(result.exitCode, 0, result.stderr);
-  // shortcut: rename leaves resource.envName stale, so output shows the old name; drop this note when the roadmap item that re-checkpoints the resource lands
-  assert.equal(result.stdout, `${resource.envName}: claude-code 1.0.0 -> 1.1.0`);
+  // The box was renamed in the test above.
+  assert.equal(result.stdout, "new-name: claude-code 1.0.0 -> 1.1.0");
   assert.deepEqual(host.harness.inspection.sdk.callsTo("hosts.installProviderCli"), [
     [{ hostId: "host-1", provider: "claude-code", actionKind: "update" }],
   ]);
   assert.deepEqual(onaCalls(), []);
+});
+
+// Bug: `bb ona sync <name>` looked the name up before refreshing the listing, so a box renamed in Ona was "not found".
+test("bb ona sync finds a box by the name it was given in Ona, not through bb", local, async () => {
+  writeFileSync(
+    state,
+    JSON.stringify(
+      envs().map((e) => (e.id === resource.envId ? { ...e, metadata: { ...e.metadata, name: "ona-named" } } : e)),
+    ),
+  );
+  const result = await host.harness.behavior.runCli(["sync", "ona-named"]);
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.match(result.stdout ?? "", /^ona:new-name /m);
 });
 
 test("thread.deleted drops the thread's stored cost", local, async () => {

@@ -286,6 +286,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     tunnels.stop(envId);
   }
 
+  /** The box's current name: the stored one goes stale after `bb ona rename`. */
+  const nameOf = (env: OnaEnvironment, owned: OnaResource) => env.metadata.name ?? owned.envName;
   bb.experimental_machines.register({
     id: PROVIDER_ID,
     displayName: "Ona devbox",
@@ -360,7 +362,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       // Ona may have stopped it already (idle timeout); bb then only records the suspension.
       const env = await ona.getEnvironmentIfExists(owned.envId, signal);
       if (env && !isStopped(env)) {
-        report.step(`Stopping Ona environment ${owned.envName}`);
+        report.step(`Stopping Ona environment ${nameOf(env, owned)}`);
         await ona.stop(owned.envId, signal);
       }
       return { resource };
@@ -372,17 +374,19 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       const env = await ona.getEnvironmentIfExists(owned.envId, signal);
       if (!env) throw new Error(`Ona environment "${owned.envId}" not found. Run \`ona environment list\`.`);
       await ensureRunning(env, report, signal);
-      await checkpoint(resource);
+      // The stored name goes stale after `bb ona rename`; only a lifecycle hook can store the current one.
+      const current = { ...owned, envName: nameOf(env, owned) };
+      await checkpoint(current);
       // bootstrap with the creation key restarts the already-enrolled daemon.
       await connect(owned, owned.key, report, signal);
-      return { resource };
+      return { resource: current };
     },
     async remove({ resource, hostId, report, signal }) {
       const owned = resourceSchema.parse(resource);
       if (owned.adopted) {
         const env = await ona.getEnvironmentIfExists(owned.envId, signal);
         if (env && isRunning(env)) {
-          report.step(`Stopping the bb daemon on ${owned.envName} (environment is kept)`);
+          report.step(`Stopping the bb daemon on ${nameOf(env, owned)} (environment is kept)`);
           // The detached daemon and its supervisor both run from the data dir.
           // Pass values as positional args so nothing is interpolated into the script.
           const dataDir = owned.dataDir ?? "";
@@ -417,7 +421,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         return {
           status: "failed",
           message:
-            `Not deleting Ona environment ${owned.envName}: it has ${unpushed.count} unpushed commit(s) ${where}. ` +
+            `Not deleting Ona environment ${nameOf(live, owned)}: it has ${unpushed.count} unpushed commit(s) ${where}. ` +
             `Push them, or delete the box in Ona with \`ona environment delete ${owned.envId}\`, ` +
             "then run `bb machine retry-cleanup` again.",
         };
@@ -425,7 +429,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       await disconnect(owned.envId);
       await deps.forgetBox(owned.envId);
       if (live) {
-        report.step(`Deleting Ona environment ${owned.envName}`);
+        report.step(`Deleting Ona environment ${nameOf(live, owned)}`);
         await ona.delete(owned.envId, signal);
       }
       return { status: "removed" };

@@ -314,6 +314,7 @@ export function onaCommands(deps: OnaCommandDeps) {
           if (!valid.success)
             return { exitCode: 1, stderr: `Invalid name "${name}": ${valid.error.issues[0]?.message}` };
           await ona.rename(envId, name);
+          await snapshot.refresh().catch(() => undefined);
           const row = (await machines()).find((r) => r.resource.envId === envId);
           if (row) await bb.sdk.hosts.update({ hostId: row.hostId, name: `ona:${name}` });
           return {
@@ -373,10 +374,10 @@ export function onaCommands(deps: OnaCommandDeps) {
           return { exitCode: 0, stdout: formatStatus(rows, onaHealth()) };
         }
         case "sync": {
+          await snapshot.refresh().catch(() => undefined);
           const targets = ref ? [await findMachine(ref)] : await machines();
           if (targets.some((row) => row === null))
             return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${ref}".` };
-          await snapshot.refresh().catch(() => undefined);
           await reconcile(ref ? new Set(targets.map((row) => row!.hostId)) : new Set([ALL]), {
             force: true,
             wait: true,

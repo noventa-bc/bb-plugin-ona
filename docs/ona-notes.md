@@ -70,6 +70,9 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   component, so it can't show the cost chip. It could replace the DOM
   workaround in `app.tsx` that hides bb's native "Open in" button.
 - SDK 0.6.104 has no `machine_busy` suspend error code.
+- In SDK 0.6.104 a provider resource is written by the provider's own lifecycle
+  hooks (`create`, `suspend`, `resume`, through `checkpoint` or the returned
+  resource) and read with `getResource` (checked 2026-11-02).
 - SDK surfaces in 0.6.104 that the plugin doesn't use:
   - host entries: `experimental_defineHostEntry` (plugin code on the daemon,
     fs watch, signals) and the `experimental_host.deleted` event
