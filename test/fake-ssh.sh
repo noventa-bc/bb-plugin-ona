@@ -4,5 +4,5 @@
 while [ "$1" = "-o" ]; do shift 2; done
 [ "$1" = "-N" ] && exec sleep 100000
 shift
-# A remote script that defaults to $HOME (the daemon uninstall) must never touch the developer's own.
-exec env HOME="${FAKE_SSH_HOME:-$HOME}" sh -c "$*"
+# A remote script that reads the home (the daemon uninstall, the cost collectors) must never see the developer's own.
+exec env -u CLAUDE_CONFIG_DIR HOME="${FAKE_SSH_HOME:-$HOME}" sh -c "$*"

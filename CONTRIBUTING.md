@@ -42,8 +42,9 @@ npm run check        # typecheck, lint, format check, tests
    SDK's fake bb host with the fake `ona` (`test/fake-ona.mjs`, stateful) and
    fake `ssh`, and drives the provider's create, suspend, resume and remove;
    `test/e2e-commands.test.ts` does the same for the sync pass and the `bb ona`
-   commands. Both need a loopback port, so they skip themselves inside the
-   agent sandbox.
+   commands, and `test/e2e-heal.test.ts` for the daemon heal, a resume during
+   an Ona start and the `thread_cost` rpc. All three need a loopback port, so
+   they skip themselves inside the agent sandbox.
 3. Write the least code that solves the whole task. Mark a known limit with a
    `shortcut: <the limit>, <when to upgrade>` comment.
 4. Make the coupled changes `AGENTS.md` lists (README settings table, usage

@@ -8,6 +8,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { envNameForKey, type OnaResource } from "../src/provider.ts";
+import type { BbHost } from "../src/sync.ts";
 import { ctx as baseCtx, local, startHost, type E2eHost } from "./e2e-host.ts";
 
 const KEY = "key-1";
@@ -22,7 +23,7 @@ let onaCalls: E2eHost["onaCalls"];
 let close: E2eHost["close"];
 let resource: OnaResource;
 const bootstraps: string[] = [];
-const hosts: unknown[] = [];
+const hosts: BbHost[] = [];
 let patchBox: E2eHost["patchBox"];
 const checkpoints: unknown[] = [];
 const ctx = {
