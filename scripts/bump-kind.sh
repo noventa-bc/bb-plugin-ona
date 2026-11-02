@@ -3,11 +3,13 @@
 # line in the body (stdin) means major, `feat` minor, `fix` and `perf` patch,
 # any other type none. A change that touches only Markdown is never a bump.
 # Used by scripts/bump.sh and scripts/release-check.sh, so the rule lives here.
+# The diff runs from the merge base to the working tree, so staged work that
+# is not committed yet counts (bump.sh runs before the first commit).
 #
 #   printf '%s' "$body" | scripts/bump-kind.sh "<PR title>" <base, e.g. main>
 title=$1
 base=$2
-if [ -z "$(git diff --name-only "$base...HEAD" -- . ':!*.md')" ]; then
+if [ -z "$(git diff --name-only "$(git merge-base "$base" HEAD)" -- . ':!*.md')" ]; then
   echo none
   exit 0
 fi
