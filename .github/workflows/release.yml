@@ -1,13 +1,19 @@
-# On a `v*` tag: create the GitHub release with that version's CHANGELOG.md
-# section as the notes. Fails if the tag does not match package.json's version.
+# On a push to main (or by hand): if package.json's version has no GitHub
+# release yet, tag it `v<version>` at the pushed commit and create the release
+# with generated notes (the PR titles merged since the previous tag).
 name: release
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+  workflow_dispatch:
 permissions:
   contents: write
+# Two quick pushes run one after the other; the second sees the release and exits.
+concurrency: { group: release }
 jobs:
   release:
+    # A manual run on another branch must never tag it.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -18,12 +24,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=$(node -p "require('./package.json').version")
-          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
-            echo "tag $GITHUB_REF_NAME does not match package.json version $version"; exit 1
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "v$version already released"; exit 0
           fi
-          # The lines from "## <version> (" up to the next "## " heading.
-          awk -v v="$version" '/^## /{p = index($0, "## " v " (") == 1} p' CHANGELOG.md > notes.md
-          if [ ! -s notes.md ]; then
-            echo "CHANGELOG.md has no section '## $version (...)'"; exit 1
-          fi
-          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md
+          # Creates the tag at this commit when it does not exist; an existing tag is kept where it is.
+          gh release create "v$version" --target "$GITHUB_SHA" --title "v$version" --generate-notes

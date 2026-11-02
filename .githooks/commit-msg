@@ -1,0 +1,4 @@
+#!/bin/sh
+# Reject a commit message that is not a Conventional Commit.
+# Enable once per clone: git config core.hooksPath .githooks
+exec scripts/conventional.sh <"$1"

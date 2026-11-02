@@ -86,14 +86,22 @@ those and the "skipped or not checked" lines ponytail ends with.
    Repeat until there are no open findings. Check the ten Code Review Rules
    in `AGENTS.md`.
 7. **Open the PR.** Push the branch and open a pull request against `main`.
-   The description carries: the roadmap labels, what changed and why, how it
+   The title is a Conventional Commit (`type(scope): subject`, see
+   `AGENTS.md`): the squash merge makes it the commit on `main`, and it
+   decides the release. The description carries: the roadmap labels, what changed and why, how it
    was tested, the owner live-test steps from the handoff, and anything left
    out. Nothing from the "Security (private)" handoff section goes in the PR.
 8. **Wait for CI.** The `check` workflow must be green. A red run goes back to
-   the builder; never merge around it.
-9. **Merge.** The orchestrator squash-merges as soon as CI is green and the
-   review has no open findings, and deletes the branch. PRs that touch the
-   same files merge one at a time: merge `main` into the next branch (a merge
+   the builder; never merge around it. A PR with no checks at all after a
+   minute (GitHub sometimes drops the event when the branch and the PR appear
+   together) is not green: push a merge of `main` or an empty commit to
+   retrigger, and merge only once runs exist.
+9. **Merge.** The orchestrator squash-merges with
+   `gh pr merge --squash --delete-branch --subject "<PR title>"` (the title is
+   the commit subject whatever the repository's squash setting) as soon as CI
+   is green and the review has no open findings. A push to `main` then tags
+   and releases the version in `package.json` on its own (`release.yml`); no
+   step here does it. PRs that touch the same files merge one at a time: merge `main` into the next branch (a merge
    commit; force-pushing is blocked, so never rebase a pushed branch), fix
    conflicts keeping both sides, run `npm run check`, let CI run again, then
    merge. Two green PRs can still break each other once combined, so the

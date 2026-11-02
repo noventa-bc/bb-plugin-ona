@@ -24,6 +24,7 @@ Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
 - Ona's SSH starts stopped devboxes. Any SSH to a devbox can wake it.
 - Never run `ona` actions, `ssh` to devboxes, or `bb machine` or `bb plugin` changes.
 - Never commit to `main` or push, except as `FACTORY.md` allows: builders commit on `agent/*` branches, the orchestrator pushes them and opens PRs.
+- Commit messages and PR titles are Conventional Commits, `type(scope): subject` (`scripts/conventional.sh` has the rule; `.githooks/commit-msg` checks it locally, `check.yml` checks the PR). `feat` bumps the minor version, `fix` and `perf` the patch, `!` the major: that PR bumps `package.json`. Other types need no bump. A push to `main` tags and releases the version with notes generated from the merged PR titles.
 - Read-only `bb ona status` is fine, but only when the owner is present.
 
 ## Coupled changes
@@ -33,7 +34,7 @@ Change these together, in the same edit.
 - Plugin settings go with the settings table in `README.md`.
 - `bb ona` commands go with their usage text, `README.md`, `skills/ona-devboxes/SKILL.md` and `PLUGIN_OVERVIEW.md`.
 - `decide()` in `src/reconcile.ts` goes with its tests in `test/reconcile.test.ts` and the rules table in `docs/sync.md`.
-- A user-visible change gets a bullet under "Unreleased" in `CHANGELOG.md`. Leave out the commit hash. The owner adds it.
+- A user-visible change is described by its PR title (a Conventional Commit in user-facing wording) and, when more is needed, the PR body: release notes are generated from merged PR titles.
 
 ## Decisions
 
@@ -62,7 +63,7 @@ Change these together, in the same edit.
 
 ## Docs
 
-- Each file owns one thing. `README.md` is for users. `skills/ona-devboxes/SKILL.md` is for agents that use the plugin. `CHANGELOG.md` is for changes. `docs/decisions/` is for reasons.
+- Each file owns one thing. `README.md` is for users. `skills/ona-devboxes/SKILL.md` is for agents that use the plugin. `docs/decisions/` is for reasons.
 - Use exact numbers.
 - Write "box" or "devbox" for an Ona environment. Write "machine" only for the bb machine.
 - Put commands and settings in backticks.

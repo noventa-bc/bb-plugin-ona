@@ -24,6 +24,8 @@ orchestrator opens PRs.
   `security add-generic-password -U -s nono -a claude_code_oauth_token -w`.
   The scripts have nono pass it in as `CLAUDE_CODE_OAUTH_TOKEN`; an exported
   `CLAUDE_CODE_OAUTH_TOKEN` takes precedence. Don't write it into a file.
+- `git config core.hooksPath .githooks` in each clone: the `commit-msg` hook
+  rejects a message that is not a Conventional Commit (`AGENTS.md`).
 - GitHub repository settings: turn on secret scanning, push protection and
   Dependabot alerts. Add a ruleset on the default branch that blocks
   deletion and force pushes and requires a pull request with squash merge
@@ -60,7 +62,7 @@ an unattended agent skips a conflicting item.
    Decide on anything under "Needs owner review", and check that each added
    piece of complexity is worth what the handoff says it costs.
 2. Run `npm run check` in the worktree (outside the sandbox, so every test runs).
-3. Stage files by name, commit, then run `/changelog` to add the hash and commit that.
+3. Stage files by name and commit.
 4. Apply "Process feedback" proposals to `AGENTS.md` yourself, if they hold up.
 5. Remove the worktree: `git worktree remove <worktree>` and `git branch -D agent/<slug>`.
 
@@ -79,18 +81,18 @@ after a bb upgrade, run through this list:
 
 ## Release
 
-1. Bump `version` in `package.json`.
-2. In `CHANGELOG.md`, turn `## Unreleased` into `## X.Y.Z (YYYY-MM-DD)` and
-   add a fresh, empty `## Unreleased` above it.
-3. Land that through a PR.
-4. `git tag vX.Y.Z <merge commit> && git push origin vX.Y.Z`. The `release`
-   workflow (`.github/workflows/release.yml`) creates the GitHub release from
-   that changelog section and refuses a tag that does not match `package.json`.
+A release is a PR whose title is a `feat`, `fix`, `perf` or `!` Conventional
+Commit. That PR bumps `version` in `package.json` as the title requires
+(`check.yml` fails otherwise; `scripts/release-check.sh` has the rule). On
+merge, `release.yml` tags the squash commit `vX.Y.Z` and creates the GitHub
+release with notes generated from the PR titles merged since the previous tag
+(`https://github.com/noventa-bc/bb-plugin-ona/releases`); a version that
+already has a release is left alone. Nobody tags by hand.
 
-Never move a tag: bb's `git:` installs resolve a semver range to tags, so a
-fix ships as a new version. The one exception is a tag the workflow refused
-and nobody has installed: delete it (`git push origin :vX.Y.Z`) and push it
-again once fixed.
+If the release run fails, fix `main` through a PR, then rerun `release.yml`
+from the Actions tab (`workflow_dispatch`) or let the next push to `main` run
+it. Never move a tag: bb's `git:` installs resolve a semver range to tags, so
+a fix ships as a new version.
 
 ## Sandbox checks (nono 0.81.0, checked 2026-10-30)
 
