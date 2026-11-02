@@ -52,8 +52,9 @@ you asked for, so safety rule 1 does not gate it.
 
 1. **Never wake a box.** Ona's SSH starts a stopped box, so the plugin only uses
    SSH (tunnel, daemon check) when Ona says the box is running. It re-checks
-   Ona right before each daemon check. If Ona can't be asked, tunnels wait
-   rather than connect. *Why: an accidental start costs money and keeps the box up.*
+   Ona right before each daemon check, and runs the cost collectors only on a
+   box bb reports connected. If Ona can't be asked, tunnels wait rather than
+   connect. *Why: an accidental start costs money and keeps the box up.*
 2. **Never stop a box.** Suspends the plugin makes because of what it saw in Ona
    skip the provider's stop. *Why: a wrong or stale listing must not stop a box with your work on it.*
 3. **Never restart a live daemon.** The daemon is restarted only when the check
@@ -136,6 +137,9 @@ CI checks parts of these rules with Semgrep (`.semgrep/rules.yml`):
   `src/ssh.ts` start child processes.
 - `ona-lifecycle-outside-onacli`: `ona environment start`, `stop`, `delete` and
   `ssh` run only through `OnaCli` in `src/ona.ts` (safety rules 1 and 2).
+- `ssh-outside-runners`: `sshExecutor` and `sshCapture` are called only in
+  `src/ssh.ts` and `src/provider.ts`; code elsewhere goes through the
+  provider's methods, each of which names its guard (safety rule 1).
 - `remote-script-interpolation`: a script sent over SSH interpolates values
   only through `shellQuote`.
 - `console-instead-of-bb-log`: plugin code logs through `bb.log`.

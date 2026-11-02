@@ -18,6 +18,13 @@ export default tseslint.config(
         { allowForKnownSafeCalls: [{ from: "package", package: "node:test", name: ["test", "before", "after"] }] },
       ],
       "@typescript-eslint/no-misused-promises": "error",
+      "@typescript-eslint/no-deprecated": "error",
+      "@typescript-eslint/no-shadow": "error",
+      "@typescript-eslint/use-unknown-in-catch-callback-variable": "error",
+      "@typescript-eslint/prefer-promise-reject-errors": "error",
+      "@typescript-eslint/only-throw-error": "error",
+      "@typescript-eslint/switch-exhaustiveness-check": "error",
+      "max-lines": ["error", { max: 500, skipBlankLines: true, skipComments: true }],
       // bb can accept a lifecycle request without acting on it; use the host it returns.
       "no-restricted-syntax": [
         "error",
@@ -31,5 +38,10 @@ export default tseslint.config(
         })),
       ],
     },
+  },
+  {
+    files: ["server.ts"],
+    // shortcut: server.ts is at its current size, the limit only lets it shrink; lower it as code moves to src/
+    rules: { "max-lines": ["error", { max: 864, skipBlankLines: true, skipComments: true }] },
   },
 );

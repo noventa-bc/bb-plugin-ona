@@ -20,8 +20,8 @@ export function updatesToApply(statuses: Record<string, CliStatus>, wanted: read
 /** Threads in these states have an agent turn in flight; don't swap its CLI underneath it. */
 const BUSY_THREAD_STATES = new Set(["active", "starting", "stopping", "pending"]);
 
-export function hostIsBusy(threadStatuses: readonly string[]): boolean {
-  return threadStatuses.some((status) => BUSY_THREAD_STATES.has(status));
+export function hostIsBusy(statuses: readonly string[]): boolean {
+  return statuses.some((status) => BUSY_THREAD_STATES.has(status));
 }
 
 /** What `hostIsBusy` reads from bb's thread list: queued work waiting for the host counts as pending. */

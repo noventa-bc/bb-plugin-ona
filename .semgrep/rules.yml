@@ -35,6 +35,18 @@ rules:
       - pattern: '[..., "environment", "delete", ...]'
       - pattern: '[..., "environment", "ssh", ...]'
 
+  - id: ssh-outside-runners
+    message: "Run commands on a box only in src/ssh.ts or src/provider.ts; elsewhere call a provider method, which names its guard (docs/sync.md safety rule 1)."
+    severity: ERROR
+    languages: [typescript]
+    paths:
+      exclude:
+        - src/ssh.ts
+        - src/provider.ts
+    pattern-either:
+      - pattern: sshExecutor(...)
+      - pattern: sshCapture(...)
+
   - id: remote-script-interpolation
     message: "Remote script text is a constant: pass values as arguments or through shellQuote (Code Review Rule 5)."
     severity: ERROR
