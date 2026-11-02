@@ -40,6 +40,12 @@ export default tseslint.config(
     },
   },
   {
+    // Dead `??`, `?.` and always-true checks hide a type that drifted from the code. Tests and
+    // app.tsx are left out: fakes and UI props are loose on purpose.
+    files: ["src/**/*.ts", "server.ts"],
+    rules: { "@typescript-eslint/no-unnecessary-condition": "error" },
+  },
+  {
     files: ["server.ts"],
     // shortcut: server.ts is at its current size, the limit only lets it shrink; lower it as code moves to src/
     rules: { "max-lines": ["error", { max: 864, skipBlankLines: true, skipComments: true }] },

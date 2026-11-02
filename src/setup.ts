@@ -152,7 +152,7 @@ export function planSetup(input: {
               id: "login",
               title: "Ona login",
               state: "blocked",
-              detail: `Run \`ona login\`${input.login && !input.login.ok ? ` (${input.login.message})` : ""}`,
+              detail: `Run \`ona login\`${input.login ? ` (${input.login.message})` : ""}`,
             },
     );
     steps.push(

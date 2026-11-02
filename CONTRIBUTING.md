@@ -60,9 +60,10 @@ npm run check        # typecheck, lint, format check, tests
    also sets `version` in `package.json`; merging it releases it, with notes
    generated from the merged PR titles, so a user-visible change gets a title
    in user-facing wording. In the body, say what changed and why, how you
-   tested it, and what a maintainer should check live. CI must be green: `check` (Ubuntu, with Semgrep and shellcheck) and,
-   for Markdown, `docs`. `main` only changes through squash-merged pull
-   requests.
+   tested it, and what a maintainer should check live. CI must be green:
+   `check` (Ubuntu, with Semgrep, shellcheck and a test file per `src/` module)
+   and, for Markdown, `docs` (formatting, line limits and dead relative links).
+   `main` only changes through squash-merged pull requests.
 
 ## Working with a coding agent
 
