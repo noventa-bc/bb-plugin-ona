@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { formatStatus, keepAliveCommand, parseArgs, type KeepAliveDeps } from "../src/commands.ts";
+import {
+  formatStatus,
+  keepAliveCommand,
+  onaCommands,
+  parseArgs,
+  usage,
+  type KeepAliveDeps,
+  type OnaCommandDeps,
+} from "../src/commands.ts";
 import type { OnaEnvironment } from "../src/ona.ts";
 import type { StatusRow } from "../src/sync.ts";
 
@@ -148,4 +156,52 @@ test("status text: one block per machine with what the plugin saw, did and is wa
   assert.equal(lines[3], "  last action: release-idle: idle for 1h (3h ago) ERROR bb kept the machine active");
   assert.equal(lines[4], "  retrying after 10:00:00");
   assert.match(lines[5]!, /^  2 workspace\(s\) need recovery; .*bb environment list --host host_1/);
+});
+
+// Dispatch only; list, sync, status and keep-alive also run end to end in
+// test/e2e-commands.test.ts. The fake holds just what these cases call.
+
+const ROW = { hostId: "host_1", machine: "ona:box", status: "active", resource: { envId: "env_1" } };
+
+function fakeRun() {
+  const calls: string[] = [];
+  const deps = {
+    machines: () => Promise.resolve([ROW]),
+    tunnels: { status: () => "up" },
+    resolveEnvId: (ref: string) => Promise.resolve(ref === "box" ? "env_1" : ref),
+    keepAlives: {
+      stop: (envId: string) => {
+        calls.push(`keepAlives.stop ${envId}`);
+        return true;
+      },
+    },
+  } as unknown as OnaCommandDeps;
+  const run = onaCommands(deps);
+  return { calls, run: (...argv: string[]) => run(argv, {}) };
+}
+
+test("help, --help and no command print the usage", async () => {
+  const { run } = fakeRun();
+  for (const argv of [["help"], ["--help"], []]) {
+    assert.deepEqual(await run(...argv), { exitCode: 0, stdout: usage });
+  }
+});
+
+test("list --json prints the machines with their tunnel status", async () => {
+  const { run } = fakeRun();
+  const result = await run("list", "--json");
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(JSON.parse(result.stdout ?? ""), [{ ...ROW, tunnel: "up" }]);
+});
+
+test("keep-alive <ref> off stops the keep-alive of the resolved box", async () => {
+  const { run, calls } = fakeRun();
+  assert.deepEqual(await run("keep-alive", "box", "off"), { exitCode: 0, stdout: "Ended the keep-alive for box." });
+  assert.deepEqual(calls, ["keepAlives.stop env_1"]);
+});
+
+test("an unknown command, or one missing its <ref>, exits 1 with the usage", async () => {
+  const { run } = fakeRun();
+  assert.deepEqual(await run("frobnicate"), { exitCode: 1, stderr: usage });
+  assert.deepEqual(await run("host"), { exitCode: 1, stderr: usage });
 });
