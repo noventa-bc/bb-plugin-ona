@@ -12,7 +12,7 @@ const environmentSchema = z.object({
       projectId: z.string().optional(),
       archivedAt: z.string().optional(),
     })
-    .passthrough(),
+    .loose(),
   status: z
     .object({
       phase: z.string().optional(),
@@ -24,20 +24,20 @@ const environmentSchema = z.object({
               branch: z.string().optional(),
               totalUnpushedCommits: z.union([z.number(), z.string()]).optional(),
             })
-            .passthrough()
+            .loose()
             .optional(),
         })
-        .passthrough()
+        .loose()
         .optional(),
     })
-    .passthrough()
+    .loose()
     .optional(),
 });
 export type OnaEnvironment = z.infer<typeof environmentSchema>;
 
 const projectSchema = z.object({
   id: z.string(),
-  metadata: z.object({ name: z.string().optional() }).passthrough(),
+  metadata: z.object({ name: z.string().optional() }).loose(),
 });
 
 /**

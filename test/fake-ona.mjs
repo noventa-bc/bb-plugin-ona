@@ -16,7 +16,7 @@ const fail = (message) => {
 if (FAKE_ONA_FAIL) fail(FAKE_ONA_FAIL);
 if (FAKE_ONA_LOG) appendFileSync(FAKE_ONA_LOG, `${args.join(" ")}\n`);
 
-const [group, verb, ref] = args;
+const [group, verb = "", ref] = args;
 const flag = (name) => args[args.indexOf(name) + 1];
 const envs = FAKE_ONA_ENVIRONMENTS ? JSON.parse(readFileSync(FAKE_ONA_ENVIRONMENTS, "utf8")) : [];
 const env = envs.find((e) => e.id === ref);

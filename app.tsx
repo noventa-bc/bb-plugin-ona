@@ -103,7 +103,7 @@ function ThreadCostChip({ threadId }: { threadId: string }) {
     const load = () =>
       rpc
         .call("thread_cost", { threadId })
-        .then(({ cost }) => !cancelled && setCost(cost))
+        .then((reply) => !cancelled && setCost(reply.cost))
         .catch(() => undefined);
     void load();
     const timer = setInterval(() => void load(), 60_000);
@@ -140,7 +140,7 @@ function DevboxEditor({ threadId, isCompactViewport }: ThreadHeaderActionProps) 
     let cancelled = false;
     rpc
       .call("thread_devbox", { threadId })
-      .then(({ devbox }) => !cancelled && setDevbox(devbox))
+      .then((reply) => !cancelled && setDevbox(reply.devbox))
       .catch(() => undefined);
     return () => {
       cancelled = true;

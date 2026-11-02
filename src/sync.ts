@@ -229,7 +229,7 @@ export function createSync(deps: SyncDeps) {
           },
           { cooldown: false },
         )
-        .catch((error) => {
+        .catch((error: unknown) => {
           bb.log.warn(`${row.machine}: could not let go: ${errorText(error)}`);
         });
     }
@@ -347,7 +347,7 @@ export function createSync(deps: SyncDeps) {
         },
         { force, heavy, cooldown: heavy },
       )
-      .catch((error) => {
+      .catch((error: unknown) => {
         bb.log.warn(`${machine}: ${decision.action} failed: ${errorText(error)}`);
       });
   }
@@ -363,7 +363,7 @@ export function createSync(deps: SyncDeps) {
       const targets = keys.has(ALL) ? rows : rows.filter((row) => keys.has(row.hostId));
       if (targets.length === 0) return;
       // Host-specific passes come from events where someone may be waiting: keep them fresher.
-      const listing = await snapshot.get(keys.has(ALL) ? undefined : 5_000).catch((error) => {
+      const listing = await snapshot.get(keys.has(ALL) ? undefined : 5_000).catch((error: unknown) => {
         bb.log.warn(`could not list Ona environments: ${errorText(error)}`);
         return null;
       });
