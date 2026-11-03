@@ -149,7 +149,9 @@ View them with `bb plugin config ona`, and change one with `bb plugin config ona
 | `codexSqliteHome` | `/workspaces/.codex-sqlite-bb` | Where Codex launched by bb keeps its SQLite state on the devbox's local disk. |
 | `machineDataDir` | `/workspaces/.bb-machines` | Local folder that `~/.bb-machines` is symlinked to on every devbox. Empty leaves `~/.bb-machines` alone. |
 
-A changed setting takes effect after `bb plugin reload ona`, and reaches a machine's box on its next connect (`bb ona reconnect` or a resume).
+A changed setting applies after `bb plugin reload ona`.
+
+`waitForSharedHome`, `codexSqliteHome` and `machineDataDir` reach a box on its next connect (`bb ona reconnect`, a resume or the daemon's restart); `inactivityTimeout` applies to boxes created after the change.
 
 The last two exist because Ona devboxes can share an NFS-mounted home. SQLite
 breaks on network filesystems, and bb allows only one machine identity per data

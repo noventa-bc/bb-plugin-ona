@@ -204,7 +204,7 @@ test("bb ona reconnect refuses a box Ona shows stopped (fails if it connects wit
   assert.equal(result.exitCode, 1, result.stdout);
   assert.match(
     result.stderr ?? "",
-    /^ona:\S+ is stopped in Ona, so it was not reconnected\. Run `bb ona sync ona:\S+` \(bb then shows it suspended\), then `bb machine resume ona:/,
+    /^ona:\S+ is stopped in Ona, so it was not reconnected\. Once bb no longer shows it connected, `bb ona sync ona:\S+` marks it suspended; then run `bb machine resume ona:/,
   );
   assert.ok(listings() > asked, "the refusal came after Ona answered a listing");
   assert.deepEqual(sshCalls(), []);

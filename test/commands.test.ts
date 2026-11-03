@@ -180,17 +180,24 @@ const ROW = { hostId: "host_1", machine: "ona:box", status: "active", phase: "ac
 
 /**
  * `phase`: the bb lifecycle phase of the one machine. `ona`: its Ona phase, or null when Ona doesn't list it.
- * `extra`: `archived` marks the box archived; `listingFails` makes the listing throw; `duringListing` runs
- * while the listing is taken, so a guard action can start then.
+ * `extra`: `archived` marks the box archived; `listingFails` makes the listing throw `listingError`;
+ * `duringListing` runs while the listing is taken, with the guard and the machine, so an action can start
+ * or a suspend can finish then.
  */
 function fakeRun(
   phase = "active",
   ona: string | null = "RUNNING",
-  extra: { archived?: boolean; listingFails?: boolean; duringListing?: (guard: HostGuard) => void } = {},
+  extra: {
+    archived?: boolean;
+    listingFails?: boolean;
+    listingError?: string;
+    duringListing?: (guard: HostGuard, machine: { phase: string }) => void;
+  } = {},
 ) {
   const calls: string[] = [];
   const machine = { ...ROW, phase };
   const guard = new HostGuard();
+  const listingError = extra.listingError ?? "could not reach Ona";
   const envs =
     ona === null
       ? []
@@ -207,11 +214,11 @@ function fakeRun(
     guard,
     snapshot: {
       refresh: async () => {
-        extra.duringListing?.(guard);
-        if (extra.listingFails) throw new Error("could not reach Ona");
+        extra.duringListing?.(guard, machine);
+        if (extra.listingFails) throw new Error(listingError);
         return { envs, at: 0 };
       },
-      lastError: extra.listingFails ? "could not reach Ona" : null,
+      lastError: extra.listingFails ? listingError : null,
     },
     provider: { reconnect: async (resource: { envId: string }) => void calls.push(`reconnect ${resource.envId}`) },
     tunnels: { status: () => "up" },
@@ -323,7 +330,8 @@ test("reconnect refuses a STARTING box, without a provider call", async () => {
 
 test("reconnect says what to do for each other state Ona can show, and never calls the provider", async () => {
   const check = "Check the box in Ona and `bb ona status ona:box`.";
-  const sync = "Run `bb ona sync ona:box` (bb then shows it suspended), then `bb machine resume ona:box`.";
+  const sync =
+    "Once bb no longer shows it connected, `bb ona sync ona:box` marks it suspended; then run `bb machine resume ona:box`.";
   const wait = "Try again once Ona shows it running.";
   for (const [ona, archived, state, hint] of [
     ["STOPPED", false, "stopped", sync],
@@ -346,6 +354,32 @@ test("reconnect says what to do for each other state Ona can show, and never cal
 
 test("reconnect refuses when Ona cannot be asked, and names Ona's error", async () => {
   const { run, calls } = fakeRun("active", "RUNNING", { listingFails: true });
+  assert.deepEqual(await run("reconnect", "box"), {
+    exitCode: 1,
+    stderr:
+      "Can't ask Ona whether ona:box is running (could not reach Ona); not reconnected. Check `ona login` and try again.",
+  });
+  assert.deepEqual(calls, []);
+});
+
+test("reconnect refuses a machine a suspend finished while Ona was listed, without a provider call", async () => {
+  const { run, calls } = fakeRun("active", "RUNNING", {
+    duringListing: (_guard, machine) => {
+      machine.phase = "suspended";
+    },
+  });
+  assert.deepEqual(await run("reconnect", "box"), {
+    exitCode: 1,
+    stderr: "ona:box is suspended in bb, so it was not reconnected. Resume it with `bb machine resume ona:box`.",
+  });
+  assert.deepEqual(calls, []);
+});
+
+test("reconnect names only the first line of Ona's error when the listing fails", async () => {
+  const { run, calls } = fakeRun("active", "RUNNING", {
+    listingFails: true,
+    listingError: "could not reach Ona\n  at the listing call",
+  });
   assert.deepEqual(await run("reconnect", "box"), {
     exitCode: 1,
     stderr:

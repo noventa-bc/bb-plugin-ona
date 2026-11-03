@@ -115,6 +115,12 @@ function notActiveHint(phase: Exclude<HostPhase, "active">, machine: string): st
   return "Try again once bb shows it active.";
 }
 
+/** The refusal for a machine bb doesn't show active. */
+function notActiveRefusal(row: Row): CliResult {
+  const hint = notActiveHint(row.phase as Exclude<HostPhase, "active">, row.machine);
+  return { exitCode: 1, stderr: `${row.machine} is ${row.phase} in bb, so it was not reconnected. ${hint}` };
+}
+
 /** What `bb ona reconnect` says for a box Ona doesn't show running; `env` is undefined when Ona lists no such box. */
 function notRunningInOna(machine: string, env: OnaEnvironment | undefined): string {
   const check = `Check the box in Ona and \`bb ona status ${machine}\`.`;
@@ -123,7 +129,7 @@ function notRunningInOna(machine: string, env: OnaEnvironment | undefined): stri
   const phase = env.status?.phase;
   const state = short(phase ?? "unknown");
   if (phase === "ENVIRONMENT_PHASE_STOPPED" || phase === "ENVIRONMENT_PHASE_STOPPING") {
-    return `${machine} is ${state} in Ona, so it was not reconnected. Run \`bb ona sync ${machine}\` (bb then shows it suspended), then \`bb machine resume ${machine}\`.`;
+    return `${machine} is ${state} in Ona, so it was not reconnected. Once bb no longer shows it connected, \`bb ona sync ${machine}\` marks it suspended; then run \`bb machine resume ${machine}\`.`;
   }
   if (isStarting(env))
     return `${machine} is ${state} in Ona, so it was not reconnected. Try again once Ona shows it running.`;
@@ -188,7 +194,6 @@ export const usage = [
   "  bb ona rename <ref> [name]    Rename the Ona environment (random fun name if omitted) and its bb machine",
   "  bb ona reconnect <ref>        Reopen an active machine's tunnel and restart its bb daemon",
   "                                Refused unless bb shows the machine active and Ona shows its box running.",
-  "                                A changed setting takes effect after `bb plugin reload ona`, and reaches a machine's box on its next connect (`bb ona reconnect` or a resume).",
   "  bb ona status [ref] [--json]  bb's view of each devbox next to Ona's, and what the plugin last did",
   "  bb ona sync [ref]             Re-check Ona now and repair (ignores cooldowns, keeps the safety rules)",
   "  bb ona keep-alive <ref> <duration|off>  Keep a running devbox from Ona's inactivity timeout (at most 12h)",
@@ -397,28 +402,29 @@ export function onaCommands(deps: OnaCommandDeps) {
           const row = await findMachine(ref);
           if (!row) return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${ref}".` };
           // A tunnel keeps the box awake, so none opens on a machine bb doesn't show active (decision 0003).
-          if (row.phase !== "active") {
-            const hint = notActiveHint(row.phase as Exclude<HostPhase, "active">, row.machine);
-            return { exitCode: 1, stderr: `${row.machine} is ${row.phase} in bb, so it was not reconnected. ${hint}` };
-          }
+          if (row.phase !== "active") return notActiveRefusal(row);
           const steps: string[] = [];
           const report = { step: (text: string) => steps.push(text), log: () => {} };
           // Safety rule 1 (docs/sync.md): SSH starts a stopped box, so Ona is asked right before the connect.
           const listing = await snapshot.refresh().catch(() => null);
           if (!listing) {
+            const reason = (snapshot.lastError ?? "no listing").split("\n")[0];
             return {
               exitCode: 1,
-              stderr: `Can't ask Ona whether ${row.machine} is running (${snapshot.lastError ?? "no listing"}); not reconnected. Check \`ona login\` and try again.`,
+              stderr: `Can't ask Ona whether ${row.machine} is running (${reason}); not reconnected. Check \`ona login\` and try again.`,
             };
           }
+          // bb may have changed while Ona was asked: a suspend or remove that finished then is seen here.
+          const current = await findMachine(ref);
+          if (!current) return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${ref}".` };
+          if (current.phase !== "active") return notActiveRefusal(current);
           const env = listing.envs.find((e) => e.id === row.resource.envId);
           if (!isRunning(env)) return { exitCode: 1, stderr: notRunningInOna(row.machine, env) };
-          // The busy check comes after the listing, so an action that started while Ona was asked is seen.
+          // guard.run is the busy check: it returns false, without running, while another action holds the machine.
           const busyRefusal = (): CliResult => ({
             exitCode: 1,
             stderr: `${row.machine} is busy (${guard.busyWith(row.hostId) ?? "another action"}); try again shortly or see \`bb ona status\`.`,
           });
-          if (guard.busyWith(row.hostId)) return busyRefusal();
           const ran = await guard.run(
             row.hostId,
             "reconnect",
