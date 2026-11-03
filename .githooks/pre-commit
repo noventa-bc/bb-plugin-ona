@@ -1,0 +1,50 @@
+#!/bin/sh
+# Runs before each commit the checks that would otherwise fail in the PR, quickest first. npm install
+# points core.hooksPath at this folder (the prepare script in package.json).
+set -u
+
+stop() {
+  echo "pre-commit: stopped at $1; the commit was not made" >&2
+  exit 1
+}
+
+command -v npm >/dev/null 2>&1 || { echo "pre-commit: npm is not on PATH; load the Node in .nvmrc first (nvm use)" >&2; exit 1; }
+[ -x node_modules/.bin/tsc ] || { echo "pre-commit: node_modules is missing; run npm ci --ignore-scripts" >&2; exit 1; }
+
+echo "pre-commit: scripts/leak-check.sh"
+scripts/leak-check.sh || stop "scripts/leak-check.sh"
+
+echo "pre-commit: scripts/docs-check.sh"
+scripts/docs-check.sh || stop "scripts/docs-check.sh"
+
+# check.yml skips changes that touch only Markdown. Deleted paths and both sides of a rename count
+# as changes there, so they count here too.
+code_changed=0
+git diff --cached --no-renames --name-only | grep -qv '\.md$' && code_changed=1
+
+# shortcut: checks the working tree, not the index; stash-free index checks when a staged-only hunk ever slips past
+if [ "$code_changed" = 1 ]; then
+  # GIT_INDEX_FILE may be exported to hooks, and the tests run git add in throwaway repositories.
+  echo "pre-commit: npm run check"
+  env -u GIT_INDEX_FILE npm run check || stop "npm run check"
+  if command -v semgrep >/dev/null 2>&1; then
+    echo "pre-commit: semgrep"
+    semgrep --test --metrics=off .semgrep/ || stop "semgrep --test"
+    semgrep scan --config .semgrep/rules.yml --error --metrics=off app.tsx server.ts src || stop "semgrep scan"
+  else
+    echo "pre-commit: semgrep is not installed; skipped"
+  fi
+else
+  echo "pre-commit: only Markdown is staged; npm run check and semgrep skipped"
+fi
+
+if command -v shellcheck >/dev/null 2>&1; then
+  echo "pre-commit: shellcheck on the staged shell files"
+  git diff --cached --name-only --diff-filter=ACMR -- '*.sh' '.githooks/*' | while IFS= read -r f; do
+    shellcheck "$f" || exit 1
+  done || stop "shellcheck"
+else
+  echo "pre-commit: shellcheck is not installed; skipped"
+fi
+
+echo "pre-commit: all checks passed"

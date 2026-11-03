@@ -9,9 +9,10 @@ Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
 
 ## Commands
 
-- Run `npm run check` (typecheck, lint, format check and tests) before you finish. `npm run format` fixes formatting.
+- Run `npm run check` (Node pin, typecheck, lint, format check and tests) before you finish. `npm run format` fixes formatting.
 - CI: `check.yml` runs `npm run check` and skips changes that touch only Markdown; `docs.yml` runs on Markdown changes and is where a job that validates `.md` files goes.
-- CI also runs `shellcheck` on `scripts/*.sh` and `test/*.sh`; `npm run check` does not. After changing a `.sh` file, run `shellcheck` on it (`brew install shellcheck`), or say in the handoff that it was not run.
+- `scripts/docs-check.sh` runs the Markdown checks CI runs.
+- CI also runs `shellcheck` on `scripts/*.sh`, `test/*.sh` and `.githooks/*`; `npm run check` does not. After changing a `.sh` file, run `shellcheck` on it (`brew install shellcheck`), or say in the handoff that it was not run.
 - CI also runs the Semgrep rules in `.semgrep/rules.yml` (fixtures in `.semgrep/rules.ts`). Locally: `brew install semgrep`, then `semgrep --test --metrics=off .semgrep/` and `semgrep scan --config .semgrep/rules.yml --error --metrics=off app.tsx server.ts src`.
 - Each test times out after 60 s (`--test-timeout` in `package.json`), so a hang shows up as a named failure.
 - Run one test file with `node --test --experimental-strip-types test/reconcile.test.ts`.
@@ -25,7 +26,7 @@ Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
 - Ona's SSH starts stopped devboxes. Any SSH to a devbox can wake it.
 - Never run `ona` actions, `ssh` to devboxes, or `bb machine` or `bb plugin` changes.
 - Never commit to `main` or push, except as `FACTORY.md` allows: builders commit on `agent/*` branches, the orchestrator pushes them and opens PRs.
-- Commit messages and PR titles are Conventional Commits, `type(scope): subject` (`scripts/conventional.sh` has the rule; `.githooks/commit-msg` checks it locally, `check.yml` checks the PR). `feat` bumps the minor version, `fix` and `perf` the patch, `!` the major: that PR bumps `package.json` (`scripts/bump.sh "<title>"` does it). Other types, and any Markdown-only change, need no bump. A push to `main` tags and releases the version with notes generated from the merged PR titles.
+- Commit messages and PR titles are Conventional Commits, `type(scope): subject` (`scripts/conventional.sh` has the rule; `.githooks/commit-msg` checks it locally, `.githooks/pre-commit` runs `scripts/leak-check.sh`, `scripts/docs-check.sh` and, unless only Markdown is staged, `npm run check` before each commit, `check.yml` checks the PR). `feat` bumps the minor version, `fix` and `perf` the patch, `!` the major: that PR bumps `package.json` (`scripts/bump.sh "<title>"` does it). Other types, and any Markdown-only change, need no bump. A push to `main` tags and releases the version with notes generated from the merged PR titles.
 - Read-only `bb ona status` is fine, but only when the owner is present.
 
 ## Coupled changes

@@ -4,8 +4,9 @@
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  // .semgrep/ holds Semgrep test fixtures, which break rules on purpose.
-  { ignores: ["dist/", "node_modules/", ".semgrep/"] },
+  // .semgrep/ holds Semgrep test fixtures, which break rules on purpose. .claude/ holds agent
+  // worktrees, whose sources belong to their own tsconfig.
+  { ignores: ["dist/", "node_modules/", ".semgrep/", ".claude/"] },
   {
     // test/*.mjs is the fake ona CLI; shellcheck no longer covers it, this does.
     files: ["**/*.ts", "**/*.tsx", "test/*.mjs"],

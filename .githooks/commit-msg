@@ -1,4 +1,4 @@
 #!/bin/sh
 # Reject a commit message that is not a Conventional Commit.
-# Enable once per clone: git config core.hooksPath .githooks
+# npm install points core.hooksPath at .githooks (the prepare script in package.json).
 exec scripts/conventional.sh <"$1"
