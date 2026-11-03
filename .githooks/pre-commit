@@ -8,6 +8,16 @@ stop() {
   exit 1
 }
 
+# The GIT_* variables git gives a hook (dumped from git 2.56: the index, GIT_DIR of a linked worktree,
+# the author and -c settings). The checks run without them: a test that makes its own repository would
+# otherwise commit into this one. The leak check and the diffs below keep them, since they read this
+# commit's index.
+checks() {
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE -u GIT_PREFIX -u GIT_OBJECT_DIRECTORY \
+    -u GIT_CONFIG_PARAMETERS -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_AUTHOR_DATE -u GIT_REFLOG_ACTION \
+    -u GIT_EDITOR -u GIT_EXEC_PATH "$@"
+}
+
 command -v npm >/dev/null 2>&1 || { echo "pre-commit: npm is not on PATH; load the Node in .nvmrc first (nvm use)" >&2; exit 1; }
 [ -x node_modules/.bin/tsc ] || { echo "pre-commit: node_modules is missing; run npm ci --ignore-scripts" >&2; exit 1; }
 
@@ -15,7 +25,7 @@ echo "pre-commit: scripts/leak-check.sh"
 scripts/leak-check.sh || stop "scripts/leak-check.sh"
 
 echo "pre-commit: scripts/docs-check.sh"
-scripts/docs-check.sh || stop "scripts/docs-check.sh"
+checks scripts/docs-check.sh || stop "scripts/docs-check.sh"
 
 # check.yml skips changes that touch only Markdown. Deleted paths and both sides of a rename count
 # as changes there, so they count here too.
@@ -24,13 +34,12 @@ git diff --cached --no-renames --name-only | grep -qv '\.md$' && code_changed=1
 
 # shortcut: checks the working tree, not the index; stash-free index checks when a staged-only hunk ever slips past
 if [ "$code_changed" = 1 ]; then
-  # GIT_INDEX_FILE may be exported to hooks, and the tests run git add in throwaway repositories.
   echo "pre-commit: npm run check"
-  env -u GIT_INDEX_FILE npm run check || stop "npm run check"
+  checks npm run check || stop "npm run check"
   if command -v semgrep >/dev/null 2>&1; then
     echo "pre-commit: semgrep"
-    semgrep --test --metrics=off .semgrep/ || stop "semgrep --test"
-    semgrep scan --config .semgrep/rules.yml --error --metrics=off app.tsx server.ts src || stop "semgrep scan"
+    checks semgrep --test --metrics=off .semgrep/ || stop "semgrep --test"
+    checks semgrep scan --config .semgrep/rules.yml --error --metrics=off app.tsx server.ts src || stop "semgrep scan"
   else
     echo "pre-commit: semgrep is not installed; skipped"
   fi

@@ -29,6 +29,8 @@ orchestrator opens PRs.
   Commit (`AGENTS.md`); `pre-commit` runs the personal-path check, the Markdown
   checks and, unless only Markdown is staged, `npm run check`, before each commit.
   `pre-merge-commit` runs the same hook for a merge commit, which git would otherwise leave unchecked.
+  The checks run with git's hook variables (`GIT_DIR` and the rest) removed, because a test that makes its
+  own repository would otherwise commit into the one being committed.
 - GitHub repository settings: turn on secret scanning, push protection and
   Dependabot alerts. Add a ruleset on the default branch that blocks
   deletion and force pushes and requires a pull request with squash merge

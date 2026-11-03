@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, test } from "node:test";
+import { scrubbed } from "./sandbox.ts";
 
 const repo = join(import.meta.dirname, "..");
 const script = join(repo, "scripts", "docs-check.sh");
@@ -17,8 +18,7 @@ const repoConfig: Record<string, string> = {
   ".prettierignore": readFileSync(join(repo, ".prettierignore"), "utf8"),
 };
 
-// GIT_* variables from an outer git hook would point git at the wrong repository.
-const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")));
+const env = scrubbed(process.env);
 
 function git(dir: string, ...args: string[]) {
   const run = spawnSync("git", ["-C", dir, ...args], { env, stdio: "pipe" });

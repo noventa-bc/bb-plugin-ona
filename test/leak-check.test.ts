@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
+import { scrubbed } from "./sandbox.ts";
 
 const script = join(import.meta.dirname, "..", "scripts", "leak-check.sh");
 
@@ -14,8 +15,7 @@ const homePath = ["", "home", "x", ""].join("/");
 const dirs: string[] = [];
 after(() => dirs.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 
-// GIT_* variables from an outer git hook would point git at the commit's index.
-const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")));
+const env = scrubbed(process.env);
 
 function git(dir: string, ...args: string[]) {
   const run = spawnSync("git", ["-C", dir, ...args], { env, stdio: "pipe" });

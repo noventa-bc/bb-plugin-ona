@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
+import { scrubbed } from "./sandbox.ts";
 
 const repo = join(import.meta.dirname, "..");
 const prepare: string = JSON.parse(readFileSync(join(repo, "package.json"), "utf8")).scripts.prepare;
@@ -11,8 +12,7 @@ const prepare: string = JSON.parse(readFileSync(join(repo, "package.json"), "utf
 const dirs: string[] = [];
 after(() => dirs.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 
-// GIT_* variables from an outer git hook would point git at the wrong repository.
-const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")));
+const env = scrubbed(process.env);
 
 function newDir(prefix: string) {
   const dir = mkdtempSync(join(tmpdir(), prefix));
