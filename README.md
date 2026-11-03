@@ -223,10 +223,10 @@ bb's native **Open in** menu can't reach devboxes, so the plugin hides it on dev
 ### Spend per thread
 
 A devbox thread's header shows what the thread has cost so far (for example `$3.50`); hover it
-for the source. It updates when a turn finishes, at most every 5 minutes per thread. A turn whose
-usage is not written yet keeps the last figure (none before the first) and is checked again every
-5 minutes for up to 60 minutes; after that the turn's figure is final until the next turn finishes.
-A paused box shows its last figure and isn't woken.
+for the source. The figure updates when a turn finishes, at most every 5 minutes per thread. Codex
+records a turn's usage some minutes after the turn ends, so a Codex turn is checked up to 12 times
+(about an hour while a thread header is open and the box runs). For Codex, a `≥` before the figure
+means some sessions have no recorded usage. A paused box shows its last figure and isn't woken.
 
 - **Codex:** OpenAI's own per-thread estimate, the number behind Codex's `estimated-thread-cost`
   status item. The plugin asks a short-lived `codex app-server` on the box (`account/usage/read`),
