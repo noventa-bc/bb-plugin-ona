@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { promisify } from "node:util";
 import { MOVE_MACHINE_ASIDE } from "../src/provider.ts";
+import { DAEMON_PROBE } from "../src/reconcile.ts";
 import { sandboxed } from "./sandbox.ts";
 
 /**
@@ -80,9 +81,9 @@ test("a retried remove leaves the folder it already moved alone and succeeds", s
 // so the folder stayed in place.
 test("a folder whose server host contains .old is still moved aside", sandboxed, async (t) => {
   const { disk, remove } = devbox(t);
-  renameSync(join(disk, "server-host-1"), join(disk, "bb.old-site.example.com-8443"));
+  renameSync(join(disk, "server-host-1"), join(disk, "bb.old-2.example.com-8443"));
   assert.equal(await remove("host-1"), 0);
-  assert.match(readdirSync(disk).sort()[0] ?? "", /^bb\.old-site\.example\.com-8443\.old-\d{8}T\d{6}Z$/);
+  assert.match(readdirSync(disk).sort()[0] ?? "", /^bb\.old-2\.example\.com-8443\.old-\d{8}T\d{6}Z$/);
 });
 
 // Bug: on a box without a working ps (missing, or one that rejects -eo) the stop
@@ -122,4 +123,10 @@ test("a legacy folder that holds other machines' data folders is left alone", sa
   assert.deepEqual(readdirSync(disk).sort(), ["host-id", "server-host-1", "server-host-10"]);
   assert.equal(running(0), true);
   assert.equal(running(1), true);
+});
+
+// Bug: busybox ps reads everything after the first "=" in an -o argument as the header,
+// so "-o pid=,args=" printed only PIDs: the stop loop and the daemon probe saw no daemon.
+test("the box scripts give ps one column per -o", () => {
+  for (const script of [MOVE_MACHINE_ASIDE, DAEMON_PROBE]) assert.doesNotMatch(script, /-\w*o \S+=,/);
 });

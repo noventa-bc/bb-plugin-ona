@@ -99,7 +99,7 @@ export const MOVE_MACHINE_ASIDE = [
   // An empty id would match a folder whose host-id file is empty.
   '[ -n "$host" ] || exit 2',
   // Without a working ps the stop loop sees no daemon, and the folder would move under a live one.
-  "ps -eo pid=,args= >/dev/null || exit 4",
+  "ps -e -o pid= -o args= >/dev/null || exit 4",
   'for id in "$HOME"/.bb-machines/*/host-id ${legacy:+"$legacy/host-id"}; do',
   '  [ -f "$id" ] && [ "$(cat "$id")" = "$host" ] || continue',
   '  data="${id%/host-id}"',
@@ -113,7 +113,7 @@ export const MOVE_MACHINE_ASIDE = [
   // has no trailing slash, and `cat` and `ls` have exited.
   // shortcut: a daemon started from a `bb-app` on the PATH has no folder in its
   // command line, so it keeps running while the folder moves; match its BB_DATA_DIR if a box shows one.
-  `  while pids=$(ps -eo pid=,args= | awk 'index($0, ENVIRON["real"] "/") {print $1}') && [ -n "$pids" ]; do`,
+  `  while pids=$(ps -e -o pid= -o args= | awk 'index($0, ENVIRON["real"] "/") {print $1}') && [ -n "$pids" ]; do`,
   // Repeated so a supervisor's restart is caught too; forced after 10 s.
   '    n=$((n + 1)); [ "$n" -gt 10 ] && { kill -9 $pids 2>/dev/null; break; }',
   "    kill $pids 2>/dev/null; sleep 1",
