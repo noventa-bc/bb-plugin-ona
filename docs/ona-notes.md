@@ -70,6 +70,11 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   component, so it can't show the cost chip. It could replace the DOM
   workaround in `app.tsx` that hides bb's native "Open in" button.
 - SDK 0.6.104 has no `machine_busy` suspend error code.
+- bb 0.48.1's `threads.list` leaves out hidden threads (workflow steps, side
+  chats) unless asked with `includeHidden: true`, drops archived ones on the
+  server with `archived: false`, and applies no limit when none is passed.
+  `bb thread archive <id>` accepts a hidden thread's id, and archiving a thread
+  also archives the hidden threads it started (checked 2026-11-03).
 - bb 0.48.1 registers the daemon's `/internal` routes in the `registerInternal*`
   functions of `server/dist/start-server.js` and calls them from
   `host-daemon/dist/daemon-bundle.mjs` (its route-string calls, plus

@@ -271,7 +271,10 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
 - **"thread … holds this box" in `bb ona status`:** bb still shows that thread
   busy after more than 6 hours with no update, so the plugin won't release the
   box or update its agent CLIs. Open the thread; if nothing is running in it,
-  archive it. Archived threads never hold a box.
+  archive it. Archived threads never hold a box. A workflow step or side chat
+  runs in a thread bb hides from its sidebar; archive it with
+  `bb thread archive <id>`, or archive the thread that started it, which
+  archives it too.
 - **"workspace(s) need recovery" in `bb ona status`:** a thread workspace's
   teardown failed for good, and bb won't suspend the machine until it's
   recovered, so the box stays awake. Check what's left in it

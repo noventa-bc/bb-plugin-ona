@@ -26,6 +26,8 @@ interface Box {
   status?: string;
   lastSeenAt?: number;
   threads?: ThreadRecord[] | "fail";
+  /** Threads bb lists only when asked for hidden ones (workflow workers, side chats). */
+  hiddenThreads?: ThreadRecord[];
   /** The name Ona lists, when it differs from the stored one. */
   name?: string;
   workspaces?: WorkspaceView[];
@@ -97,10 +99,13 @@ function world(
           experimental_reconcile: lifecycleCall("reconcile", "active"),
         },
         threads: {
-          list: async ({ hostId }) => {
+          // Like bb: hidden threads only when asked, archived ones dropped when asked.
+          list: async ({ hostId, includeHidden, archived }) => {
             const threads = byHost.get(hostId)?.threads ?? [];
             if (threads === "fail") throw new Error("bb is down");
-            return threads;
+            return [...threads, ...(includeHidden ? (byHost.get(hostId)?.hiddenThreads ?? []) : [])].filter(
+              (thread) => archived !== false || thread.archivedAt == null,
+            );
           },
         },
         environments: { list: async ({ hostId }) => byHost.get(hostId)?.workspaces ?? [] },
@@ -181,6 +186,19 @@ test("an idle box whose only active thread is archived is released without stopp
   await sync.reconcile(new Set([ALL]), { wait: true });
   assert.deepEqual(calls, ["suspend h1"]);
   assert.equal(releasing.size, 0);
+});
+
+// Bug: bb lists hidden threads only when asked, so a box was let go under a workflow worker's turn.
+test("an idle box whose only busy thread is hidden is not released", async () => {
+  const worker: ThreadRecord = {
+    id: "t1",
+    status: "active",
+    updatedAt: NOW - 2 * HOUR,
+    runtime: { displayStatus: "active" },
+  };
+  const { sync, calls } = world([idle("h1", { hiddenThreads: [worker] })]);
+  await sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(calls, []);
 });
 
 test("bb accepting a suspend without acting on it is a failure, not a release", async () => {
@@ -281,6 +299,19 @@ test("Ona stopping a box with a thread waiting: suspended without stopping, then
     runtime: { displayStatus: "waiting-for-host" },
   };
   const { sync, calls } = world([idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waiting] })]);
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.deepEqual(calls, ["suspend h1", "resume h1"]);
+});
+
+// Bug: a workflow step or side chat waiting for a box Ona stopped never resumed it (bb hides those threads).
+test("Ona stopping a box with a hidden thread waiting: suspended without stopping, then resumed", async () => {
+  const waiting: ThreadRecord = {
+    id: "t1",
+    status: "idle",
+    updatedAt: NOW,
+    runtime: { displayStatus: "waiting-for-host" },
+  };
+  const { sync, calls } = world([idle("h1", { ona: "STOPPED", status: "disconnected", hiddenThreads: [waiting] })]);
   await sync.reconcile(new Set(["h1"]), { wait: true });
   assert.deepEqual(calls, ["suspend h1", "resume h1"]);
 });
