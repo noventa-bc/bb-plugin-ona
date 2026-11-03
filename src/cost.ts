@@ -93,12 +93,14 @@ export function claudeCost(buckets: readonly ClaudeUsageBucket[]): { usd: number
 
 /** Codex `account/usage/read` results per thread id; null when unavailable. */
 export function codexCost(
-  results: Record<string, { estimatedUsageUsdMicros?: number | null } | { error: string } | null>,
+  results: Record<string, { estimatedUsageUsdMicros?: number | null; groups?: unknown[] } | { error: string } | null>,
 ): { usd: number; missing: string[] } {
   let usd = 0;
   const missing: string[] = [];
   for (const [threadId, result] of Object.entries(results)) {
-    const micros = result && "estimatedUsageUsdMicros" in result ? result.estimatedUsageUsdMicros : null;
+    // Codex answers $0 with no groups until it records a thread's usage (checked 2026-11-03): that is missing, not $0.
+    const micros =
+      result && "estimatedUsageUsdMicros" in result && result.groups?.length ? result.estimatedUsageUsdMicros : null;
     if (typeof micros === "number") usd += micros / 1_000_000;
     else missing.push(threadId);
   }

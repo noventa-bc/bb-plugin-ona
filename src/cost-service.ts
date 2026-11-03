@@ -137,13 +137,14 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
             }
           }
         }
-        // Keep the last good figure if this round had nothing to price. An empty
-        // round stores no seq, so the next poll past the 5-minute floor tries this
-        // turn once more; a second empty round settles it until the next turn.
+        // Keep the last good figure if this round had nothing to price. An empty round stores no seq, so
+        // each poll past the floor retries it: Codex can lag about 30 minutes in recording usage (checked 2026-11-03).
+        // shortcut: an empty round retries with no end (one collector run per 5 minutes while the header is open),
+        // bound it to a window after the turn when that load matters.
         const result = cost ?? stored?.cost ?? null;
         await bb.storage.kv.set(key, {
           cost: result,
-          seq: cost || stored?.seq === "" ? seq : "",
+          seq: cost ? seq : "",
           checkedAt: Date.now(),
         });
         return result;

@@ -188,19 +188,25 @@ test("a first round with nothing to price collects again after the floor", async
   assert.deepEqual(w.collectorRuns, ["env-1", "env-1"]);
 });
 
-test("a second empty round settles the turn: no third collect until a new turn finishes", async () => {
-  // Bug: an unpriceable thread would otherwise run a collector every 5 minutes for as long as it is open.
-  const w = world({ turnSeq: 8, collect: async () => ({ buckets: [] }) });
-  await w.costs.threadCost("t1");
-  pastFloor(w);
-  await w.costs.threadCost("t1");
+test("an empty round is retried on every poll past the floor until a round prices something (fails if a second empty round settles the turn)", async () => {
+  // Bug: a second empty round settled the turn, but Codex can take about 30 minutes to record a turn's usage (checked 2026-11-03).
+  let buckets: ClaudeUsageBucket[] = [];
+  const w = world({ turnSeq: 8, collect: async () => ({ buckets }) });
+  assert.equal(await w.costs.threadCost("t1"), null);
   pastFloor(w);
   assert.equal(await w.costs.threadCost("t1"), null);
-  assert.deepEqual(w.collectorRuns, ["env-1", "env-1"]);
+  pastFloor(w);
+  assert.equal(await w.costs.threadCost("t1"), null);
+  assert.deepEqual(w.collectorRuns, ["env-1", "env-1", "env-1"]);
+  buckets = [ONE_DOLLAR_BUCKET];
+  pastFloor(w);
+  assert.equal((await w.costs.threadCost("t1"))?.usd, 1);
+  assert.equal((await w.costs.threadCost("t1"))?.usd, 1);
+  assert.deepEqual(w.collectorRuns, ["env-1", "env-1", "env-1", "env-1"]);
 });
 
-test("a Codex round where every session is missing is retried once, then settled", async () => {
-  // Bug: all-missing stored the new seq (no retry) before R13; an unbounded retry would SSH every 5 minutes after it.
+test("a Codex round where every session is missing is retried on every poll past the floor (fails if the second empty round settles it)", async () => {
+  // Bug: two all-missing rounds settled the turn, but Codex can take about 30 minutes to record a turn's usage (checked 2026-11-03).
   const w = world({
     turnSeq: 8,
     provider: "codex",
@@ -211,7 +217,17 @@ test("a Codex round where every session is missing is retried once, then settled
   assert.equal(await w.costs.threadCost("t1"), null);
   pastFloor(w);
   assert.equal(await w.costs.threadCost("t1"), null);
-  assert.deepEqual(w.collectorRuns, ["env-1", "env-1"]);
+  assert.deepEqual(w.collectorRuns, ["env-1", "env-1", "env-1"]);
+});
+
+test("a Codex thread whose usage Codex has not recorded shows no figure, then its figure once recorded (fails if the $0 is shown)", async () => {
+  // Bug: Codex answers $0 with no groups until it records the turn's usage, and that $0 was shown until the next turn.
+  let usage: unknown = { estimatedUsageUsdMicros: 0, groups: [] };
+  const w = world({ turnSeq: 8, provider: "codex", collect: async () => ({ results: { "session-1": usage } }) });
+  assert.equal(await w.costs.threadCost("t1"), null);
+  usage = { estimatedUsageUsdMicros: 1_000_000, groups: [{}] };
+  pastFloor(w);
+  assert.equal((await w.costs.threadCost("t1"))?.usd, 1);
 });
 
 test("a string seq equal to the stored one returns the stored figure without collecting", async () => {

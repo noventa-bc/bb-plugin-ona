@@ -64,12 +64,23 @@ test("model ids match the most specific price entry", () => {
 
 test("Codex cost sums OpenAI's estimates and lists threads without one", () => {
   const { usd, missing } = codexCost({
-    a: { estimatedUsageUsdMicros: 2_886_018 },
+    a: { estimatedUsageUsdMicros: 2_886_018, groups: [{}] },
     b: { estimatedUsageUsdMicros: null },
     c: { error: "nope" },
   });
   close(usd, 2.886018);
   assert.deepEqual(missing, ["b", "c"]);
+});
+
+test("a Codex usage with no groups counts as missing, not $0 (fails if an unrecorded thread is priced at $0)", () => {
+  // Bug: Codex answers $0 with no groups until it records a turn's usage, and that $0 was priced and shown.
+  const { usd, missing } = codexCost({
+    recorded: { estimatedUsageUsdMicros: 2_000_000, groups: [{}] },
+    unrecorded: { estimatedUsageUsdMicros: 0, groups: [] },
+    absent: { estimatedUsageUsdMicros: 0 },
+  });
+  close(usd, 2);
+  assert.deepEqual(missing, ["unrecorded", "absent"]);
 });
 
 test("provider sessions are collected once each, in order", () => {
