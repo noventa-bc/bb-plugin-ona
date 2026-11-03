@@ -298,6 +298,10 @@ test("snapshot shares one list between concurrent callers and caches it", async 
   assert.equal(calls, 2);
   await snapshot.refresh();
   assert.equal(calls, 3);
+  // Bug: refresh() returned the cache once the wall clock stepped back, so an SSH caller could act on an old listing.
+  now -= 60_000;
+  await snapshot.refresh();
+  assert.equal(calls, 4);
 });
 
 // Bug: `bb ona rename` refreshed into a list that started before the rename and cached the old name.
@@ -396,6 +400,40 @@ test("a symlinked legacy data folder finds a daemon run from its resolved folder
     assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", "", join(home, "link", "data")], { env }).status, 0);
   } finally {
     child.kill();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+// Bug: the folders reached awk through -v, which reads backslash escapes, so a legacy folder whose
+// path had one (here \t) never matched its own daemon, and a live daemon was restarted.
+test("a legacy folder whose path has a backslash still finds its daemon", sandboxed, async () => {
+  const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
+  const data = join(home, "back\\tdata");
+  mkdirSync(data, { recursive: true });
+  const daemonPath = `${realpathSync(data)}/npm/bin/bb-app`;
+  const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 10000)", daemonPath, "host-daemon"], {
+    stdio: "ignore",
+  });
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const env = { ...process.env, HOME: home };
+    assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", "", data], { env }).status, 0);
+  } finally {
+    child.kill();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+// Guard: the probe's own $(ps) subshell carries the folders in its command line, so with no daemon
+// running it must not read as one. Removing the $2!=me clause makes this fail.
+test("a probe with no daemon answers no daemon, though its own ps subshell names the folders", sandboxed, () => {
+  const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
+  try {
+    const x = join(home, "X");
+    mkdirSync(join(x, "sub"), { recursive: true });
+    const env = { ...process.env, HOME: home };
+    assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", x, join(x, "sub")], { env }).status, 1);
+  } finally {
     rmSync(home, { recursive: true, force: true });
   }
 });

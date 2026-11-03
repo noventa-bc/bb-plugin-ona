@@ -1,8 +1,9 @@
 // MOVE_MACHINE_ASIDE, the script that removing an adopted box runs over SSH,
 // run locally with bash against a temporary home laid out as on a devbox.
 import assert from "node:assert/strict";
-import { execFile, spawn, spawnSync } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -16,18 +17,25 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { MOVE_MACHINE_ASIDE } from "../src/provider.ts";
 import { DAEMON_PROBE } from "../src/reconcile.ts";
 import { brokenTools, partialPs, sandboxed } from "./sandbox.ts";
 
+const SLEEPS = "setTimeout(() => {}, 60000)";
+const IGNORES_TERM = "process.on('SIGTERM', () => {}); setTimeout(() => {}, 60000)";
+
 /**
  * A home whose ~/.bb-machines links to a local-disk folder (as `machineDataDir`
  * sets it up) holding the data folders of machines host-1 and host-10. Each runs
- * a stand-in daemon whose command line carries the resolved folder, as bb's does.
- * `remove` runs the script and returns its exit code.
+ * a stand-in daemon running `script`, whose command line names the resolved
+ * folder as bb's does, or the folder as reached through ~/.bb-machines with
+ * `viaLink`. A no-op `sleep` sits beside any fake `ps` a test puts first on PATH,
+ * so the stop loop's rounds take no time. `remove` runs the script and returns
+ * its exit code; `exitedWithin` waits up to 2 s for daemon i to exit.
  */
-function devbox(t: TestContext) {
+function devbox(t: TestContext, { script = SLEEPS, viaLink = false } = {}) {
   const home = mkdtempSync(join(tmpdir(), "bb-ona-remove-"));
   t.after(() => rmSync(home, { recursive: true, force: true }));
   const disk = join(home, "disk");
@@ -35,11 +43,12 @@ function devbox(t: TestContext) {
     const folder = join(disk, `server-${hostId}`);
     mkdirSync(folder, { recursive: true });
     writeFileSync(join(folder, "host-id"), `${hostId}\n`);
-    const args = ["-e", "setTimeout(() => {}, 60000)", `${realpathSync(folder)}/npm/bin/bb-app`, "host-daemon"];
-    return spawn(process.execPath, args, { stdio: "ignore" });
+    const named = viaLink ? join(home, ".bb-machines", `server-${hostId}`) : realpathSync(folder);
+    return spawn(process.execPath, ["-e", script, `${named}/npm/bin/bb-app`, "host-daemon"], { stdio: "ignore" });
   });
-  t.after(() => daemons.forEach((daemon) => daemon.kill()));
+  t.after(() => daemons.forEach((daemon) => daemon.kill("SIGKILL")));
   symlinkSync(disk, join(home, ".bb-machines"));
+  writeFileSync(join(home, "sleep"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
   const remove = (hostId: string, legacy = "", path = process.env.PATH) =>
     promisify(execFile)("/bin/bash", ["-c", MOVE_MACHINE_ASIDE, "bb-ona-remove", hostId, legacy], {
       env: { ...process.env, HOME: home, PATH: path },
@@ -48,7 +57,11 @@ function devbox(t: TestContext) {
       (error: unknown) => (error as { code: number }).code,
     );
   const running = (i: number) => daemons[i]!.exitCode === null && daemons[i]!.signalCode === null;
-  return { home, disk, remove, running, pids: daemons.map((daemon) => daemon.pid!) };
+  const exitedWithin = async (i: number) => {
+    for (let tick = 0; tick < 40 && running(i); tick++) await delay(50);
+    return !running(i);
+  };
+  return { home, disk, remove, running, exitedWithin, pids: daemons.map((daemon) => daemon.pid!) };
 }
 
 // Bug: the old script matched only ~/.bb-machines/ in command lines, but the
@@ -99,15 +112,13 @@ for (const [tool, body] of brokenTools) {
 }
 
 // Bug: a ps that failed after a listing that worked ended the stop loop as if no daemon
-// were left, and the folder moved.
+// were left, and the folder moved. Here the second listing prints part of its list, then exits 1.
 test("a ps that fails during the stop loop leaves the folder and exits 4", sandboxed, async (t) => {
-  const { home, disk, remove } = devbox(t);
+  const { home, disk, remove, pids } = devbox(t);
   writeFileSync(
     join(home, "ps"),
-    `#!/bin/sh\nif [ -f "$HOME/ps-ran" ]; then exit 1; fi; touch "$HOME/ps-ran"; exec /bin/ps "$@"\n`,
-    {
-      mode: 0o755,
-    },
+    `#!/bin/sh\nif [ -f "$HOME/ps-ran" ]; then\n${partialPs(pids[0]!)}\nfi\ntouch "$HOME/ps-ran"; exec /bin/ps "$@"\n`,
+    { mode: 0o755 },
   );
   assert.equal(await remove("host-1", "", `${home}:${process.env.PATH}`), 4);
   assert.deepEqual(readdirSync(disk).sort(), ["server-host-1", "server-host-10"]);
@@ -126,15 +137,51 @@ test("a ps that exits 1 after a listing without the daemon moves nothing and exi
 // Bug: after ten TERM rounds the loop sent KILL and moved the folder without listing again, so a
 // daemon that the listing still showed was left running under the moved folder.
 test("a daemon still listed after the forced kills keeps its folder and exits 4", sandboxed, async (t) => {
-  const { home, disk, remove } = devbox(t);
-  // A pid that no longer exists: kill can't end it, and the listing keeps showing it.
-  const gone = spawnSync(process.execPath, ["-e", ""]).pid;
+  const { home, disk, remove, exitedWithin } = devbox(t);
+  // Pid 2147483646 is beyond the pid range, so no process has it: kill can't end it, and the listing keeps it.
   const folder = realpathSync(join(disk, "server-host-1"));
-  writeFileSync(join(home, "ps"), `#!/bin/sh\n/bin/ps "$@"\necho "${gone} 1 ${folder}/npm/bin/bb-app host-daemon"\n`, {
-    mode: 0o755,
-  });
+  writeFileSync(
+    join(home, "ps"),
+    `#!/bin/sh\n/bin/ps "$@"\necho "2147483646 1 ${folder}/npm/bin/bb-app host-daemon"\n`,
+    { mode: 0o755 },
+  );
   assert.equal(await remove("host-1", "", `${home}:${process.env.PATH}`), 4);
   assert.deepEqual(readdirSync(disk).sort(), ["server-host-1", "server-host-10"]);
+  assert.equal(await exitedWithin(0), true, "the TERM round must stop the daemon the listing still shows");
+});
+
+// Guard: a daemon that ignores TERM is ended by the KILL rounds, and its folder moves only after
+// the listing no longer shows it.
+test("a daemon that ignores TERM is killed in the forced rounds and its folder moved aside", sandboxed, async (t) => {
+  const { home, disk, remove, running, exitedWithin } = devbox(t, { script: IGNORES_TERM });
+  assert.equal(await remove("host-1", "", `${home}:${process.env.PATH}`), 0);
+  const [moved, other, ...rest] = readdirSync(disk).sort();
+  assert.match(moved ?? "", /^server-host-1\.old-\d{8}T\d{6}Z$/);
+  assert.equal(other, "server-host-10");
+  assert.deepEqual(rest, []);
+  assert.equal(await exitedWithin(0), true, "the KILL rounds must stop a daemon that ignores TERM");
+  assert.equal(running(1), true, "another machine's daemon keeps running");
+});
+
+// Guard: a daemon whose command line names its folder through ~/.bb-machines was not matched, so
+// the folder moved under a running daemon.
+test("a daemon run from the symlinked path is stopped and its folder moved aside", sandboxed, async (t) => {
+  const { home, disk, remove, exitedWithin } = devbox(t, { viaLink: true });
+  assert.equal(await remove("host-1", "", `${home}:${process.env.PATH}`), 0);
+  assert.match(readdirSync(disk).sort()[0] ?? "", /^server-host-1\.old-\d{8}T\d{6}Z$/);
+  assert.equal(await exitedWithin(0), true, "the daemon run from the symlinked path must be stopped");
+});
+
+// Guard: a host id that names the folder puts its path in the script's own command line, and the
+// stop loop must not signal the script's shell (or its subshells) for it.
+test("a host id that names the folder does not stop the script itself", sandboxed, async (t) => {
+  const { home, remove } = devbox(t);
+  const legacy = join(home, "legacy-9");
+  mkdirSync(legacy);
+  const real = realpathSync(legacy);
+  writeFileSync(join(legacy, "host-id"), `${real}/x\n`);
+  assert.equal(await remove(`${real}/x`, legacy), 0);
+  assert.equal(existsSync(legacy), false, "the legacy folder is moved aside");
 });
 
 // Bug: a remove that moved nothing said nothing, as if the folder had moved.

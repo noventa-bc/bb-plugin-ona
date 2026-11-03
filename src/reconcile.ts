@@ -335,8 +335,8 @@ export class HostGuard {
 
 /**
  * Remote script for rule 3: exit 0 if a process's command line names a path
- * under ~/.bb-machines or under one of the folders given as arguments (each as
- * given and resolved through symlinks), 1 if none does, and 2 if the process
+ * under ~/.bb-machines (as given and resolved through symlinks), under $1 as
+ * given, or under $2 as given or resolved; 1 if none does; and 2 if the process
  * listing fails or can't be trusted. The caller treats any other exit, an SSH
  * failure and a timeout as unknown, and restarts nothing.
  */
@@ -346,13 +346,12 @@ export const DAEMON_PROBE = [
   // A ps that exits non-zero, even after printing part of its list, is unknown.
   "out=$(ps -e -o pid= -o ppid= -o args=) || exit 2",
   'root="$HOME/.bb-machines"',
-  // A daemon's command line carries the resolved path, so each folder is matched as given and resolved.
-  'for dir in "$root" "$(readlink -f "$root" 2>/dev/null)" "$@" "$(readlink -f "$1" 2>/dev/null)" "$(readlink -f "$2" 2>/dev/null)"; do',
+  // $1 needs no readlink: ~/.bb-machines links to it (ensureLocalMachineRoot makes it so), so the resolved root covers it.
+  'for dir in "$root" "$(readlink -f "$root" 2>/dev/null)" "$@" "$(readlink -f "$2" 2>/dev/null)"; do',
   '  [ -n "$dir" ] || continue',
-  // This shell and its parent are skipped by pid; its children by ppid: ps, and the awk that carries
-  // the folder in its command line. A listing without this shell under its parent can't be trusted
-  // (ps ignores -o, or no awk): exit 2, never "no daemon", which would restart a live one.
-  `  printf '%s\\n' "$out" | awk -v d="$dir/" -v me="$me" -v pp="$pp" '$1==me && $2==pp {ok=1} $1!=me && $1!=pp && $2!=me && index($0, d) {f=1} END {exit ok ? !f : 2}'`,
+  // This shell is skipped by pid; its $(...) subshell, which carries this shell's argv, by ppid. awk starts after the listing, so it is never in it.
+  // A listing without this shell under its parent can't be trusted (ps ignores -o, or no awk): exit 2, never "no daemon", which would restart a live one.
+  `  export d="$dir/"; printf '%s\\n' "$out" | awk -v me="$me" -v pp="$pp" '$1==me && $2==pp {ok=1} $1!=me && $1!=pp && $2!=me && index($0, ENVIRON["d"]) {f=1} END {exit ok ? !f : 2}'`,
   "  case $? in 0) exit 0 ;; 1) ;; *) exit 2 ;; esac",
   "done",
   "exit 1",

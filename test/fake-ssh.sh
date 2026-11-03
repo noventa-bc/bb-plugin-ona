@@ -1,6 +1,8 @@
 #!/bin/sh
 # Stand-in for ssh: drop options and the host, run the remote command locally.
 # `ssh -N` is a tunnel: hold it open until the TunnelManager kills it.
+# With FAKE_SSH_LOG set, every call first appends its arguments there.
+[ -z "${FAKE_SSH_LOG:-}" ] || echo "$*" >>"$FAKE_SSH_LOG"
 while [ "$1" = "-o" ]; do shift 2; done
 [ "$1" = "-N" ] && exec sleep 100000
 shift

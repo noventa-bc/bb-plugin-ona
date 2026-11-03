@@ -1,5 +1,7 @@
 # Opens a PR when a new @get-bb/plugin-sdk is published, so the normal `check`
 # workflow typechecks the plugin against it. Nothing else is watched here.
+# The prefixes make the PR titles Conventional Commits (scripts/conventional.sh), which
+# check.yml requires; `build` and `ci` need no version bump.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -11,8 +13,10 @@ updates:
     versioning-strategy: increase
     open-pull-requests-limit: 1
     commit-message:
-      prefix: "Bump"
+      prefix: "build(deps)"
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: "ci"

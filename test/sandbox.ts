@@ -12,7 +12,7 @@ export const brokenTools: [string, string][] = [
   ["ps", "exit 1"],
   ["ps", "exit 127"],
   ["awk", "exit 127"],
-  // A busybox ps without -o support prints a PID-first table. Its second column is STAT, never a number,
+  // A ps that ignores -o and prints a table whose second column is STAT, never a number,
   // so it can't match the shell's parent pid.
   ["ps", "exec /bin/ps -e -o pid= -o stat= -o vsz= -o user= -o args="],
 ];
