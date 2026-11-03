@@ -283,7 +283,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
    * connect() for a machine bb doesn't show active yet (create, resume). An open
    * tunnel keeps the box awake (decision 0003), so a failure closes the box's
    * tunnel. A second machine on the box only comes from a failed adopt, whose
-   * cleanup `remove()` closes the tunnel anyway.
+   * cleanup `remove()` closes the tunnel when Ona answers.
    */
   async function connectOrClose(resource: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal) {
     try {

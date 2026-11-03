@@ -90,11 +90,10 @@ type HostPhase = Awaited<ReturnType<BbPluginApi["sdk"]["hosts"]["list"]>>[number
 /** What to do about a machine `bb ona reconnect` refused. The switch covers every phase the SDK lists (lint checks it). */
 function notActiveHint(phase: Exclude<HostPhase, "active">, machine: string): string {
   switch (phase) {
-    // bb accepts a resume during a suspend and waits for it.
+    // Which phases bb accepts a resume in: docs/ona-notes.md.
     case "suspended":
     case "suspending":
       return `Resume it with \`bb machine resume ${machine}\`.`;
-    // bb refuses a resume while creating, and one is under way while resuming.
     case "creating":
     case "resuming":
       break;

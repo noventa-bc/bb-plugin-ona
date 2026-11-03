@@ -206,3 +206,16 @@ test("a resume that fails with the box's tunnel already open, connecting or up, 
     assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"], tunnel);
   }
 });
+
+// Guards decision 0003's cleanup: after a failed adopt, bb's remove() is what closes the box's tunnel.
+test("remove of an adopted machine on a running box closes its tunnel", async () => {
+  const { provider, tunnels } = register({ found: box("RUNNING"), phases: ["RUNNING"], tunnel: "up" });
+  const removed = await provider.remove({
+    report: { step() {}, log() {} },
+    hostId: "host-1",
+    resource: { envId: "env-1", envName: "box", adopted: true, key: "key-1" },
+    signal: new AbortController().signal,
+  });
+  assert.equal(removed.status, "removed");
+  assert.deepEqual(tunnels, ["stop env-1"]);
+});
