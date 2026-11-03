@@ -21,41 +21,60 @@ import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { MOVE_MACHINE_ASIDE } from "../src/provider.ts";
 import { DAEMON_PROBE } from "../src/reconcile.ts";
-import { brokenTools, partialPs, sandboxed } from "./sandbox.ts";
+import { brokenTools, partialPs, sandboxed, standIn } from "./sandbox.ts";
 
-const SLEEPS = "setTimeout(() => {}, 60000)";
-const IGNORES_TERM = "process.on('SIGTERM', () => {}); setTimeout(() => {}, 60000)";
+// The stand-ins write their ready file after installing their signal handlers.
+const SLEEPS = 'require("node:fs").writeFileSync(process.argv[3], ""); setTimeout(() => {}, 60000)';
+const IGNORES_TERM =
+  'process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(process.argv[3], ""); setTimeout(() => {}, 60000)';
+
+/** Resolves once the ready file exists; throws after 5 s. */
+async function ready(path: string): Promise<void> {
+  for (let tick = 0; tick < 250 && !existsSync(path); tick++) await delay(20);
+  if (!existsSync(path)) throw new Error(`${path} never appeared`);
+}
 
 /**
  * A home whose ~/.bb-machines links to a local-disk folder (as `machineDataDir`
  * sets it up) holding the data folders of machines host-1 and host-10. Each runs
  * a stand-in daemon running `script`, whose command line names the resolved
  * folder as bb's does, or the folder as reached through ~/.bb-machines with
- * `viaLink`. A no-op `sleep` sits beside any fake `ps` a test puts first on PATH,
- * so the stop loop's rounds take no time. `remove` runs the script and returns
- * its exit code; `exitedWithin` waits up to 2 s for daemon i to exit.
+ * `viaLink`. A `sleep` that takes 0.05 s sits beside any fake `ps` a test puts
+ * first on PATH, so a killed process is reaped before the next listing. `remove`
+ * runs the script and returns its exit code, or null when a signal ends it.
+ * `exitedWithin` waits up to 2 s for daemon i to exit.
  */
 function devbox(t: TestContext, { script = SLEEPS, viaLink = false } = {}) {
   const home = mkdtempSync(join(tmpdir(), "bb-ona-remove-"));
   t.after(() => rmSync(home, { recursive: true, force: true }));
   const disk = join(home, "disk");
+  const readyFiles: string[] = [];
   const daemons = ["host-1", "host-10"].map((hostId) => {
     const folder = join(disk, `server-${hostId}`);
     mkdirSync(folder, { recursive: true });
     writeFileSync(join(folder, "host-id"), `${hostId}\n`);
     const named = viaLink ? join(home, ".bb-machines", `server-${hostId}`) : realpathSync(folder);
-    return spawn(process.execPath, ["-e", script, `${named}/npm/bin/bb-app`, "host-daemon"], { stdio: "ignore" });
+    const readyFile = join(home, `ready-${hostId}`);
+    readyFiles.push(readyFile);
+    return spawn(process.execPath, ["-e", script, `${named}/npm/bin/bb-app`, "host-daemon", readyFile], {
+      stdio: "ignore",
+    });
   });
   t.after(() => daemons.forEach((daemon) => daemon.kill("SIGKILL")));
   symlinkSync(disk, join(home, ".bb-machines"));
-  writeFileSync(join(home, "sleep"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
-  const remove = (hostId: string, legacy = "", path = process.env.PATH) =>
-    promisify(execFile)("/bin/bash", ["-c", MOVE_MACHINE_ASIDE, "bb-ona-remove", hostId, legacy], {
+  writeFileSync(join(home, "sleep"), "#!/bin/sh\n/bin/sleep 0.05\n", { mode: 0o755 });
+  const started = Promise.all(readyFiles.map(ready));
+  started.catch(() => {});
+  const remove = async (hostId: string, legacy = "", path = process.env.PATH, cwd?: string): Promise<number | null> => {
+    await started;
+    return promisify(execFile)("/bin/bash", ["-c", MOVE_MACHINE_ASIDE, "bb-ona-remove", hostId, legacy], {
+      cwd,
       env: { ...process.env, HOME: home, PATH: path },
     }).then(
       () => 0,
-      (error: unknown) => (error as { code: number }).code,
+      (error: unknown) => (error as { code: number | null }).code,
     );
+  };
   const running = (i: number) => daemons[i]!.exitCode === null && daemons[i]!.signalCode === null;
   const exitedWithin = async (i: number) => {
     for (let tick = 0; tick < 40 && running(i); tick++) await delay(50);
@@ -64,10 +83,8 @@ function devbox(t: TestContext, { script = SLEEPS, viaLink = false } = {}) {
   return { home, disk, remove, running, exitedWithin, pids: daemons.map((daemon) => daemon.pid!) };
 }
 
-// Bug: the old script matched only ~/.bb-machines/ in command lines, but the
-// daemon runs from the resolved folder, and nothing moved the folder, so bb's
-// installer refused to adopt the box again. host-10 guards the "/" after the
-// folder in the match: without it, removing host-1 stops host-10's daemon.
+// The stop loop matches the resolved folder; host-10 guards the "/" after the folder in the match,
+// so removing host-1 leaves host-10's daemon running.
 test("removing an adopted box stops its daemon and moves its data folder aside", sandboxed, async (t) => {
   const { disk, remove, running } = devbox(t);
   assert.equal(await remove("host-1"), 0);
@@ -99,8 +116,7 @@ test("a folder whose server host contains .old is still moved aside", sandboxed,
   assert.match(readdirSync(disk).sort()[0] ?? "", /^bb\.old-2\.example\.com-8443\.old-\d{8}T\d{6}Z$/);
 });
 
-// Bug: a ps or awk that is missing, fails, or ignores -o made the stop loop see no daemon,
-// and the folder moved under a live one.
+// The stop loop exits 4 and leaves the folder in place when ps or awk is missing, fails, or ignores -o.
 for (const [tool, body] of brokenTools) {
   test(`a box whose ${tool} fails (${body}) moves nothing and exits 4`, sandboxed, async (t) => {
     const { home, disk, remove, running } = devbox(t);
@@ -111,8 +127,8 @@ for (const [tool, body] of brokenTools) {
   });
 }
 
-// Bug: a ps that failed after a listing that worked ended the stop loop as if no daemon
-// were left, and the folder moved. Here the second listing prints part of its list, then exits 1.
+// A ps that fails in a later round leaves the folder in place: its second listing prints part of
+// its list, then exits 1.
 test("a ps that fails during the stop loop leaves the folder and exits 4", sandboxed, async (t) => {
   const { home, disk, remove, pids } = devbox(t);
   writeFileSync(
@@ -124,8 +140,7 @@ test("a ps that fails during the stop loop leaves the folder and exits 4", sandb
   assert.deepEqual(readdirSync(disk).sort(), ["server-host-1", "server-host-10"]);
 });
 
-// Bug: a ps that printed a listing without the daemon, then exited 1, passed the trust check (the
-// shell's own line was there), so the loop saw no daemon and moved the folder under it.
+// A ps that exits 1 is untrusted even when its listing still shows this shell: exit 4, the folder stays.
 test("a ps that exits 1 after a listing without the daemon moves nothing and exits 4", sandboxed, async (t) => {
   const { home, disk, remove, running, pids } = devbox(t);
   writeFileSync(join(home, "ps"), `#!/bin/sh\n${partialPs(pids[0]!)}\n`, { mode: 0o755 });
@@ -134,8 +149,7 @@ test("a ps that exits 1 after a listing without the daemon moves nothing and exi
   assert.equal(running(0), true);
 });
 
-// Bug: after ten TERM rounds the loop sent KILL and moved the folder without listing again, so a
-// daemon that the listing still showed was left running under the moved folder.
+// After the KILL rounds the loop lists again: a daemon the listing still shows keeps its folder (exit 4).
 test("a daemon still listed after the forced kills keeps its folder and exits 4", sandboxed, async (t) => {
   const { home, disk, remove, exitedWithin } = devbox(t);
   // Pid 2147483646 is beyond the pid range, so no process has it: kill can't end it, and the listing keeps it.
@@ -150,8 +164,8 @@ test("a daemon still listed after the forced kills keeps its folder and exits 4"
   assert.equal(await exitedWithin(0), true, "the TERM round must stop the daemon the listing still shows");
 });
 
-// Guard: a daemon that ignores TERM is ended by the KILL rounds, and its folder moves only after
-// the listing no longer shows it.
+// A daemon that ignores TERM is ended by the KILL rounds, and its folder moves only once the listing
+// no longer shows it.
 test("a daemon that ignores TERM is killed in the forced rounds and its folder moved aside", sandboxed, async (t) => {
   const { home, disk, remove, running, exitedWithin } = devbox(t, { script: IGNORES_TERM });
   assert.equal(await remove("host-1", "", `${home}:${process.env.PATH}`), 0);
@@ -163,8 +177,7 @@ test("a daemon that ignores TERM is killed in the forced rounds and its folder m
   assert.equal(running(1), true, "another machine's daemon keeps running");
 });
 
-// Guard: a daemon whose command line names its folder through ~/.bb-machines was not matched, so
-// the folder moved under a running daemon.
+// A daemon whose command line names its folder through ~/.bb-machines is stopped before the folder moves.
 test("a daemon run from the symlinked path is stopped and its folder moved aside", sandboxed, async (t) => {
   const { home, disk, remove, exitedWithin } = devbox(t, { viaLink: true });
   assert.equal(await remove("host-1", "", `${home}:${process.env.PATH}`), 0);
@@ -172,8 +185,8 @@ test("a daemon run from the symlinked path is stopped and its folder moved aside
   assert.equal(await exitedWithin(0), true, "the daemon run from the symlinked path must be stopped");
 });
 
-// Guard: a host id that names the folder puts its path in the script's own command line, and the
-// stop loop must not signal the script's shell (or its subshells) for it.
+// A host id that contains the folder path puts it in the script's own command line; the stop loop
+// skips the script's shell and its subshells.
 test("a host id that names the folder does not stop the script itself", sandboxed, async (t) => {
   const { home, remove } = devbox(t);
   const legacy = join(home, "legacy-9");
@@ -182,6 +195,35 @@ test("a host id that names the folder does not stop the script itself", sandboxe
   writeFileSync(join(legacy, "host-id"), `${real}/x\n`);
   assert.equal(await remove(`${real}/x`, legacy), 0);
   assert.equal(existsSync(legacy), false, "the legacy folder is moved aside");
+});
+
+// A legacy folder whose path has a newline can't be matched within one listing line: exit 4, and the
+// folder stays with its daemon running.
+test("a legacy folder whose path has a newline stays in place", sandboxed, async (t) => {
+  const { home, remove } = devbox(t);
+  const legacy = join(home, "legacy\nnl");
+  mkdirSync(legacy);
+  writeFileSync(join(legacy, "host-id"), "host-9\n");
+  const daemon = await standIn(t, `${realpathSync(legacy)}/npm/bin/bb-app`);
+  assert.equal(await remove("host-9", legacy), 4);
+  assert.equal(existsSync(join(legacy, "host-id")), true, "the folder stays");
+  assert.equal(daemon.exitCode === null && daemon.signalCode === null, true, "the daemon keeps running");
+});
+
+// A legacy dataDir that is not absolute is ignored, so no process outside the machine folder is matched.
+test("a relative legacy folder never signals a process outside the machine folder", sandboxed, async (t) => {
+  const { home, remove } = devbox(t);
+  const cwd = join(home, "cwd");
+  mkdirSync(join(cwd, "data"), { recursive: true });
+  writeFileSync(join(cwd, "data", "host-id"), "host-r\n");
+  const unrelated = await standIn(t, join(home, "other", "data", "unrelated"));
+  assert.equal(await remove("host-r", "data", undefined, cwd), 3);
+  assert.equal(existsSync(join(cwd, "data", "host-id")), true, "the relative folder stays");
+  assert.equal(
+    unrelated.exitCode === null && unrelated.signalCode === null,
+    true,
+    "the unrelated process keeps running",
+  );
 });
 
 // Bug: a remove that moved nothing said nothing, as if the folder had moved.
@@ -213,8 +255,7 @@ test("a legacy folder that holds other machines' data folders is left alone", sa
   assert.equal(running(1), true);
 });
 
-// Bug: POSIX makes the rest of an -o argument its header, as busybox before 1.35 does, so
-// "-o pid=,args=" printed only PIDs there: the stop loop and the daemon probe saw no daemon.
+// The box scripts give ps one column per -o: busybox before 1.35 reads the rest of an -o argument as its header.
 test("the box scripts give ps one column per -o", () => {
   for (const script of [MOVE_MACHINE_ASIDE, DAEMON_PROBE]) assert.doesNotMatch(script, /-\w*o \S+=,/);
 });

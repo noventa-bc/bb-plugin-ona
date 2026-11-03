@@ -78,9 +78,10 @@ you asked for, so safety rule 1 does not gate it.
 2. **Never stop a box.** Suspends the plugin makes because of what it saw in Ona
    skip the provider's stop. *Why: a wrong or stale listing must not stop a box with your work on it.*
 3. **Restart a daemon only when the check finds none.** The check looks for a
-   process whose command line names a folder under `~/.bb-machines` or under the
-   box's legacy data folder. A failed process listing, a failed SSH connection or
-   a timeout counts as unknown, and nothing is restarted.
+   process whose command line names a folder under `~/.bb-machines`, the machine
+   data folder (`machineDataDir`) or the box's legacy data folder, each as given
+   and resolved through symlinks. A process listing that can't be trusted, a
+   failed SSH connection or a timeout counts as unknown, and nothing is restarted.
    *Why: a restart kills running agent turns.*
 4. **Unknown is not gone.** A failed or empty `ona environment list` changes
    nothing, and "missing" needs two listings in a row. A lookup by id

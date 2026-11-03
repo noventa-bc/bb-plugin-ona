@@ -6,7 +6,7 @@ import { test } from "node:test";
 import type { MachineExecutor } from "@get-bb/plugin-sdk";
 import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
 import type { OnaCli, OnaEnvironment } from "../src/ona.ts";
-import { registerOnaProvider } from "../src/provider.ts";
+import { registerOnaProvider, resourceSchema } from "../src/provider.ts";
 import type { TunnelManager } from "../src/ssh.ts";
 import { tick, useFakeClock } from "./fake-clock.ts";
 
@@ -130,3 +130,10 @@ test(
     assert.deepEqual(calls, ["get STARTING"]);
   },
 );
+
+// A legacy dataDir that is not absolute is read as absent, so the scripts never match it.
+test("a relative legacy dataDir is dropped and a trailing slash is stripped", () => {
+  const resource = { envId: "env-1", envName: "box", adopted: true, key: "key-1" };
+  assert.equal(resourceSchema.parse({ ...resource, dataDir: "data" }).dataDir, undefined);
+  assert.equal(resourceSchema.parse({ ...resource, dataDir: "/srv/bb/" }).dataDir, "/srv/bb");
+});

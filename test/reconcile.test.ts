@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,7 +19,7 @@ import {
   type MachineView,
   type OnaView,
 } from "../src/reconcile.ts";
-import { brokenTools, partialPs, sandboxed } from "./sandbox.ts";
+import { brokenTools, partialPs, sandboxed, standIn } from "./sandbox.ts";
 
 const NOW = 10_000_000;
 const machine = (overrides: Partial<MachineView> = {}): MachineView => ({
@@ -332,28 +332,23 @@ test("snapshot keeps the last good list and reports the error", async () => {
 
 // --- daemon probe (rule 3), run locally ---
 
-test("daemon probe finds a process running from the data folder, and only that", sandboxed, async () => {
+test("daemon probe finds a process running from the data folder, and only that", sandboxed, async (t) => {
   const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
   const dir = join(home, "data", ".bb-machines");
-  const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 10000)", `${dir}/daemon`], { stdio: "ignore" });
-  try {
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    const probe = (arg: string) =>
-      spawnSync("bash", ["-c", DAEMON_PROBE, "probe", arg], { env: { ...process.env, HOME: home } }).status;
-    assert.equal(probe(dir), 0);
-    assert.equal(probe(join(home, "elsewhere")), 1, "the probe must not match its own command line");
-  } finally {
-    child.kill();
-  }
+  await standIn(t, `${dir}/daemon`);
+  const probe = (arg: string) =>
+    spawnSync("bash", ["-c", DAEMON_PROBE, "probe", arg], { env: { ...process.env, HOME: home } }).status;
+  assert.equal(probe(dir), 0);
+  assert.equal(probe(join(home, "elsewhere")), 1, "the probe must not match its own command line");
 });
 
-// Bug: a box that couldn't list processes (ps missing or failing, a ps that rejects args=, no awk)
-// read as "no daemon", so a live daemon was restarted; a ps that ignores -o read as "running".
+// A box whose process listing can't be trusted answers unknown (exit 2).
 test("a daemon probe that can't list processes answers unknown", () => {
   for (const [name, body] of brokenTools) {
     const bin = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
     try {
-      writeFileSync(join(bin, name!), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+      writeFileSync(join(bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
       const env = { ...process.env, HOME: bin, PATH: `${bin}:${process.env.PATH}` };
       assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", bin], { env }).status, 2, `${name}: ${body}`);
     } finally {
@@ -364,68 +359,70 @@ test("a daemon probe that can't list processes answers unknown", () => {
   assert.equal(spawnSync("bash", ["-n", "-c", DAEMON_PROBE]).status, 0);
 });
 
-// Bug: a ps that printed a listing without the daemon, then exited 1, passed the trust check (this
-// shell's own line was there), so the probe answered "no daemon" and a live daemon was restarted.
-test("a daemon probe whose ps exits 1 after a listing without the daemon answers unknown", sandboxed, async () => {
+// A ps that exits 1 is untrusted even when its listing still shows this shell: unknown (exit 2).
+test("a daemon probe whose ps exits 1 after a listing without the daemon answers unknown", sandboxed, async (t) => {
   const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
   const bin = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  t.after(() => rmSync(bin, { recursive: true, force: true }));
   const dir = join(home, "data", ".bb-machines");
-  const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 10000)", `${dir}/daemon`], { stdio: "ignore" });
-  try {
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    writeFileSync(join(bin, "ps"), `#!/bin/sh\n${partialPs(child.pid!)}\n`, { mode: 0o755 });
-    const env = { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` };
-    assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", dir], { env }).status, 2);
-  } finally {
-    child.kill();
-    rmSync(home, { recursive: true, force: true });
-    rmSync(bin, { recursive: true, force: true });
-  }
+  const child = await standIn(t, `${dir}/daemon`);
+  writeFileSync(join(bin, "ps"), `#!/bin/sh\n${partialPs(child.pid!)}\n`, { mode: 0o755 });
+  const env = { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` };
+  assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", dir], { env }).status, 2);
 });
 
-// Bug: a legacy data folder given through a symlink was matched only by its link path, so a daemon
-// run from the resolved folder read as "no daemon" and was restarted.
-test("a symlinked legacy data folder finds a daemon run from its resolved folder", sandboxed, async () => {
+// A legacy data folder given through a symlink is matched through its resolved folder.
+test("a symlinked legacy data folder finds a daemon run from its resolved folder", sandboxed, async (t) => {
   const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
   const data = join(home, "real", "data");
   mkdirSync(data, { recursive: true });
   symlinkSync(join(home, "real"), join(home, "link"));
-  const daemonPath = `${realpathSync(data)}/npm/bin/bb-app`;
-  const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 10000)", daemonPath, "host-daemon"], {
-    stdio: "ignore",
-  });
-  try {
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    const env = { ...process.env, HOME: home };
-    assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", "", join(home, "link", "data")], { env }).status, 0);
-  } finally {
-    child.kill();
-    rmSync(home, { recursive: true, force: true });
-  }
+  await standIn(t, `${realpathSync(data)}/npm/bin/bb-app`);
+  const env = { ...process.env, HOME: home };
+  assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", "", join(home, "link", "data")], { env }).status, 0);
 });
 
-// Bug: the folders reached awk through -v, which reads backslash escapes, so a legacy folder whose
-// path had one (here \t) never matched its own daemon, and a live daemon was restarted.
-test("a legacy folder whose path has a backslash still finds its daemon", sandboxed, async () => {
+// Folder paths reach awk through the environment, so a backslash in one is matched as written.
+test("a legacy folder whose path has a backslash still finds its daemon", sandboxed, async (t) => {
   const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
   const data = join(home, "back\\tdata");
   mkdirSync(data, { recursive: true });
-  const daemonPath = `${realpathSync(data)}/npm/bin/bb-app`;
-  const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 10000)", daemonPath, "host-daemon"], {
-    stdio: "ignore",
-  });
-  try {
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    const env = { ...process.env, HOME: home };
-    assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", "", data], { env }).status, 0);
-  } finally {
-    child.kill();
-    rmSync(home, { recursive: true, force: true });
-  }
+  await standIn(t, `${realpathSync(data)}/npm/bin/bb-app`);
+  const env = { ...process.env, HOME: home };
+  assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", "", data], { env }).status, 0);
 });
 
-// Guard: the probe's own $(ps) subshell carries the folders in its command line, so with no daemon
-// running it must not read as one. Removing the $2!=me clause makes this fail.
+// A machine folder given through a symlink is matched through its resolved folder, with no ~/.bb-machines link.
+test(
+  "a machine folder given through a symlink finds its daemon when ~/.bb-machines is absent",
+  sandboxed,
+  async (t) => {
+    const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
+    t.after(() => rmSync(home, { recursive: true, force: true }));
+    const machineFolder = join(home, "disk", "server-a");
+    mkdirSync(join(machineFolder, "npm", "bin"), { recursive: true });
+    symlinkSync(machineFolder, join(home, "alias"));
+    await standIn(t, `${realpathSync(machineFolder)}/npm/bin/bb-app`);
+    const env = { ...process.env, HOME: home };
+    assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", join(home, "alias")], { env }).status, 0);
+  },
+);
+
+// A folder path with a newline can't be matched within one listing line, so the answer is unknown (exit 2).
+test("a daemon probe whose folder path has a newline answers unknown", sandboxed, async (t) => {
+  const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const data = join(home, "a\nb");
+  mkdirSync(data, { recursive: true });
+  await standIn(t, `${realpathSync(data)}/npm/bin/bb-app`);
+  const env = { ...process.env, HOME: home };
+  assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", "", data], { env }).status, 2);
+});
+
+// The probe's own $(ps) subshell carries the folders in its command line; with no daemon running, it is not a match.
 test("a probe with no daemon answers no daemon, though its own ps subshell names the folders", sandboxed, () => {
   const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
   try {

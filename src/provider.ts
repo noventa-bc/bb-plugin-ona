@@ -24,11 +24,13 @@ export const resourceSchema = z.object({
   key: z.string(),
   /**
    * Legacy BB_DATA_DIR from 0.1.0 enrollments; new machines use ~/.bb-machines.
-   * Trailing slashes are dropped: `mv` can't move "dir/" to "dir/.old-…".
+   * Trailing slashes are dropped: `mv` can't move "dir/" to "dir/.old-…". A path
+   * that is not absolute is read as absent, not rejected: lifecycle calls parse
+   * this schema, and a rejection would stop suspend, resume and remove.
    */
   dataDir: z
     .string()
-    .transform((dir) => dir.replace(/\/+$/, ""))
+    .transform((dir) => (dir.startsWith("/") ? dir.replace(/\/+$/, "") : undefined))
     .optional(),
 });
 export type OnaResource = z.infer<typeof resourceSchema>;
@@ -93,10 +95,12 @@ export interface ProviderDeps {
  * again. "$2" is the legacy `dataDir`, which bb's installer used as the data
  * folder itself. Exits 2 for an empty machine id, 3 when no folder names the
  * machine, 4 when the processes couldn't be listed or didn't stop (the folder
- * stays), 1 when the folder can't be entered, and mv's status when the move fails.
+ * stays), and 1 when the folder can't be entered or moved.
  */
 export const MOVE_MACHINE_ASIDE = [
   'host="$1"; legacy="$2"',
+  // A legacy dataDir that is not absolute is ignored.
+  "case $legacy in /*) ;; *) legacy= ;; esac",
   // An empty id would match a folder whose host-id file is empty.
   '[ -n "$host" ] || exit 2',
   'for id in "$HOME"/.bb-machines/*/host-id ${legacy:+"$legacy/host-id"}; do',
@@ -107,19 +111,20 @@ export const MOVE_MACHINE_ASIDE = [
   // A folder that holds other machines' data folders is never stopped or moved.
   '  for other in "$data"/*/host-id; do [ -f "$other" ] && continue 2; done',
   '  real=$(cd "$data" && pwd -P) || exit 1; export real given="$data"; n=0',
+  // A newline in the path can't be matched within one listing line: the folder stays.
+  '  case "$data$real" in *"',
+  '"*) exit 4 ;; esac',
   // bb 0.48.1 starts the daemon from the resolved path; one started through ~/.bb-machines names the path as given.
   // Every process whose command line names the folder is stopped. The script never stops itself: its own shell,
   // its parent and its children are skipped by pid or ppid, whatever paths their command lines carry.
-  // shortcut: a daemon started from a `bb-app` on the PATH is not matched; see DAEMON_PROBE in src/reconcile.ts.
   // A ps that exits non-zero, even after printing part of its list, is unknown, and so is a listing
-  // without this shell under its parent (ps ignores -o, or no awk): exit 4 rather than move the
-  // folder under a daemon the listing hid.
+  // without this shell under its parent (ps ignores -o, or no awk): exit 4, and the folder stays.
   "  while :; do",
   "    out=$(ps -e -o pid= -o ppid= -o args=) || exit 4",
   `    pids=$(printf '%s\\n' "$out" | awk -v me="$$" -v pp="$PPID" '$1 == me && $2 == pp {ok=1} $1 != me && $1 != pp && $2 != me && (index($0, ENVIRON["real"] "/") || index($0, ENVIRON["given"] "/")) {print $1} END {exit !ok}') || exit 4`,
   '    [ -n "$pids" ] || break',
-  // Repeated so a restart within about one second is caught (bb's daemon on a box is detached, not supervised):
-  // TERM in rounds 1-10, KILL in rounds 11-12, each round sleeping one second. Still listed after round 12: exit 4, and the folder stays.
+  // Each round lists the processes again: TERM in rounds 1-10, KILL in rounds 11-12, one second apart.
+  // Still listed after round 12: exit 4, and the folder stays.
   '    n=$((n + 1)); [ "$n" -gt 12 ] && exit 4',
   '    if [ "$n" -gt 10 ]; then kill -9 $pids 2>/dev/null; else kill $pids 2>/dev/null; fi; sleep 1',
   "  done",
@@ -467,10 +472,13 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
           } else if (exitCode !== 0) {
             // -1: timed out or SSH failed, so the script may still have finished.
             const what = exitCode === -1 ? "May not have moved" : "Could not move";
-            // Exit 4 can come after an earlier round already stopped the daemon.
-            const earlier = exitCode === 4 ? " The bb daemon may already have been stopped by an earlier round." : "";
+            // Exit 4: the process listing couldn't be trusted, or a daemon was still listed after the stop rounds.
+            const cause =
+              exitCode === 4
+                ? " The process listing couldn't be trusted, or the daemon was still running after 12 rounds; it may be stopped or still running."
+                : "";
             bb.log.warn(
-              `${what} bb's data folder on ${name} aside (exit ${exitCode}: ${output.trim().slice(-300)}).${earlier} ` +
+              `${what} bb's data folder on ${name} aside (exit ${exitCode}: ${output.trim().slice(-300)}).${cause} ` +
                 `Before adopting it again, ${byHand}.`,
             );
           }
