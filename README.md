@@ -305,7 +305,8 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
 - **bb and Ona disagree about a box** (bb says down but it's running, or the
   other way round): run `bb ona status <name>`. It shows both views and what
   the plugin last did about it. `bb ona sync <name>` re-checks now, and
-  `bb ona reconnect <name>` restarts the daemon of an active machine outright. Two lines to look for:
+  `bb ona reconnect <name>` restarts the daemon of an active machine outright;
+  one suspended in bb but running in Ona needs `bb machine resume ona:<name>`. Two lines to look for:
   - "ERROR … (run `ona login`?)" at the top: the plugin can't reach Ona, so it
     changes nothing.
   - "gave up after 3 failures": the last error is shown next to it.

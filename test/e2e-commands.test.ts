@@ -166,12 +166,18 @@ test("bb ona keep-alive refuses a stopped box, holds a running one and ends on `
   assert.deepEqual(onaCalls(), [`environment keep-alive --environment-id ${ref} -q -- sleep 60`]);
 });
 
-test("bb ona reconnect refuses a suspending machine (fails if it opens a tunnel or calls Ona)", local, async () => {
+test("bb ona reconnect refuses a suspended machine (fails if it opens a tunnel or calls Ona)", local, async () => {
   bootstraps.length = 0;
-  // bb is still suspending the machine from the sync test above.
+  Object.assign(hosts[0]!, {
+    status: "disconnected",
+    lifecycle: { phase: "suspended", message: null, suspendedAt: 1 },
+  });
   const result = await host.harness.behavior.runCli(["reconnect", resource.envId]);
   assert.equal(result.exitCode, 1);
-  assert.match(result.stderr ?? "", /is suspending in bb, so it was not reconnected\. Resume it with/);
+  assert.match(
+    result.stderr ?? "",
+    /is suspended in bb, so it was not reconnected\. Resume it with `bb machine resume ona:/,
+  );
   assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:off/);
   assert.deepEqual(bootstraps, []);
   assert.deepEqual(onaCalls(), []);
@@ -199,7 +205,6 @@ test("bb ona rename renames the box in Ona and its bb machine (fails if bb keeps
 });
 
 test("bb ona update installs only the pending CLI (fails if a current CLI is reinstalled)", local, async () => {
-  Object.assign(hosts[0]!, { status: "connected", lifecycle: { phase: "active", message: null, suspendedAt: null } });
   const result = await host.harness.behavior.runCli(["update"]);
   assert.equal(result.exitCode, 0, result.stderr);
   // The box was renamed in the test above.

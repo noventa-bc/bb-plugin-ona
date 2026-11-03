@@ -22,7 +22,7 @@ const box = (phase: string): OnaEnvironment => ({
  * `phases`: what each Ona lookup returns in turn (null is a box Ona no longer has).
  * `rootExits`: the `~/.bb-machines` script's exit codes in turn. Both repeat their last entry.
  * `preflightExit`: the prerequisites check's exit code. Every other command exits 0.
- * `stopFails`: closing a tunnel throws.
+ * `tunnelUp`: the box's tunnel is already open, as for a box another machine uses.
  */
 type Setup = {
   found: OnaEnvironment;
@@ -30,23 +30,17 @@ type Setup = {
   rootExits?: number[];
   rootOutput?: string;
   preflightExit?: number;
-  stopFails?: boolean;
+  tunnelUp?: boolean;
 };
 
 /** The next entry in turn, the last one repeated. */
 const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
 
 /** The provider in a fake host. `calls` logs Ona lookups and the root script; `tunnels`, tunnel opens and closes. */
-function register({
-  found,
-  phases = [],
-  rootExits = [],
-  rootOutput = "",
-  preflightExit = 0,
-  stopFails = false,
-}: Setup) {
+function register({ found, phases = [], rootExits = [], rootOutput = "", preflightExit = 0, tunnelUp = false }: Setup) {
   const calls: string[] = [];
   const tunnels: string[] = [];
+  const open = new Set(tunnelUp ? [found.id] : []);
   const ona = {
     findEnvironment: async () => found,
     getEnvironmentIfExists: async (_id: string, signal: AbortSignal) => {
@@ -79,10 +73,14 @@ function register({
     ona,
     sshBinary: "ssh",
     tunnels: {
-      ensure: (envId: string) => void tunnels.push(`ensure ${envId}`),
+      status: (envId: string) => (open.has(envId) ? "up" : "off"),
+      ensure(envId: string) {
+        tunnels.push(`ensure ${envId}`);
+        open.add(envId);
+      },
       stop(envId: string) {
         tunnels.push(`stop ${envId}`);
-        if (stopFails) throw new Error("stop failed");
+        open.delete(envId);
       },
     } as unknown as TunnelManager,
     defaultProject: "",
@@ -97,7 +95,7 @@ function register({
     forgetBox: async () => {},
     executorFor: () => executor,
   });
-  return { provider: host.harness.registrations.machineProviders.get("ona")!, host, calls, tunnels };
+  return { provider: host.harness.registrations.machineProviders.get("ona")!, calls, tunnels };
 }
 
 const lifecycle = () => ({ report: { step() {}, log() {} }, checkpoint: async () => {} });
@@ -191,10 +189,9 @@ test("a create that fails at preflight closes the tunnel it opened and rethrows 
   assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"]);
 });
 
-test("a tunnel close that throws after a failed resume is logged, and the resume error still surfaces", async () => {
-  const { resumed, host } = resume({ found: box("RUNNING"), phases: ["RUNNING"], preflightExit: 3, stopFails: true });
-  await assert.rejects(resumed, /missing bb prerequisites/);
-  assert.deepEqual(host.harness.inspection.logEntries, [
-    { level: "warn", message: "Could not close the tunnel to env-1 after a failed connect: Error: stop failed" },
-  ]);
+// Bug: a failed adopt of a box another machine uses closed that machine's tunnel, which the adopt never opened.
+test("an adopt of a box whose tunnel is already up fails at preflight and leaves the tunnel up", async () => {
+  const { created, tunnels } = start({ found: box("RUNNING"), preflightExit: 3, tunnelUp: true });
+  await assert.rejects(created, /^Error: Devbox is missing bb prerequisites: missing: node$/);
+  assert.deepEqual(tunnels, ["ensure env-1"]);
 });

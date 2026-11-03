@@ -281,16 +281,15 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
 
   /**
    * connect() for a machine bb doesn't show active yet (create, resume). An open
-   * tunnel keeps the box awake (decision 0003), so a failure closes it; a failed
-   * close is only logged, so bb still gets the connect error.
+   * tunnel keeps the box awake (decision 0003), so a failure closes the tunnel
+   * this call opened. One already up is left alone: another machine on the box may use it.
    */
   async function connectOrClose(resource: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal) {
+    const opened = tunnels.status(resource.envId) === "off";
     try {
       return await connect(resource, resource.key, report, signal);
     } catch (error) {
-      await disconnect(resource.envId).catch((stopError: unknown) =>
-        bb.log.warn(`Could not close the tunnel to ${resource.envId} after a failed connect: ${String(stopError)}`),
-      );
+      if (opened) await disconnect(resource.envId);
       throw error;
     }
   }

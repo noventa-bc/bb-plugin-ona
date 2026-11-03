@@ -350,11 +350,14 @@ export function onaCommands(deps: OnaCommandDeps) {
           const row = await findMachine(ref);
           if (!row) return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${ref}".` };
           // A tunnel keeps the box awake, so none opens on a machine bb doesn't show active (decision 0003).
-          if (row.phase !== "active")
-            return {
-              exitCode: 1,
-              stderr: `${row.machine} is ${row.phase} in bb, so it was not reconnected. Resume it with \`bb machine resume ${row.machine}\`.`,
-            };
+          if (row.phase !== "active") {
+            // bb refuses a resume while creating or removing, and one is under way while resuming.
+            const hint =
+              row.phase === "suspended"
+                ? `Resume it with \`bb machine resume ${row.machine}\`.`
+                : "Try again once bb shows it active.";
+            return { exitCode: 1, stderr: `${row.machine} is ${row.phase} in bb, so it was not reconnected. ${hint}` };
+          }
           const steps: string[] = [];
           const report = { step: (text: string) => steps.push(text), log: () => {} };
           const busy = guard.busyWith(row.hostId);
