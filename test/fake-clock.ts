@@ -11,8 +11,9 @@ export function useFakeClock() {
 export const enableFakeClock = () => mock.timers.enable({ apis: ["setTimeout", "Date"] });
 
 /**
- * Turns the fake clock off; eslint flags `mock.timers.reset()` and `mock.reset()` elsewhere
- * (an alias of either slips).
+ * Turns the fake clock off; eslint flags `mock.timers.reset()` and `mock.reset()` elsewhere.
+ * Not flagged: an alias, a dispose, and the reset Node itself runs after a test that
+ * enabled the clock through its context, so enable it only through this file.
  * shortcut: Node 24.22.1's mock_timers.js removes an aborted sleep's fake timer in an async
  * finally, after a reset emptied the queue, so the next test's timers never fire (`check.yml`
  * names the versions), drop the settle once a bare reset right after an aborted sleep passes
