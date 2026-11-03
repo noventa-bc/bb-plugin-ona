@@ -19,6 +19,7 @@ import {
   type MachineView,
   type OnaView,
 } from "../src/reconcile.ts";
+import { sandboxed } from "./sandbox.ts";
 
 const NOW = 10_000_000;
 const machine = (overrides: Partial<MachineView> = {}): MachineView => ({
@@ -330,11 +331,6 @@ test("snapshot keeps the last good list and reports the error", async () => {
 });
 
 // --- daemon probe (rule 3), run locally ---
-
-// The agent sandbox hides other processes from `ps`; this runs in CI and outside the sandbox.
-const sandboxed = {
-  skip: process.env.NONO_CAP_FILE ? "needs to see other processes, hidden in the agent sandbox" : false,
-};
 
 test("daemon probe finds a process running from the data folder, and only that", sandboxed, async () => {
   const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));

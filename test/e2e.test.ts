@@ -4,8 +4,8 @@
 // The tests are one story in file order (shared `resource`, `hosts`,
 // `bootstraps`): run the whole file, not one test by name.
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { after, before, test } from "node:test";
 import { envNameForKey, type OnaResource } from "../src/provider.ts";
 import type { BbHost } from "../src/sync.ts";
@@ -26,12 +26,19 @@ const bootstraps: string[] = [];
 const hosts: BbHost[] = [];
 let patchBox: E2eHost["patchBox"];
 const checkpoints: unknown[] = [];
+/** Plugin log messages about bb's data folder since the last read. */
+const logged = () =>
+  host.harness.logEntries
+    .splice(0)
+    .map((entry) => entry.message)
+    .filter((message) => message.includes("data folder"));
 const ctx = {
   ...baseCtx,
   checkpoint: async (r: unknown) => {
     checkpoints.push(r);
   },
 };
+let adopted: OnaResource;
 
 before(async () => {
   if (local.skip) return;
@@ -152,10 +159,75 @@ test("remove never deletes an adopted box", local, async () => {
   if (created.status !== "created") return;
   assert.equal((created.resource as OnaResource).adopted, true);
   onaCalls();
-  // The uninstall script runs locally over fake-ssh: an empty data dir makes it a no-op.
-  const adopted = { ...(created.resource as OnaResource), dataDir: mkdtempSync(join(dir, "data-")) };
+  logged();
+  // The script runs locally over fake-ssh, on this machine's legacy data folder.
+  const dataDir = mkdtempSync(join(dir, "data-"));
+  writeFileSync(join(dataDir, "host-id"), "host-2\n");
+  // Bug: a trailing slash made `mv` try to move the folder into itself.
+  adopted = { ...(created.resource as OnaResource), dataDir: `${dataDir}/` };
   const result = await provider.remove({ ...ctx, resource: adopted, hostId: "host-2" });
   assert.deepEqual(result, { status: "removed" });
+  // Bug: the folder stayed, and bb's installer refused to adopt the box again.
+  assert.equal(existsSync(dataDir), false);
+  assert.equal(readdirSync(dir).filter((name) => name.startsWith(`${basename(dataDir)}.old-`)).length, 1);
+  assert.deepEqual(logged(), []);
   assert.deepEqual(onaCalls(), ["environment get env-adopted"]);
   assert.deepEqual(envs(), [box]);
+});
+
+// Bug: a remove that moved nothing said nothing, as if the folder had moved;
+// then it said so only in bb's server log.
+test("a remove that finds no data folder says so", local, async () => {
+  const result = await provider.remove({ ...ctx, resource: adopted, hostId: "host-9" });
+  assert.deepEqual(result, { status: "removed" });
+  const [line, ...rest] = logged();
+  assert.match(line ?? "", /^Found no bb data folder for machine host-9 on brave-otter; nothing moved\. /);
+  assert.match(
+    line ?? "",
+    /If adopting it again fails, move aside .* "Adopting a box again after removing its machine"/,
+  );
+  assert.deepEqual(rest, []);
+  assert.deepEqual(onaCalls(), ["environment get env-adopted"]);
+});
+
+const asRoot = process.getuid?.() === 0 && "root ignores folder permissions";
+
+// Bug: a failed move was told only in bb's server log.
+test(
+  "a remove that can't move the data folder says how to move it by hand",
+  { skip: local.skip || asRoot },
+  async (t) => {
+    const parent = mkdtempSync(join(dir, "read-only-"));
+    const dataDir = join(parent, "data");
+    mkdirSync(dataDir);
+    writeFileSync(join(dataDir, "host-id"), "host-2\n");
+    chmodSync(parent, 0o555);
+    t.after(() => chmodSync(parent, 0o755));
+    const result = await provider.remove({ ...ctx, resource: { ...adopted, dataDir }, hostId: "host-2" });
+    assert.deepEqual(result, { status: "removed" });
+    assert.equal(existsSync(join(dataDir, "host-id")), true);
+    const [line, ...rest] = logged();
+    assert.match(
+      line ?? "",
+      /^Could not move bb's data folder on brave-otter aside \(exit 1: .*Permission denied\)\. /,
+    );
+    assert.match(line ?? "", /Before adopting it again, move aside the bb data folder whose host-id is host-2 /);
+    assert.deepEqual(rest, []);
+    assert.deepEqual(onaCalls(), ["environment get env-adopted"]);
+  },
+);
+
+test("removing a stopped adopted box leaves its data folder, says so and keeps the box", local, async () => {
+  patchBox("env-adopted", { phase: "ENVIRONMENT_PHASE_STOPPED" });
+  const dataDir = mkdtempSync(join(dir, "data-"));
+  writeFileSync(join(dataDir, "host-id"), "host-2\n");
+  const result = await provider.remove({ ...ctx, resource: { ...adopted, dataDir }, hostId: "host-2" });
+  assert.deepEqual(result, { status: "removed" });
+  assert.equal(existsSync(join(dataDir, "host-id")), true, "no SSH to a box Ona doesn't report running");
+  const [line, ...rest] = logged();
+  assert.match(line ?? "", /^brave-otter isn't running, so bb's data folder on it was left in place\./);
+  assert.match(line ?? "", /start it and move aside the bb data folder whose host-id is host-2 /);
+  assert.deepEqual(rest, []);
+  assert.deepEqual(onaCalls(), ["environment get env-adopted"]);
+  assert.equal(envs().length, 1);
 });
