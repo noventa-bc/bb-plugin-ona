@@ -1,21 +1,16 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { after, test } from "node:test";
+import { test } from "node:test";
+import { tempDir } from "./sandbox.ts";
 
 const script = join(import.meta.dirname, "..", "scripts", "node-check.sh");
 const running = process.version.slice(1);
 
-const dirs: string[] = [];
-after(() => dirs.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
-
-/** Run node-check.sh against an .nvmrc holding `nvmrc` (no file when undefined); return its exit status and stderr. */
+/** Runs node-check.sh against an .nvmrc holding `nvmrc` (no file when undefined); returns the exit status and stderr. */
 function nodeCheck(nvmrc: string | undefined) {
-  const dir = mkdtempSync(join(tmpdir(), "node-check-"));
-  dirs.push(dir);
-  const file = join(dir, ".nvmrc");
+  const file = join(tempDir("node-check-"), ".nvmrc");
   if (nvmrc !== undefined) writeFileSync(file, nvmrc);
   // The script runs `node` from PATH: put the Node running the tests first so the two agree.
   const env = { ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH}` };

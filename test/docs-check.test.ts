@@ -1,16 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { after, test } from "node:test";
-import { scrubbed } from "./sandbox.ts";
+import { test } from "node:test";
+import { git, scrubbed, tempDir } from "./sandbox.ts";
 
 const repo = join(import.meta.dirname, "..");
 const script = join(repo, "scripts", "docs-check.sh");
-
-const dirs: string[] = [];
-after(() => dirs.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 
 // The repo's own prettier config, so each fixture is judged the way the repo is.
 const repoConfig: Record<string, string> = {
@@ -20,21 +16,15 @@ const repoConfig: Record<string, string> = {
 
 const env = scrubbed(process.env);
 
-function git(dir: string, ...args: string[]) {
-  const run = spawnSync("git", ["-C", dir, ...args], { env, stdio: "pipe" });
-  assert.equal(run.status, 0, String(run.stderr));
-}
-
 /** Write the files into a new git repository, stage them (git add skips ignored files), run docs-check.sh on it. */
 function docsCheck(files: Record<string, string>) {
-  const dir = mkdtempSync(join(tmpdir(), "docs-check-"));
-  dirs.push(dir);
+  const dir = tempDir("docs-check-");
   for (const [name, text] of Object.entries({ ...repoConfig, ...files })) {
     mkdirSync(dirname(join(dir, name)), { recursive: true });
     writeFileSync(join(dir, name), text);
   }
-  git(dir, "init", "-q");
-  git(dir, "add", "--all");
+  git(dir, env, "init", "-q");
+  git(dir, env, "add", "--all");
   const run = spawnSync(script, [dir], { env, stdio: "pipe", timeout: 60_000 });
   return { status: run.status, output: String(run.stdout) + String(run.stderr) };
 }

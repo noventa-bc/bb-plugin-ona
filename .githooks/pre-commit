@@ -8,15 +8,25 @@ stop() {
   exit 1
 }
 
-# The GIT_* variables git gives a hook (dumped from git 2.56: the index, GIT_DIR of a linked worktree,
-# the author and -c settings). The checks run without them: a test that makes its own repository would
-# otherwise commit into this one. The leak check and the diffs below keep them, since they read this
-# commit's index.
-checks() {
-  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE -u GIT_PREFIX -u GIT_OBJECT_DIRECTORY \
-    -u GIT_CONFIG_PARAMETERS -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_AUTHOR_DATE -u GIT_REFLOG_ACTION \
-    -u GIT_EDITOR -u GIT_EXEC_PATH "$@"
-}
+# Runs a command with every GIT_* variable removed. The subshell keeps the removal to that command:
+# the hook's own git calls read this commit's index and need those variables.
+checks() (
+  # The variable names have no spaces, so the word splitting is safe.
+  # shellcheck disable=SC2046
+  for v in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$v"; done
+  "$@"
+)
+
+# shortcut: the checks read the working tree, so a file staged and edited again is refused, upgrade when they can read the index
+partial=$(git -c core.quotePath=false diff --name-only | while IFS= read -r f; do
+  git -c core.quotePath=false diff --cached --name-only -- ":(literal)$f" | grep -Fqx -- "$f" && printf '%s\n' "$f"
+done)
+if [ -n "$partial" ]; then
+  printf '%s\n' "$partial" | while IFS= read -r f; do
+    echo "pre-commit: commit or stash the unstaged edits to $f: the checks read the working tree" >&2
+  done
+  stop "unstaged edits"
+fi
 
 command -v npm >/dev/null 2>&1 || { echo "pre-commit: npm is not on PATH; load the Node in .nvmrc first (nvm use)" >&2; exit 1; }
 [ -x node_modules/.bin/tsc ] || { echo "pre-commit: node_modules is missing; run npm ci --ignore-scripts" >&2; exit 1; }
@@ -30,9 +40,8 @@ checks scripts/docs-check.sh || stop "scripts/docs-check.sh"
 # check.yml skips changes that touch only Markdown. Deleted paths and both sides of a rename count
 # as changes there, so they count here too.
 code_changed=0
-git diff --cached --no-renames --name-only | grep -qv '\.md$' && code_changed=1
+git -c core.quotePath=false diff --cached --no-renames --name-only | grep -qv '\.md$' && code_changed=1
 
-# shortcut: checks the working tree, not the index; stash-free index checks when a staged-only hunk ever slips past
 if [ "$code_changed" = 1 ]; then
   echo "pre-commit: npm run check"
   checks npm run check || stop "npm run check"
@@ -49,7 +58,7 @@ fi
 
 if command -v shellcheck >/dev/null 2>&1; then
   echo "pre-commit: shellcheck on the staged shell files"
-  git diff --cached --name-only --diff-filter=ACMR -- '*.sh' '.githooks/*' | while IFS= read -r f; do
+  git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR -- '*.sh' '.githooks/*' | while IFS= read -r f; do
     shellcheck "$f" || exit 1
   done || stop "shellcheck"
 else

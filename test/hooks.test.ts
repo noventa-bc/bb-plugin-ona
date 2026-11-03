@@ -1,0 +1,132 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { chmodSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { test } from "node:test";
+import { git, scrubbed, tempDir } from "./sandbox.ts";
+
+const repo = join(import.meta.dirname, "..");
+const env = scrubbed(process.env);
+const usersBare = ["", "Users", "x"].join("/");
+
+function writeExecutable(path: string, text: string) {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, text);
+  chmodSync(path, 0o755);
+}
+
+/** Copies a file of this repository to the same path in `dir`, keeping it executable. */
+function copyIn(dir: string, file: string) {
+  mkdirSync(dirname(join(dir, file)), { recursive: true });
+  copyFileSync(join(repo, file), join(dir, file));
+  chmodSync(join(dir, file), 0o755);
+}
+
+/** node_modules with a typechecker and a prettier that succeed, so the hook's preflight and docs check pass. */
+function placeholderTools(dir: string) {
+  writeExecutable(join(dir, "node_modules", ".bin", "tsc"), "#!/bin/sh\nexit 0\n");
+  writeExecutable(join(dir, "node_modules", ".bin", "prettier"), "#!/bin/sh\nexit 0\n");
+}
+
+// Fake npm and semgrep on PATH. The fake npm records its environment in the file named by NPM_ENV_FILE.
+const fakeBin = tempDir("fake-bin-");
+writeExecutable(join(fakeBin, "npm"), '#!/bin/sh\nenv > "$NPM_ENV_FILE"\n');
+writeExecutable(join(fakeBin, "semgrep"), "#!/bin/sh\nexit 0\n");
+
+/** A repository committed with the pre-commit hook and the scripts it runs, with placeholder tools. */
+function hookRepo() {
+  const dir = tempDir("hooks-");
+  git(dir, env, "init", "-q", "-b", "main");
+  for (const file of [".githooks/pre-commit", "scripts/leak-check.sh", "scripts/docs-check.sh"]) copyIn(dir, file);
+  writeFileSync(join(dir, "AGENTS.md"), "# Agents\n");
+  writeFileSync(join(dir, "FACTORY.md"), "# Factory\n");
+  writeFileSync(join(dir, "README.md"), "# Readme\n");
+  git(dir, env, "add", "--all");
+  git(dir, env, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--no-verify", "-m", "base");
+  placeholderTools(dir);
+  return dir;
+}
+
+/** Runs the pre-commit hook in `dir`; the fake npm writes its environment to `npmEnvFile`. */
+function runHook(dir: string, npmEnvFile: string, extra: NodeJS.ProcessEnv = {}) {
+  const run = spawnSync("sh", [".githooks/pre-commit"], {
+    cwd: dir,
+    env: { ...env, PATH: `${fakeBin}:${process.env.PATH}`, NPM_ENV_FILE: npmEnvFile, ...extra },
+    stdio: "pipe",
+    timeout: 60_000,
+  });
+  return { status: run.status, output: String(run.stdout) + String(run.stderr) };
+}
+
+function newEnvFile() {
+  return join(tempDir("npm-env-"), "env.txt");
+}
+
+test("a file staged and then edited again is refused, naming the file", () => {
+  const dir = hookRepo();
+  writeFileSync(join(dir, "a.txt"), "one\n");
+  git(dir, env, "add", "a.txt");
+  writeFileSync(join(dir, "a.txt"), "two\n");
+  const r = runHook(dir, newEnvFile());
+  assert.equal(r.status, 1, r.output);
+  assert.match(r.output, /commit or stash the unstaged edits to a\.txt: the checks read the working tree/);
+});
+
+test("a non-ASCII file staged and then edited again is refused too", () => {
+  const dir = hookRepo();
+  writeFileSync(join(dir, "nótes.txt"), "one\n");
+  git(dir, env, "add", "nótes.txt");
+  writeFileSync(join(dir, "nótes.txt"), "two\n");
+  const r = runHook(dir, newEnvFile());
+  assert.equal(r.status, 1, r.output);
+  assert.match(r.output, /commit or stash the unstaged edits to nótes\.txt: /);
+});
+
+test("a file staged without later edits passes the hook", () => {
+  const dir = hookRepo();
+  writeFileSync(join(dir, "b.ts"), "export const b = 1;\n");
+  git(dir, env, "add", "b.ts");
+  const r = runHook(dir, newEnvFile());
+  assert.equal(r.status, 0, r.output);
+});
+
+test("the checks run without the GIT_* variables git gives the hook", () => {
+  const dir = hookRepo();
+  const linked = join(tempDir("hooks-linked-"), "wt");
+  git(dir, env, "worktree", "add", "-q", linked, "-b", "linked");
+  placeholderTools(linked);
+  writeFileSync(join(linked, "c.ts"), "export const c = 1;\n");
+  git(linked, env, "add", "c.ts");
+  const gitDir = git(linked, env, "rev-parse", "--absolute-git-dir");
+  const envFile = newEnvFile();
+  const r = runHook(linked, envFile, {
+    GIT_DIR: gitDir,
+    GIT_INDEX_FILE: join(gitDir, "index"),
+    GIT_PREFIX: "",
+    GIT_AUTHOR_NAME: "hook",
+    GIT_CONFIG_PARAMETERS: "'user.name'='t'",
+  });
+  assert.equal(r.status, 0, r.output);
+  const seen = readFileSync(envFile, "utf8")
+    .split("\n")
+    .filter((line) => line.startsWith("GIT_"));
+  assert.deepEqual(seen, []);
+});
+
+test("a commit message holding a bare user folder is refused, and only the path is printed", () => {
+  const file = join(tempDir("commit-msg-"), "MSG");
+  writeFileSync(file, `chore(hooks): see ${usersBare} and token-x\n`);
+  const run = spawnSync("sh", [".githooks/commit-msg", file], { cwd: repo, env, stdio: "pipe", timeout: 30_000 });
+  const output = String(run.stdout) + String(run.stderr);
+  assert.equal(run.status, 1, output);
+  assert.match(output, /leak-check: refused, a personal path/);
+  assert.ok(output.includes(usersBare), output);
+  assert.doesNotMatch(output, /token-x/);
+});
+
+test("a conventional commit message without a personal path passes the commit-msg hook", () => {
+  const file = join(tempDir("commit-msg-"), "MSG");
+  writeFileSync(file, "chore(hooks): plain message\n");
+  const run = spawnSync("sh", [".githooks/commit-msg", file], { cwd: repo, env, stdio: "pipe", timeout: 30_000 });
+  assert.equal(run.status, 0, String(run.stderr));
+});

@@ -1,25 +1,23 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { scrubbed } from "./sandbox.ts";
+import { git, scrubbed, tempDir } from "./sandbox.ts";
 
 const script = join(import.meta.dirname, "..", "scripts", "bump-kind.sh");
 
-/** A throwaway repo with one commit on main, and a helper that runs git in it. */
+/** A throwaway repo with one commit on main, and helpers that run git and bump-kind.sh in it. */
 function repo() {
-  const dir = mkdtempSync(join(tmpdir(), "bump-kind-"));
+  const dir = tempDir("bump-kind-");
   const env = scrubbed(process.env);
-  const git = (...args: string[]) => execFileSync("git", ["-C", dir, ...args], { stdio: "pipe", env }).toString();
-  git("init", "-q", "-b", "main");
-  git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init");
+  git(dir, env, "init", "-q", "-b", "main");
+  git(dir, env, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init");
   const kind = (title: string) =>
     execFileSync(script, [title, "main"], { cwd: dir, input: "", stdio: "pipe", env }).toString().trim();
   const stage = (name: string) => {
     writeFileSync(join(dir, name), "x\n");
-    git("add", name);
+    git(dir, env, "add", name);
   };
   return { kind, stage };
 }

@@ -26,9 +26,9 @@ export default tseslint.config(
       "@typescript-eslint/only-throw-error": "error",
       "@typescript-eslint/switch-exhaustiveness-check": "error",
       "max-lines": ["error", { max: 500, skipBlankLines: true, skipComments: true }],
-      // bb can accept a lifecycle request without acting on it; use the host it returns.
       "no-restricted-syntax": [
         "error",
+        // bb can accept a lifecycle request without acting on it; use the host it returns.
         ...[
           "ExpressionStatement > AwaitExpression",
           "ExpressionStatement > UnaryExpression[operator='void']",
@@ -37,6 +37,14 @@ export default tseslint.config(
           selector: `${parent} > CallExpression[callee.property.name=/^experimental_(suspend|resume|reconcile)$/]`,
           message: "bb can accept this without acting on it: check the returned host's lifecycle (lifecycleRefusal).",
         })),
+        {
+          // A reset right after an aborted fake sleep breaks the next test's timers on CI's Node
+          // (test/fake-clock.ts). `mock.reset()` resets the clock too.
+          selector:
+            "CallExpression[callee.property.name='reset']:matches([callee.object.name=/^(mock|timers)$/], [callee.object.property.name=/^(mock|timers)$/])",
+          message:
+            "Reset the fake clock with await resetFakeClock() from test/fake-clock.ts (stubs: mock.restoreAll()).",
+        },
       ],
     },
   },

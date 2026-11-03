@@ -34,3 +34,5 @@ jobs:
         run: scripts/release-check.sh "origin/$BASE"
       # Prettier, the line limits and the relative links; the pre-commit hook runs the same script.
       - run: scripts/docs-check.sh
+      # The personal-path check on the checkout (AGENTS.md rule 10).
+      - run: scripts/leak-check.sh

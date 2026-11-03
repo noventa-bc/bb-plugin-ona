@@ -26,7 +26,7 @@ Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
 - Ona's SSH starts stopped devboxes. Any SSH to a devbox can wake it.
 - Never run `ona` actions, `ssh` to devboxes, or `bb machine` or `bb plugin` changes.
 - Never commit to `main` or push, except as `FACTORY.md` allows: builders commit on `agent/*` branches, the orchestrator pushes them and opens PRs.
-- Commit messages and PR titles are Conventional Commits, `type(scope): subject` (`scripts/conventional.sh` has the rule; `.githooks/commit-msg` checks it locally, `.githooks/pre-commit` runs `scripts/leak-check.sh`, `scripts/docs-check.sh` and, unless only Markdown is staged, `npm run check` before each commit, `check.yml` checks the PR). `feat` bumps the minor version, `fix` and `perf` the patch, `!` the major: that PR bumps `package.json` (`scripts/bump.sh "<title>"` does it). Other types, and any Markdown-only change, need no bump. A push to `main` tags and releases the version with notes generated from the merged PR titles.
+- Commit messages and PR titles are Conventional Commits, `type(scope): subject` (`scripts/conventional.sh` has the rule; `.githooks/commit-msg` and `.githooks/pre-commit` run the checks, and those files say which; `check.yml` checks the PR). `feat` bumps the minor version, `fix` and `perf` the patch, `!` the major: that PR bumps `package.json` (`scripts/bump.sh "<title>"` does it). Other types, and any Markdown-only change, need no bump. A push to `main` tags and releases the version with notes generated from the merged PR titles.
 - Read-only `bb ona status` is fine, but only when the owner is present.
 
 ## Coupled changes
