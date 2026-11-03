@@ -98,9 +98,6 @@ export const MOVE_MACHINE_ASIDE = [
   'host="$1"; legacy="$2"',
   // An empty id would match a folder whose host-id file is empty.
   '[ -n "$host" ] || exit 2',
-  // Without a working ps and awk the stop loop sees no daemon, and the folder would move under a
-  // live one; a ps that ignores -o prints other columns, so this shell must show under its parent.
-  `ps -e -o pid= -o ppid= -o args= | awk -v me="$$" -v pp="$PPID" '$1 == me && $2 == pp {ok=1} END {exit !ok}' || exit 4`,
   'for id in "$HOME"/.bb-machines/*/host-id ${legacy:+"$legacy/host-id"}; do',
   '  [ -f "$id" ] && [ "$(cat "$id")" = "$host" ] || continue',
   '  data="${id%/host-id}"',
@@ -114,7 +111,11 @@ export const MOVE_MACHINE_ASIDE = [
   // has no trailing slash, and `cat` and `ls` have exited.
   // shortcut: a daemon started from a `bb-app` on the PATH has no folder in its
   // command line, so it keeps running while the folder moves; match its BB_DATA_DIR if a box shows one.
-  `  while pids=$(ps -e -o pid= -o args= | awk 'index($0, ENVIRON["real"] "/") {print $1}') && [ -n "$pids" ]; do`,
+  // A listing without this shell under its parent (ps failed or ignores -o, no awk) can't be
+  // trusted: exit 4 rather than move the folder under a live daemon the listing hid.
+  "  while :; do",
+  `    pids=$(ps -e -o pid= -o ppid= -o args= | awk -v me="$$" -v pp="$PPID" '$1 == me && $2 == pp {ok=1} index($0, ENVIRON["real"] "/") {print $1} END {exit !ok}') || exit 4`,
+  '    [ -n "$pids" ] || break',
   // Repeated so a supervisor's restart is caught too; forced after 10 s.
   '    n=$((n + 1)); [ "$n" -gt 10 ] && { kill -9 $pids 2>/dev/null; break; }',
   "    kill $pids 2>/dev/null; sleep 1",
@@ -505,7 +506,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
 
   /**
    * Whether bb's daemon runs on a box: true, false, or null when SSH or the
-   * process check on the box couldn't tell. Only call it for a box Ona reports RUNNING (SSH starts stopped boxes).
+   * process check on the box couldn't tell. Only call it for a box Ona reports
+   * RUNNING (SSH starts stopped boxes).
    */
   async function daemonAlive(resource: OnaResource, signal: AbortSignal): Promise<boolean | null> {
     const { exitCode } = await executorFor(deps.sshBinary, resource.envId, [])

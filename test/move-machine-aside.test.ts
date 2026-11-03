@@ -86,8 +86,8 @@ test("a folder whose server host contains .old is still moved aside", sandboxed,
   assert.match(readdirSync(disk).sort()[0] ?? "", /^bb\.old-2\.example\.com-8443\.old-\d{8}T\d{6}Z$/);
 });
 
-// Bug: on a box without a working ps (missing, or one that rejects -e) or without
-// awk, the stop loop saw no daemon and the folder moved under a live one.
+// Bug: a ps or awk that is missing, fails, or ignores -o made the stop loop see no daemon,
+// and the folder moved under a live one.
 const brokenTools: [string, string][] = [
   ["ps", "exit 127"],
   ["awk", "exit 127"],
@@ -103,6 +103,21 @@ for (const [tool, body] of brokenTools) {
     assert.equal(running(0), true);
   });
 }
+
+// Bug: a ps that failed after a listing that worked ended the stop loop as if no daemon
+// were left, and the folder moved.
+test("a ps that fails during the stop loop leaves the folder and exits 4", sandboxed, async (t) => {
+  const { home, disk, remove } = devbox(t);
+  writeFileSync(
+    join(home, "ps"),
+    `#!/bin/sh\nif [ -f "$HOME/ps-ran" ]; then exit 1; fi; touch "$HOME/ps-ran"; exec /bin/ps "$@"\n`,
+    {
+      mode: 0o755,
+    },
+  );
+  assert.equal(await remove("host-1", "", `${home}:${process.env.PATH}`), 4);
+  assert.deepEqual(readdirSync(disk).sort(), ["server-host-1", "server-host-10"]);
+});
 
 // Bug: a remove that moved nothing said nothing, as if the folder had moved.
 test("removing a machine whose data folder isn't on the box changes nothing and exits 3", sandboxed, async (t) => {
