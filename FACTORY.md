@@ -28,8 +28,7 @@ the quick fix is right and when it is not.
 - **Reviewer.** A fresh agent (not the builder) briefed to break the change:
   it hunts for the input, timing or state that makes it wrong, and reports
   only findings with a concrete failing case. Plus the repo's `code-review`
-  pass and `/ponytail-review`, which runs as its own agent with the skill, not
-  in-line in the orchestrator: three passes on every PR this flow opens, all
+  pass and `/ponytail-review`: three passes on every PR this flow opens, all
   independent of the orchestrator. Findings go back to the builder until clean.
 
 Subagents run on Haiku at max effort by default (for example: builders of
@@ -73,12 +72,11 @@ those and the "skipped or not checked" lines ponytail ends with.
    candidate rules on the code, count the hits, propose only what pays, and
    let the owner pick. A task that touches bb's machine lifecycle (create,
    resume, suspend, remove, reconnect, the daemon) has its brief name the bb
-   server function the builder reads first. bb 0.48.1's source is the `bb-app`
-   package bundled inside the bb app; `docs/ona-notes.md` (bb SDK section) gives
-   the path. Read it with bounded grep (`grep -n`, piped to `head`). Its
-   round-1 adversarial reviewer is briefed to read that source too (R18: three
-   review rounds went to a design that bb's source ruled out). Execute only
-   once sure; until then, ask.
+   server function the builder reads first. The source path is in
+   `docs/ona-notes.md` (bb SDK section). Read it with bounded grep (`grep -n`,
+   piped to `head`). Its round-1 adversarial reviewer runs on Opus at medium
+   effort and is briefed to read that source too. Execute only once sure; until
+   then, ask.
 2. **Size.** A task is one PR a reviewer can read in one sitting: one roadmap
    item, or a group of its bullets that share files. Split anything larger.
    Independent tasks run in parallel; tasks that touch the same files run in
@@ -103,9 +101,11 @@ those and the "skipped or not checked" lines ponytail ends with.
    this flow opens, with no exception for a small or docs-only change. After
    that, `code-review` runs every round; the adversarial pass and
    `/ponytail-review` run on every round whose diff changed code since they
-   last ran (comments, docs and lint messages are not code). A PR opens after a
-   round with no open findings, and only once all three have run on code that
-   has not changed since. Check the ten Code Review Rules in `AGENTS.md`.
+   last ran (comments, docs and lint messages are not code). The Code Review
+   Rules in `AGENTS.md` and the rules table in `docs/sync.md` count as code. A PR
+   opens after a round with no open findings, and only once all three have run
+   on code that has not changed since. Check the ten Code Review Rules in
+   `AGENTS.md`.
 7. **Open the PR.** Push the branch and open a pull request against `main`.
    The title is a Conventional Commit (`type(scope): subject`, see
    `AGENTS.md`): the squash merge makes it the commit on `main`, and it
