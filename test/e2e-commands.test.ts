@@ -172,13 +172,13 @@ test("bb ona reconnect refuses a suspended machine (fails if it opens a tunnel o
     status: "disconnected",
     lifecycle: { phase: "suspended", message: null, suspendedAt: 1 },
   });
+  assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:off/);
   const result = await host.harness.behavior.runCli(["reconnect", resource.envId]);
   assert.equal(result.exitCode, 1);
   assert.match(
     result.stderr ?? "",
     /is suspended in bb, so it was not reconnected\. Resume it with `bb machine resume ona:/,
   );
-  // The tunnel was closed by the provider's suspend in the idle-release test above.
   assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:off/);
   assert.deepEqual(bootstraps, []);
   assert.deepEqual(onaCalls(), []);

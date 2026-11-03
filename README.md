@@ -157,7 +157,9 @@ whose data folder is directly inside `~/.bb-machines`, so the plugin makes
 symlink resolves to each devbox's own disk. If `~/.bb-machines` already exists
 as a real folder, setup stops and asks you to move it aside
 (`mv ~/.bb-machines ~/.bb-machines.shared`). Settings apply to machines added
-after you change them.
+after you change them, except `codexSqliteHome`: a change applies when the
+machine is reconnected (`bb ona reconnect`, only while the machine is active in
+bb) or resumed from suspended.
 
 ## Usage
 

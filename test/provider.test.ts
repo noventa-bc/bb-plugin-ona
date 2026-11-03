@@ -18,8 +18,11 @@ const box = (phase: string): OnaEnvironment => ({
   status: { phase: `ENVIRONMENT_PHASE_${phase}` },
 });
 
+const adoptedResource = { envId: "env-1", envName: "box", adopted: true, key: "key-1" };
+
 /**
  * `phases`: what each Ona lookup returns in turn (null is a box Ona no longer has).
+ * `lookupFails`: every Ona lookup throws.
  * `rootExits`: the `~/.bb-machines` script's exit codes in turn. Both repeat their last entry.
  * `preflightExit`: the prerequisites check's exit code. Every other command exits 0.
  * `tunnel`: the box's tunnel is already open, in this state.
@@ -27,6 +30,7 @@ const box = (phase: string): OnaEnvironment => ({
 type Setup = {
   found: OnaEnvironment;
   phases?: (string | null)[];
+  lookupFails?: boolean;
   rootExits?: number[];
   rootOutput?: string;
   preflightExit?: number;
@@ -37,7 +41,15 @@ type Setup = {
 const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
 
 /** The provider in a fake host. `calls` logs Ona lookups and the root script; `tunnels`, tunnel opens and closes. */
-function register({ found, phases = [], rootExits = [], rootOutput = "", preflightExit = 0, tunnel }: Setup) {
+function register({
+  found,
+  phases = [],
+  lookupFails,
+  rootExits = [],
+  rootOutput = "",
+  preflightExit = 0,
+  tunnel,
+}: Setup) {
   const calls: string[] = [];
   const tunnels: string[] = [];
   const open = new Map(tunnel ? [[found.id, tunnel]] : []);
@@ -46,6 +58,7 @@ function register({ found, phases = [], rootExits = [], rootOutput = "", preflig
     getEnvironmentIfExists: async (_id: string, signal: AbortSignal) => {
       // As the real CLI call would: a loop that probes past an abort fails instead of spinning.
       signal.throwIfAborted();
+      if (lookupFails) throw new Error("Ona is unreachable");
       const phase = next(phases);
       calls.push(`get ${phase}`);
       return phase === null || phase === undefined ? null : box(phase);
@@ -122,7 +135,7 @@ function resume(setup: Setup) {
   const resumed = provider.resume!({
     ...lifecycle(),
     hostId: "host-1",
-    resource: { envId: "env-1", envName: "box", adopted: true, key: "key-1" },
+    resource: adoptedResource,
     signal: new AbortController().signal,
   });
   return { resumed, ...rest };
@@ -207,15 +220,42 @@ test("a resume that fails with the box's tunnel already open, connecting or up, 
   }
 });
 
-// Guards decision 0003's cleanup: after a failed adopt, bb's remove() is what closes the box's tunnel.
-test("remove of an adopted machine on a running box closes its tunnel", async () => {
+test("remove of an adopted machine closes its tunnel", async () => {
   const { provider, tunnels } = register({ found: box("RUNNING"), phases: ["RUNNING"], tunnel: "up" });
   const removed = await provider.remove({
-    report: { step() {}, log() {} },
+    report: lifecycle().report,
     hostId: "host-1",
-    resource: { envId: "env-1", envName: "box", adopted: true, key: "key-1" },
+    resource: adoptedResource,
     signal: new AbortController().signal,
   });
   assert.equal(removed.status, "removed");
+  assert.deepEqual(tunnels, ["stop env-1"]);
+});
+
+test("remove of an adopted machine whose Ona lookup throws still closes its tunnel", async () => {
+  const { provider, tunnels } = register({ found: box("RUNNING"), lookupFails: true, tunnel: "up" });
+  await assert.rejects(
+    provider.remove({
+      report: lifecycle().report,
+      hostId: "host-1",
+      resource: adoptedResource,
+      signal: new AbortController().signal,
+    }),
+    /Ona is unreachable/,
+  );
+  assert.deepEqual(tunnels, ["stop env-1"]);
+});
+
+test("remove of a bb-created machine whose Ona lookup throws still closes its tunnel", async () => {
+  const { provider, tunnels } = register({ found: box("RUNNING"), lookupFails: true, tunnel: "up" });
+  await assert.rejects(
+    provider.remove({
+      report: lifecycle().report,
+      hostId: "host-1",
+      resource: { envId: "env-1", envName: "box", adopted: false, key: "key-1" },
+      signal: new AbortController().signal,
+    }),
+    /Ona is unreachable/,
+  );
   assert.deepEqual(tunnels, ["stop env-1"]);
 });

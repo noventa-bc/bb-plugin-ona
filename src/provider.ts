@@ -281,9 +281,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
 
   /**
    * connect() for a machine bb doesn't show active yet (create, resume). An open
-   * tunnel keeps the box awake (decision 0003), so a failure closes the box's
-   * tunnel. A second machine on the box only comes from a failed adopt, whose
-   * cleanup `remove()` closes the tunnel when Ona answers.
+   * tunnel keeps the box awake (decision 0003), so a failure closes the box's tunnel.
    */
   async function connectOrClose(resource: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal) {
     try {
@@ -445,6 +443,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     async remove({ resource, hostId, report, signal }) {
       const owned = resourceSchema.parse(resource);
       if (owned.adopted) {
+        // Before the Ona lookup, which can throw: an open tunnel keeps the box awake (decision 0003).
+        await disconnect(owned.envId);
         const env = await ona.getEnvironmentIfExists(owned.envId, signal);
         // The machine is still removed either way; a folder left behind only blocks adopting the box again.
         // Told through the plugin log: bb 0.48.1 writes `report.log` only to its server log.
@@ -488,13 +488,16 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
               `Before adopting it again, start it and ${byHand}.`,
           );
         }
-        await disconnect(owned.envId);
         await deps.forgetBox(owned.envId);
         return { status: "removed" };
       }
       // `get` also returns boxes Ona already deleted or is deleting, which `list` hid.
-      // It runs first so a refused remove leaves the machine connected and its state kept.
-      const env = await ona.getEnvironmentIfExists(owned.envId, signal);
+      // The lookup runs before the tunnel closes, so a refused remove leaves the machine connected and its state kept.
+      // A lookup that throws closes the tunnel first, then the error goes on.
+      const env = await ona.getEnvironmentIfExists(owned.envId, signal).catch(async (error: unknown) => {
+        await disconnect(owned.envId);
+        throw error;
+      });
       const live = env && !isDeleted(env) ? env : null;
       const unpushed = live && unpushedWork(live);
       if (unpushed) {
