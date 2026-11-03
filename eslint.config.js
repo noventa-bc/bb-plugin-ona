@@ -41,7 +41,8 @@ export default tseslint.config(
           // (test/fake-clock.ts). `mock.reset()` resets the clock too.
           selector:
             "CallExpression[callee.property.name='reset']:matches([callee.object.name=/^(mock|timers)$/], [callee.object.property.name=/^(mock|timers)$/])",
-          message: "Reset the fake clock with resetFakeClock() from test/fake-clock.ts (stubs: mock.restoreAll()).",
+          message:
+            "Reset the fake clock with await resetFakeClock() from test/fake-clock.ts (stubs: mock.restoreAll()).",
         },
       ],
     },
