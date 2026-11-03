@@ -133,6 +133,10 @@ The shared listing is `OnaSnapshot` in `src/ona.ts`. Removing an Ona machine
 drops the box's stored keys (`forgetBox()` in `src/sync.ts`, called from the provider's `remove()`).
 `remove()` refuses to delete a created box that Ona reports unpushed commits
 on (`unpushedWork()` in `src/ona.ts`), before it disconnects or forgets anything.
+For an adopted box, `remove()` runs `MOVE_MACHINE_ASIDE` (`src/provider.ts`)
+over SSH, only when `ona environment get`, made just before, says the box is
+running (safety rule 1). It stops bb's daemon and moves bb's data folder aside;
+the box is never deleted.
 To add or change a rule, update `decide()`, its test in
 `test/reconcile.test.ts`, and the table above, all in the same change.
 

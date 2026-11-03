@@ -22,8 +22,14 @@ export const resourceSchema = z.object({
   adopted: z.boolean(),
   /** Creation key, reused for bootstrap recovery on resume. Not a secret. */
   key: z.string(),
-  /** Legacy BB_DATA_DIR from 0.1.0 enrollments; new machines use ~/.bb-machines. */
-  dataDir: z.string().optional(),
+  /**
+   * Legacy BB_DATA_DIR from 0.1.0 enrollments; new machines use ~/.bb-machines.
+   * Trailing slashes are dropped: `mv` can't move "dir/" to "dir/.old-…".
+   */
+  dataDir: z
+    .string()
+    .transform((dir) => dir.replace(/\/+$/, ""))
+    .optional(),
 });
 export type OnaResource = z.infer<typeof resourceSchema>;
 
@@ -78,6 +84,46 @@ export interface ProviderDeps {
   /** Opens the command channel to a box; `sshExecutor` unless a test passes a fake. */
   executorFor?: typeof sshExecutor;
 }
+
+/**
+ * Run on an adopted box when its machine is removed: stops the processes that
+ * run from the data folder of machine "$1" (bb's daemon) and moves the folder
+ * aside, never deleting it. bb's installer refuses a folder that names another
+ * machine, so a folder left in place blocks adopting the box again. "$2" is
+ * the legacy `dataDir`, which bb's installer used as the data folder itself.
+ * Exits 3 when no folder names the machine, and another non-zero code when the
+ * move failed.
+ */
+export const MOVE_MACHINE_ASIDE = [
+  'host="$1"; legacy="$2"',
+  // An empty id would match a folder whose host-id file is empty.
+  '[ -n "$host" ] || exit 2',
+  // Without a working ps the stop loop sees no daemon, and the folder would move under a live one.
+  "ps -eo pid=,args= >/dev/null || exit 4",
+  'for id in "$HOME"/.bb-machines/*/host-id ${legacy:+"$legacy/host-id"}; do',
+  '  [ -f "$id" ] && [ "$(cat "$id")" = "$host" ] || continue',
+  '  data="${id%/host-id}"',
+  // bb retries a remove whose later teardown step failed; the folder it moved still names the machine.
+  '  case "${data##*/}" in *.old-[0-9]*T[0-9]*Z) moved=1; continue ;; esac',
+  // A folder that holds other machines' data folders is never stopped or moved.
+  '  for other in "$data"/*/host-id; do [ -f "$other" ] && continue 2; done',
+  '  real=$(cd "$data" && pwd -P) || exit 1; export real; n=0',
+  // bb 0.48.1 starts the daemon from the resolved path. The script never stops
+  // itself: the path reaches awk through the environment, the legacy argument
+  // has no trailing slash, and `cat` and `ls` have exited.
+  // shortcut: a daemon started from a `bb-app` on the PATH has no folder in its
+  // command line, so it keeps running while the folder moves; match its BB_DATA_DIR if a box shows one.
+  `  while pids=$(ps -eo pid=,args= | awk 'index($0, ENVIRON["real"] "/") {print $1}') && [ -n "$pids" ]; do`,
+  // Repeated so a supervisor's restart is caught too; forced after 10 s.
+  '    n=$((n + 1)); [ "$n" -gt 10 ] && { kill -9 $pids 2>/dev/null; break; }',
+  "    kill $pids 2>/dev/null; sleep 1",
+  "  done",
+  // bb's installer allows one data folder per machine, so the first match is the only one.
+  '  mv "$data" "$data.old-$(date -u +%Y%m%dT%H%M%SZ)"; exit',
+  "done",
+  '[ -n "$moved" ] && exit 0',
+  "exit 3",
+].join("\n");
 
 /** Deterministic Ona name for a creation key, so retries find the same environment. */
 export function envNameForKey(key: string): string {
@@ -385,27 +431,47 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       const owned = resourceSchema.parse(resource);
       if (owned.adopted) {
         const env = await ona.getEnvironmentIfExists(owned.envId, signal);
+        // The machine is still removed either way; a folder left behind only blocks adopting the box again.
+        // Told through the plugin log: bb 0.48.1 writes `report.log` only to its server log.
+        const byHand =
+          `move aside the bb data folder whose host-id is ${hostId} ` +
+          `(see "Adopting a box again after removing its machine" in the plugin's README)`;
         if (env && isRunning(env)) {
-          report.step(`Stopping the bb daemon on ${nameOf(env, owned)} (environment is kept)`);
-          // The detached daemon and its supervisor both run from the data dir.
-          // Pass values as positional args so nothing is interpolated into the script.
-          const dataDir = owned.dataDir ?? "";
-          const script = [
-            'dir="${1:-$HOME/.bb-machines}"; host="$2"',
-            'pkill -f -- "$dir/" || true',
-            'for f in "$dir"/*/install-machine.sh "$dir"/install-machine.sh; do',
-            '  [ -f "$f" ] && bash "$f" --uninstall --host-id "$host" || true',
-            "done",
-          ].join("\n");
-          await executorFor(deps.sshBinary, owned.envId)
+          const name = nameOf(env, owned);
+          report.step(`Stopping the bb daemon on ${name} and moving its data folder aside (environment is kept)`);
+          let output = "";
+          // Values go in as positional args so nothing is interpolated into the script.
+          const { exitCode } = await executorFor(deps.sshBinary, owned.envId)
             .exec({
-              command: ["bash", "-c", script, "bb-ona-remove", dataDir, hostId],
+              command: ["bash", "-c", MOVE_MACHINE_ASIDE, "bb-ona-remove", hostId, owned.dataDir ?? ""],
               stdin: "",
               timeoutMs: 120_000,
               signal,
-              onOutput: () => {},
+              onOutput: (chunk) => {
+                output += chunk;
+              },
             })
-            .catch(() => undefined);
+            .catch((error: unknown) => {
+              output += String(error);
+              return { exitCode: -1 };
+            });
+          if (exitCode === 3) {
+            bb.log.warn(
+              `Found no bb data folder for machine ${hostId} on ${name}; nothing moved. If adopting it again fails, ${byHand}.`,
+            );
+          } else if (exitCode !== 0) {
+            // -1: timed out or SSH failed, so the script may still have finished.
+            const what = exitCode === -1 ? "May not have moved" : "Could not move";
+            bb.log.warn(
+              `${what} bb's data folder on ${name} aside (exit ${exitCode}: ${output.trim().slice(-300)}). ` +
+                `Before adopting it again, ${byHand}.`,
+            );
+          }
+        } else if (env && !isDeleted(env)) {
+          bb.log.warn(
+            `${nameOf(env, owned)} isn't running, so bb's data folder on it was left in place. ` +
+              `Before adopting it again, start it and ${byHand}.`,
+          );
         }
         await disconnect(owned.envId);
         await deps.forgetBox(owned.envId);
