@@ -74,9 +74,9 @@ those and the "skipped or not checked" lines ponytail ends with.
    resume, suspend, remove, reconnect, the daemon) has its brief name the bb
    server function the builder reads first. The source path is in
    `docs/ona-notes.md` (bb SDK section). Read it with bounded grep (`grep -n`,
-   piped to `head`). Its round-1 adversarial reviewer runs on Opus at medium
-   effort and is briefed to read that source too. Execute only once sure; until
-   then, ask.
+   piped to `head`). Its round-1 adversarial reviewer is briefed to read that
+   source too, so it runs on Opus (see the model paragraph under Roles).
+   Execute only once sure; until then, ask.
 2. **Size.** A task is one PR a reviewer can read in one sitting: one roadmap
    item, or a group of its bullets that share files. Split anything larger.
    Independent tasks run in parallel; tasks that touch the same files run in
@@ -101,8 +101,8 @@ those and the "skipped or not checked" lines ponytail ends with.
    this flow opens, with no exception for a small or docs-only change. After
    that, `code-review` runs every round; the adversarial pass and
    `/ponytail-review` run on every round whose diff changed code since they
-   last ran (comments, docs and lint messages are not code). The Code Review
-   Rules in `AGENTS.md` and the rules table in `docs/sync.md` count as code. A PR
+   last ran (comments, lint messages and docs are not code, except the Code
+   Review Rules in `AGENTS.md` and the rules table in `docs/sync.md`). A PR
    opens after a round with no open findings, and only once all three have run
    on code that has not changed since. Check the ten Code Review Rules in
    `AGENTS.md`.
