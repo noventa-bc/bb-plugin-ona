@@ -85,6 +85,25 @@ export async function keepAliveCommand(
   };
 }
 
+type HostPhase = Awaited<ReturnType<BbPluginApi["sdk"]["hosts"]["list"]>>[number]["lifecycle"]["phase"];
+
+/** What to do about a machine `bb ona reconnect` refused. No default: a new bb phase fails the typecheck. */
+function notActiveHint(phase: Exclude<HostPhase, "active">, machine: string): string {
+  switch (phase) {
+    case "suspended":
+      return `Resume it with \`bb machine resume ${machine}\`.`;
+    case "suspending":
+      return `Wait for the suspend to finish, then resume it with \`bb machine resume ${machine}\`.`;
+    // bb refuses a resume while creating, and one is under way while resuming.
+    case "creating":
+    case "resuming":
+      return "Try again once bb shows it active.";
+    case "removing":
+    case "destroyed":
+      return "It is being removed.";
+  }
+}
+
 /** What the status header says about the ona CLI. */
 export interface OnaHealth {
   lastError: string | null;
@@ -351,11 +370,7 @@ export function onaCommands(deps: OnaCommandDeps) {
           if (!row) return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${ref}".` };
           // A tunnel keeps the box awake, so none opens on a machine bb doesn't show active (decision 0003).
           if (row.phase !== "active") {
-            // bb refuses a resume while creating or removing, and one is under way while resuming.
-            const hint =
-              row.phase === "suspended"
-                ? `Resume it with \`bb machine resume ${row.machine}\`.`
-                : "Try again once bb shows it active.";
+            const hint = notActiveHint(row.phase as Exclude<HostPhase, "active">, row.machine);
             return { exitCode: 1, stderr: `${row.machine} is ${row.phase} in bb, so it was not reconnected. ${hint}` };
           }
           const steps: string[] = [];

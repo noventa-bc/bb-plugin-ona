@@ -279,17 +279,27 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     return bb.experimental_machines.bootstrap({ key, executor, report, signal });
   }
 
+  /** Whether another machine bb shows active uses this box, so its tunnel must stay up. */
+  async function activeSharer(envId: string): Promise<boolean> {
+    for (const host of await bb.sdk.hosts.list()) {
+      if (host.machineProviderId !== PROVIDER_ID || host.lifecycle.phase !== "active") continue;
+      const parsed = resourceSchema.safeParse(await bb.experimental_machines.getResource(host.id));
+      if (parsed.success && parsed.data.envId === envId) return true;
+    }
+    return false;
+  }
+
   /**
    * connect() for a machine bb doesn't show active yet (create, resume). An open
-   * tunnel keeps the box awake (decision 0003), so a failure closes the tunnel
-   * this call opened. One already up is left alone: another machine on the box may use it.
+   * tunnel keeps the box awake (decision 0003), so a failure closes the box's
+   * tunnel unless another active machine uses the box. If bb can't be asked, it
+   * closes: the next sync pass reopens a sharer's tunnel.
    */
   async function connectOrClose(resource: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal) {
-    const opened = tunnels.status(resource.envId) === "off";
     try {
       return await connect(resource, resource.key, report, signal);
     } catch (error) {
-      if (opened) await disconnect(resource.envId);
+      if (!(await activeSharer(resource.envId).catch(() => false))) await disconnect(resource.envId);
       throw error;
     }
   }

@@ -22,7 +22,8 @@ const box = (phase: string): OnaEnvironment => ({
  * `phases`: what each Ona lookup returns in turn (null is a box Ona no longer has).
  * `rootExits`: the `~/.bb-machines` script's exit codes in turn. Both repeat their last entry.
  * `preflightExit`: the prerequisites check's exit code. Every other command exits 0.
- * `tunnelUp`: the box's tunnel is already open, as for a box another machine uses.
+ * `tunnel`: the box's tunnel is already open, in this state.
+ * `sharer`: another machine bb shows active uses the box.
  */
 type Setup = {
   found: OnaEnvironment;
@@ -30,17 +31,18 @@ type Setup = {
   rootExits?: number[];
   rootOutput?: string;
   preflightExit?: number;
-  tunnelUp?: boolean;
+  tunnel?: "up" | "connecting";
+  sharer?: boolean;
 };
 
 /** The next entry in turn, the last one repeated. */
 const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
 
 /** The provider in a fake host. `calls` logs Ona lookups and the root script; `tunnels`, tunnel opens and closes. */
-function register({ found, phases = [], rootExits = [], rootOutput = "", preflightExit = 0, tunnelUp = false }: Setup) {
+function register({ found, phases = [], rootExits = [], rootOutput = "", preflightExit = 0, tunnel, sharer }: Setup) {
   const calls: string[] = [];
   const tunnels: string[] = [];
-  const open = new Set(tunnelUp ? [found.id] : []);
+  const open = new Map(tunnel ? [[found.id, tunnel]] : []);
   const ona = {
     findEnvironment: async () => found,
     getEnvironmentIfExists: async (_id: string, signal: AbortSignal) => {
@@ -64,19 +66,24 @@ function register({ found, phases = [], rootExits = [], rootOutput = "", preflig
       return { exitCode: next(rootExits)! };
     },
   };
+  // The machine under test is resuming; a sharer is another active machine on the same box.
+  const hosts = [{ id: "host-1", machineProviderId: "ona", lifecycle: { phase: "resuming" } }];
+  if (sharer) hosts.push({ id: "host-0", machineProviderId: "ona", lifecycle: { phase: "active" } });
   const host = createFakePluginHost({
     pluginId: "ona",
     machineBootstrap: { bootstrap: async () => ({ hostId: "host-1" }) },
+    machineResource: async (hostId) => ({ envId: found.id, envName: "box", adopted: true, key: hostId }),
+    sdk: { hosts: { list: async () => hosts as never } },
   });
   registerOnaProvider(host.bb, {
     availability: async () => ({ status: "available" }),
     ona,
     sshBinary: "ssh",
     tunnels: {
-      status: (envId: string) => (open.has(envId) ? "up" : "off"),
+      status: (envId: string) => open.get(envId) ?? "off",
       ensure(envId: string) {
         tunnels.push(`ensure ${envId}`);
-        open.add(envId);
+        if (!open.has(envId)) open.set(envId, "connecting");
       },
       stop(envId: string) {
         tunnels.push(`stop ${envId}`);
@@ -190,8 +197,18 @@ test("a create that fails at preflight closes the tunnel it opened and rethrows 
 });
 
 // Bug: a failed adopt of a box another machine uses closed that machine's tunnel, which the adopt never opened.
-test("an adopt of a box whose tunnel is already up fails at preflight and leaves the tunnel up", async () => {
-  const { created, tunnels } = start({ found: box("RUNNING"), preflightExit: 3, tunnelUp: true });
+test("an adopt of a box another active machine uses fails at preflight and leaves its tunnel up", async () => {
+  const { created, tunnels } = start({ found: box("RUNNING"), preflightExit: 3, tunnel: "up", sharer: true });
   await assert.rejects(created, /^Error: Devbox is missing bb prerequisites: missing: node$/);
   assert.deepEqual(tunnels, ["ensure env-1"]);
+});
+
+// Bug: the close keyed on "this call opened the tunnel", so a resume re-run after a stuck one found it
+// open and left it open on failure, keeping awake a box bb doesn't show active (decision 0003).
+test("a resume that fails with the box's tunnel already open, connecting or up, closes it", async () => {
+  for (const tunnel of ["connecting", "up"] as const) {
+    const { resumed, tunnels } = resume({ found: box("RUNNING"), phases: ["RUNNING"], preflightExit: 3, tunnel });
+    await assert.rejects(resumed, /^Error: Devbox is missing bb prerequisites: missing: node$/);
+    assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"], tunnel);
+  }
 });
