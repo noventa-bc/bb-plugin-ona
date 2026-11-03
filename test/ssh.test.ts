@@ -150,6 +150,9 @@ async function askTimes(gate: () => Promise<boolean>, seconds: number): Promise<
     return times;
   } finally {
     tunnels.stopAll();
+    // The aborted sleep removes its fake timer a microtask later; after a reset that removal
+    // corrupts the emptied fake queue, and the next test's timers never fire.
+    await settle();
     mock.timers.reset();
   }
 }

@@ -5,7 +5,12 @@ import { afterEach, beforeEach, mock } from "node:test";
 /** Mock the clock around every test in the calling file. */
 export function useFakeClock() {
   beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "Date"] }));
-  afterEach(() => mock.timers.reset());
+  // A sleep aborted at the end of a test removes its fake timer a microtask later; after a
+  // reset that removal corrupts the emptied fake queue, and the next test's timers never fire.
+  afterEach(async () => {
+    await settle();
+    mock.timers.reset();
+  });
 }
 
 /** Let pending work run up to its next sleep (setImmediate is not mocked). */
