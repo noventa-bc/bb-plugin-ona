@@ -341,6 +341,7 @@ export class HostGuard {
 export const DAEMON_PROBE = [
   "me=$$; pp=$PPID; found=1",
   // Without a working ps every folder would look empty, and a live daemon would be restarted.
+  // shortcut: a busybox ps built without -o prints its default table, so the probe always answers running (no restart, no heal); check the ppid column here if such a box shows up.
   "ps -e -o pid= >/dev/null || exit 2",
   'root="$HOME/.bb-machines"',
   'for dir in "$root" "$(readlink -f "$root" 2>/dev/null)" "$@"; do',

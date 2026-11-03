@@ -349,7 +349,9 @@ test("a daemon probe whose ps fails answers unknown", () => {
   try {
     writeFileSync(join(home, "ps"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
     const env = { ...process.env, HOME: home, PATH: `${home}:${process.env.PATH}` };
-    assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", home], { env }).status, 2);
+    const probe = spawnSync("bash", ["-c", DAEMON_PROBE, "probe", home], { env });
+    // Empty stderr: bash also exits 2 on a syntax error.
+    assert.deepEqual([probe.status, probe.stderr.toString()], [2, ""]);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
