@@ -49,7 +49,7 @@ Change these together, in the same edit.
 - Rule 1: simplicity, always. The simplest thing that fully works beats the clever, the general and the defensive.
 - Tests, fakes and stubs meet the same bar as `src/`: clear names, one job per helper, a comment only for a why. Not production code is no excuse for a mess.
 - Write the least code that solves the whole task (the ponytail ruleset, installed as a Claude Code plugin; see `docs/owner.md`). A shortcut with a known limit gets a comment `shortcut: <the limit>, <when to upgrade>`; `/ponytail-debt` lists them.
-- Fix a bug with a failing test first, where a test is possible.
+- Fix a bug with a failing test first, where a test is possible. A `// Bug:` line names only a bug that was on `main`, not a design tried and dropped inside the PR (git history has it).
 - When you find a bug, a source of noise or anything that can damage the repo, add the guard that stops it recurring in the same change: a test, a lint rule, a CI step, a `.gitignore` line or a written rule here. Say in the handoff which guard you added.
 - A change to what a sync pass does gets a scenario in `test/sync.test.ts` (fake bb calls, fake Ona listing).
 - For `server.ts` code without tests, list owner check steps in the handoff instead.
@@ -71,12 +71,13 @@ Change these together, in the same edit.
 - Write facts that stay true over time. Avoid words that depend on when the text is read.
 - A dated fact carries the words "checked YYYY-MM-DD".
 - Do not document what the code shows. Point to the code instead. Comments and docs
-  describe what exists; nothing about what was removed or is absent (git history has that).
+  describe what exists; nothing about what was removed or is absent (git history has
+  that; a `// Bug:` line in a test is the one exception).
 - `docs/ona-notes.md` holds facts about Ona and bb. A fact about a build or CI tool lives as a comment next to its pin.
 
 ## Code Review Rules
 
-The safety rules behind 1–4 are in `docs/sync.md`. Cite `file:line` for each finding. Report at most 5 nits. Run `/ponytail-review` on the diff as part of the review.
+The safety rules behind 1–4 are in `docs/sync.md`. Cite `file:line` for each finding. Report at most 5 nits. Run `/ponytail-review` on the diff in its own agent (FACTORY.md step 6).
 
 1. No SSH, start or stop of a box unless an Ona listing from the same check says the box is RUNNING. A failed listing means "unknown".
 2. Automatic suspends never stop a box.

@@ -28,13 +28,17 @@ the quick fix is right and when it is not.
 - **Reviewer.** A fresh agent (not the builder) briefed to break the change:
   it hunts for the input, timing or state that makes it wrong, and reports
   only findings with a concrete failing case. Plus the repo's `code-review`
-  pass and `/ponytail-review`: three passes on every PR this flow opens.
-  Findings go back to the builder until clean.
+  pass and `/ponytail-review`, which runs as its own agent with the skill, not
+  in-line in the orchestrator: three passes on every PR this flow opens, all
+  independent of the orchestrator. Findings go back to the builder until clean.
 
-Pick the cheapest model that can do the task well: a strong model for code,
-review and anything touching a safety rule; a small model (Haiku) for
-mechanical work (merges, renames, fixtures, lookups); the orchestrator checks
-a small model's output and briefs it with exact commands and a stop condition.
+Subagents run on Haiku at max effort by default (for example: builders of
+small changes, reviewers of tests, docs, lint and CI, mechanical work). Use
+Opus at medium effort only with a stated reason in its brief: a change to a
+safety rule or an accepted decision, a tricky concurrency or state bug, or a
+review that must read bb's source. The orchestrator runs on Fable. It checks
+a Haiku subagent's output and briefs it with exact commands and a stop
+condition.
 
 Merging on green is only as safe as CI. Every PR adds a test for the behaviour
 it changes; a gap CI cannot see (untested module, missing lint, unchecked
@@ -67,7 +71,14 @@ those and the "skipped or not checked" lines ponytail ends with.
    the task touches a tool, protocol or platform. A tooling or process item
    (lint, CI, hooks, release flow) starts with a measured survey: run the
    candidate rules on the code, count the hits, propose only what pays, and
-   let the owner pick. Execute only once sure; until then, ask.
+   let the owner pick. A task that touches bb's machine lifecycle (create,
+   resume, suspend, remove, reconnect, the daemon) has its brief name the bb
+   server function the builder reads first. bb 0.48.1's source is the `bb-app`
+   package bundled inside the bb app; `docs/ona-notes.md` (bb SDK section) gives
+   the path. Read it with bounded grep (`grep -n`, piped to `head`). Its
+   round-1 adversarial reviewer is briefed to read that source too (R18: three
+   review rounds went to a design that bb's source ruled out). Execute only
+   once sure; until then, ask.
 2. **Size.** A task is one PR a reviewer can read in one sitting: one roadmap
    item, or a group of its bullets that share files. Split anything larger.
    Independent tasks run in parallel; tasks that touch the same files run in
@@ -87,11 +98,14 @@ those and the "skipped or not checked" lines ponytail ends with.
 6. **Review.** The orchestrator reads the handoff and the diff, runs the
    adversarial reviewer (brief: the diff, the files it touches, the specific
    ways it could fail, never the orchestrator's own verdict), `code-review`
-   and `/ponytail-review branch`, and sends findings back to the builder.
-   All three passes run on every PR this flow opens, with no exception for a
-   small or docs-only change, and a pass that did not run blocks the PR.
-   Each round of fixes runs all three again; the PR opens after a round with
-   no open findings. Check the ten Code Review Rules in `AGENTS.md`.
+   and `/ponytail-review branch`, each in its own agent, and sends findings
+   back to the builder. All three passes run on the first round of every PR
+   this flow opens, with no exception for a small or docs-only change. After
+   that, `code-review` runs every round; the adversarial pass and
+   `/ponytail-review` run on every round whose diff changed code since they
+   last ran (comments, docs and lint messages are not code). A PR opens after a
+   round with no open findings, and only once all three have run on code that
+   has not changed since. Check the ten Code Review Rules in `AGENTS.md`.
 7. **Open the PR.** Push the branch and open a pull request against `main`.
    The title is a Conventional Commit (`type(scope): subject`, see
    `AGENTS.md`): the squash merge makes it the commit on `main`, and it
@@ -175,6 +189,12 @@ Rules the owner gave that no section above states. Checked 2026-11-02.
   `sh -c "cd <worktree> && npm run check"`: a `cd` at the start of a compound
   command can be dropped, and `npm` run from a folder without `package.json`
   walks up and installs into the live checkout.
+- Before any commit, the check runs as its own command (the `sh -c` form above)
+  and its exit code is read before the commit. Never chain `npm run check` into
+  a commit with `;` (the commit runs even when the check fails) or pipe it into
+  grep (the exit code is grep's). `.githooks/pre-commit` (set by `npm install`)
+  runs the checks on every commit; a checkout without the hook reads the exit
+  code by hand (checked 2026-11-03).
 - A subagent cannot see the owner's approvals and refuses to install, commit or
   push. Builders leave work staged; the orchestrator commits, pushes and runs
   approved installs in the builder's worktree, then tells it to continue.
