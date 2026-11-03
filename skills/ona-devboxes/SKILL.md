@@ -51,7 +51,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
 - `ssh "$(bb ona host <machine-or-env>)"` — interactive shell; `bb ona ssh <ref>` prints the command.
 - `bb ona open <ref>` — open in your Ona editor.
 - `bb ona reconnect <ref>` — reopen the tunnel and restart the daemon. A changed setting applies after `bb plugin reload ona`, not on reconnect.
-  Refused on a machine bb doesn't show active; `bb machine resume <m>` resumes a suspended one.
+  Refused unless bb shows the machine active and Ona shows its box running; `bb machine resume <m>` resumes a suspended one.
 - `bb ona status [ref]` — bb's view of each devbox next to Ona's, and what the plugin last did and why.
   Use it first when bb and Ona disagree (box changed outside bb); `bb ona sync [ref]` re-checks and repairs now.
 - `bb ona keep-alive <ref> <duration>` — keep a running devbox from Ona's inactivity timeout

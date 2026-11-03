@@ -178,14 +178,17 @@ test("status text names a busy thread with no update for over 6h", () => {
 
 const ROW = { hostId: "host_1", machine: "ona:box", status: "active", phase: "active", resource: { envId: "env_1" } };
 
-/** `phase`: the bb lifecycle phase of the one machine. */
-function fakeRun(phase = "active") {
+/** `phase`: the bb lifecycle phase of the one machine. `ona`: its Ona phase, or null when Ona doesn't list it. */
+function fakeRun(phase = "active", ona: string | null = "RUNNING") {
   const calls: string[] = [];
   const machine = { ...ROW, phase };
+  const envs =
+    ona === null ? [] : [{ id: "env_1", metadata: { name: "box" }, status: { phase: `ENVIRONMENT_PHASE_${ona}` } }];
   const deps = {
     machines: () => Promise.resolve([machine]),
     findMachine: (ref: string) => Promise.resolve(ref === "box" ? machine : null),
     guard: new HostGuard(),
+    snapshot: { refresh: async () => ({ envs, at: 0 }), lastError: null },
     provider: { reconnect: async (resource: { envId: string }) => void calls.push(`reconnect ${resource.envId}`) },
     tunnels: { status: () => "up" },
     resolveEnvId: (ref: string) => Promise.resolve(ref === "box" ? "env_1" : ref),

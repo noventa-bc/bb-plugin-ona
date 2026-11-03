@@ -382,6 +382,25 @@ export function onaCommands(deps: OnaCommandDeps) {
               exitCode: 1,
               stderr: `${row.machine} is busy (${busy}); try again shortly or see \`bb ona status\`.`,
             };
+          // Safety rule 1 (docs/sync.md): SSH starts a stopped box, so Ona is asked right before the connect.
+          // A failed listing refuses too: "unknown" is not "running".
+          const listing = await snapshot.refresh().catch(() => null);
+          if (!listing) {
+            return {
+              exitCode: 1,
+              stderr: `Ona could not be asked about ${row.machine}, so it was not reconnected. Resume it with \`bb machine resume ${row.machine}\`.`,
+            };
+          }
+          const env = listing.envs.find((e) => e.id === row.resource.envId);
+          if (!isRunning(env)) {
+            const phase = env
+              ? (env.status?.phase ?? "unknown").replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase()
+              : "not listed";
+            return {
+              exitCode: 1,
+              stderr: `${row.machine} is ${phase} in Ona, so it was not reconnected. Resume it with \`bb machine resume ${row.machine}\`.`,
+            };
+          }
           await guard.run(
             row.hostId,
             "reconnect",

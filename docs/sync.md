@@ -57,7 +57,7 @@ you asked for, so safety rule 1 does not gate it.
 **Safety rules.** Every automatic action keeps these:
 
 1. **Never wake a box.** Ona's SSH starts a stopped box, so the plugin uses SSH
-   (tunnel connect and reconnect, daemon check, cost collector, and the cleanup
+   (tunnel connect and reconnect, `bb ona reconnect`, daemon check, cost collector, and the cleanup
    when you remove an adopted box's machine) only when Ona, asked right before it, says
    the box is running: an `ona environment list`, or for that cleanup
    `ona environment get` ([0005](decisions/0005-lookup-by-id-counts-as-listing.md)). A
@@ -73,7 +73,7 @@ you asked for, so safety rule 1 does not gate it.
    sees the box stopped asks bb to suspend it once bb no longer shows the
    machine connected.
    These commands you run yourself are not gated and may wake a box:
-   `ona environment open`, `bb ona reconnect` and `bb ona ssh --thread`.
+   `ona environment open` and `bb ona ssh --thread`.
    *Why: an accidental start costs money and keeps the box up.*
 2. **Never stop a box.** Suspends the plugin makes because of what it saw in Ona
    skip the provider's stop. *Why: a wrong or stale listing must not stop a box with your work on it.*
