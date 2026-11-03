@@ -91,8 +91,8 @@ export interface ProviderDeps {
  * aside, never deleting it. bb's installer refuses a folder that names another
  * machine, so a folder left in place blocks adopting the box again. "$2" is
  * the legacy `dataDir`, which bb's installer used as the data folder itself.
- * Exits 3 when no folder names the machine, and another non-zero code when the
- * move failed.
+ * Exits 3 when no folder names the machine, 4 when the daemon couldn't be listed
+ * or didn't stop (the folder stays), and another non-zero code when the move failed.
  */
 export const MOVE_MACHINE_ASIDE = [
   'host="$1"; legacy="$2"',
@@ -107,18 +107,21 @@ export const MOVE_MACHINE_ASIDE = [
   '  for other in "$data"/*/host-id; do [ -f "$other" ] && continue 2; done',
   '  real=$(cd "$data" && pwd -P) || exit 1; export real; n=0',
   // bb 0.48.1 starts the daemon from the resolved path. The script never stops
-  // itself: the path reaches awk through the environment, the legacy argument
-  // has no trailing slash, and `cat` and `ls` have exited.
+  // itself: the folder path reaches awk through the environment, the legacy argument
+  // has no trailing slash, and the `cat` that read host-id has exited.
   // shortcut: a daemon started from a `bb-app` on the PATH has no folder in its
   // command line, so it keeps running while the folder moves; match its BB_DATA_DIR if a box shows one.
-  // A listing without this shell under its parent (ps failed or ignores -o, no awk) can't be
-  // trusted: exit 4 rather than move the folder under a live daemon the listing hid.
+  // A ps that exits non-zero, even after printing part of its list, is unknown, and so is a listing
+  // without this shell under its parent (ps ignores -o, or no awk): exit 4 rather than move the
+  // folder under a daemon the listing hid.
   "  while :; do",
-  `    pids=$(ps -e -o pid= -o ppid= -o args= | awk -v me="$$" -v pp="$PPID" '$1 == me && $2 == pp {ok=1} index($0, ENVIRON["real"] "/") {print $1} END {exit !ok}') || exit 4`,
+  "    out=$(ps -e -o pid= -o ppid= -o args=) || exit 4",
+  `    pids=$(printf '%s\\n' "$out" | awk -v me="$$" -v pp="$PPID" '$1 == me && $2 == pp {ok=1} index($0, ENVIRON["real"] "/") {print $1} END {exit !ok}') || exit 4`,
   '    [ -n "$pids" ] || break',
-  // Repeated so a supervisor's restart is caught too; forced after 10 s.
-  '    n=$((n + 1)); [ "$n" -gt 10 ] && { kill -9 $pids 2>/dev/null; break; }',
-  "    kill $pids 2>/dev/null; sleep 1",
+  // Repeated so a supervisor's restart is caught too: TERM in rounds 1-10, KILL in rounds 11-12,
+  // each round sleeping one second. Still listed after round 12: exit 4, and the folder stays.
+  '    n=$((n + 1)); [ "$n" -gt 12 ] && exit 4',
+  '    if [ "$n" -gt 10 ]; then kill -9 $pids 2>/dev/null; else kill $pids 2>/dev/null; fi; sleep 1',
   "  done",
   // bb's installer allows one data folder per machine, so the first match is the only one.
   '  mv "$data" "$data.old-$(date -u +%Y%m%dT%H%M%SZ)"; exit',
@@ -464,8 +467,10 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
           } else if (exitCode !== 0) {
             // -1: timed out or SSH failed, so the script may still have finished.
             const what = exitCode === -1 ? "May not have moved" : "Could not move";
+            // Exit 4 can come after an earlier round already stopped the daemon.
+            const earlier = exitCode === 4 ? " The bb daemon may already have been stopped by an earlier round." : "";
             bb.log.warn(
-              `${what} bb's data folder on ${name} aside (exit ${exitCode}: ${output.trim().slice(-300)}). ` +
+              `${what} bb's data folder on ${name} aside (exit ${exitCode}: ${output.trim().slice(-300)}).${earlier} ` +
                 `Before adopting it again, ${byHand}.`,
             );
           }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -19,7 +19,7 @@ import {
   type MachineView,
   type OnaView,
 } from "../src/reconcile.ts";
-import { sandboxed } from "./sandbox.ts";
+import { brokenTools, partialPs, sandboxed } from "./sandbox.ts";
 
 const NOW = 10_000_000;
 const machine = (overrides: Partial<MachineView> = {}): MachineView => ({
@@ -346,13 +346,7 @@ test("daemon probe finds a process running from the data folder, and only that",
 // Bug: a box that couldn't list processes (ps missing or failing, a ps that rejects args=, no awk)
 // read as "no daemon", so a live daemon was restarted; a ps that ignores -o read as "running".
 test("a daemon probe that can't list processes answers unknown", () => {
-  const fakes: [string, string][] = [
-    ["ps", "exit 1"],
-    ["awk", "exit 127"],
-    // A busybox ps without -o support prints its default PID USER VSZ STAT COMMAND table.
-    ["ps", "exec /bin/ps -e -o pid= -o user= -o vsz= -o stat= -o args="],
-  ];
-  for (const [name, body] of fakes) {
+  for (const [name, body] of brokenTools) {
     const bin = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
     try {
       writeFileSync(join(bin, name!), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
@@ -364,4 +358,44 @@ test("a daemon probe that can't list processes answers unknown", () => {
   }
   // bash also exits 2 on a syntax error, so the whole script must parse.
   assert.equal(spawnSync("bash", ["-n", "-c", DAEMON_PROBE]).status, 0);
+});
+
+// Bug: a ps that printed a listing without the daemon, then exited 1, passed the trust check (this
+// shell's own line was there), so the probe answered "no daemon" and a live daemon was restarted.
+test("a daemon probe whose ps exits 1 after a listing without the daemon answers unknown", sandboxed, async () => {
+  const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
+  const bin = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
+  const dir = join(home, "data", ".bb-machines");
+  const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 10000)", `${dir}/daemon`], { stdio: "ignore" });
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    writeFileSync(join(bin, "ps"), `#!/bin/sh\n${partialPs(child.pid!)}\n`, { mode: 0o755 });
+    const env = { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` };
+    assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", dir], { env }).status, 2);
+  } finally {
+    child.kill();
+    rmSync(home, { recursive: true, force: true });
+    rmSync(bin, { recursive: true, force: true });
+  }
+});
+
+// Bug: a legacy data folder given through a symlink was matched only by its link path, so a daemon
+// run from the resolved folder read as "no daemon" and was restarted.
+test("a symlinked legacy data folder finds a daemon run from its resolved folder", sandboxed, async () => {
+  const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
+  const data = join(home, "real", "data");
+  mkdirSync(data, { recursive: true });
+  symlinkSync(join(home, "real"), join(home, "link"));
+  const daemonPath = `${realpathSync(data)}/npm/bin/bb-app`;
+  const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 10000)", daemonPath, "host-daemon"], {
+    stdio: "ignore",
+  });
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const env = { ...process.env, HOME: home };
+    assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", "", join(home, "link", "data")], { env }).status, 0);
+  } finally {
+    child.kill();
+    rmSync(home, { recursive: true, force: true });
+  }
 });

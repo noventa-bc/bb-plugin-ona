@@ -334,21 +334,25 @@ export class HostGuard {
 }
 
 /**
- * Remote script for rule 3: exit 0 if a bb daemon process runs from one of
- * the given data folders, 1 if none does. Every other exit (SSH failure,
- * timeout, a process listing it can't trust) means "unknown" and must not
- * trigger a restart.
+ * Remote script for rule 3: exit 0 if a process's command line names a path
+ * under ~/.bb-machines or under one of the folders given as arguments (each as
+ * given and resolved through symlinks), 1 if none does, and 2 if the process
+ * listing fails or can't be trusted. The caller treats any other exit, an SSH
+ * failure and a timeout as unknown, and restarts nothing.
  */
 export const DAEMON_PROBE = [
   "me=$$; pp=$PPID",
+  // shortcut: a daemon started from a `bb-app` on the PATH has no folder in its command line, so this probe answers no daemon for it; match its BB_DATA_DIR if a box shows one.
+  // A ps that exits non-zero, even after printing part of its list, is unknown.
+  "out=$(ps -e -o pid= -o ppid= -o args=) || exit 2",
   'root="$HOME/.bb-machines"',
-  'for dir in "$root" "$(readlink -f "$root" 2>/dev/null)" "$@"; do',
+  // A daemon's command line carries the resolved path, so each folder is matched as given and resolved.
+  'for dir in "$root" "$(readlink -f "$root" 2>/dev/null)" "$@" "$(readlink -f "$1" 2>/dev/null)" "$(readlink -f "$2" 2>/dev/null)"; do',
   '  [ -n "$dir" ] || continue',
-  // This shell, its parent and the ps/awk children carry the folder in their
-  // own command lines; skip them. A listing without this shell under its parent
-  // can't be trusted (ps failed or ignored -o, or no awk): that is unknown (2),
-  // never "no daemon", which would restart a live one.
-  '  ps -e -o pid= -o ppid= -o args= | awk -v d="$dir/" -v me="$me" -v pp="$pp" \'$1==me && $2==pp {ok=1} $1!=me && $1!=pp && $2!=me && index($0, d) {f=1} END {exit ok ? !f : 2}\'',
+  // This shell and its parent are skipped by pid; its children by ppid: ps, and the awk that carries
+  // the folder in its command line. A listing without this shell under its parent can't be trusted
+  // (ps ignores -o, or no awk): exit 2, never "no daemon", which would restart a live one.
+  `  printf '%s\\n' "$out" | awk -v d="$dir/" -v me="$me" -v pp="$pp" '$1==me && $2==pp {ok=1} $1!=me && $1!=pp && $2!=me && index($0, d) {f=1} END {exit ok ? !f : 2}'`,
   "  case $? in 0) exit 0 ;; 1) ;; *) exit 2 ;; esac",
   "done",
   "exit 1",

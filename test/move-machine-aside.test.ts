@@ -1,7 +1,7 @@
 // MOVE_MACHINE_ASIDE, the script that removing an adopted box runs over SSH,
 // run locally with bash against a temporary home laid out as on a devbox.
 import assert from "node:assert/strict";
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
@@ -19,7 +19,7 @@ import { test, type TestContext } from "node:test";
 import { promisify } from "node:util";
 import { MOVE_MACHINE_ASIDE } from "../src/provider.ts";
 import { DAEMON_PROBE } from "../src/reconcile.ts";
-import { sandboxed } from "./sandbox.ts";
+import { brokenTools, partialPs, sandboxed } from "./sandbox.ts";
 
 /**
  * A home whose ~/.bb-machines links to a local-disk folder (as `machineDataDir`
@@ -48,7 +48,7 @@ function devbox(t: TestContext) {
       (error: unknown) => (error as { code: number }).code,
     );
   const running = (i: number) => daemons[i]!.exitCode === null && daemons[i]!.signalCode === null;
-  return { home, disk, remove, running };
+  return { home, disk, remove, running, pids: daemons.map((daemon) => daemon.pid!) };
 }
 
 // Bug: the old script matched only ~/.bb-machines/ in command lines, but the
@@ -88,12 +88,6 @@ test("a folder whose server host contains .old is still moved aside", sandboxed,
 
 // Bug: a ps or awk that is missing, fails, or ignores -o made the stop loop see no daemon,
 // and the folder moved under a live one.
-const brokenTools: [string, string][] = [
-  ["ps", "exit 127"],
-  ["awk", "exit 127"],
-  // A busybox ps without -o support prints its default PID USER VSZ STAT COMMAND table.
-  ["ps", "exec /bin/ps -e -o pid= -o user= -o vsz= -o stat= -o args="],
-];
 for (const [tool, body] of brokenTools) {
   test(`a box whose ${tool} fails (${body}) moves nothing and exits 4`, sandboxed, async (t) => {
     const { home, disk, remove, running } = devbox(t);
@@ -115,6 +109,30 @@ test("a ps that fails during the stop loop leaves the folder and exits 4", sandb
       mode: 0o755,
     },
   );
+  assert.equal(await remove("host-1", "", `${home}:${process.env.PATH}`), 4);
+  assert.deepEqual(readdirSync(disk).sort(), ["server-host-1", "server-host-10"]);
+});
+
+// Bug: a ps that printed a listing without the daemon, then exited 1, passed the trust check (the
+// shell's own line was there), so the loop saw no daemon and moved the folder under it.
+test("a ps that exits 1 after a listing without the daemon moves nothing and exits 4", sandboxed, async (t) => {
+  const { home, disk, remove, running, pids } = devbox(t);
+  writeFileSync(join(home, "ps"), `#!/bin/sh\n${partialPs(pids[0]!)}\n`, { mode: 0o755 });
+  assert.equal(await remove("host-1", "", `${home}:${process.env.PATH}`), 4);
+  assert.deepEqual(readdirSync(disk).sort(), ["server-host-1", "server-host-10"]);
+  assert.equal(running(0), true);
+});
+
+// Bug: after ten TERM rounds the loop sent KILL and moved the folder without listing again, so a
+// daemon that the listing still showed was left running under the moved folder.
+test("a daemon still listed after the forced kills keeps its folder and exits 4", sandboxed, async (t) => {
+  const { home, disk, remove } = devbox(t);
+  // A pid that no longer exists: kill can't end it, and the listing keeps showing it.
+  const gone = spawnSync(process.execPath, ["-e", ""]).pid;
+  const folder = realpathSync(join(disk, "server-host-1"));
+  writeFileSync(join(home, "ps"), `#!/bin/sh\n/bin/ps "$@"\necho "${gone} 1 ${folder}/npm/bin/bb-app host-daemon"\n`, {
+    mode: 0o755,
+  });
   assert.equal(await remove("host-1", "", `${home}:${process.env.PATH}`), 4);
   assert.deepEqual(readdirSync(disk).sort(), ["server-host-1", "server-host-10"]);
 });
