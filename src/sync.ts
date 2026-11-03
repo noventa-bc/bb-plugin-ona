@@ -27,7 +27,7 @@ import {
   type OnaView,
   type PassScheduler,
 } from "./reconcile.ts";
-import { stuckThreads, threadStatuses, unarchived, type ThreadState } from "./updates.ts";
+import { liveThreads, stuckThreads, threadStatuses, type LiveThreadsArgs, type ThreadState } from "./updates.ts";
 
 export const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -70,7 +70,7 @@ export interface SyncBb {
       experimental_resume(args: { hostId: string }): Promise<BbHost>;
       experimental_reconcile(args: { hostId: string }): Promise<BbHost>;
     };
-    threads: { list(args: { hostId: string }): Promise<readonly ThreadRecord[]> };
+    threads: { list(args: LiveThreadsArgs): Promise<readonly ThreadRecord[]> };
     environments: { list(args: { hostId: string }): Promise<readonly WorkspaceView[]> };
   };
   experimental_machines: { getResource(hostId: string): Promise<unknown> };
@@ -212,7 +212,7 @@ export function createSync(deps: SyncDeps) {
     const candidates = rows.filter((row) => row.phase === "active" && guard.mayAct(row.hostId));
     const activity: MachineActivity[] = [];
     for (const row of candidates) {
-      const threads = await liveThreads(row.hostId);
+      const threads = await liveThreads(bb.sdk.threads, row.hostId);
       const connectedAt = (await bb.storage.kv.get<number>(connectedAtKey(row.resource.envId))) ?? pluginStartedAt;
       activity.push({
         hostId: row.hostId,
@@ -297,13 +297,8 @@ export function createSync(deps: SyncDeps) {
     }
   }
 
-  /** bb's threads on a host, archived ones dropped: those never hold or wake a box. */
-  async function liveThreads(hostId: string): Promise<ThreadRecord[]> {
-    return unarchived(await bb.sdk.threads.list({ hostId }));
-  }
-
   async function threadWaiting(hostId: string): Promise<boolean> {
-    const threads = await liveThreads(hostId);
+    const threads = await liveThreads(bb.sdk.threads, hostId);
     return threads.some(
       (thread) => thread.runtime.displayStatus === "waiting-for-host" || thread.queuedWork === "waiting",
     );
@@ -459,7 +454,7 @@ export function createSync(deps: SyncDeps) {
           keepAliveUntil: deps.keepAliveUntil(row.resource.envId),
           needsRecovery: (await workspaces(row.hostId)).needsRecovery,
           stuckThreads: stuckThreads(
-            await liveThreads(row.hostId).catch((error: unknown) => {
+            await liveThreads(bb.sdk.threads, row.hostId).catch((error: unknown) => {
               bb.log.info(`couldn't list threads on ${row.hostId}: ${errorText(error)}`);
               return [];
             }),
