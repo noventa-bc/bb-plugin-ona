@@ -58,18 +58,19 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 
 ## bb SDK
 
-- The plugin pins `@get-bb/plugin-sdk` 0.6.104, the SDK published with bb
-  0.48.1.
-- SDK 0.6.104 leaves `experimental_threadHeaderAction` and
-  `PluginThreadHeaderActionProps` out of its public types. Its app collector
-  still accepts the slot, so `app.tsx` takes the slot's types from the SDK's
-  `internal/plugin-app-collector` subpath. bb 0.48 still draws header items registered
-  through that slot (owner checked 2026-10-30).
-- SDK 0.6.104 has `experimental_threadAction` with `placement: "header"`. A
-  header action is a labelled button with an icon and a `run`, not a
-  component, so it can't show the cost chip. It could replace the DOM
-  workaround in `app.tsx` that hides bb's native "Open in" button.
-- SDK 0.6.104 has no `machine_busy` suspend error code.
+- The plugin pins `@get-bb/plugin-sdk` 0.6.109 (checked 2026-11-03).
+- SDK 0.6.109's public types do not declare an `experimental_threadHeaderAction`
+  slot (checked 2026-11-03). Its app collector still accepts the slot, so
+  `app.tsx` takes `LegacyThreadHeaderActionRegistration` from the SDK's
+  `internal/plugin-app-collector` subpath. bb 0.48 still draws header items
+  registered through that slot (owner checked 2026-10-30).
+- SDK 0.6.109 has `experimental_threadAction` on `app.slots` with
+  `placement: "header"` (checked 2026-11-03). A header action is a labelled
+  button with an icon and a `run`, not a component, so it can't show the cost
+  chip. It could replace the DOM workaround in `app.tsx` that hides bb's native
+  "Open in" button.
+- SDK 0.6.109 has no `machine_busy` suspend error code (checked 2026-11-03: the
+  name occurs nowhere in its typings or `dist`).
 - bb 0.48.1's `threads.list` leaves out hidden threads (workflow steps, side
   chats) unless asked with `includeHidden: true`, drops archived ones on the
   server with `archived: false`, and applies no limit when none is passed.
@@ -100,20 +101,23 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   `bb.log.*` also goes to `bb plugin logs <id>`; `report.step` text is cleared
   when the remove finishes (`lifecycleReporter` and `emitLog` in
   `server/dist/start-server.js`) (checked 2026-11-03).
-- In SDK 0.6.104 a provider resource is written by the provider's own lifecycle
+- In SDK 0.6.109 a provider resource is written by the provider's own lifecycle
   hooks (`create`, `suspend`, `resume`, through `checkpoint` or the returned
-  resource) and read with `getResource` (checked 2026-11-02).
-- SDK surfaces in 0.6.104 that the plugin doesn't use:
+  `resource`) and read with `PluginMachines.getResource` (checked 2026-11-03).
+- SDK surfaces in 0.6.109 that the plugin doesn't use (checked 2026-11-03):
+  - 13 of the 25 top-level members of `BbPluginApi` are never accessed by
+    `app.tsx`, `server.ts` or `src/`: one internal member, `pluginId`, `http`,
+    `realtime` (`bb.realtime.publish`), `agents`
+    (`bb.agents.contributeInstructions`), `providers`, `ui`, `experimental_hooks`,
+    `experimental_serverAccess`, `status` (`bb.status.needsConfiguration`),
+    `hosts`, `experimental_aiServices` and `onInstall`
+  - app slots (`app.slots`): `settingsSection`, `navPanel`,
+    `experimental_machineProviderInputs` and
+    `experimental_environmentProviderInputs`
   - host entries: `experimental_defineHostEntry` (plugin code on the daemon,
     fs watch, signals) and the `experimental_host.deleted` event
-  - UI: `settingsSection` and `navPanel`
-  - provider inputs: `experimental_machineProviderInputs` and
-    `experimental_environmentProviderInputs`
-  - `bb.agents.contributeInstructions`
-  - `bb.realtime.publish`
   - declarative `defineCli`
-  - `bb.status.needsConfiguration`
-  - `ephemeral: true` machines
+  - `ephemeral: true` machines (the plugin sets `ephemeral: false`)
 
 ## Known gaps
 
