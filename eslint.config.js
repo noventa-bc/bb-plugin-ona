@@ -37,9 +37,10 @@ export default tseslint.config(
           message: "bb can accept this without acting on it: check the returned host's lifecycle (lifecycleRefusal).",
         })),
         {
-          // A reset right after an aborted fake sleep breaks the next test's timers (test/fake-clock.ts).
+          // A reset right after an aborted fake sleep breaks the next test's timers on CI's Node
+          // (test/fake-clock.ts). `mock.reset()` resets the clock too.
           selector:
-            "CallExpression[callee.property.name='reset']:matches([callee.object.property.name='timers'], [callee.object.name='timers'])",
+            "CallExpression[callee.property.name='reset']:matches([callee.object.name=/^(mock|timers)$/], [callee.object.property.name=/^(mock|timers)$/])",
           message: "Turn the fake clock off with resetFakeClock() from test/fake-clock.ts.",
         },
       ],
