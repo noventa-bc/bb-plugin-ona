@@ -12,7 +12,7 @@ permissions:
 jobs:
   check:
     timeout-minutes: 10
-    # Pinned image: the -latest label moves on its own (checked 2026-10-30); Dependabot bumps it.
+    # Pinned image: the -latest label moves on its own (checked 2026-10-30); bump it by hand, Dependabot does not watch runner labels.
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
