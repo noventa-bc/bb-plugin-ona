@@ -503,8 +503,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
   });
 
   /**
-   * Whether bb's daemon runs on a box: true, false, or null when SSH couldn't
-   * tell. Only call it for a box Ona reports RUNNING (SSH starts stopped boxes).
+   * Whether bb's daemon runs on a box: true, false, or null when SSH or the
+   * process check on the box couldn't tell. Only call it for a box Ona reports RUNNING (SSH starts stopped boxes).
    */
   async function daemonAlive(resource: OnaResource, signal: AbortSignal): Promise<boolean | null> {
     const { exitCode } = await executorFor(deps.sshBinary, resource.envId, [])

@@ -343,16 +343,24 @@ test("daemon probe finds a process running from the data folder, and only that",
   }
 });
 
-// Bug: a ps that fails (missing, or one that rejects -e) read as "no daemon", so a live daemon was restarted.
-test("a daemon probe whose ps fails answers unknown", () => {
-  const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
-  try {
-    writeFileSync(join(home, "ps"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
-    const env = { ...process.env, HOME: home, PATH: `${home}:${process.env.PATH}` };
-    const probe = spawnSync("bash", ["-c", DAEMON_PROBE, "probe", home], { env });
-    // Empty stderr: bash also exits 2 on a syntax error.
-    assert.deepEqual([probe.status, probe.stderr.toString()], [2, ""]);
-  } finally {
-    rmSync(home, { recursive: true, force: true });
+// Bug: a box that couldn't list processes (ps missing or failing, a ps that ignores -o, no awk)
+// read as "no daemon", so a live daemon was restarted.
+test("a daemon probe that can't list processes answers unknown", () => {
+  const fakes = [
+    ["ps", "exit 1"],
+    ["ps", "echo '  PID USER COMMAND'; echo '    1 root init'"],
+    ["awk", "exit 127"],
+  ];
+  for (const [name, body] of fakes) {
+    const bin = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
+    try {
+      writeFileSync(join(bin, name!), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+      const env = { ...process.env, HOME: bin, PATH: `${bin}:${process.env.PATH}` };
+      assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", bin], { env }).status, 2, `${name}: ${body}`);
+    } finally {
+      rmSync(bin, { recursive: true, force: true });
+    }
   }
+  // bash also exits 2 on a syntax error, so the whole script must parse.
+  assert.equal(spawnSync("bash", ["-n", "-c", DAEMON_PROBE]).status, 0);
 });

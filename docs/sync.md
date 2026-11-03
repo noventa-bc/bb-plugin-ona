@@ -64,8 +64,8 @@ you asked for, so safety rule 1 does not gate it.
 2. **Never stop a box.** Suspends the plugin makes because of what it saw in Ona
    skip the provider's stop. *Why: a wrong or stale listing must not stop a box with your work on it.*
 3. **Never restart a live daemon.** The daemon is restarted only when the check
-   finds no daemon process. If the check can't tell (SSH failed, or the box
-   has no working `ps`), nothing is restarted.
+   finds no daemon process. If the check can't tell (SSH or the process check
+   on the box fails), nothing is restarted.
    *Why: a restart kills running agent turns.*
 4. **Unknown is not gone.** A failed or empty `ona environment list` changes
    nothing, and "missing" needs two listings in a row. A lookup by id

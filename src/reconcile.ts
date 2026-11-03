@@ -336,13 +336,13 @@ export class HostGuard {
 /**
  * Remote script for rule 3: exit 0 if a bb daemon process runs from one of
  * the given data folders, 1 if none does. Every other exit (SSH failure,
- * timeout, a ps that fails) means "unknown" and must not trigger a restart.
+ * timeout, a box where ps or awk doesn't work) means "unknown" and must not trigger a restart.
  */
 export const DAEMON_PROBE = [
   "me=$$; pp=$PPID; found=1",
-  // Without a working ps every folder would look empty, and a live daemon would be restarted.
-  // shortcut: a busybox ps built without -o prints its default table, so the probe always answers running (no restart, no heal); check the ppid column here if such a box shows up.
-  "ps -e -o pid= >/dev/null || exit 2",
+  // Without a working ps and awk every folder would look empty, and a live daemon would be restarted:
+  // ps must list this shell alone on its line (a ps that ignores -o prints more columns).
+  `ps -e -o pid= | awk -v me="$me" '$1 == me && NF == 1 {f=1} END {exit !f}' || exit 2`,
   'root="$HOME/.bb-machines"',
   'for dir in "$root" "$(readlink -f "$root" 2>/dev/null)" "$@"; do',
   '  [ -n "$dir" ] || continue',

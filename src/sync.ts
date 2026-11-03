@@ -340,7 +340,7 @@ export function createSync(deps: SyncDeps) {
               const alive = await provider.daemonAlive(resource, AbortSignal.timeout(30_000));
               if (alive === true) return "daemon is running; not restarting";
               if (alive === null)
-                return "couldn't tell whether the daemon runs (SSH failed, or the box has no working ps); not restarting";
+                return "couldn't tell whether the daemon runs (SSH or the process check on the box failed); not restarting";
               const report = { step: (text: string) => bb.log.info(`${machine}: ${text}`), log: () => {} };
               await provider.reconnect(resource, report, AbortSignal.timeout(15 * 60_000));
               return "daemon was down; restarted it";
