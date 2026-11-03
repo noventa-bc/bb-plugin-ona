@@ -3,11 +3,11 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mock, test } from "node:test";
+import { test } from "node:test";
 import { envNameForKey } from "../src/provider.ts";
 import { daemonEnv, shellQuote, sshCapture, sshExecutor, TunnelManager } from "../src/ssh.ts";
 import { pollUntil, sleep } from "../src/time.ts";
-import { resetFakeClock, settle, tick } from "./fake-clock.ts";
+import { enableFakeClock, resetFakeClock, settle, tick } from "./fake-clock.ts";
 
 const fakeSsh = fileURLToPath(new URL("./fake-ssh.sh", import.meta.url));
 const executor = sshExecutor(fakeSsh, "env-1");
@@ -143,7 +143,7 @@ async function askTimes(gate: () => Promise<boolean>, seconds: number): Promise<
     },
   );
   try {
-    mock.timers.enable({ apis: ["setTimeout", "Date"] });
+    enableFakeClock();
     tunnels.ensure("env-1");
     await tick(1_000, seconds);
     await settle();

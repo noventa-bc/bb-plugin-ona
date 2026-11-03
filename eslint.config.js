@@ -3,22 +3,6 @@
 // bb lifecycle calls whose result is ignored.
 import tseslint from "typescript-eslint";
 
-// bb can accept a lifecycle request without acting on it; use the host it returns.
-const lifecycleCalls = [
-  "ExpressionStatement > AwaitExpression",
-  "ExpressionStatement > UnaryExpression[operator='void']",
-  "ExpressionStatement",
-].map((parent) => ({
-  selector: `${parent} > CallExpression[callee.property.name=/^experimental_(suspend|resume|reconcile)$/]`,
-  message: "bb can accept this without acting on it: check the returned host's lifecycle (lifecycleRefusal).",
-}));
-
-// A bare reset right after an abort breaks the next test's fake timers (see test/fake-clock.ts).
-const bareClockReset = {
-  selector: "CallExpression[callee.property.name='reset'][callee.object.property.name='timers']",
-  message: "Turn the fake clock off with resetFakeClock() from test/fake-clock.ts.",
-};
-
 export default tseslint.config(
   // .semgrep/ holds Semgrep test fixtures, which break rules on purpose.
   { ignores: ["dist/", "node_modules/", ".semgrep/"] },
@@ -41,12 +25,25 @@ export default tseslint.config(
       "@typescript-eslint/only-throw-error": "error",
       "@typescript-eslint/switch-exhaustiveness-check": "error",
       "max-lines": ["error", { max: 500, skipBlankLines: true, skipComments: true }],
-      "no-restricted-syntax": ["error", ...lifecycleCalls, bareClockReset],
+      "no-restricted-syntax": [
+        "error",
+        // bb can accept a lifecycle request without acting on it; use the host it returns.
+        ...[
+          "ExpressionStatement > AwaitExpression",
+          "ExpressionStatement > UnaryExpression[operator='void']",
+          "ExpressionStatement",
+        ].map((parent) => ({
+          selector: `${parent} > CallExpression[callee.property.name=/^experimental_(suspend|resume|reconcile)$/]`,
+          message: "bb can accept this without acting on it: check the returned host's lifecycle (lifecycleRefusal).",
+        })),
+        {
+          // A reset right after an aborted fake sleep breaks the next test's timers (test/fake-clock.ts).
+          selector:
+            "CallExpression[callee.property.name='reset']:matches([callee.object.property.name='timers'], [callee.object.name='timers'])",
+          message: "Turn the fake clock off with resetFakeClock() from test/fake-clock.ts.",
+        },
+      ],
     },
-  },
-  {
-    files: ["test/fake-clock.ts"],
-    rules: { "no-restricted-syntax": ["error", ...lifecycleCalls] },
   },
   {
     // Dead `??`, `?.` and always-true checks hide a type that drifted from the code. Tests and

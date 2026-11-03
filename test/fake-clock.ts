@@ -4,18 +4,21 @@ import { afterEach, beforeEach, mock } from "node:test";
 
 /** Mock the clock around every test in the calling file. */
 export function useFakeClock() {
-  beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "Date"] }));
+  beforeEach(enableFakeClock);
   afterEach(resetFakeClock);
 }
 
+export const enableFakeClock = () => mock.timers.enable({ apis: ["setTimeout", "Date"] });
+
 /**
- * The only way to turn the fake clock off (eslint enforces it). On Node 24.6 and later
- * (checked 2026-11-03), a sleep aborted just before removes its fake timer a microtask
- * later; after a reset that removal corrupts the emptied queue, and the next test's
- * timers never fire.
+ * Turns the fake clock off; eslint flags a direct `mock.timers.reset()` elsewhere.
+ * shortcut: works around node:test removing an aborted sleep's fake timer a microtask
+ * late, which corrupts the emptied queue so the next test's timers never fire (seen on
+ * CI's Node 24.22.1, not on 24.3.0, checked 2026-11-03); drop the settle when Node fixes it.
  */
 export async function resetFakeClock() {
   await settle();
+  // eslint-disable-next-line no-restricted-syntax -- the one place the clock is reset
   mock.timers.reset();
 }
 
