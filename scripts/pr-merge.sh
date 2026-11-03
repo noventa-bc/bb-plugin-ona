@@ -47,7 +47,7 @@ fi
 if printf '%s\n' "$files" | grep -qx package.json; then
   behind=$(gh api "repos/{owner}/{repo}/compare/main...$sha" --jq .behind_by) || behind=unknown
   if [ "$behind" != "0" ]; then
-    echo "PR $pr changes package.json and is not up to date with main (behind by: $behind); merge main into it, set the version in package.json and package-lock.json to main's (a clean merge keeps the PR's), run scripts/bump.sh \"<PR title>\" again, and let CI run again" >&2
+    echo "PR $pr changes package.json and is not up to date with main (behind by: $behind); merge main into it, set the version in package.json and package-lock.json to main's (a clean merge keeps the PR's), run scripts/bump.sh \"<PR title>\" again, and let CI run again; for a Dependabot PR comment \`@dependabot rebase\` on it instead, wait for CI, then run this script again" >&2
     exit 1
   fi
 fi
