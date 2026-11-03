@@ -254,7 +254,7 @@ bb ona sync [name]             # re-check Ona now and repair out-of-step machine
 bb ona keep-alive <name> 2h    # keep a running box from Ona's idle timeout (at most 12h)
 bb ona keep-alive <name> off   # end it early
 bb ona rename <name> [new]     # rename env + bb machine (random fun name if omitted)
-bb ona reconnect <name>        # reopen the tunnel and restart the bb daemon
+bb ona reconnect <name>        # active machines: reopen the tunnel and restart the bb daemon
 bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
 bb machine resume ona:<name>   # starts it, reopens the tunnel, restarts the daemon (Play button)
 bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's daemon, moves its data folder aside
@@ -305,7 +305,7 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
 - **bb and Ona disagree about a box** (bb says down but it's running, or the
   other way round): run `bb ona status <name>`. It shows both views and what
   the plugin last did about it. `bb ona sync <name>` re-checks now, and
-  `bb ona reconnect <name>` restarts the daemon outright. Two lines to look for:
+  `bb ona reconnect <name>` restarts the daemon of an active machine outright. Two lines to look for:
   - "ERROR … (run `ona login`?)" at the top: the plugin can't reach Ona, so it
     changes nothing.
   - "gave up after 3 failures": the last error is shown next to it.

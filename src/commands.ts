@@ -141,7 +141,7 @@ export const usage = [
   "  bb ona open <ref>             Open the devbox in your Ona editor",
   "  bb ona shell <ref> -- <cmd…>  Run one command in the devbox checkout and print its output",
   "  bb ona rename <ref> [name]    Rename the Ona environment (random fun name if omitted) and its bb machine",
-  "  bb ona reconnect <ref>        Reopen the tunnel and restart the bb daemon (applies new settings)",
+  "  bb ona reconnect <ref>        Reopen an active machine's tunnel and restart its bb daemon (applies new settings)",
   "  bb ona status [ref] [--json]  bb's view of each devbox next to Ona's, and what the plugin last did",
   "  bb ona sync [ref]             Re-check Ona now and repair (ignores cooldowns, keeps the safety rules)",
   "  bb ona keep-alive <ref> <duration|off>  Keep a running devbox from Ona's inactivity timeout (at most 12h)",
@@ -183,7 +183,7 @@ export const commands = [
   },
   {
     name: "reconnect",
-    summary: "Reopen the tunnel and restart the bb daemon",
+    summary: "Reopen an active machine's tunnel and restart its bb daemon",
     usage: "bb ona reconnect <ref>",
   },
   {
@@ -349,6 +349,12 @@ export function onaCommands(deps: OnaCommandDeps) {
           if (!ref) break;
           const row = await findMachine(ref);
           if (!row) return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${ref}".` };
+          // A tunnel keeps the box awake, so none opens on a machine bb doesn't show active (decision 0003).
+          if (row.phase !== "active")
+            return {
+              exitCode: 1,
+              stderr: `${row.machine} is ${row.phase} in bb, so it was not reconnected. Resume it with \`bb machine resume ${row.machine}\`.`,
+            };
           const steps: string[] = [];
           const report = { step: (text: string) => steps.push(text), log: () => {} };
           const busy = guard.busyWith(row.hostId);

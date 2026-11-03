@@ -1,6 +1,6 @@
-// The provider's bootstrap waits, driven through `create` (adopt mode) in the SDK's fake
-// host with a fake `ona` and a fake command channel. setTimeout and Date are mocked, so
-// each tick is one poll interval and the tests are instant.
+// The provider's bootstrap waits, driven through `create` (adopt mode) and `resume` in the
+// SDK's fake host with a fake `ona`, a fake command channel and a fake tunnel manager.
+// setTimeout and Date are mocked, so each tick is one poll interval and the tests are instant.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { MachineExecutor } from "@get-bb/plugin-sdk";
@@ -20,16 +20,33 @@ const box = (phase: string): OnaEnvironment => ({
 
 /**
  * `phases`: what each Ona lookup returns in turn (null is a box Ona no longer has).
- * `rootExits`: the `~/.bb-machines` script's exit codes in turn; every other command exits 0.
- * Both repeat their last entry.
+ * `rootExits`: the `~/.bb-machines` script's exit codes in turn. Both repeat their last entry.
+ * `preflightExit`: the prerequisites check's exit code. Every other command exits 0.
+ * `stopFails`: closing a tunnel throws.
  */
-type Setup = { found: OnaEnvironment; phases?: (string | null)[]; rootExits?: number[]; rootOutput?: string };
+type Setup = {
+  found: OnaEnvironment;
+  phases?: (string | null)[];
+  rootExits?: number[];
+  rootOutput?: string;
+  preflightExit?: number;
+  stopFails?: boolean;
+};
 
 /** The next entry in turn, the last one repeated. */
 const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
 
-function start({ found, phases = [], rootExits = [], rootOutput = "" }: Setup) {
+/** The provider in a fake host. `calls` logs Ona lookups and the root script; `tunnels`, tunnel opens and closes. */
+function register({
+  found,
+  phases = [],
+  rootExits = [],
+  rootOutput = "",
+  preflightExit = 0,
+  stopFails = false,
+}: Setup) {
   const calls: string[] = [];
+  const tunnels: string[] = [];
   const ona = {
     findEnvironment: async () => found,
     getEnvironmentIfExists: async (_id: string, signal: AbortSignal) => {
@@ -43,6 +60,10 @@ function start({ found, phases = [], rootExits = [], rootOutput = "" }: Setup) {
   } as unknown as OnaCli;
   const executor: MachineExecutor = {
     async exec({ command, onOutput }) {
+      if (command[2]?.startsWith("missing=")) {
+        onOutput("missing: node");
+        return { exitCode: preflightExit };
+      }
       if (command[3] !== "bb-ona-root") return { exitCode: 0 };
       calls.push("root");
       onOutput(rootOutput);
@@ -57,7 +78,13 @@ function start({ found, phases = [], rootExits = [], rootOutput = "" }: Setup) {
     availability: async () => ({ status: "available" }),
     ona,
     sshBinary: "ssh",
-    tunnels: { ensure() {}, stop() {} } as unknown as TunnelManager,
+    tunnels: {
+      ensure: (envId: string) => void tunnels.push(`ensure ${envId}`),
+      stop(envId: string) {
+        tunnels.push(`stop ${envId}`);
+        if (stopFails) throw new Error("stop failed");
+      },
+    } as unknown as TunnelManager,
     defaultProject: "",
     inactivityTimeout: "",
     codexSqliteHome: "",
@@ -70,18 +97,37 @@ function start({ found, phases = [], rootExits = [], rootOutput = "" }: Setup) {
     forgetBox: async () => {},
     executorFor: () => executor,
   });
+  return { provider: host.harness.registrations.machineProviders.get("ona")!, host, calls, tunnels };
+}
+
+const lifecycle = () => ({ report: { step() {}, log() {} }, checkpoint: async () => {} });
+
+/** `create` in adopt mode, started. */
+function start(setup: Setup) {
+  const { provider, ...rest } = register(setup);
   const controller = new AbortController();
-  const created = host.harness.registrations.machineProviders.get("ona")!.create({
+  const created = provider.create({
+    ...lifecycle(),
     inputs: { mode: "adopt", environment: "box" },
     key: "key-1",
     attempt: 1,
-    report: { step() {}, log() {} },
     signal: controller.signal,
-    checkpoint: async () => {},
   });
   // Settled either way; the test awaits `created` itself.
   created.catch(() => {});
-  return { created, calls, controller };
+  return { created, controller, ...rest };
+}
+
+/** `resume` of the adopted machine, started. */
+function resume(setup: Setup) {
+  const { provider, ...rest } = register(setup);
+  const resumed = provider.resume!({
+    ...lifecycle(),
+    hostId: "host-1",
+    resource: { envId: "env-1", envName: "box", adopted: true, key: "key-1" },
+    signal: new AbortController().signal,
+  });
+  return { resumed, ...rest };
 }
 
 test("~/.bb-machines retries on exit 6 (fails if a real folder on a not-yet-mounted home is final)", async () => {
@@ -130,3 +176,25 @@ test(
     assert.deepEqual(calls, ["get STARTING"]);
   },
 );
+
+// Bug: connect() opens the tunnel before the tunnel wait, preflight and bootstrap, so a resume or
+// create that failed after it left the tunnel open, keeping awake a box bb doesn't show active (decision 0003).
+test("a resume that fails at preflight closes the tunnel it opened and rethrows (fails if the tunnel stays open)", async () => {
+  const { resumed, tunnels } = resume({ found: box("RUNNING"), phases: ["RUNNING"], preflightExit: 3 });
+  await assert.rejects(resumed, /^Error: Devbox is missing bb prerequisites: missing: node$/);
+  assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"]);
+});
+
+test("a create that fails at preflight closes the tunnel it opened and rethrows (fails if the tunnel stays open)", async () => {
+  const { created, tunnels } = start({ found: box("RUNNING"), preflightExit: 3 });
+  await assert.rejects(created, /^Error: Devbox is missing bb prerequisites: missing: node$/);
+  assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"]);
+});
+
+test("a tunnel close that throws after a failed resume is logged, and the resume error still surfaces", async () => {
+  const { resumed, host } = resume({ found: box("RUNNING"), phases: ["RUNNING"], preflightExit: 3, stopFails: true });
+  await assert.rejects(resumed, /missing bb prerequisites/);
+  assert.deepEqual(host.harness.inspection.logEntries, [
+    { level: "warn", message: "Could not close the tunnel to env-1 after a failed connect: Error: stop failed" },
+  ]);
+});

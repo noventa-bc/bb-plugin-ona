@@ -10,6 +10,7 @@ import {
   type OnaCommandDeps,
 } from "../src/commands.ts";
 import type { OnaEnvironment } from "../src/ona.ts";
+import { HostGuard } from "../src/reconcile.ts";
 import type { StatusRow } from "../src/sync.ts";
 
 test("parseArgs: positionals, flags, --json, --thread <id> and a shell command after --", () => {
@@ -175,12 +176,17 @@ test("status text names a busy thread with no update for over 6h", () => {
 // Dispatch only; list, sync, status and keep-alive also run end to end in
 // test/e2e-commands.test.ts. The fake holds just what these cases call.
 
-const ROW = { hostId: "host_1", machine: "ona:box", status: "active", resource: { envId: "env_1" } };
+const ROW = { hostId: "host_1", machine: "ona:box", status: "active", phase: "active", resource: { envId: "env_1" } };
 
-function fakeRun() {
+/** `phase`: the bb lifecycle phase of the one machine. */
+function fakeRun(phase = "active") {
   const calls: string[] = [];
+  const machine = { ...ROW, phase };
   const deps = {
-    machines: () => Promise.resolve([ROW]),
+    machines: () => Promise.resolve([machine]),
+    findMachine: (ref: string) => Promise.resolve(ref === "box" ? machine : null),
+    guard: new HostGuard(),
+    provider: { reconnect: async (resource: { envId: string }) => void calls.push(`reconnect ${resource.envId}`) },
     tunnels: { status: () => "up" },
     resolveEnvId: (ref: string) => Promise.resolve(ref === "box" ? "env_1" : ref),
     keepAlives: {
@@ -218,4 +224,24 @@ test("an unknown command, or one missing its <ref>, exits 1 with the usage", asy
   const { run } = fakeRun();
   assert.deepEqual(await run("frobnicate"), { exitCode: 1, stderr: usage });
   assert.deepEqual(await run("host"), { exitCode: 1, stderr: usage });
+});
+
+// Bug: reconnect never checked bb's view, so on a suspended machine it opened a tunnel that kept the box awake (decision 0003).
+test("reconnect on a machine bb doesn't show active exits 1 with the resume hint and never reconnects", async () => {
+  for (const phase of ["suspended", "suspending", "resuming"]) {
+    const { run, calls } = fakeRun(phase);
+    const result = await run("reconnect", "box");
+    assert.equal(result.exitCode, 1, phase);
+    assert.equal(
+      result.stderr,
+      `ona:box is ${phase} in bb, so it was not reconnected. Resume it with \`bb machine resume ona:box\`.`,
+    );
+    assert.deepEqual(calls, [], phase);
+  }
+});
+
+test("reconnect on an active machine reconnects it", async () => {
+  const { run, calls } = fakeRun();
+  assert.deepEqual(await run("reconnect", "box"), { exitCode: 0, stdout: "Reconnected ona:box" });
+  assert.deepEqual(calls, ["reconnect env_1"]);
 });
