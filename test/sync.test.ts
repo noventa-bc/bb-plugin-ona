@@ -38,6 +38,8 @@ function world(
   options: {
     refuse?: string;
     daemonAlive?: boolean | null;
+    /** Ona lists every box STOPPED once the daemon check has run. */
+    stopDuringProbe?: boolean;
     archived?: boolean | "not-found" | "fail";
     listing?: "fail" | "empty";
     autoRepair?: boolean;
@@ -146,6 +148,7 @@ function world(
       releasing,
       daemonAlive: async () => {
         calls.push("probe");
+        if (options.stopDuringProbe) for (const box of boxes) box.ona = "STOPPED";
         return options.daemonAlive ?? true;
       },
       reconnect: async () => void calls.push("restart daemon"),
@@ -324,6 +327,16 @@ test("a running box whose daemon dropped is probed, and restarted only if the da
     await sync.reconcile(new Set(["h1"]), { wait: true });
     assert.deepEqual(calls, daemonAlive === false ? ["probe", "restart daemon"] : ["probe"], String(daemonAlive));
   }
+});
+
+test("a box stopped in Ona while its daemon is checked is not restarted", async () => {
+  // Bug: the restart trusted the listing from before the check (up to 30 s of SSH), and its SSH would start the box.
+  const { sync, calls } = world([idle("h1", { status: "disconnected", lastSeenAt: NOW - HOUR })], {
+    daemonAlive: false,
+    stopDuringProbe: true,
+  });
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.deepEqual(calls, ["probe"]);
 });
 
 test("removing a machine drops its box's stored keys and leaves other boxes' alone", async () => {

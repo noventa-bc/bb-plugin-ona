@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import { envNameForKey } from "../src/provider.ts";
-import { daemonEnv, shellQuote, sshCapture, sshExecutor } from "../src/ssh.ts";
+import { daemonEnv, shellQuote, sshCapture, sshExecutor, TunnelManager } from "../src/ssh.ts";
+import { pollUntil, sleep } from "../src/time.ts";
+import { settle, tick } from "./fake-clock.ts";
 
 const fakeSsh = fileURLToPath(new URL("./fake-ssh.sh", import.meta.url));
 const executor = sshExecutor(fakeSsh, "env-1");
+const quiet = { debug() {}, info() {}, warn() {}, error() {} };
 
 test("shellQuote keeps safe words and quotes the rest", () => {
   assert.equal(shellQuote("node"), "node");
@@ -59,4 +65,82 @@ test("environment names are stable per key", () => {
 test("daemon env keeps Codex SQLite off the shared home only when configured", () => {
   assert.deepEqual(daemonEnv(""), ["BB_INSTALL_SKIP_SERVICE=1"]);
   assert.deepEqual(daemonEnv("/workspaces/x"), ["BB_INSTALL_SKIP_SERVICE=1", "CODEX_SQLITE_HOME=/workspaces/x"]);
+});
+
+test("a tunnel runs ssh only when its gate says yes: a gate that says no or throws never reaches the box", async () => {
+  // Bug: Ona's SSH starts a stopped box, so any ssh run past a no (or an unanswered) gate wakes it.
+  const dir = mkdtempSync(join(tmpdir(), "bb-ona-ssh-"));
+  const log = join(dir, "ssh.log");
+  process.env.FAKE_SSH_LOG = log;
+  const asked: string[] = [];
+  const tunnels = new TunnelManager(
+    fakeSsh,
+    () => 1,
+    () => 2,
+    quiet,
+    async (envId) => {
+      asked.push(envId);
+      if (envId === "env-throws") throw new Error("ona environment list failed");
+      return envId === "env-yes";
+    },
+  );
+  try {
+    for (const envId of ["env-no", "env-throws", "env-yes"]) tunnels.ensure(envId);
+    // env-yes shows a spawn reaches the log; the other two had the same time to (wrongly) spawn.
+    const signal = AbortSignal.timeout(10_000);
+    assert.ok(
+      await pollUntil(async () => existsSync(log) && readFileSync(log, "utf8").includes("env-yes"), {
+        deadlineMs: 10_000,
+        intervalMs: 20,
+        signal,
+      }),
+      "env-yes never reached ssh",
+    );
+    await sleep(200);
+    const calls = readFileSync(log, "utf8").trim().split("\n");
+    assert.equal(calls.length, 1, calls.join("\n"));
+    assert.match(calls[0]!, / env-yes\.ona\.environment$/);
+    assert.deepEqual(asked.sort(), ["env-no", "env-throws", "env-yes"]);
+  } finally {
+    tunnels.stopAll();
+    delete process.env.FAKE_SSH_LOG;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/** The fake times, in seconds, at which a tunnel asks `gate` over `seconds` of fake time. */
+async function askTimes(gate: () => Promise<boolean>, seconds: number): Promise<number[]> {
+  const times: number[] = [];
+  const tunnels = new TunnelManager(
+    fakeSsh,
+    () => 1,
+    () => 2,
+    quiet,
+    async () => {
+      times.push(Date.now() / 1_000);
+      return gate();
+    },
+  );
+  try {
+    mock.timers.enable({ apis: ["setTimeout", "Date"] });
+    tunnels.ensure("env-1");
+    await tick(1_000, seconds);
+    await settle();
+    return times;
+  } finally {
+    tunnels.stopAll();
+    mock.timers.reset();
+  }
+}
+
+test("a tunnel its gate refused asks again every 10 s for a minute, then every minute", async () => {
+  // Bug: a refusal waited 60 s, so a box Ona still showed STARTING just after a resume got its tunnel a minute late.
+  // Bug: at 10 s forever, a box stopped for good (or stuck) cost 6 Ona listings and 6 passes a minute.
+  assert.deepEqual(await askTimes(async () => false, 180), [0, 10, 20, 30, 40, 50, 60, 120, 180]);
+});
+
+test("a tunnel whose gate throws (Ona can't be asked) asks again every minute", async () => {
+  // Bug: a throw waited 10 s like a refusal, so a logged-out or down Ona CLI was called 6 times a minute per tunnel.
+  const gate = () => Promise.reject(new Error("ona environment list failed"));
+  assert.deepEqual(await askTimes(gate, 120), [0, 60, 120]);
 });

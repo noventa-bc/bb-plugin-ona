@@ -210,8 +210,9 @@ export function matchEnvironment(envs: readonly OnaEnvironment[], ref: string): 
   return prefixed.length === 1 ? prefixed[0]! : null;
 }
 
-export function isRunning(env: OnaEnvironment): boolean {
-  return env.status?.phase === "ENVIRONMENT_PHASE_RUNNING";
+/** Safety rule 1's test (docs/sync.md): a box the listing lacks is not running. */
+export function isRunning(env: OnaEnvironment | undefined): boolean {
+  return env?.status?.phase === "ENVIRONMENT_PHASE_RUNNING";
 }
 
 /** On its way up (created, starting, ...): starting it again would fail. */
@@ -262,10 +263,11 @@ export interface OnaListing {
 
 /**
  * One cached `ona environment list` shared by everything that only needs a
- * recent view (tunnel reconnects, the reconciler, status). Concurrent callers
- * share a single CLI call, so a burst of reconnects after the Mac wakes costs
- * one list, not one per box. Provider create/resume/suspend still ask Ona
- * directly: they act on what they read.
+ * recent view (the reconciler, status); anything about to SSH calls
+ * `refresh()` instead (safety rule 1). Concurrent callers share a single CLI
+ * call, so a pass over every box after the Mac wakes costs one list, not one
+ * per box. Provider create/resume/suspend still ask Ona directly: they act on
+ * what they read.
  */
 export class OnaSnapshot {
   private last: OnaListing | null = null;

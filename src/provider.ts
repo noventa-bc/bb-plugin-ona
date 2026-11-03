@@ -455,7 +455,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
 
   /**
    * Run a cost collector script on a devbox and parse the JSON line it prints.
-   * Only call it for a box bb reports connected (SSH starts stopped boxes).
+   * Only call it for a box a fresh Ona listing says is RUNNING (SSH starts stopped boxes).
    */
   async function runCollector(envId: string, script: string, ids: string[]): Promise<unknown> {
     // Login shell for the user's PATH (node, codex); Codex keeps bb's local SQLite home.

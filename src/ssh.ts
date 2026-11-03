@@ -103,8 +103,9 @@ export class TunnelManager {
   /**
    * `shouldConnect` is asked before every (re)connect. Ona's SSH starts a
    * stopped environment on connect, so reconnecting blindly would undo Ona's
-   * idle auto-stop; return false while the environment is stopped. If it
-   * throws, the tunnel waits and asks again rather than risk waking the box.
+   * idle auto-stop; return true only when a fresh listing says RUNNING. A
+   * false is asked again after 10 s, after 60 s from the 7th in a row; a throw
+   * (Ona can't be asked) after 60 s.
    * `onConnected` runs each time a tunnel comes up.
    */
   constructor(
@@ -148,11 +149,15 @@ export class TunnelManager {
   private async loop(envId: string, state: { controller: AbortController; connectedAt: number | null }) {
     const signal = state.controller.signal;
     let backoff = 1_000;
+    let refusals = 0;
     while (!signal.aborted) {
-      if (!(await this.shouldConnect(envId).catch(() => false))) {
-        await sleep(60_000, signal);
+      const connect = await this.shouldConnect(envId).catch(() => null);
+      if (!connect) {
+        // Just after a resume Ona can say STARTING while SSH works; a refusal that lasts is a stopped or stuck box.
+        await sleep(connect === null || ++refusals > 6 ? 60_000 : 10_000, signal);
         continue;
       }
+      refusals = 0;
       const remotePort = this.remotePort();
       const localPort = this.localPort();
       const started = Date.now();

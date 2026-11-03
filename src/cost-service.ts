@@ -10,6 +10,7 @@ import {
   providerSessions,
   type ClaudeUsageBucket,
 } from "./cost.ts";
+import { isRunning, type OnaSnapshot } from "./ona.ts";
 import type { Devbox, ThreadCost } from "./rpc.ts";
 import { errorText } from "./sync.ts";
 
@@ -34,10 +35,11 @@ export interface CostDeps {
   /** Runs a collector script on a running box; the provider's runCollector(). */
   runCollector(envId: string, script: string, ids: string[]): Promise<unknown>;
   threadDevbox(threadId: string): Promise<Devbox | null>;
+  snapshot: Pick<OnaSnapshot, "refresh">;
 }
 
 const costKey = (threadId: string) => `cost:${threadId}`;
-export function createThreadCost({ bb, runCollector, threadDevbox }: CostDeps) {
+export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: CostDeps) {
   const costInFlight = new Map<string, Promise<ThreadCost | null>>();
 
   /** Drop a deleted thread's stored figure so the keys don't pile up. */
@@ -49,8 +51,9 @@ export function createThreadCost({ bb, runCollector, threadDevbox }: CostDeps) {
 
   /**
    * Spend so far for a devbox thread. Cached per thread and recomputed only
-   * after a new turn finishes; a box that isn't connected is never woken,
-   * its last known figure is returned instead.
+   * after a new turn finishes; a box that isn't connected, or that a fresh
+   * Ona listing doesn't show running, is never woken: its last known figure
+   * is returned instead.
    */
   async function threadCost(threadId: string): Promise<ThreadCost | null> {
     const devbox = await threadDevbox(threadId);
@@ -94,6 +97,11 @@ export function createThreadCost({ bb, runCollector, threadDevbox }: CostDeps) {
         const sessions = providerSessions(identity);
         let cost: ThreadCost | null = null;
         if (sessions.length > 0) {
+          // Safety rule 1: bb's "connected" can lag a stop made in Ona, and SSH would start the box.
+          // Nothing is stored, so the floor can't hide this turn once the box runs again.
+          // A failed listing throws into the catch below.
+          const env = (await snapshot.refresh()).envs.find((e) => e.id === devbox.envId);
+          if (!isRunning(env)) return stored?.cost ?? null;
           if (agentProvider === "codex") {
             const reply = (await runCollector(devbox.envId, CODEX_COLLECTOR, sessions)) as {
               results?: Parameters<typeof codexCost>[0];
