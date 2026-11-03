@@ -3,8 +3,9 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 import { OnaSnapshot, type OnaEnvironment } from "../src/ona.ts";
+import { resourceSchema } from "../src/provider.ts";
 import {
   ALL,
   COOLDOWN_MS,
@@ -433,4 +434,44 @@ test("a probe with no daemon answers no daemon, though its own ps subshell names
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
+});
+
+/**
+ * A home whose legacy folder "legacy" holds a stand-in daemon run from it, and a
+ * working folder that is not the home. Returns the environment and working folder
+ * to run the probe with.
+ */
+async function legacyDaemon(t: TestContext): Promise<{ env: NodeJS.ProcessEnv; cwd: string }> {
+  const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const legacy = join(home, "legacy");
+  mkdirSync(join(legacy, "npm", "bin"), { recursive: true });
+  await standIn(t, `${realpathSync(legacy)}/npm/bin/bb-app`);
+  const cwd = join(home, "elsewhere");
+  mkdirSync(cwd);
+  return { env: { ...process.env, HOME: home }, cwd };
+}
+
+// A relative legacy dataDir is resolved against $HOME, the SSH shell's folder, not against the working folder.
+test("a daemon probe resolves a relative legacy folder against HOME, from any working folder", sandboxed, async (t) => {
+  const { env, cwd } = await legacyDaemon(t);
+  assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", "", "./legacy"], { env, cwd }).status, 0);
+});
+
+// The resource schema keeps a relative legacy dataDir, so the probe that sync runs gets the folder it names.
+test("a relative legacy dataDir the resource schema keeps still finds its daemon", sandboxed, async (t) => {
+  const { env, cwd } = await legacyDaemon(t);
+  const dataDir = resourceSchema.shape.dataDir.parse("./legacy");
+  assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", "", dataDir ?? ""], { env, cwd }).status, 0);
+});
+
+// A relative legacy dataDir matches only the folder it resolves to, not a command line that merely contains its name.
+test("a relative legacy folder is not matched by a daemon that only shares its name", sandboxed, async (t) => {
+  const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const other = join(home, "other", "legacy");
+  mkdirSync(join(other, "npm", "bin"), { recursive: true });
+  await standIn(t, `${realpathSync(other)}/npm/bin/bb-app`);
+  const env = { ...process.env, HOME: home };
+  assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", "", "legacy"], { env }).status, 1);
 });

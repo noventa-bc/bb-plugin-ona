@@ -79,8 +79,9 @@ you asked for, so safety rule 1 does not gate it.
    skip the provider's stop. *Why: a wrong or stale listing must not stop a box with your work on it.*
 3. **Restart a daemon only when the check finds none.** The check looks for a
    process whose command line names a folder under `~/.bb-machines`, the machine
-   data folder (`machineDataDir`) or the box's legacy data folder, each as given
-   and resolved through symlinks. A process listing that can't be trusted, a
+   data folder (`machineDataDir`) or the box's legacy data folder (a relative one
+   resolved against `$HOME`), each as given and resolved through symlinks. A
+   process listing that can't be trusted, a folder path with a newline in it, a
    failed SSH connection or a timeout counts as unknown, and nothing is restarted.
    *Why: a restart kills running agent turns.*
 4. **Unknown is not gone.** A failed or empty `ona environment list` changes

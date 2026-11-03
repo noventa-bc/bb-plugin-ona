@@ -40,8 +40,9 @@ async function ready(path: string): Promise<void> {
  * a stand-in daemon running `script`, whose command line names the resolved
  * folder as bb's does, or the folder as reached through ~/.bb-machines with
  * `viaLink`. A `sleep` that takes 0.05 s sits beside any fake `ps` a test puts
- * first on PATH, so a killed process is reaped before the next listing. `remove`
- * runs the script and returns its exit code, or null when a signal ends it.
+ * first on PATH. Reaping a killed process before the next listing is a timing
+ * assumption that the stop loop's 12 rounds absorb. `remove` runs the script and
+ * returns its exit code, or null when a signal ends it.
  * `exitedWithin` waits up to 2 s for daemon i to exit.
  */
 function devbox(t: TestContext, { script = SLEEPS, viaLink = false } = {}) {
@@ -210,7 +211,7 @@ test("a legacy folder whose path has a newline stays in place", sandboxed, async
   assert.equal(daemon.exitCode === null && daemon.signalCode === null, true, "the daemon keeps running");
 });
 
-// A legacy dataDir that is not absolute is ignored, so no process outside the machine folder is matched.
+// A relative legacy dataDir resolves against $HOME, so the folder of the same name in the working folder is not matched.
 test("a relative legacy folder never signals a process outside the machine folder", sandboxed, async (t) => {
   const { home, remove } = devbox(t);
   const cwd = join(home, "cwd");
@@ -224,6 +225,20 @@ test("a relative legacy folder never signals a process outside the machine folde
     true,
     "the unrelated process keeps running",
   );
+});
+
+// A relative legacy dataDir resolves against $HOME, the SSH shell's folder: its daemon stops and its folder moves aside.
+test("a relative legacy folder under HOME is moved aside and its daemon stopped", sandboxed, async (t) => {
+  const { home, remove } = devbox(t);
+  const legacy = join(home, "rel-legacy");
+  mkdirSync(legacy);
+  writeFileSync(join(legacy, "host-id"), "host-rel\n");
+  const daemon = await standIn(t, `${realpathSync(legacy)}/npm/bin/bb-app`);
+  assert.equal(await remove("host-rel", "rel-legacy"), 0);
+  assert.equal(existsSync(legacy), false, "the legacy folder is moved aside");
+  const stopped = () => daemon.exitCode !== null || daemon.signalCode !== null;
+  for (let tick = 0; tick < 40 && !stopped(); tick++) await delay(50);
+  assert.equal(stopped(), true, "the daemon run from HOME must be stopped");
 });
 
 // Bug: a remove that moved nothing said nothing, as if the folder had moved.

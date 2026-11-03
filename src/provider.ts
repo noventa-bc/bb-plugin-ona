@@ -24,13 +24,12 @@ export const resourceSchema = z.object({
   key: z.string(),
   /**
    * Legacy BB_DATA_DIR from 0.1.0 enrollments; new machines use ~/.bb-machines.
-   * Trailing slashes are dropped: `mv` can't move "dir/" to "dir/.old-…". A path
-   * that is not absolute is read as absent, not rejected: lifecycle calls parse
-   * this schema, and a rejection would stop suspend, resume and remove.
+   * Trailing slashes are dropped: `mv` can't move "dir/" to "dir/.old-…".
+   * A relative path is resolved against `$HOME` on the box.
    */
   dataDir: z
     .string()
-    .transform((dir) => (dir.startsWith("/") ? dir.replace(/\/+$/, "") : undefined))
+    .transform((dir) => dir.replace(/\/+$/, ""))
     .optional(),
 });
 export type OnaResource = z.infer<typeof resourceSchema>;
@@ -94,13 +93,14 @@ export interface ProviderDeps {
  * that names another machine, so a folder left in place blocks adopting the box
  * again. "$2" is the legacy `dataDir`, which bb's installer used as the data
  * folder itself. Exits 2 for an empty machine id, 3 when no folder names the
- * machine, 4 when the processes couldn't be listed or didn't stop (the folder
- * stays), and 1 when the folder can't be entered or moved.
+ * machine, 4 when the processes couldn't be listed, didn't stop, or the folder
+ * path has a newline (the folder stays), and 1 when the folder can't be entered
+ * or moved.
  */
 export const MOVE_MACHINE_ASIDE = [
   'host="$1"; legacy="$2"',
-  // A legacy dataDir that is not absolute is ignored.
-  "case $legacy in /*) ;; *) legacy= ;; esac",
+  // A relative legacy dataDir is relative to the SSH shell's folder, $HOME.
+  `case $legacy in /*|'') ;; *) legacy="$HOME/$legacy" ;; esac`,
   // An empty id would match a folder whose host-id file is empty.
   '[ -n "$host" ] || exit 2',
   'for id in "$HOME"/.bb-machines/*/host-id ${legacy:+"$legacy/host-id"}; do',
@@ -472,10 +472,10 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
           } else if (exitCode !== 0) {
             // -1: timed out or SSH failed, so the script may still have finished.
             const what = exitCode === -1 ? "May not have moved" : "Could not move";
-            // Exit 4: the process listing couldn't be trusted, or a daemon was still listed after the stop rounds.
+            // Exit 4: the listing couldn't be trusted, a path has a newline, or a daemon was still listed after the stop rounds.
             const cause =
               exitCode === 4
-                ? " The process listing couldn't be trusted, or the daemon was still running after 12 rounds; it may be stopped or still running."
+                ? " The process listing couldn't be trusted, the folder path has a newline, or the daemon was still running after 12 rounds; it may be stopped or still running."
                 : "";
             bb.log.warn(
               `${what} bb's data folder on ${name} aside (exit ${exitCode}: ${output.trim().slice(-300)}).${cause} ` +

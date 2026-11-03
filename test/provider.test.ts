@@ -131,9 +131,10 @@ test(
   },
 );
 
-// A legacy dataDir that is not absolute is read as absent, so the scripts never match it.
-test("a relative legacy dataDir is dropped and a trailing slash is stripped", () => {
+// A relative legacy dataDir is kept: the scripts resolve it against $HOME on the box.
+test("a relative legacy dataDir is kept and a trailing slash is stripped", () => {
   const resource = { envId: "env-1", envName: "box", adopted: true, key: "key-1" };
-  assert.equal(resourceSchema.parse({ ...resource, dataDir: "data" }).dataDir, undefined);
+  assert.equal(resourceSchema.parse({ ...resource, dataDir: "data" }).dataDir, "data");
+  assert.equal(resourceSchema.parse({ ...resource, dataDir: "data/" }).dataDir, "data");
   assert.equal(resourceSchema.parse({ ...resource, dataDir: "/srv/bb/" }).dataDir, "/srv/bb");
 });
