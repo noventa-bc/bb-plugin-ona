@@ -168,6 +168,12 @@ test("bb ona keep-alive refuses a stopped box, holds a running one and ends on `
 
 test("bb ona reconnect refuses a suspended machine (fails if it opens a tunnel or calls Ona)", local, async () => {
   bootstraps.length = 0;
+  // Close the tunnel here, not in the earlier test: the provider's suspend does, and a stopped box gets no stop.
+  patchBox(resource.envId, { phase: STOPPED });
+  await provider.suspend!({ ...ctx, resource, hostId: "host-1" });
+  // The suspend's Ona lookup is not what this test checks.
+  onaCalls();
+  patchBox(resource.envId, { phase: RUNNING });
   Object.assign(hosts[0]!, {
     status: "disconnected",
     lifecycle: { phase: "suspended", message: null, suspendedAt: 1 },

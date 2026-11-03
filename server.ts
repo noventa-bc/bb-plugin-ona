@@ -76,7 +76,7 @@ export default async function plugin(bb: BbPluginApi) {
       type: "string",
       label: "Codex SQLite home on devboxes",
       description:
-        "CODEX_SQLITE_HOME for Codex launched by bb, on the devbox's local disk (a shared NFS ~/.codex corrupts SQLite WAL). Empty keeps Codex's default. A change applies when the machine is reconnected (`bb ona reconnect`, only while the machine is active in bb) or resumed from suspended.",
+        "CODEX_SQLITE_HOME for Codex launched by bb, on the devbox's local disk (a shared NFS ~/.codex corrupts SQLite WAL). Empty keeps Codex's default. The plugin reads it once, at load: a change applies only after `bb plugin reload ona`.",
       default: "/workspaces/.codex-sqlite-bb",
       experimental_schema: devboxPath,
     },
@@ -175,19 +175,18 @@ export default async function plugin(bb: BbPluginApi) {
   /** Ona env id -> bb host id, refreshed on every pass. */
   const hostByEnv = new Map<string, string>();
 
-  // Don't let tunnel reconnects wake environments Ona has stopped; a stop
-  // noticed here is synced to bb right away (see reconcile).
+  // Safety rule 1: a tunnel (re)connects only when a listing fetched now says
+  // RUNNING; a cached one can predate a stop made in Ona's UI. A box Ona shows
+  // stopped gets a pass right away (see reconcile).
   const tunnels = new TunnelManager(
     sshPath,
     port,
     () => proxy.port,
     bb.log,
     async (envId) => {
-      const env = (await snapshot.get()).envs.find((e) => e.id === envId);
-      const stopped = env !== undefined && isStopped(env);
-      if (stopped) scheduler.schedule(hostByEnv.get(envId) ?? ALL, 0);
-      // Connecting to a box that is still stopping would start it again.
-      return env !== undefined && !stopped && env.status?.phase !== "ENVIRONMENT_PHASE_STOPPING";
+      const env = (await snapshot.refresh()).envs.find((e) => e.id === envId);
+      if (env && isStopped(env)) scheduler.schedule(hostByEnv.get(envId) ?? ALL, 0);
+      return isRunning(env);
     },
     // A tunnel that came back may lead to a box whose daemon died with it;
     // check once bb has had time to hear from the daemon.
@@ -351,7 +350,7 @@ export default async function plugin(bb: BbPluginApi) {
     return (await devboxes()).find((box) => box.hostId === environment.hostId) ?? null;
   }
 
-  const costs = createThreadCost({ bb, runCollector: provider.runCollector, threadDevbox });
+  const costs = createThreadCost({ bb, runCollector: provider.runCollector, threadDevbox, snapshot });
   bb.events.on("thread.deleted", ({ thread }) => costs.forget(thread.id));
 
   /**

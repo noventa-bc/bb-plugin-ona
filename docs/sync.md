@@ -56,11 +56,25 @@ you asked for, so safety rule 1 does not gate it.
 
 **Safety rules.** Every automatic action keeps these:
 
-1. **Never wake a box.** Ona's SSH starts a stopped box, so the plugin only uses
-   SSH (tunnel, daemon check) when Ona says the box is running. It re-checks
-   Ona right before each daemon check, and runs the cost collectors only on a
-   box bb reports connected. If Ona can't be asked, tunnels wait rather than
-   connect. *Why: an accidental start costs money and keeps the box up.*
+1. **Never wake a box.** Ona's SSH starts a stopped box, so the plugin uses SSH
+   (tunnel connect and reconnect, daemon check, cost collector, and the cleanup
+   when you remove an adopted box's machine) only when Ona, asked right before it, says
+   the box is running: an `ona environment list`, or for that cleanup
+   `ona environment get` ([0005](decisions/0005-lookup-by-id-counts-as-listing.md)). A
+   daemon restart asks Ona again after the daemon check, right before it
+   starts. A cached listing, bb showing the machine connected, a box that is
+   starting or stopping, or a listing that lacks the box is not enough. If Ona
+   can't be asked, nothing connects: tunnels wait, and a thread's cost shows
+   its last figure. Every connect attempt of a tunnel asks for one fresh
+   listing (so does each reconnect after `ssh` exits), plus a check when Ona shows the box
+   stopped. A refused tunnel tries again every 10s for a minute,
+   then every minute (every minute while Ona can't be asked). A tunnel closes
+   when bb suspends or removes the machine, or the plugin stops; a check that
+   sees the box stopped asks bb to suspend it once bb no longer shows the
+   machine connected.
+   These commands you run yourself are not gated and may wake a box:
+   `ona environment open`, `bb ona reconnect` and `bb ona ssh --thread`.
+   *Why: an accidental start costs money and keeps the box up.*
 2. **Never stop a box.** Suspends the plugin makes because of what it saw in Ona
    skip the provider's stop. *Why: a wrong or stale listing must not stop a box with your work on it.*
 3. **Never restart a live daemon.** The daemon is restarted only when the check
@@ -82,13 +96,15 @@ you asked for, so safety rule 1 does not gate it.
   up or tearing down a workspace on it (a running box only; this never starts one).
 - **45s after** an Ona machine disconnects, so a brief drop (Wi-Fi, Mac sleep) can recover on its own.
 - **30s after** a tunnel comes back up.
+- **Right away** when a tunnel finds its box stopped in Ona.
 - **After** bb's realtime connection reconnects.
 - **Every 2 minutes**, as a backstop.
 - **Right after the Mac wakes**: a 15s timer that fires 60s+ late means the process slept, so the plugin re-reads Ona and checks every machine once.
 
 Bursts of events are merged into one check. All checks share one cached `ona
-environment list` (at most 15s old; 5s for event-driven checks), so a dozen
-boxes reconnecting after the Mac wakes cost one Ona call.
+environment list` (at most 15s old; 5s for event-driven checks), so checking a
+dozen boxes after the Mac wakes costs one Ona call. Anything about to SSH skips
+the cache (rule 1); callers that ask while a list is running share the next one.
 
 **Seeing and fixing it yourself.**
 
@@ -133,7 +149,12 @@ service. The `bb ona` commands are in `src/commands.ts`.
 The shared listing is `OnaSnapshot` in `src/ona.ts`. Removing an Ona machine
 drops the box's stored keys (`forgetBox()` in `src/sync.ts`, called from the provider's `remove()`).
 `remove()` refuses to delete a created box that Ona reports unpushed commits
-on (`unpushedWork()` in `src/ona.ts`), before it disconnects or forgets anything.
+on (`unpushedWork()` in `src/ona.ts`), before it deletes or forgets anything.
+Every `remove()` path closes the box's tunnel. A thrown Ona lookup closes it
+before the error goes on. A refused remove closes it before it returns. A
+removal closes it just before the keys are dropped: for an adopted box after the
+move-aside, for a created box after the refusal check. The keys stay on a
+refusal or a thrown lookup, so bb's retry can finish.
 For an adopted box, `remove()` runs `MOVE_MACHINE_ASIDE` (`src/provider.ts`)
 over SSH, only when `ona environment get`, made just before, says the box is
 running (safety rule 1). It stops bb's daemon and moves bb's data folder aside;

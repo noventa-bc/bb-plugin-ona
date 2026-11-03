@@ -443,9 +443,11 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     async remove({ resource, hostId, report, signal }) {
       const owned = resourceSchema.parse(resource);
       if (owned.adopted) {
-        // Before the Ona lookup, which can throw: an open tunnel keeps the box awake (decision 0003).
-        await disconnect(owned.envId);
-        const env = await ona.getEnvironmentIfExists(owned.envId, signal);
+        // A thrown lookup closes the tunnel before the error goes on; the keys stay for bb's retry.
+        const env = await ona.getEnvironmentIfExists(owned.envId, signal).catch(async (error: unknown) => {
+          await disconnect(owned.envId);
+          throw error;
+        });
         // The machine is still removed either way; a folder left behind only blocks adopting the box again.
         // Told through the plugin log: bb 0.48.1 writes `report.log` only to its server log.
         const byHand =
@@ -488,12 +490,14 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
               `Before adopting it again, start it and ${byHand}.`,
           );
         }
+        // Last: a sync pass can reopen the tunnel while the move-aside runs, so it closes here, before the keys go.
+        await disconnect(owned.envId);
         await deps.forgetBox(owned.envId);
         return { status: "removed" };
       }
       // `get` also returns boxes Ona already deleted or is deleting, which `list` hid.
-      // The lookup runs before the tunnel closes, so a refused remove leaves the machine connected and its state kept.
-      // A lookup that throws closes the tunnel first, then the error goes on.
+      // The lookup runs first, so a refused remove keeps bb's state (the keys) for the retry.
+      // Every path closes the tunnel: a refused remove, a thrown lookup, and the removal.
       const env = await ona.getEnvironmentIfExists(owned.envId, signal).catch(async (error: unknown) => {
         await disconnect(owned.envId);
         throw error;
@@ -501,6 +505,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       const live = env && !isDeleted(env) ? env : null;
       const unpushed = live && unpushedWork(live);
       if (unpushed) {
+        await disconnect(owned.envId);
         const where = unpushed.branch ? `on branch ${unpushed.branch}` : "on its current branch";
         return {
           status: "failed",
@@ -539,7 +544,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
 
   /**
    * Run a cost collector script on a devbox and parse the JSON line it prints.
-   * Only call it for a box bb reports connected (SSH starts stopped boxes).
+   * Only call it for a box a fresh Ona listing says is RUNNING (SSH starts stopped boxes).
    */
   async function runCollector(envId: string, script: string, ids: string[]): Promise<unknown> {
     // Login shell for the user's PATH (node, codex); Codex keeps bb's local SQLite home.

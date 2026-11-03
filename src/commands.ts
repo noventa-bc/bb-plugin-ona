@@ -161,7 +161,7 @@ export const usage = [
   "  bb ona open <ref>             Open the devbox in your Ona editor",
   "  bb ona shell <ref> -- <cmd…>  Run one command in the devbox checkout and print its output",
   "  bb ona rename <ref> [name]    Rename the Ona environment (random fun name if omitted) and its bb machine",
-  "  bb ona reconnect <ref>        Reopen an active machine's tunnel and restart its bb daemon (applies new settings)",
+  "  bb ona reconnect <ref>        Reopen an active machine's tunnel and restart its bb daemon",
   "  bb ona status [ref] [--json]  bb's view of each devbox next to Ona's, and what the plugin last did",
   "  bb ona sync [ref]             Re-check Ona now and repair (ignores cooldowns, keeps the safety rules)",
   "  bb ona keep-alive <ref> <duration|off>  Keep a running devbox from Ona's inactivity timeout (at most 12h)",

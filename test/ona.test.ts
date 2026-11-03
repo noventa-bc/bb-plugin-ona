@@ -71,6 +71,25 @@ test("isRunning, isStarting and isStopped agree with the fixture phases", async 
   assert.equal(isStopped(env("env-9abc")), false);
 });
 
+test("isRunning, the gate for every SSH (safety rule 1), passes only RUNNING: no other phase and no missing box", () => {
+  // Guards rule 1's whole test: every SSH gate is isRunning alone, so only RUNNING passes and a box the listing lacks doesn't.
+  const box = (phase: string): OnaEnvironment => ({ id: "env-1", metadata: {}, status: { phase } });
+  assert.equal(isRunning(box("ENVIRONMENT_PHASE_RUNNING")), true);
+  for (const phase of [
+    "ENVIRONMENT_PHASE_STARTING",
+    "ENVIRONMENT_PHASE_STOPPING",
+    "ENVIRONMENT_PHASE_STOPPED",
+    "ENVIRONMENT_PHASE_DELETED",
+    "ENVIRONMENT_PHASE_DELETING",
+    "ENVIRONMENT_PHASE_UNSPECIFIED",
+    "",
+  ]) {
+    assert.equal(isRunning(box(phase)), false, phase || "a blank phase");
+  }
+  assert.equal(isRunning({ id: "env-1", metadata: {} }), false, "no status");
+  assert.equal(isRunning(undefined), false, "a box the listing doesn't have");
+});
+
 test("findEnvironment matches an exact id", async () => {
   setFake({});
   assert.equal((await cli.findEnvironment("env-0001"))?.metadata.name, "brave-otter");

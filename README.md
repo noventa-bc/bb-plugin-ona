@@ -149,6 +149,8 @@ View them with `bb plugin config ona`, and change one with `bb plugin config ona
 | `codexSqliteHome` | `/workspaces/.codex-sqlite-bb` | Where Codex launched by bb keeps its SQLite state on the devbox's local disk. |
 | `machineDataDir` | `/workspaces/.bb-machines` | Local folder that `~/.bb-machines` is symlinked to on every devbox. Empty leaves `~/.bb-machines` alone. |
 
+A changed setting applies after `bb plugin reload ona`.
+
 The last two exist because Ona devboxes can share an NFS-mounted home. SQLite
 breaks on network filesystems, and bb allows only one machine identity per data
 folder, so both are kept on each devbox's local disk. bb only restarts a daemon
@@ -156,10 +158,7 @@ whose data folder is directly inside `~/.bb-machines`, so the plugin makes
 `~/.bb-machines` a symlink to `machineDataDir`. On a shared home that one
 symlink resolves to each devbox's own disk. If `~/.bb-machines` already exists
 as a real folder, setup stops and asks you to move it aside
-(`mv ~/.bb-machines ~/.bb-machines.shared`). Settings apply to machines added
-after you change them, except `codexSqliteHome`: a change applies when the
-machine is reconnected (`bb ona reconnect`, only while the machine is active in
-bb) or resumed from suspended.
+(`mv ~/.bb-machines ~/.bb-machines.shared`).
 
 ## Usage
 
