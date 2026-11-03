@@ -48,7 +48,7 @@ Change these together, in the same edit.
 
 - Rule 1: simplicity, always. The simplest thing that fully works beats the clever, the general and the defensive.
 - Tests, fakes and stubs meet the same bar as `src/`: clear names, one job per helper, a comment only for a why. Not production code is no excuse for a mess.
-- Write the least code that solves the whole task (the ponytail ruleset, installed as a Claude Code plugin; see `docs/owner.md`). A shortcut with a known limit gets a comment `shortcut: <the limit>, <when to upgrade>`; `/ponytail-debt` lists them.
+- Write the least code that solves the whole task (the ponytail ruleset, installed as a Claude Code plugin; see `docs/owner.md`). A shortcut with a known limit gets a comment `shortcut: <the limit>, <when to upgrade>`; `/ponytail-debt` lists them. A shortcut comment never names a safety or security gap; that goes to the private roadmap.
 - Fix a bug with a failing test first, where a test is possible. A `// Bug:` line names only a bug that was on `main`, not a design tried and dropped inside the PR (git history has it).
 - When you find a bug, a source of noise or anything that can damage the repo, add the guard that stops it recurring in the same change: a test, a lint rule, a CI step, a `.gitignore` line or a written rule here. Say in the handoff which guard you added.
 - A change to what a sync pass does gets a scenario in `test/sync.test.ts` (fake bb calls, fake Ona listing).
@@ -88,7 +88,7 @@ The safety rules behind 1–4 are in `docs/sync.md`. Cite `file:line` for each f
 7. No secrets in logs, storage or errors.
 8. A call that changes state can be accepted without taking effect (bb suspend, resume and reconcile return the host). Check the result, treat "not done" as a failure so the guard backs off, and never report an action as done on the call alone. ESLint enforces this for the bb lifecycle calls.
 9. Complexity the change doesn't justify is a finding: a simpler way to the same result, an unused option, or a big change (see "Complexity") made without the owner's review.
-10. Public content: no company, client or person names, no personal paths, no real environment names or IDs, and no description of an unfixed weakness (those go under Security (private) in the handoff).
+10. Public content: no company, client or person names, no personal paths, no real environment names or IDs, and no description of an unfixed weakness (those go to the private roadmap as items to fix).
 
 ## Handoff
 
@@ -101,11 +101,11 @@ Write `.agent/HANDOFF.md` when a task ends. The file is git-ignored. Use these s
 - Review findings, and what was done about each
 - Owner live-test steps
 - Open questions
-- Security (private)
+- Weaknesses for the roadmap (private)
 - Process feedback
 
 Leave changes uncommitted for the owner to review, unless the task runs under `FACTORY.md`, where they go into a PR.
-Write unfixed weaknesses only under Security (private). Never put them in a committed file.
+List unfixed weaknesses only under Weaknesses for the roadmap; the orchestrator adds each to the private roadmap. Never describe one in a committed file, a code comment, a commit message or PR text.
 Process feedback holds proposed edits to this file, with evidence.
 
 ## Improving this file

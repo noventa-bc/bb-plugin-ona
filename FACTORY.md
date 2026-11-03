@@ -114,7 +114,8 @@ those and the "skipped or not checked" lines ponytail ends with.
    same rule. The description carries: the roadmap labels, what changed and why, how it
    was tested, the three review passes and what each found, the owner
    live-test steps from the handoff, and anything left out. Nothing from the
-   "Security (private)" handoff section goes in the PR.
+   "Weaknesses for the roadmap" handoff section goes in the PR; the
+   orchestrator adds each to the private roadmap.
 8. **Wait for CI.** The workflows the PR needs must be green: `check` for
    code, `docs` for Markdown, both for a PR with both. A red run goes back to
    the builder; never merge around it. A PR whose run has not appeared after
