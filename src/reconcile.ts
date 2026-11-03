@@ -336,10 +336,12 @@ export class HostGuard {
 /**
  * Remote script for rule 3: exit 0 if a bb daemon process runs from one of
  * the given data folders, 1 if none does. Every other exit (SSH failure,
- * timeout) means "unknown" and must not trigger a restart.
+ * timeout, a ps that fails) means "unknown" and must not trigger a restart.
  */
 export const DAEMON_PROBE = [
   "me=$$; pp=$PPID; found=1",
+  // Without a working ps every folder would look empty, and a live daemon would be restarted.
+  "ps -e -o pid= >/dev/null || exit 2",
   'root="$HOME/.bb-machines"',
   'for dir in "$root" "$(readlink -f "$root" 2>/dev/null)" "$@"; do',
   '  [ -n "$dir" ] || continue',

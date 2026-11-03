@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -340,5 +340,17 @@ test("daemon probe finds a process running from the data folder, and only that",
     assert.equal(probe(join(home, "elsewhere")), 1, "the probe must not match its own command line");
   } finally {
     child.kill();
+  }
+});
+
+// Bug: a ps that fails (missing, or one that rejects -e) read as "no daemon", so a live daemon was restarted.
+test("a daemon probe whose ps fails answers unknown", () => {
+  const home = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));
+  try {
+    writeFileSync(join(home, "ps"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+    const env = { ...process.env, HOME: home, PATH: `${home}:${process.env.PATH}` };
+    assert.equal(spawnSync("bash", ["-c", DAEMON_PROBE, "probe", home], { env }).status, 2);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
   }
 });

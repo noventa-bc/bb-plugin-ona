@@ -86,7 +86,7 @@ test("a folder whose server host contains .old is still moved aside", sandboxed,
   assert.match(readdirSync(disk).sort()[0] ?? "", /^bb\.old-2\.example\.com-8443\.old-\d{8}T\d{6}Z$/);
 });
 
-// Bug: on a box without a working ps (missing, or one that rejects -eo) the stop
+// Bug: on a box without a working ps (missing, or one that rejects -e) the stop
 // loop saw no daemon and the folder moved under a live one.
 test("a box whose ps fails moves nothing and exits 4", sandboxed, async (t) => {
   const { home, disk, remove, running } = devbox(t);
@@ -125,8 +125,8 @@ test("a legacy folder that holds other machines' data folders is left alone", sa
   assert.equal(running(1), true);
 });
 
-// Bug: busybox ps reads everything after the first "=" in an -o argument as the header,
-// so "-o pid=,args=" printed only PIDs: the stop loop and the daemon probe saw no daemon.
+// Bug: POSIX makes the rest of an -o argument its header, as busybox before 1.35 does, so
+// "-o pid=,args=" printed only PIDs there: the stop loop and the daemon probe saw no daemon.
 test("the box scripts give ps one column per -o", () => {
   for (const script of [MOVE_MACHINE_ASIDE, DAEMON_PROBE]) assert.doesNotMatch(script, /-\w*o \S+=,/);
 });
