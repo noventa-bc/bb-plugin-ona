@@ -83,7 +83,7 @@ The safety rules behind 1–4 are in `docs/sync.md`. Cite `file:line` for each f
 3. Forcing (`bb ona sync`) only skips cooldowns. It never skips a safety rule.
 4. Removing a machine never deletes an adopted environment.
 5. Remote script text is a constant. Values are passed as arguments or through `shellQuote`.
-6. The tunnel goes only to the loopback proxy. Added proxy routes need a test and a line in `docs/security.md`.
+6. The tunnel goes only to the loopback proxy, its devbox end listens on loopback only, and the proxy forwards only to bb's loopback URL. A change to `src/proxy.ts` that lets more through (a listed route, the upgrade check, or a looser matcher, path, method or header check) needs allowed and denied cases in `test/proxy.test.ts` and keeps `docs/security.md` accurate.
 7. No secrets in logs, storage or errors.
 8. A call that changes state can be accepted without taking effect (bb suspend, resume and reconcile return the host). Check the result, treat "not done" as a failure so the guard backs off, and never report an action as done on the call alone. ESLint enforces this for the bb lifecycle calls.
 9. Complexity the change doesn't justify is a finding: a simpler way to the same result, an unused option, or a big change (see "Complexity") made without the owner's review.
