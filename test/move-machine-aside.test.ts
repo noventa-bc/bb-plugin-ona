@@ -88,10 +88,16 @@ test("a folder whose server host contains .old is still moved aside", sandboxed,
 
 // Bug: on a box without a working ps (missing, or one that rejects -e) or without
 // awk, the stop loop saw no daemon and the folder moved under a live one.
-for (const tool of ["ps", "awk"]) {
-  test(`a box whose ${tool} fails moves nothing and exits 4`, sandboxed, async (t) => {
+const brokenTools: [string, string][] = [
+  ["ps", "exit 127"],
+  ["awk", "exit 127"],
+  // A busybox ps without -o support prints its default PID USER VSZ STAT COMMAND table.
+  ["ps", "exec /bin/ps -e -o pid= -o user= -o vsz= -o stat= -o args="],
+];
+for (const [tool, body] of brokenTools) {
+  test(`a box whose ${tool} fails (${body}) moves nothing and exits 4`, sandboxed, async (t) => {
     const { home, disk, remove, running } = devbox(t);
-    writeFileSync(join(home, tool), "#!/bin/sh\nexit 127\n", { mode: 0o755 });
+    writeFileSync(join(home, tool), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
     assert.equal(await remove("host-1", "", `${home}:${process.env.PATH}`), 4);
     assert.deepEqual(readdirSync(disk).sort(), ["server-host-1", "server-host-10"]);
     assert.equal(running(0), true);
