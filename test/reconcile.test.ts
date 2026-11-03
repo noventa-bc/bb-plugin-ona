@@ -343,13 +343,14 @@ test("daemon probe finds a process running from the data folder, and only that",
   }
 });
 
-// Bug: a box that couldn't list processes (ps missing or failing, a ps that ignores -o, no awk)
-// read as "no daemon", so a live daemon was restarted.
+// Bug: a box that couldn't list processes (ps missing or failing, a ps that rejects args=, no awk)
+// read as "no daemon", so a live daemon was restarted; a ps that ignores -o read as "running".
 test("a daemon probe that can't list processes answers unknown", () => {
   const fakes = [
     ["ps", "exit 1"],
     ["ps", "echo '  PID USER COMMAND'; echo '    1 root init'"],
     ["awk", "exit 127"],
+    ["ps", 'case "$*" in *args=*) exit 1 ;; esac; exec /bin/ps "$@"'],
   ];
   for (const [name, body] of fakes) {
     const bin = mkdtempSync(join(tmpdir(), "bb-ona-probe-"));

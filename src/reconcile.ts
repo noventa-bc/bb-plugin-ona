@@ -336,19 +336,20 @@ export class HostGuard {
 /**
  * Remote script for rule 3: exit 0 if a bb daemon process runs from one of
  * the given data folders, 1 if none does. Every other exit (SSH failure,
- * timeout, a box where ps or awk doesn't work) means "unknown" and must not trigger a restart.
+ * timeout, a process listing it can't trust) means "unknown" and must not
+ * trigger a restart.
  */
 export const DAEMON_PROBE = [
-  "me=$$; pp=$PPID; found=1",
-  // Without a working ps and awk every folder would look empty, and a live daemon would be restarted:
-  // ps must list this shell alone on its line (a ps that ignores -o prints more columns).
-  `ps -e -o pid= | awk -v me="$me" '$1 == me && NF == 1 {f=1} END {exit !f}' || exit 2`,
+  "me=$$; pp=$PPID",
   'root="$HOME/.bb-machines"',
   'for dir in "$root" "$(readlink -f "$root" 2>/dev/null)" "$@"; do',
   '  [ -n "$dir" ] || continue',
   // This shell, its parent and the ps/awk children carry the folder in their
-  // own command lines; skip them.
-  '  if ps -e -o pid= -o ppid= -o args= | awk -v d="$dir/" -v me="$me" -v pp="$pp" \'$1!=me && $1!=pp && $2!=me && index($0, d) {f=1} END {exit !f}\'; then found=0; break; fi',
+  // own command lines; skip them. A listing without this shell under its parent
+  // can't be trusted (ps failed or ignored -o, or no awk): that is unknown (2),
+  // never "no daemon", which would restart a live one.
+  '  ps -e -o pid= -o ppid= -o args= | awk -v d="$dir/" -v me="$me" -v pp="$pp" \'$1==me && $2==pp {ok=1} $1!=me && $1!=pp && $2!=me && index($0, d) {f=1} END {exit ok ? !f : 2}\'',
+  "  case $? in 0) exit 0 ;; 1) ;; *) exit 2 ;; esac",
   "done",
-  "exit $found",
+  "exit 1",
 ].join("\n");

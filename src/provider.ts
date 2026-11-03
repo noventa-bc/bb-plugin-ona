@@ -98,8 +98,8 @@ export const MOVE_MACHINE_ASIDE = [
   'host="$1"; legacy="$2"',
   // An empty id would match a folder whose host-id file is empty.
   '[ -n "$host" ] || exit 2',
-  // Without a working ps the stop loop sees no daemon, and the folder would move under a live one.
-  "ps -e -o pid= -o args= >/dev/null || exit 4",
+  // Without a working ps and awk the stop loop sees no daemon, and the folder would move under a live one.
+  `ps -e -o pid= -o args= | awk -v me="$$" '$1 == me {ok=1} END {exit !ok}' || exit 4`,
   'for id in "$HOME"/.bb-machines/*/host-id ${legacy:+"$legacy/host-id"}; do',
   '  [ -f "$id" ] && [ "$(cat "$id")" = "$host" ] || continue',
   '  data="${id%/host-id}"',
