@@ -82,6 +82,24 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   from `downloadPath`), both under the app's
   `node_modules/bb-app` (on macOS inside `bb.app/Contents/Resources/app.asar.unpacked`).
   `src/proxy.ts` lists them (checked 2026-11-02).
+- bb 0.48.1's installer (`server/dist/assets/install-machine.sh` under the
+  app's `node_modules/bb-app`) refuses a data folder whose `host-id` names
+  another machine, or whose `auth.json` does when `host-id` is empty ("<dir> on
+  this computer belongs to machine <old>, not <new>."), and its `--uninstall`
+  deletes the data folder. The daemon it starts runs `bb-app` from the folder's
+  resolved path, unless it falls back to a `bb-app` already on the `PATH`. The
+  daemon clones a project into `<data folder>/checkouts/<slug>` unless given a
+  path (`resolveProjectCloneDefaultPath` in
+  `host-daemon/dist/start-host-daemon.js`) (checked 2026-11-03).
+- bb 0.48.1 accepts `bb machine remove <m> --force` only for a provider machine
+  left removing after a failed cleanup that a workspace still blocks, and only
+  while no daemon is connected for it (409 `machine_cleanup_not_failed`,
+  `machine_connected`, `machine_cleanup_not_blocked`; `assertForcedRemovalAllowed`
+  in `server/dist/start-server.js`) (checked 2026-11-03).
+- bb 0.48.1 writes a machine provider's `report.log` only to bb's server log;
+  `bb.log.*` also goes to `bb plugin logs <id>`; `report.step` text is cleared
+  when the remove finishes (`lifecycleReporter` and `emitLog` in
+  `server/dist/start-server.js`) (checked 2026-11-03).
 - In SDK 0.6.104 a provider resource is written by the provider's own lifecycle
   hooks (`create`, `suspend`, `resume`, through `checkpoint` or the returned
   resource) and read with `getResource` (checked 2026-11-02).

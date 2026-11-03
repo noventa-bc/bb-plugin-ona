@@ -257,7 +257,7 @@ bb ona rename <name> [new]     # rename env + bb machine (random fun name if omi
 bb ona reconnect <name>        # reopen the tunnel and restart the bb daemon
 bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
 bb machine resume ona:<name>   # starts it, reopens the tunnel, restarts the daemon (Play button)
-bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's daemon only
+bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's daemon, moves its data folder aside
 ```
 
 ## Troubleshooting
@@ -281,12 +281,27 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
   (`bb environment list --host <machine>`, then the workspace path on the box).
   bb's `bb environment cleanup <id> --recover` refuses on Ona boxes while
   they're connected, because it can't inspect Ona's SSH processes. For an
-  adopted box: stop bb's daemon on the box, `bb machine remove <machine>
-  --force`, rename bb's data folder on the box (`/workspaces/.bb-machines/<server>`,
-  for example to `<server>.old`), then `bb ona adopt <box>`. The Ona environment
-  and the workspace files stay. Without the rename, bb's installer takes the
-  systemd path, which Ona's containers only pretend to support, and the
-  adoption times out waiting for a daemon that never starts.
+  adopted box, start over: run `bb machine remove <machine>`. When its cleanup
+  fails, keep the box running, stop every bb daemon on it, and anything
+  running from a checkout in it, with
+  `ssh "$(bb ona host <box>)" 'pkill -f "$(readlink -f ~/.bb-machines)/"'`,
+  and run `bb machine remove <machine> --force` (bb accepts `--force` only after
+  a normal remove failed, and only while the daemon is disconnected). Because
+  the box is running, the forced remove moves bb's data folder aside. Then run
+  `bb ona adopt <box>`.
+- **Adopting a box again after removing its machine:** removing an adopted
+  machine while its box is running stops bb's daemon there and moves bb's data
+  folder aside, from `~/.bb-machines/<server>` to
+  `~/.bb-machines/<server>.old-<UTC time>`; nothing in it is deleted. bb clones
+  projects into `<server>/checkouts/<project>` by default, so those clones, and
+  any unpushed work in them, move with it. When it leaves the folder (the box
+  wasn't running, or the move failed) or finds none, the remove says so in
+  `bb plugin logs ona`: start the box, then rename the folder whose `host-id`
+  file holds the host id the log line names (in a shell from
+  `ssh "$(bb ona host <box>)"`, `grep -l <host-id> ~/.bb-machines/*/host-id`
+  finds it). Otherwise bb's installer refuses it with "… on this computer
+  belongs to machine …". After the re-adopt, the old machine's threads can't
+  take new messages, and its project sources must be added again.
 - **bb and Ona disagree about a box** (bb says down but it's running, or the
   other way round): run `bb ona status <name>`. It shows both views and what
   the plugin last did about it. `bb ona sync <name>` re-checks now, and

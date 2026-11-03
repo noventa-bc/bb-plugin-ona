@@ -345,7 +345,7 @@ export const DAEMON_PROBE = [
   '  [ -n "$dir" ] || continue',
   // This shell, its parent and the ps/awk children carry the folder in their
   // own command lines; skip them.
-  '  if ps -eo pid=,ppid=,args= | awk -v d="$dir/" -v me="$me" -v pp="$pp" \'$1!=me && $1!=pp && $2!=me && index($0, d) {f=1} END {exit !f}\'; then found=0; break; fi',
+  '  if ps -e -o pid= -o ppid= -o args= | awk -v d="$dir/" -v me="$me" -v pp="$pp" \'$1!=me && $1!=pp && $2!=me && index($0, d) {f=1} END {exit !f}\'; then found=0; break; fi',
   "done",
   "exit $found",
 ].join("\n");
