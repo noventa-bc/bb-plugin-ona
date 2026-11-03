@@ -149,7 +149,7 @@ View them with `bb plugin config ona`, and change one with `bb plugin config ona
 | `codexSqliteHome` | `/workspaces/.codex-sqlite-bb` | Where Codex launched by bb keeps its SQLite state on the devbox's local disk. |
 | `machineDataDir` | `/workspaces/.bb-machines` | Local folder that `~/.bb-machines` is symlinked to on every devbox. Empty leaves `~/.bb-machines` alone. |
 
-A changed setting applies after `bb plugin reload ona`.
+A changed setting takes effect after `bb plugin reload ona`, and reaches a machine's box on its next connect (`bb ona reconnect` or a resume).
 
 The last two exist because Ona devboxes can share an NFS-mounted home. SQLite
 breaks on network filesystems, and bb allows only one machine identity per data
@@ -255,7 +255,7 @@ bb ona sync [name]             # re-check Ona now and repair out-of-step machine
 bb ona keep-alive <name> 2h    # keep a running box from Ona's idle timeout (at most 12h)
 bb ona keep-alive <name> off   # end it early
 bb ona rename <name> [new]     # rename env + bb machine (random fun name if omitted)
-bb ona reconnect <name>        # active machines: reopen the tunnel and restart the bb daemon; refused if Ona doesn't show the box running
+bb ona reconnect <name>        # active machines: reopen the tunnel and restart the bb daemon; refused unless bb shows the machine active and Ona shows its box running
 bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
 bb machine resume ona:<name>   # starts it, reopens the tunnel, restarts the daemon (Play button)
 bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's daemon, moves its data folder aside

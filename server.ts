@@ -76,7 +76,7 @@ export default async function plugin(bb: BbPluginApi) {
       type: "string",
       label: "Codex SQLite home on devboxes",
       description:
-        "CODEX_SQLITE_HOME for Codex launched by bb, on the devbox's local disk (a shared NFS ~/.codex corrupts SQLite WAL). Empty keeps Codex's default. The plugin reads it once, at load: a change applies only after `bb plugin reload ona`.",
+        "CODEX_SQLITE_HOME for Codex launched by bb, on the devbox's local disk (a shared NFS ~/.codex corrupts SQLite WAL). Empty keeps Codex's default. A changed setting takes effect after `bb plugin reload ona`, and reaches a machine's box on its next connect (`bb ona reconnect` or a resume).",
       default: "/workspaces/.codex-sqlite-bb",
       experimental_schema: devboxPath,
     },

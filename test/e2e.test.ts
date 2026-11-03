@@ -140,9 +140,14 @@ test("remove refuses a created box with unpushed commits and closes its tunnel",
 });
 
 test("remove deletes a clean created box", local, async () => {
+  // The refused remove above closed the tunnel: bring it up, so the remove below has one to close.
+  await provider.resume!({ ...ctx, resource, hostId: "host-1" });
+  onaCalls();
+  assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:(up|connecting)/);
   const result = await provider.remove({ ...ctx, resource, hostId: "host-1" });
   assert.deepEqual(result, { status: "removed" });
   assert.deepEqual(onaCalls(), [`environment get ${resource.envId}`, `environment delete ${resource.envId}`]);
+  assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:off/);
   assert.deepEqual(envs(), []);
   hosts.length = 0;
 });

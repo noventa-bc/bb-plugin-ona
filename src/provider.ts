@@ -490,7 +490,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
               `Before adopting it again, start it and ${byHand}.`,
           );
         }
-        // Last: a sync pass can reopen the tunnel while the move-aside runs, so it closes here, before the keys go.
+        // Closes the tunnel last, after the move-aside and before the keys go.
         await disconnect(owned.envId);
         await deps.forgetBox(owned.envId);
         return { status: "removed" };

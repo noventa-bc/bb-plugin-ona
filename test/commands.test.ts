@@ -178,17 +178,41 @@ test("status text names a busy thread with no update for over 6h", () => {
 
 const ROW = { hostId: "host_1", machine: "ona:box", status: "active", phase: "active", resource: { envId: "env_1" } };
 
-/** `phase`: the bb lifecycle phase of the one machine. `ona`: its Ona phase, or null when Ona doesn't list it. */
-function fakeRun(phase = "active", ona: string | null = "RUNNING") {
+/**
+ * `phase`: the bb lifecycle phase of the one machine. `ona`: its Ona phase, or null when Ona doesn't list it.
+ * `extra`: `archived` marks the box archived; `listingFails` makes the listing throw; `duringListing` runs
+ * while the listing is taken, so a guard action can start then.
+ */
+function fakeRun(
+  phase = "active",
+  ona: string | null = "RUNNING",
+  extra: { archived?: boolean; listingFails?: boolean; duringListing?: (guard: HostGuard) => void } = {},
+) {
   const calls: string[] = [];
   const machine = { ...ROW, phase };
+  const guard = new HostGuard();
   const envs =
-    ona === null ? [] : [{ id: "env_1", metadata: { name: "box" }, status: { phase: `ENVIRONMENT_PHASE_${ona}` } }];
+    ona === null
+      ? []
+      : [
+          {
+            id: "env_1",
+            metadata: { name: "box", archivedAt: extra.archived ? "2026-01-01T00:00:00Z" : undefined },
+            status: { phase: `ENVIRONMENT_PHASE_${ona}` },
+          },
+        ];
   const deps = {
     machines: () => Promise.resolve([machine]),
     findMachine: (ref: string) => Promise.resolve(ref === "box" ? machine : null),
-    guard: new HostGuard(),
-    snapshot: { refresh: async () => ({ envs, at: 0 }), lastError: null },
+    guard,
+    snapshot: {
+      refresh: async () => {
+        extra.duringListing?.(guard);
+        if (extra.listingFails) throw new Error("could not reach Ona");
+        return { envs, at: 0 };
+      },
+      lastError: extra.listingFails ? "could not reach Ona" : null,
+    },
     provider: { reconnect: async (resource: { envId: string }) => void calls.push(`reconnect ${resource.envId}`) },
     tunnels: { status: () => "up" },
     resolveEnvId: (ref: string) => Promise.resolve(ref === "box" ? "env_1" : ref),
@@ -200,7 +224,7 @@ function fakeRun(phase = "active", ona: string | null = "RUNNING") {
     },
   } as unknown as OnaCommandDeps;
   const run = onaCommands(deps);
-  return { calls, run: (...argv: string[]) => run(argv, {}) };
+  return { calls, guard, run: (...argv: string[]) => run(argv, {}) };
 }
 
 test("help, --help and no command print the usage", async () => {
@@ -260,4 +284,72 @@ test("reconnect on an active machine reconnects it", async () => {
   const { run, calls } = fakeRun();
   assert.deepEqual(await run("reconnect", "box"), { exitCode: 0, stdout: "Reconnected ona:box" });
   assert.deepEqual(calls, ["reconnect env_1"]);
+});
+
+test("reconnect refuses when a guard action takes the machine while Ona is listed, and never calls the provider", async () => {
+  let release = () => {};
+  const { run, calls } = fakeRun("active", "RUNNING", {
+    duringListing: (guard) => {
+      void guard.run("host_1", "heal-daemon", "sync", () => new Promise<void>((done) => (release = done)));
+    },
+  });
+  const result = await run("reconnect", "box");
+  release();
+  assert.deepEqual(result, {
+    exitCode: 1,
+    stderr: "ona:box is busy (heal-daemon); try again shortly or see `bb ona status`.",
+  });
+  assert.deepEqual(calls, []);
+});
+
+test("reconnect refuses a box the Ona listing lacks, without a provider call", async () => {
+  const { run, calls } = fakeRun("active", null);
+  assert.deepEqual(await run("reconnect", "box"), {
+    exitCode: 1,
+    stderr:
+      "ona:box is not listed in Ona, so it was not reconnected. Check the box in Ona and `bb ona status ona:box`.",
+  });
+  assert.deepEqual(calls, []);
+});
+
+test("reconnect refuses a STARTING box, without a provider call", async () => {
+  const { run, calls } = fakeRun("active", "STARTING");
+  assert.deepEqual(await run("reconnect", "box"), {
+    exitCode: 1,
+    stderr: "ona:box is starting in Ona, so it was not reconnected. Try again once Ona shows it running.",
+  });
+  assert.deepEqual(calls, []);
+});
+
+test("reconnect says what to do for each other state Ona can show, and never calls the provider", async () => {
+  const check = "Check the box in Ona and `bb ona status ona:box`.";
+  const sync = "Run `bb ona sync ona:box` (bb then shows it suspended), then `bb machine resume ona:box`.";
+  const wait = "Try again once Ona shows it running.";
+  for (const [ona, archived, state, hint] of [
+    ["STOPPED", false, "stopped", sync],
+    ["STOPPING", false, "stopping", sync],
+    ["PENDING", false, "pending", wait],
+    ["CREATING", false, "creating", wait],
+    ["DELETING", false, "deleting", check],
+    ["DELETED", false, "deleted", check],
+    ["STOPPED", true, "archived", check],
+  ] as const) {
+    const { run, calls } = fakeRun("active", ona, { archived });
+    assert.deepEqual(
+      await run("reconnect", "box"),
+      { exitCode: 1, stderr: `ona:box is ${state} in Ona, so it was not reconnected. ${hint}` },
+      state,
+    );
+    assert.deepEqual(calls, [], state);
+  }
+});
+
+test("reconnect refuses when Ona cannot be asked, and names Ona's error", async () => {
+  const { run, calls } = fakeRun("active", "RUNNING", { listingFails: true });
+  assert.deepEqual(await run("reconnect", "box"), {
+    exitCode: 1,
+    stderr:
+      "Can't ask Ona whether ona:box is running (could not reach Ona); not reconnected. Check `ona login` and try again.",
+  });
+  assert.deepEqual(calls, []);
 });
