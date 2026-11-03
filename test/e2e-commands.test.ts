@@ -213,10 +213,10 @@ test("bb ona sync finds a box by the name it was given in Ona, not through bb", 
 });
 
 test("thread.deleted drops the thread's stored cost", local, async () => {
-  await host.bb.storage.kv.set("cost:thread-1", { cost: null, seq: 1, checkedAt: Date.now() });
+  await host.bb.storage.kv.set("cost2:thread-1", { cost: null, seq: 1, checkedAt: Date.now() });
   const { errors } = await host.harness.behavior.emitThreadEvent("thread.deleted", {
     thread: makeThreadResponse({ id: "thread-1" }),
   });
   assert.deepEqual(errors, []);
-  assert.equal((await host.bb.storage.kv.get("cost:thread-1")) ?? null, null);
+  assert.equal((await host.bb.storage.kv.get("cost2:thread-1")) ?? null, null);
 });

@@ -83,6 +83,26 @@ test("a Codex usage with no groups counts as missing, not $0 (fails if an unreco
   assert.deepEqual(missing, ["unrecorded", "absent"]);
 });
 
+test("a Codex usage with a positive usd counts as recorded, even without groups (fails if a recorded figure counts as unrecorded)", () => {
+  // Bug: a figure Codex reports without groups was treated as unrecorded, so it was never priced.
+  const { usd, missing } = codexCost({
+    withEmptyGroups: { estimatedUsageUsdMicros: 2_000_000, groups: [] },
+    withoutGroups: { estimatedUsageUsdMicros: 3_000_000 },
+  });
+  close(usd, 5);
+  assert.deepEqual(missing, []);
+});
+
+test("a Codex thread priced at $0 with groups shows $0 (fails if a real $0 is hidden)", () => {
+  // Guard: a zero with groups is a recorded figure; only a zero with no groups is unrecorded.
+  const { usd, missing } = codexCost({
+    zero: { estimatedUsageUsdMicros: 0, groups: [{}] },
+    unrecorded: { estimatedUsageUsdMicros: 0, groups: [] },
+  });
+  close(usd, 0);
+  assert.deepEqual(missing, ["unrecorded"]);
+});
+
 test("provider sessions are collected once each, in order", () => {
   const ids = providerSessions([
     { data: { providerThreadId: "s1" } },

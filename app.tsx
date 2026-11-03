@@ -118,7 +118,9 @@ function ThreadCostChip({ threadId }: { threadId: string }) {
     cost.basis === "openai-estimate"
       ? "Codex · OpenAI's usage estimate"
       : "Claude Code · tokens × Anthropic list prices";
-  const partial = cost.partial ? " · some usage couldn't be priced, so the real total is higher" : "";
+  const unpriced =
+    cost.provider === "codex" ? "some Codex sessions aren't recorded yet" : "some usage couldn't be priced";
+  const partial = cost.partial ? ` · ${unpriced}, so the real total is higher` : "";
   return (
     <span
       className={costChip}
