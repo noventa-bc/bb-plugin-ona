@@ -33,13 +33,19 @@ export interface ThreadState {
   archivedAt?: number | null;
 }
 
+/** The listing every reader asks bb for (see `liveThreads`). */
+export type LiveThreadsArgs = { hostId: string; includeHidden: true; archived: false };
+
 /**
- * bb can leave an archived thread stuck "active"; every reader of a thread list drops those first.
- * shortcut: the listing is paged, so a host with a page of archived threads can hide a live one;
- * pass `archived: false` to `threads.list` once bb documents it.
+ * The threads that hold or wake a box, for every reader. bb lists hidden threads (workflow workers,
+ * side chats) only when asked, and they run on the box too; an archived one never counts, since bb
+ * can leave it stuck "active".
  */
-export function unarchived<T extends ThreadState>(threads: readonly T[]): T[] {
-  return threads.filter((thread) => thread.archivedAt == null);
+export function liveThreads<T extends ThreadState>(
+  threads: { list(args: LiveThreadsArgs): Promise<readonly T[]> },
+  hostId: string,
+): Promise<readonly T[]> {
+  return threads.list({ hostId, includeHidden: true, archived: false });
 }
 
 /** What `hostIsBusy` reads from bb's thread list: queued work waiting for the host counts as pending. */
@@ -73,7 +79,7 @@ type Hosts = BbPluginApi["sdk"]["hosts"];
 /** The parts of bb's plugin API a CLI update uses; the real `bb` satisfies it. */
 export interface UpdatesBb {
   sdk: {
-    threads: { list(args: { hostId: string }): Promise<readonly ThreadState[]> };
+    threads: { list(args: LiveThreadsArgs): Promise<readonly ThreadState[]> };
     hosts: {
       providerCliStatus(args: { hostId: string }): Promise<unknown>;
       installProviderCli(args: Parameters<Hosts["installProviderCli"]>[0]): ReturnType<Hosts["installProviderCli"]>;
@@ -105,7 +111,7 @@ export function createUpdateClis({ bb, machines, autoUpdateProviders }: UpdatesD
         continue;
       }
       if (!options.force) {
-        if (hostIsBusy(threadStatuses(unarchived(await bb.sdk.threads.list({ hostId: row.hostId }))))) {
+        if (hostIsBusy(threadStatuses(await liveThreads(bb.sdk.threads, row.hostId)))) {
           lines.push(`${name}: skipped (an agent is running; retry with --force)`);
           continue;
         }
