@@ -298,6 +298,10 @@ test("snapshot shares one list between concurrent callers and caches it", async 
   assert.equal(calls, 2);
   await snapshot.refresh();
   assert.equal(calls, 3);
+  // Bug: refresh() returned the cache once the wall clock stepped back, so an SSH caller could act on an old listing.
+  now -= 60_000;
+  await snapshot.refresh();
+  assert.equal(calls, 4);
 });
 
 // Bug: `bb ona rename` refreshed into a list that started before the rename and cached the old name.
