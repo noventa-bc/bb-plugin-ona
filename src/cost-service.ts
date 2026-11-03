@@ -98,10 +98,13 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
         let cost: ThreadCost | null = null;
         if (sessions.length > 0) {
           // Safety rule 1: bb's "connected" can lag a stop made in Ona, and SSH would start the box.
-          // Nothing is stored, so the floor can't hide this turn once the box runs again.
           // A failed listing throws into the catch below.
           const env = (await snapshot.refresh()).envs.find((e) => e.id === devbox.envId);
-          if (!isRunning(env)) return stored?.cost ?? null;
+          if (!isRunning(env)) {
+            // Checked, so polls skip Ona for 5 minutes; the stored seq keeps this turn pending until the box runs.
+            if (stored) await bb.storage.kv.set(key, { ...stored, checkedAt: Date.now() });
+            return stored?.cost ?? null;
+          }
           if (agentProvider === "codex") {
             const reply = (await runCollector(devbox.envId, CODEX_COLLECTOR, sessions)) as {
               results?: Parameters<typeof codexCost>[0];

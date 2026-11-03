@@ -293,7 +293,7 @@ export class OnaSnapshot {
   /** A listing fetched after this call: a list already in flight may predate what the caller just changed or what Ona changed meanwhile. */
   async refresh(): Promise<OnaListing> {
     await this.inFlight?.catch(() => undefined);
-    return this.get(-1);
+    return this.get(-Infinity);
   }
 
   /** A listing at most `maxAgeMs` old; throws if Ona can't be asked. */

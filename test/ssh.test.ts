@@ -108,6 +108,27 @@ test("a tunnel runs ssh only when its gate says yes: a gate that says no or thro
   }
 });
 
+test("a tunnel stopped while its gate asks Ona never runs ssh", async () => {
+  // Bug: bb suspended the machine during the gate's listing, the gate then said yes, and an ssh nothing would kill held the box awake.
+  let answer = (_yes: boolean) => {};
+  let spawns = 0;
+  const tunnels = new TunnelManager(
+    "true", // if it ran, it exits at once instead of outliving the test
+    () => {
+      spawns++; // the remote port is read only to spawn ssh
+      return 1;
+    },
+    () => 2,
+    quiet,
+    () => new Promise((resolve) => (answer = resolve)),
+  );
+  tunnels.ensure("env-1");
+  tunnels.stop("env-1");
+  answer(true);
+  await settle();
+  assert.equal(spawns, 0);
+});
+
 /** The fake times, in seconds, at which a tunnel asks `gate` over `seconds` of fake time. */
 async function askTimes(gate: () => Promise<boolean>, seconds: number): Promise<number[]> {
   const times: number[] = [];

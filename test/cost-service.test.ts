@@ -85,14 +85,21 @@ test("a box that is not connected returns the stored figure and is never collect
   assert.deepEqual(w.collectorRuns, []);
 });
 
-test("bb says connected but a fresh Ona listing says stopped: the stored figure comes back, no collector runs, nothing is stored", async () => {
+test("bb says connected but a fresh Ona listing says stopped: the stored figure comes back, no collector runs, and the floor applies", async () => {
   // Bug: the collector trusted bb's "connected", which lags a stop made in Ona's UI, and Ona's SSH starts a stopped box.
-  const stored = { cost: FIGURE, seq: 7, checkedAt: OLD };
-  const w = world({ ona: "ENVIRONMENT_PHASE_STOPPED", turnSeq: 8, stored });
+  const w = world({ ona: "ENVIRONMENT_PHASE_STOPPED", turnSeq: 8, stored: { cost: FIGURE, seq: 7, checkedAt: OLD } });
   assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
   assert.deepEqual(w.collectorRuns, []);
-  // Bug: storing a check time here let the 5-minute floor hide the finished turn once the box was back.
-  assert.equal(w.kv.get("cost:t1"), stored);
+  // Bug: storing nothing paged events and listed Ona on every chip poll while bb kept the stopped box active.
+  const kept = w.kv.get("cost:t1") as { cost: ThreadCost; seq: number; checkedAt: number };
+  assert.deepEqual([kept.cost, kept.seq], [FIGURE, 7]);
+  assert.ok(kept.checkedAt > OLD);
+  assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
+  assert.equal(w.listings.count, 1);
+  // With nothing stored there is nothing to keep: a record with no seq would settle the turn's first real round.
+  const empty = world({ ona: "ENVIRONMENT_PHASE_STOPPED", turnSeq: 8 });
+  assert.equal(await empty.costs.threadCost("t1"), null);
+  assert.equal(empty.kv.has("cost:t1"), false);
 });
 
 test("bb says connected but Ona can't be asked: the stored figure comes back and no collector runs", async () => {

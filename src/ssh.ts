@@ -152,6 +152,8 @@ export class TunnelManager {
     let refusals = 0;
     while (!signal.aborted) {
       const connect = await this.shouldConnect(envId).catch(() => null);
+      // stop() can run while the gate asks Ona; an ssh spawned after it would never be killed.
+      if (this.tunnels.get(envId) !== state) return;
       if (!connect) {
         // Just after a resume Ona can say STARTING while SSH works; a refusal that lasts is a stopped or stuck box.
         await sleep(connect === null || ++refusals > 6 ? 60_000 : 10_000, signal);

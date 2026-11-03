@@ -6,7 +6,7 @@
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { KeepAlives } from "./src/keepalive.ts";
-import { isRunning, OnaCli, OnaSnapshot, sshHost } from "./src/ona.ts";
+import { isRunning, isStopped, OnaCli, OnaSnapshot, sshHost } from "./src/ona.ts";
 import {
   checkOnaLogin,
   createSetup,
@@ -176,17 +176,17 @@ export default async function plugin(bb: BbPluginApi) {
   const hostByEnv = new Map<string, string>();
 
   // Safety rule 1: a tunnel (re)connects only when a listing fetched now says
-  // RUNNING; a cached one can predate a stop made in Ona's UI. Any other phase,
-  // or a box the listing lacks, gets a pass right away (see reconcile).
+  // RUNNING; a cached one can predate a stop made in Ona's UI. A box Ona shows
+  // stopped gets a pass right away (see reconcile).
   const tunnels = new TunnelManager(
     sshPath,
     port,
     () => proxy.port,
     bb.log,
     async (envId) => {
-      const running = isRunning((await snapshot.refresh()).envs.find((e) => e.id === envId));
-      if (!running) scheduler.schedule(hostByEnv.get(envId) ?? ALL, 0);
-      return running;
+      const env = (await snapshot.refresh()).envs.find((e) => e.id === envId);
+      if (env && isStopped(env)) scheduler.schedule(hostByEnv.get(envId) ?? ALL, 0);
+      return isRunning(env);
     },
     // A tunnel that came back may lead to a box whose daemon died with it;
     // check once bb has had time to hear from the daemon.

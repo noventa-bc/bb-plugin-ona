@@ -333,7 +333,7 @@ export function createSync(deps: SyncDeps) {
               tunnels.ensure(resource.envId);
               return;
             case "heal-daemon": {
-              // Rule 1: SSH starts stopped boxes, so re-check Ona right before each SSH step.
+              // Rule 1: SSH starts stopped boxes, so ask Ona before the daemon check and again right before a restart.
               const runningNow = async () =>
                 isRunning((await snapshot.refresh()).envs.find((e) => e.id === resource.envId));
               const gone = "Ona no longer reports it running; nothing done";

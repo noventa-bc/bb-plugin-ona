@@ -57,18 +57,19 @@ you asked for, so safety rule 1 does not gate it.
 **Safety rules.** Every automatic action keeps these:
 
 1. **Never wake a box.** Ona's SSH starts a stopped box, so the plugin uses SSH
-   (tunnel connect and reconnect, daemon check, the daemon restart that follows
-   it, cost collector) only when an `ona environment list` fetched right before
-   it says the box is running; the daemon restart asks Ona again after the
-   daemon check, right before it. A cached listing, bb showing the machine
-   connected, or a box that is starting or stopping is not enough. If Ona can't be asked,
-   nothing connects: tunnels wait, and a thread's cost shows its last figure.
-   A refused tunnel asks again every 10s for a minute, then every minute, each
-   time with one `ona environment list` and one check of its machine; while Ona
-   can't be asked it asks every minute, with no check. It connects once Ona
-   shows the box running, and closes only when bb suspends or removes the
-   machine, which a check that sees the box stopped asks bb to do, unless the
-   plugin has given up (rule 5) or bb refuses the suspend.
+   (tunnel connect and reconnect, daemon check, cost collector) only when an
+   `ona environment list` fetched right before it says the box is running. A
+   daemon restart asks Ona again after the daemon check, right before it
+   starts. A cached listing, bb showing the machine connected, a box that is
+   starting or stopping, or a listing that lacks the box is not enough. If Ona
+   can't be asked, nothing connects: tunnels wait, and a thread's cost shows
+   its last figure. Every connect attempt of a tunnel makes one listing (so
+   does each reconnect after ssh exits), plus a check of its machine when Ona
+   shows the box stopped. A refused tunnel tries again every 10s for a minute,
+   then every minute (every minute while Ona can't be asked). A tunnel closes
+   when bb suspends or removes the machine, or the plugin stops; a check that
+   sees the box stopped asks bb to suspend it once bb no longer shows the
+   machine connected.
    Commands you run yourself are not gated and may wake a box:
    `ona environment open`, `bb ona reconnect` and `bb ona ssh --thread`.
    *Why: an accidental start costs money and keeps the box up.*
@@ -93,7 +94,7 @@ you asked for, so safety rule 1 does not gate it.
   up or tearing down a workspace on it (a running box only; this never starts one).
 - **45s after** an Ona machine disconnects, so a brief drop (Wi-Fi, Mac sleep) can recover on its own.
 - **30s after** a tunnel comes back up.
-- **Right away** when a tunnel is refused (Ona doesn't show the box running).
+- **Right away** when a tunnel finds its box stopped in Ona.
 - **After** bb's realtime connection reconnects.
 - **Every 2 minutes**, as a backstop.
 - **Right after the Mac wakes**: a 15s timer that fires 60s+ late means the process slept, so the plugin re-reads Ona and checks every machine once.
