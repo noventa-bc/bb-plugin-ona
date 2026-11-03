@@ -7,7 +7,7 @@ import { mock, test } from "node:test";
 import { envNameForKey } from "../src/provider.ts";
 import { daemonEnv, shellQuote, sshCapture, sshExecutor, TunnelManager } from "../src/ssh.ts";
 import { pollUntil, sleep } from "../src/time.ts";
-import { settle, tick } from "./fake-clock.ts";
+import { resetFakeClock, settle, tick } from "./fake-clock.ts";
 
 const fakeSsh = fileURLToPath(new URL("./fake-ssh.sh", import.meta.url));
 const executor = sshExecutor(fakeSsh, "env-1");
@@ -150,10 +150,7 @@ async function askTimes(gate: () => Promise<boolean>, seconds: number): Promise<
     return times;
   } finally {
     tunnels.stopAll();
-    // The aborted sleep removes its fake timer a microtask later; after a reset that removal
-    // corrupts the emptied fake queue, and the next test's timers never fire.
-    await settle();
-    mock.timers.reset();
+    await resetFakeClock();
   }
 }
 
