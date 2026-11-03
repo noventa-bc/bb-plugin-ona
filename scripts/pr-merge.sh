@@ -3,6 +3,9 @@
 # passed (FACTORY.md steps 8 and 9). A PR that touches code needs `check`, one
 # that touches Markdown needs `docs`, one with both needs both. The squash
 # subject is the PR title, and only the head commit the checks ran on is merged.
+# A PR that changes package.json must contain the current main: squashed onto a
+# main that took the same bump, it leaves the version unchanged and release.yml
+# skips its release.
 #
 #   scripts/pr-merge.sh <pr number>
 set -e
@@ -40,5 +43,12 @@ if [ "$not_passed" != "0" ]; then
   gh pr checks "$pr" >&2 || true
   echo "PR $pr is not green ($not_passed check(s) not passed); not merging" >&2
   exit 1
+fi
+if printf '%s\n' "$files" | grep -qx package.json; then
+  behind=$(gh api "repos/{owner}/{repo}/compare/main...$sha" --jq .behind_by) || behind=unknown
+  if [ "$behind" != "0" ]; then
+    echo "PR $pr changes package.json and is not up to date with main (behind by: $behind); merge main into it, set the version in package.json and package-lock.json to main's (a clean merge keeps the PR's), run scripts/bump.sh \"<PR title>\" again, and let CI run again" >&2
+    exit 1
+  fi
 fi
 gh pr merge "$pr" --squash --delete-branch --subject "$title" --match-head-commit "$sha"

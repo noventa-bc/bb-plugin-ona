@@ -113,16 +113,18 @@ those and the "skipped or not checked" lines ponytail ends with.
 9. **Merge.** The orchestrator merges with
    `scripts/pr-merge.sh <pr>` from the main checkout (the branch is deleted
    on merge, which fails from a worktree that has it checked out). It waits
-   for the runs the PR needs, watches the checks, and squash-merges the head
-   they ran on with the PR title as the commit subject, only when every
-   check passed. It runs as
-   soon as the review has no open findings. A push to `main` then tags
-   and releases the version in `package.json` on its own (`release.yml`); no
-   step here does it. PRs that touch the same files merge one at a time: merge `main` into the next branch (a merge
-   commit; force-pushing is blocked, so never rebase a pushed branch), fix
-   conflicts keeping both sides, run `npm run check`, let CI run again, then
-   merge. Two green PRs can still break each other once combined, so the
-   rerun after merging `main` is never skipped. Never merge a red PR.
+   for the runs the PR needs and merges only a fully green head (see the
+   script). It runs as soon as the review has no open findings. A push
+   to `main` then tags and releases the version in `package.json` on its own
+   (`release.yml`); no step here does it. PRs that touch the same files merge
+   one at a time: merge `main` into the next branch (a merge commit;
+   force-pushing is blocked, so never rebase a pushed branch), fix conflicts
+   keeping both sides, run `npm run check`, let CI run again, then merge. Two
+   green PRs can still break each other once combined, so the rerun after
+   merging `main` is never skipped. Never merge a red PR. A PR that changes
+   `package.json` and is behind `main` is refused: merge `main`, set the version
+   in `package.json` and `package-lock.json` back to `main`'s (a clean merge
+   keeps the PR's), then run `scripts/bump.sh "<title>"` again.
 10. **Sync the roadmap.** Status lives only in the table at the top of the
     roadmap, one linked row per item, with the landing commit in the Item cell.
     When a PR opens, set the item to In review; when it merges, set it to Done,
