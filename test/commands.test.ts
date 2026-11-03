@@ -36,20 +36,21 @@ test("parseArgs: positionals, flags, --json, --thread <id> and a shell command a
   assert.equal(parseArgs([]).command, undefined);
 });
 
-function keepAlive(phase: string | null, options: { listing?: "fail"; machine?: boolean } = {}) {
+function keepAlive(phase: string | null, options: { listing?: "fail"; listingError?: string; machine?: boolean } = {}) {
   const started: Array<[string, number]> = [];
   const stopped: string[] = [];
   const envs: OnaEnvironment[] =
     phase === null
       ? []
       : [{ id: "env-1", metadata: { name: "brave-otter" }, status: { phase: `ENVIRONMENT_PHASE_${phase}` } }];
+  const error = options.listingError ?? "not logged in";
   const deps: KeepAliveDeps = {
     snapshot: {
       refresh: async () => {
-        if (options.listing === "fail") throw new Error("not logged in");
+        if (options.listing === "fail") throw new Error(error);
         return { envs, at: 0 };
       },
-      lastError: options.listing === "fail" ? "not logged in" : null,
+      lastError: options.listing === "fail" ? error : null,
     },
     findMachine: async () => (options.machine ? { resource: { envId: "env-1" } } : null),
     resolveEnvId: async (ref) => (ref === "brave-otter" ? "env-1" : ref),
@@ -82,6 +83,7 @@ test("keep-alive refuses, and starts nothing, for a stopped, unknown or unlistab
     [keepAlive("STARTING"), /is starting in Ona/],
     [keepAlive(null), /Ona lists no devbox matching/],
     [keepAlive("RUNNING", { listing: "fail" }), /Can't ask Ona.*not logged in.*nothing changed/],
+    [keepAlive("RUNNING", { listing: "fail", listingError: "" }), /Can't ask Ona.*\(no listing\); nothing changed/],
   ];
   for (const [{ deps, started }, message] of cases) {
     const result = await keepAliveCommand(deps, "brave-otter", "1h");
@@ -134,6 +136,17 @@ test("status text: header for a healthy, failing or unrepaired CLI", () => {
   );
 });
 
+// Bug: an empty CLI error showed the CLI as ok, and one that starts with a newline printed no reason.
+test("status header names no listing when the CLI error is empty or starts with a newline", () => {
+  for (const lastError of ["", "\nnot logged in"]) {
+    assert.equal(
+      formatStatus([], { lastError, listedAt: null, autoRepair: true }, NOW).split("\n")[0],
+      "Ona CLI: ERROR no listing (run `ona login`?)",
+      JSON.stringify(lastError),
+    );
+  }
+});
+
 test("status text: one block per machine with what the plugin saw, did and is waiting on", () => {
   const text = formatStatus(
     [
@@ -180,18 +193,16 @@ const ROW = { hostId: "host_1", machine: "ona:box", status: "active", phase: "ac
 
 /**
  * `phase`: the bb lifecycle phase of the one machine. `ona`: its Ona phase, or null when Ona doesn't list it.
- * `extra`: `archived` marks the box archived; `listingFails` makes the listing throw `listingError`;
- * `duringListing` runs while the listing is taken, with the guard and the machine, so an action can start
- * or a suspend can finish then.
+ * `extra`: `listingFails` makes the listing throw `listingError`; `duringListing` runs while the listing is taken,
+ * with the guard and the machine, so an action can start, a suspend can finish, or the machine can be replaced.
  */
 function fakeRun(
   phase = "active",
   ona: string | null = "RUNNING",
   extra: {
-    archived?: boolean;
     listingFails?: boolean;
     listingError?: string;
-    duringListing?: (guard: HostGuard, machine: { phase: string }) => void;
+    duringListing?: (guard: HostGuard, machine: { phase: string; hostId: string }) => void;
   } = {},
 ) {
   const calls: string[] = [];
@@ -204,13 +215,14 @@ function fakeRun(
       : [
           {
             id: "env_1",
-            metadata: { name: "box", archivedAt: extra.archived ? "2026-01-01T00:00:00Z" : undefined },
+            metadata: { name: "box" },
             status: { phase: `ENVIRONMENT_PHASE_${ona}` },
           },
         ];
   const deps = {
     machines: () => Promise.resolve([machine]),
-    findMachine: (ref: string) => Promise.resolve(ref === "box" ? machine : null),
+    // A fresh row per lookup, as bb gives, so a row the command holds doesn't change under it.
+    findMachine: (ref: string) => Promise.resolve(ref === "box" ? { ...machine } : null),
     guard,
     snapshot: {
       refresh: async () => {
@@ -333,16 +345,15 @@ test("reconnect says what to do for each other state Ona can show, and never cal
   const sync =
     "Once bb no longer shows it connected, `bb ona sync ona:box` marks it suspended; then run `bb machine resume ona:box`.";
   const wait = "Try again once Ona shows it running.";
-  for (const [ona, archived, state, hint] of [
-    ["STOPPED", false, "stopped", sync],
-    ["STOPPING", false, "stopping", sync],
-    ["PENDING", false, "pending", wait],
-    ["CREATING", false, "creating", wait],
-    ["DELETING", false, "deleting", check],
-    ["DELETED", false, "deleted", check],
-    ["STOPPED", true, "archived", check],
+  for (const [ona, state, hint] of [
+    ["STOPPED", "stopped", sync],
+    ["STOPPING", "stopping", sync],
+    ["PENDING", "pending", wait],
+    ["CREATING", "creating", wait],
+    ["DELETING", "deleting", check],
+    ["DELETED", "deleted", check],
   ] as const) {
-    const { run, calls } = fakeRun("active", ona, { archived });
+    const { run, calls } = fakeRun("active", ona);
     assert.deepEqual(
       await run("reconnect", "box"),
       { exitCode: 1, stderr: `ona:box is ${state} in Ona, so it was not reconnected. ${hint}` },
@@ -375,6 +386,20 @@ test("reconnect refuses a machine a suspend finished while Ona was listed, witho
   assert.deepEqual(calls, []);
 });
 
+// Bug: a machine replaced during the listing (same name and box, new host id) was reconnected under the old host.
+test("reconnect refuses when the machine is replaced while Ona is listed, and never calls the provider", async () => {
+  const { run, calls } = fakeRun("active", "RUNNING", {
+    duringListing: (_guard, machine) => {
+      machine.hostId = "host_2";
+    },
+  });
+  assert.deepEqual(await run("reconnect", "box"), {
+    exitCode: 1,
+    stderr: 'No Ona-backed bb machine matches "box".',
+  });
+  assert.deepEqual(calls, []);
+});
+
 test("reconnect names only the first line of Ona's error when the listing fails", async () => {
   const { run, calls } = fakeRun("active", "RUNNING", {
     listingFails: true,
@@ -386,4 +411,21 @@ test("reconnect names only the first line of Ona's error when the listing fails"
       "Can't ask Ona whether ona:box is running (could not reach Ona); not reconnected. Check `ona login` and try again.",
   });
   assert.deepEqual(calls, []);
+});
+
+// Bug: an empty listing error, or one whose first line is empty, printed "()" in the refusal.
+test("reconnect names no listing when Ona's error is empty or starts with a newline", async () => {
+  for (const listingError of ["", "\ncould not reach Ona"]) {
+    const { run, calls } = fakeRun("active", "RUNNING", { listingFails: true, listingError });
+    assert.deepEqual(
+      await run("reconnect", "box"),
+      {
+        exitCode: 1,
+        stderr:
+          "Can't ask Ona whether ona:box is running (no listing); not reconnected. Check `ona login` and try again.",
+      },
+      JSON.stringify(listingError),
+    );
+    assert.deepEqual(calls, []);
+  }
 });

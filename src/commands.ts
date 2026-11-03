@@ -5,7 +5,6 @@ import type { BbPluginApi, PluginCliCommandInfo, PluginCliContext } from "@get-b
 import { clockTime, parseKeepAlive, type KeepAlives } from "./keepalive.ts";
 import { randomFriendlyName } from "./names.ts";
 import {
-  isArchived,
   isRunning,
   isStarting,
   matchEnvironment,
@@ -16,7 +15,7 @@ import {
   type OnaSnapshot,
 } from "./ona.ts";
 import { onaRef, type registerOnaProvider } from "./provider.ts";
-import { ALL, short, type HostGuard } from "./reconcile.ts";
+import { ALL, short, STOPPED, type HostGuard } from "./reconcile.ts";
 import { runOnce, type ShellBackend, type ShellTarget, type ThreadTerminalPlan } from "./shells.ts";
 import type { TunnelManager } from "./ssh.ts";
 import type { Row, StatusRow, Sync } from "./sync.ts";
@@ -75,7 +74,7 @@ export async function keepAliveCommand(
   if (!listing) {
     return {
       exitCode: 1,
-      stderr: `Can't ask Ona whether ${ref} is running (${snapshot.lastError ?? "no listing"}); nothing changed.`,
+      stderr: `Can't ask Ona whether ${ref} is running (${snapshot.lastError?.split("\n")[0] || "no listing"}); nothing changed.`,
     };
   }
   const row = await findMachine(ref);
@@ -125,10 +124,9 @@ function notActiveRefusal(row: Row): CliResult {
 function notRunningInOna(machine: string, env: OnaEnvironment | undefined): string {
   const check = `Check the box in Ona and \`bb ona status ${machine}\`.`;
   if (!env) return `${machine} is not listed in Ona, so it was not reconnected. ${check}`;
-  if (isArchived(env)) return `${machine} is archived in Ona, so it was not reconnected. ${check}`;
   const phase = env.status?.phase;
   const state = short(phase ?? "unknown");
-  if (phase === "ENVIRONMENT_PHASE_STOPPED" || phase === "ENVIRONMENT_PHASE_STOPPING") {
+  if (phase !== undefined && STOPPED.has(phase)) {
     return `${machine} is ${state} in Ona, so it was not reconnected. Once bb no longer shows it connected, \`bb ona sync ${machine}\` marks it suspended; then run \`bb machine resume ${machine}\`.`;
   }
   if (isStarting(env))
@@ -150,9 +148,10 @@ export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()
     const s = Math.round((now - at) / 1000);
     return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : `${Math.round(s / 3600)}h ago`;
   };
-  const header = ona.lastError
-    ? `Ona CLI: ERROR ${ona.lastError.split("\n")[0]} (run \`ona login\`?)`
-    : `Ona CLI: ok${ona.listedAt !== null ? `, listed ${ago(ona.listedAt)}` : ""}${ona.autoRepair ? "" : "  (autoRepair is off)"}`;
+  const header =
+    ona.lastError !== null
+      ? `Ona CLI: ERROR ${ona.lastError.split("\n")[0] || "no listing"} (run \`ona login\`?)`
+      : `Ona CLI: ok${ona.listedAt !== null ? `, listed ${ago(ona.listedAt)}` : ""}${ona.autoRepair ? "" : "  (autoRepair is off)"}`;
   if (rows.length === 0) return `${header}\nNo Ona machines yet.`;
   const lines = rows.map((row) => {
     const rowLines = [`${row.machine}  bb:${row.bb}  tunnel:${row.tunnel}  ona:${row.ona}`];
@@ -408,15 +407,16 @@ export function onaCommands(deps: OnaCommandDeps) {
           // Safety rule 1 (docs/sync.md): SSH starts a stopped box, so Ona is asked right before the connect.
           const listing = await snapshot.refresh().catch(() => null);
           if (!listing) {
-            const reason = (snapshot.lastError ?? "no listing").split("\n")[0];
+            const reason = snapshot.lastError?.split("\n")[0] || "no listing";
             return {
               exitCode: 1,
               stderr: `Can't ask Ona whether ${row.machine} is running (${reason}); not reconnected. Check \`ona login\` and try again.`,
             };
           }
-          // bb may have changed while Ona was asked: a suspend or remove that finished then is seen here.
+          // bb may have changed while Ona was asked: any suspend, remove or replacement is seen here.
           const current = await findMachine(ref);
-          if (!current) return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${ref}".` };
+          if (!current || current.hostId !== row.hostId)
+            return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${ref}".` };
           if (current.phase !== "active") return notActiveRefusal(current);
           const env = listing.envs.find((e) => e.id === row.resource.envId);
           if (!isRunning(env)) return { exitCode: 1, stderr: notRunningInOna(row.machine, env) };

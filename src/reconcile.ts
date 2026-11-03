@@ -62,7 +62,7 @@ export interface Decision {
 }
 
 const RUNNING = "ENVIRONMENT_PHASE_RUNNING";
-const STOPPED = new Set(["ENVIRONMENT_PHASE_STOPPED", "ENVIRONMENT_PHASE_STOPPING"]);
+export const STOPPED = new Set(["ENVIRONMENT_PHASE_STOPPED", "ENVIRONMENT_PHASE_STOPPING"]);
 const GONE = new Set(["ENVIRONMENT_PHASE_DELETED", "ENVIRONMENT_PHASE_DELETING"]);
 
 export const short = (phase: string) => phase.replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase();
