@@ -24,6 +24,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+      # node:test's fake clock corrupts its queue when reset right after an aborted sleep on
+      # 24.22.1 (seen in CI), not on 24.3.0 (checked 2026-11-03); test/fake-clock.ts works around it.
           cache: npm
       # PR title and commits are Conventional Commits; the version moved as the title requires.
       # Title, body and base go through env, never into the script text.
