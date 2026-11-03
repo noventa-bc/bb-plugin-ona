@@ -228,16 +228,20 @@ test("an unknown command, or one missing its <ref>, exits 1 with the usage", asy
 
 // Bug: reconnect never checked bb's view, so on a suspended machine it opened a tunnel that kept the box awake (decision 0003).
 // Bug: the refusal offered `bb machine resume` in every phase, though bb refuses it for most and is already resuming in one;
-// then it told a suspending machine to try again, though a suspend never ends active.
+// then it told a suspending machine to try again, though a suspend never ends active, and printed "undefined" for a phase it didn't know.
 test("reconnect on a machine bb doesn't show active exits 1, never reconnects, and gives each phase's next step", async () => {
+  const resume = "Resume it with `bb machine resume ona:box`.";
   const wait = "Try again once bb shows it active.";
+  const gone = "It is gone or being removed.";
   for (const [phase, hint] of [
-    ["suspended", "Resume it with `bb machine resume ona:box`."],
-    ["suspending", "Wait for the suspend to finish, then resume it with `bb machine resume ona:box`."],
+    ["suspended", resume],
+    ["suspending", resume],
     ["resuming", wait],
     ["creating", wait],
-    ["removing", "It is being removed."],
-    ["destroyed", "It is being removed."],
+    ["removing", gone],
+    ["destroyed", gone],
+    // A phase a newer bb adds.
+    ["hibernating", wait],
   ]) {
     const { run, calls } = fakeRun(phase);
     assert.deepEqual(

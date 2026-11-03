@@ -87,21 +87,23 @@ export async function keepAliveCommand(
 
 type HostPhase = Awaited<ReturnType<BbPluginApi["sdk"]["hosts"]["list"]>>[number]["lifecycle"]["phase"];
 
-/** What to do about a machine `bb ona reconnect` refused. No default: a new bb phase fails the typecheck. */
+/** What to do about a machine `bb ona reconnect` refused. The switch covers every phase the SDK lists (lint checks it). */
 function notActiveHint(phase: Exclude<HostPhase, "active">, machine: string): string {
   switch (phase) {
+    // bb accepts a resume during a suspend and waits for it.
     case "suspended":
-      return `Resume it with \`bb machine resume ${machine}\`.`;
     case "suspending":
-      return `Wait for the suspend to finish, then resume it with \`bb machine resume ${machine}\`.`;
+      return `Resume it with \`bb machine resume ${machine}\`.`;
     // bb refuses a resume while creating, and one is under way while resuming.
     case "creating":
     case "resuming":
-      return "Try again once bb shows it active.";
+      break;
     case "removing":
     case "destroyed":
-      return "It is being removed.";
+      return "It is gone or being removed.";
   }
+  // Also a phase a newer bb adds: Row.phase is a string at runtime.
+  return "Try again once bb shows it active.";
 }
 
 /** What the status header says about the ona CLI. */

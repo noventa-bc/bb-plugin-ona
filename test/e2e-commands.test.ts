@@ -205,7 +205,7 @@ test("bb ona rename renames the box in Ona and its bb machine (fails if bb keeps
 });
 
 test("bb ona update installs only the pending CLI (fails if a current CLI is reinstalled)", local, async () => {
-  Object.assign(hosts[0]!, { status: "connected", lifecycle: { phase: "active", message: null, suspendedAt: null } });
+  // The reconnect test above left the machine connected and active.
   const result = await host.harness.behavior.runCli(["update"]);
   assert.equal(result.exitCode, 0, result.stderr);
   // The box was renamed in the test above.
