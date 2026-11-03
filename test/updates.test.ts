@@ -8,7 +8,6 @@ import {
   STUCK_THREAD_MS,
   stuckThreads,
   threadStatuses,
-  unarchived,
   updatesToApply,
   type CliStatus,
   type ThreadState,
@@ -39,17 +38,6 @@ test("a host with an agent turn in flight is busy", () => {
   assert.equal(hostIsBusy(threadStatuses([{ status: "idle", queuedWork: "waiting" }, { status: "idle" }])), true);
 });
 
-// Bug: an archived thread bb left stuck "active" kept its box busy forever.
-test("unarchived drops an archived thread whatever its status", () => {
-  assert.deepEqual(
-    unarchived([
-      { status: "active", archivedAt: 1 },
-      { status: "idle", archivedAt: null },
-    ]),
-    [{ status: "idle", archivedAt: null }],
-  );
-});
-
 // Bug: the owner couldn't see why a box was never released.
 test("stuckThreads flags busy threads with no update for over 6h", () => {
   const now = 100 * STUCK_THREAD_MS;
@@ -74,7 +62,14 @@ type InstallEvents = Awaited<ReturnType<UpdatesBb["sdk"]["hosts"]["installProvid
 
 /** One machine per entry; installs answer with `install[hostId]`. */
 function updater(
-  boxes: Array<{ hostId: string; status?: string; threads?: ThreadState[]; codex?: Partial<CliStatus> }>,
+  boxes: Array<{
+    hostId: string;
+    status?: string;
+    threads?: ThreadState[];
+    /** Listed only when asked for hidden threads, like bb's workflow workers and side chats. */
+    hiddenThreads?: ThreadState[];
+    codex?: Partial<CliStatus>;
+  }>,
   install: Record<string, InstallEvents> = {},
 ) {
   const installs: string[] = [];
@@ -92,7 +87,12 @@ function updater(
     bb: {
       sdk: {
         threads: {
-          list: async ({ hostId }) => byHost.get(hostId)!.threads ?? [],
+          // Like bb: hidden threads only when asked, archived ones dropped when asked.
+          list: async ({ hostId, includeHidden, archived }) =>
+            [
+              ...(byHost.get(hostId)!.threads ?? []),
+              ...(includeHidden ? (byHost.get(hostId)!.hiddenThreads ?? []) : []),
+            ].filter((thread) => archived !== false || thread.archivedAt == null),
         },
         hosts: {
           providerCliStatus: async ({ hostId }) => ({ codex: status(byHost.get(hostId)!.codex ?? {}) }),
@@ -120,6 +120,8 @@ test("updateClis reports one line per box, one outcome each", async () => {
     [
       { hostId: "off", status: "disconnected", codex: pending },
       { hostId: "busy", threads: [{ status: "idle" }, { status: "active" }], codex: pending },
+      // Bug: bb lists hidden threads only when asked, so a workflow worker's CLI was swapped mid-turn.
+      { hostId: "hidden", hiddenThreads: [{ status: "active" }], codex: pending },
       // Bug: a thread bb left "active" after archiving blocked the update forever.
       { hostId: "stale", threads: [{ status: "active", archivedAt: 1 }], codex: pending },
       { hostId: "current" },
@@ -135,6 +137,7 @@ test("updateClis reports one line per box, one outcome each", async () => {
   assert.deepEqual(await updateClis(), [
     "box-off: skipped (disconnected)",
     "box-busy: skipped (an agent is running; retry with --force)",
+    "box-hidden: skipped (an agent is running; retry with --force)",
     "box-stale: codex 1.0.0 -> 2.0.0",
     "box-current: up to date (codex 1.0.0)",
     "box-updated: codex 1.0.0 -> 2.0.0",
