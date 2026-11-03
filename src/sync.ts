@@ -333,13 +333,17 @@ export function createSync(deps: SyncDeps) {
               tunnels.ensure(resource.envId);
               return;
             case "heal-daemon": {
-              // Rule 1: SSH starts stopped boxes, so re-check Ona right before it.
-              const env = (await snapshot.refresh()).envs.find((e) => e.id === resource.envId);
-              if (!env || !isRunning(env)) return "Ona no longer reports it running; nothing done";
+              // Rule 1: SSH starts stopped boxes, so ask Ona before the daemon check and again right before a restart.
+              const runningNow = async () =>
+                isRunning((await snapshot.refresh()).envs.find((e) => e.id === resource.envId));
+              const gone = "Ona no longer reports it running; nothing done";
+              if (!(await runningNow())) return gone;
               // Rule 3: restarting a live daemon would kill running turns.
               const alive = await provider.daemonAlive(resource, AbortSignal.timeout(30_000));
               if (alive === true) return "daemon is running; not restarting";
               if (alive === null) return "couldn't check the daemon over SSH; not restarting";
+              // The check can take 30 s, long enough for the box to be stopped in Ona.
+              if (!(await runningNow())) return gone;
               const report = { step: (text: string) => bb.log.info(`${machine}: ${text}`), log: () => {} };
               await provider.reconnect(resource, report, AbortSignal.timeout(15 * 60_000));
               return "daemon was down; restarted it";

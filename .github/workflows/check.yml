@@ -21,6 +21,8 @@ jobs:
           persist-credentials: false
           # The base branch, for the commit and version checks below.
           fetch-depth: 0
+      # .nvmrc (24) resolved to 24.22.1 here (checked 2026-11-03), where node:test's fake clock loses
+      # the next test's timers when reset right after an aborted sleep; 24.3.0 does not. test/fake-clock.ts works around it.
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
