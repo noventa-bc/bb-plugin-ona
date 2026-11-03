@@ -49,7 +49,9 @@ npm run check        # typecheck, lint, format check, tests
    an Ona start and the `thread_cost` rpc. All three need a loopback port, so
    they skip themselves inside the agent sandbox.
 3. Write the least code that solves the whole task. Mark a known limit with a
-   `shortcut: <the limit>, <when to upgrade>` comment.
+   `shortcut: <the limit>, <when to upgrade>` comment. Never describe an
+   unfixed security weakness in a comment, issue or PR: report it as
+   `SECURITY.md` says.
 4. Make the coupled changes `AGENTS.md` lists (README settings table, usage
    text, `docs/sync.md` rules table).
 5. Run `npm run check`, plus `shellcheck` on any `.sh` you touched and the two

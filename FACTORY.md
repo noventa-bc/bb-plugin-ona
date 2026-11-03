@@ -50,7 +50,8 @@ ruleset for every agent in the flow. At session start the orchestrator checks
 its skills are listed (`/reload-plugins` after an install) and sets `/ponytail full`. Its hooks inject the ruleset into
 subagents, so briefs state the scope and need not repeat it. Reviews run
 `/ponytail-review` on a named target (`staged`, `branch`, or the PR link). A
-builder marks a known limit with a `shortcut:` comment; its handoff carries
+builder marks a known limit with a `shortcut:` comment (never an unfixed
+weakness: that goes to the private roadmap); its handoff carries
 those and the "skipped or not checked" lines ponytail ends with.
 
 ## Inputs
