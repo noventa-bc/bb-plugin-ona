@@ -27,15 +27,14 @@ never start or stop a box; bb does that only on your action in bb (decisions 000
 | starting / creating                                                                     | anything                                                                                                              | nothing; a resume waits for Ona to finish instead of starting it again                                  |                                                                                                                                                                                              |
 | unknown (`ona` failed or returned nothing)                                              | anything                                                                                                              | nothing; `bb ona status` reports the CLI problem                                                        |                                                                                                                                                                                              |
 
-The idle rule from [How it works](../README.md#how-it-works) sits alongside these: after
-`idleDisconnect` with no thread activity, an active box is marked suspended without
-being stopped. A box isn't let go while bb is setting up or tearing down one of its
-thread workspaces, or while bb waits to retry a failed teardown, or while one needs
-recovery. A retry needs the box up ([ona-notes](ona-notes.md) has the bb fact, checked
-2026-11-04). Closing the tunnel mid-hook leaves bb unable to tell how the hook ended
-(checked 2026-11-04). A thread with a turn in flight also holds the box, hidden ones
-(workflow steps, side chats) included, but an archived thread counts for neither
-busyness nor activity, whatever status bb still shows for it.
+The idle rule in [How it works](../README.md#how-it-works) has these exceptions: a box
+isn't let go while bb is setting up or tearing down one of its thread workspaces, or
+while bb waits to retry a failed teardown, or while one needs recovery. A retry needs
+the box up ([ona-notes](ona-notes.md) has the bb fact, checked 2026-11-04). Closing the
+tunnel mid-hook leaves bb unable to tell how the hook ended (checked 2026-11-04). A
+thread with a turn in flight also holds the box, hidden ones (workflow steps, side
+chats) included, but an archived thread counts for neither busyness nor activity,
+whatever status bb still shows for it.
 
 `bb ona keep-alive <name> <duration>` is the one way to hold a box past Ona's
 inactivity timeout, and only on your request; the plugin never starts one by
@@ -133,15 +132,16 @@ you asked for, so safety rule 1 does not gate it.
 5. **One action per machine at a time.** A daemon check or restart, and a bb reconcile,
    make the machine wait 5 minutes after a success before its next one; suspends, tunnel
    reopens and idle releases do not wait after a success. A failure backs off for every
-   action (5, 10, 20 min, … up to 60 min), and after 3 failures in a row the plugin
-   stops trying and says so in `bb ona status`. Daemon checks, restarts and bb
+   action (5, then 10 min; the third failure in a row stops automatic tries until
+   `bb ona sync`), and `bb ona status` says so. Daemon checks, restarts and bb
    reconciles run at most 2 at a time.
 
 **When the plugin checks.**
 
 - **When the plugin starts** (load, reload, bb restart). This check is what reopens the tunnels.
-- **Right away** when a thread is waiting for an Ona machine. A running box only; this
-  never starts one.
+- **Right away** when a thread is waiting for an Ona machine. A running box only, except
+  a box Ona shows stopped that a waiting thread needs: bb resumes it (the stopped row
+  above; [decision 0002](decisions/0002-repairs-never-start-or-stop.md)).
 - **Workspace work** (bb sets up, tears down or retries a workspace) is read by the
   check of its own machine (the check 46 s after a disconnect, or the realtime
   reconnect's pass 2 s later), and by the 2-minute pass at the latest. A failed teardown

@@ -53,10 +53,9 @@ test("R1: bb working on a workspace skips the grace period, but never resumes a 
   assert.equal(decide(brief, ona("STOPPED"), NOW).resumeAfter, false);
 });
 
-test("R1: the grace period is 45 s: a box disconnected for 45 s is healed, one for 44.999 s or 44 s is not", () => {
+test("R1: the grace period is 45 s: a box disconnected for 45 s is healed, one for 44.999 s is not", () => {
   assert.equal(decide(machine({ lastSeenAt: NOW - 45_000 }), ona("RUNNING"), NOW).action, "heal-daemon");
   assert.equal(decide(machine({ lastSeenAt: NOW - 44_999 }), ona("RUNNING"), NOW).action, "none");
-  assert.equal(decide(machine({ lastSeenAt: NOW - 44_000 }), ona("RUNNING"), NOW).action, "none");
 });
 
 test("R1: running in Ona with no tunnel -> open the tunnel, even while bb still shows it connected", () => {

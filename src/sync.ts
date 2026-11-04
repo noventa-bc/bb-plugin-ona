@@ -246,8 +246,7 @@ export function createSync(deps: SyncDeps) {
           connectedAt,
           ...threads.map((thread) => Math.max(thread.updatedAt, thread.lastReadAt ?? 0)),
         ),
-        // Letting the box go mid-hook leaves bb unable to recover the workspace. The box is
-        // also kept while bb waits to retry a failed teardown.
+        // Letting the box go mid-hook leaves bb unable to recover the workspace, and a retry needs the box up.
         workspacesBlock: await workspaces(row.hostId).then((work) => work.busy || work.needsRecovery > 0),
       });
     }

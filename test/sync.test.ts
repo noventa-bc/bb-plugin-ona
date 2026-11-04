@@ -105,6 +105,7 @@ test("a disconnected box waits out the grace for a teardown whose retry is over 
 });
 
 // reconcile's workspaceWaiting check passes its pass clock, so a sibling's wait cannot move the cutoff.
+// Box a is listed first, so its slow listing moves the clock before b's cutoff check.
 test("a retry the pass judged busy stays busy after a sibling's wait moves the clock past its cutoff", async () => {
   enableFakeClock();
   try {
