@@ -113,6 +113,17 @@ those and the "skipped or not checked" lines ponytail ends with.
    opens after a round with no open findings, and only once all three have run
    on code that has not changed since. Check the ten Code Review Rules in
    `AGENTS.md`.
+   **Converge.** The item's code is the PR's scope, and reviewer briefs name
+   it and ask for anything outside it under a separate "Pre-existing" heading.
+   A finding goes back to the builder only when the branch introduced the
+   defect, a safety rule or a coupled change is broken, or a doc in the diff
+   contradicts the code. A finding that was already on `main` becomes a
+   roadmap item named in the PR, whatever severity the reviewer gave it. After
+   the first round no new behaviour enters the branch: a fix that needs new
+   behaviour is its own item. Code converges in three rounds; from round 4 on
+   only findings that would make the PR wrong block it, and nits never do.
+   (R11, 2026-11-04: 22 rounds, the code stable from round 6, the rest
+   pre-existing issues pulled in one by one.)
 7. **Open the PR.** The title is a Conventional Commit (`type(scope):
 subject`, see `AGENTS.md`): the squash merge makes it the commit on
    `main`, and it decides the release. First run
