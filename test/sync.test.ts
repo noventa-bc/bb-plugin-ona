@@ -113,6 +113,7 @@ test("a retry the pass judged busy stays busy after a sibling's wait moves the c
       status: "error",
       lifecycle: { phase: "teardown", retireAt: start - 40_000, teardown: { status: "failed" } },
     };
+    // The fake clock starts at 0, so the default pluginStartedAt would sit in the future and disable the idle check.
     const { sync, calls } = world(
       [
         idle("a", { status: "disconnected", lastSeenAt: start - 5_000, listingMs: 30_000 }),

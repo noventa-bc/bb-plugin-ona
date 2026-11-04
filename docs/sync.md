@@ -22,26 +22,20 @@ never start or stop a box; bb does that only on your action in bb (decisions 000
 | deleted or deleting, or missing from two listings in a row                              | active                                                                                                                | marks it suspended and reports it gone in `bb ona status`, or archived if `ona environment get` says so | remove it with `bb machine remove`, or unarchive it in Ona                                                                                                                                   |
 | missing from two listings in a row, but found by `ona environment get` and not archived | anything                                                                                                              | acts on the phase `get` reports, as for a listed box                                                    | the listing leaves out some boxes (another `ona context`, a long list, a box shared with you); a lookup by id counts as a listing ([0005](decisions/0005-lookup-by-id-counts-as-listing.md)) |
 | running                                                                                 | suspended                                                                                                             | nothing: it stays suspended until you use it                                                            | starting a box in Ona (say, for its editor) doesn't attach it to bb                                                                                                                          |
-| anything                                                                                | resuming / suspending for 10 min+                                                                                     | asks bb to reconcile the machine (5 min after the last ask)                                             | bb or the plugin restarted mid-operation                                                                                                                                                     |
+| anything                                                                                | resuming / suspending for 10 min+                                                                                     | asks bb to reconcile the machine (5 min after the last ask, longer after failures)                      | bb or the plugin restarted mid-operation                                                                                                                                                     |
 | anything                                                                                | creating, removing or destroyed                                                                                       | nothing                                                                                                 | bb is creating or removing the machine, or the machine is gone                                                                                                                               |
 | starting / creating                                                                     | anything                                                                                                              | nothing; a resume waits for Ona to finish instead of starting it again                                  |                                                                                                                                                                                              |
 | unknown (`ona` failed or returned nothing)                                              | anything                                                                                                              | nothing; `bb ona status` reports the CLI problem                                                        |                                                                                                                                                                                              |
 
 The idle rule from [How it works](../README.md#how-it-works) sits alongside these: after
-`idleDisconnect` with no thread activity, an active box is marked suspended
-without being stopped. A box isn't let go while bb is setting up or tearing
-down one of its thread workspaces, or while bb waits to retry a failed teardown,
-or while one needs recovery. A retry needs the box up ([ona-notes](ona-notes.md) has
-the bb fact, checked 2026-11-04). Closing the tunnel mid-hook leaves bb unable to tell how the hook ended (checked 2026-11-04).
-While a workspace may need recovery, an active box stays awake until they
-clear. A thread
-with a turn in flight also holds the box,
-hidden ones (workflow steps, side chats) included, but an archived thread
-counts for neither busyness nor activity, whatever status bb still shows for
-it.
-`bb ona status` names each unarchived thread that has been busy with no
-update for more than 6 hours, since such a thread holds the box until it ends
-or is archived.
+`idleDisconnect` with no thread activity, an active box is marked suspended without
+being stopped. A box isn't let go while bb is setting up or tearing down one of its
+thread workspaces, or while bb waits to retry a failed teardown, or while one needs
+recovery. A retry needs the box up ([ona-notes](ona-notes.md) has the bb fact, checked
+2026-11-04). Closing the tunnel mid-hook leaves bb unable to tell how the hook ended
+(checked 2026-11-04). A thread with a turn in flight also holds the box, hidden ones
+(workflow steps, side chats) included, but an archived thread counts for neither
+busyness nor activity, whatever status bb still shows for it.
 
 `bb ona keep-alive <name> <duration>` is the one way to hold a box past Ona's
 inactivity timeout, and only on your request; the plugin never starts one by
@@ -137,20 +131,23 @@ you asked for, so safety rule 1 does not gate it.
    (`ona environment get`) that fails is unknown too; only Ona saying the id
    doesn't exist counts as gone.
 5. **One action per machine at a time.** A daemon check or restart, and a bb reconcile,
-   make the machine wait 5 minutes before its next one; suspends, tunnel reopens and
-   idle releases do not wait. Failures back off (5, 10, 20 min, …). After 3 failures in
-   a row the plugin stops trying and says so in `bb ona status`. Daemon checks and
-   restarts run at most 2 at a time.
+   make the machine wait 5 minutes after a success before its next one; suspends, tunnel
+   reopens and idle releases do not wait after a success. A failure backs off for every
+   action (5, 10, 20 min, … up to 60 min), and after 3 failures in a row the plugin
+   stops trying and says so in `bb ona status`. Daemon checks, restarts and bb
+   reconciles run at most 2 at a time.
 
 **When the plugin checks.**
 
 - **When the plugin starts** (load, reload, bb restart). This check is what reopens the tunnels.
-- **Right away** when a thread is waiting for an Ona machine. A workspace bb sets up,
-  tears down or retries is read by the check of its own machine (the check 46 s after a
-  disconnect, or the realtime reconnect's pass 2 s later), and by the 2-minute pass at
-  the latest. A failed teardown counts as retrying until bb has given up on it, has
-  dropped it ([ona-notes](ona-notes.md) has the bb facts, checked 2026-11-04), or it is
-  more than a minute overdue. A running box only; this never starts one.
+- **Right away** when a thread is waiting for an Ona machine. A running box only; this
+  never starts one.
+- **Workspace work** (bb sets up, tears down or retries a workspace) is read by the
+  check of its own machine (the check 46 s after a disconnect, or the realtime
+  reconnect's pass 2 s later), and by the 2-minute pass at the latest. A failed teardown
+  counts as retrying until bb has given up on it, has dropped it
+  ([ona-notes](ona-notes.md) has the bb facts, checked 2026-11-04), or it is more than
+  60 s overdue.
 - **46 s after** an Ona machine disconnects, so a brief drop (Wi-Fi, Mac sleep) can recover on its own.
 - **30s after** a tunnel comes back up.
 - **Right away** when a tunnel finds its box stopped in Ona.
