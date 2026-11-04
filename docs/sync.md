@@ -77,9 +77,13 @@ you asked for, so safety rule 1 does not gate it.
    _Why: an accidental start costs money and keeps the box up._
 2. **Never stop a box.** Suspends the plugin makes because of what it saw in Ona
    skip the provider's stop. _Why: a wrong or stale listing must not stop a box with your work on it._
-3. **Never restart a live daemon.** The daemon is restarted only when the check
-   finds no daemon process. If SSH can't tell, nothing is restarted.
-   _Why: a restart kills running agent turns._
+3. **Restart a daemon only when the check finds none.** The check looks for a
+   process whose command line names a folder under `~/.bb-machines`, the machine
+   data folder (`machineDataDir`) or the box's legacy data folder (a relative one
+   is matched as given and resolved against `$HOME`), each as given and resolved
+   through symlinks. A process listing that can't be trusted, a folder path with
+   a newline in it, a failed SSH connection or a timeout counts as unknown, and
+   nothing is restarted. _Why: a restart kills running agent turns._
 4. **Unknown is not gone.** A failed or empty `ona environment list` changes
    nothing, and "missing" needs two listings in a row. A lookup by id
    (`ona environment get`) that fails is unknown too; only Ona saying the id
@@ -152,8 +156,9 @@ drops the box's stored keys (`forgetBox()` in `src/sync.ts`, called from the pro
 on (`unpushedWork()` in `src/ona.ts`), before it disconnects or forgets anything.
 For an adopted box, `remove()` runs `MOVE_MACHINE_ASIDE` (`src/provider.ts`)
 over SSH, only when `ona environment get`, made just before, says the box is
-running (safety rule 1). It stops bb's daemon and moves bb's data folder aside;
-the box is never deleted.
+running (safety rule 1). It stops every process whose command line names bb's
+data folder (bb's daemon among them) and moves the folder aside; the box is
+never deleted.
 To add or change a rule, update `decide()`, its test in
 `test/reconcile.test.ts`, and the table above, all in the same change.
 
