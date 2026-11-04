@@ -99,8 +99,8 @@ those and the "skipped or not checked" lines ponytail ends with.
    runs the
    adversarial reviewer (brief: the diff, the files it touches, the specific
    ways it could fail, never the orchestrator's own verdict), `code-review`
-   and `/ponytail-review`, each on the branch against `origin/main` and in its
-   own agent, and sends findings
+   and `/ponytail-review branch`, each on the branch against `origin/main` and
+   in its own agent, and sends findings
    back to the builder. All three passes run on the first round of every PR
    this flow opens, with no exception for a small or docs-only change. After
    that, `code-review` runs every round; the adversarial pass and
