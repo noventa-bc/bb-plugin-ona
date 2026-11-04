@@ -108,6 +108,11 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   `bb.log.*` also goes to `bb plugin logs <id>`; `report.step` text is cleared
   when the remove finishes (`lifecycleReporter` and `emitLog` in
   `server/dist/start-server.js`) (checked 2026-11-03).
+- bb 0.48.1 retries a failed environment teardown (`writeEnvironmentTeardownFailure`
+  in `server/dist/start-server.js`): after the first to fourth failed attempt,
+  `lifecycle.retireAt` is the next retry, 1, 2, 4 or 8 minutes later
+  (`REMOVE_RETRY_MS` doubled per failure); after the fifth (`MAX_REMOVE_ATTEMPTS`
+  is 5) it is null and the message starts "Needs recovery:" (checked 2026-11-04).
 - In SDK 0.6.109 a provider resource is written by the provider's own lifecycle
   hooks (`create`, `suspend`, `resume`, through `checkpoint` or the returned
   `resource`) and read with `bb.experimental_machines.getResource` (checked 2026-11-03).

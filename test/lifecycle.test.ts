@@ -65,12 +65,17 @@ test("a lifecycle request bb didn't take is reported with bb's reason", () => {
   assert.equal(lifecycleRefusal({ phase: "suspended", message: null }, RESUMED), "bb kept the machine suspended");
 });
 
-const workspace = (status: string, phase = "active", teardown: string | null = null) => ({
+const workspace = (
+  status: string,
+  phase = "active",
+  teardown: string | null = null,
+  retireAt: number | null = null,
+) => ({
   status,
-  lifecycle: { phase, teardown: teardown ? { status: teardown } : null },
+  lifecycle: { phase, retireAt, teardown: teardown ? { status: teardown } : null },
 });
 
-test("workspaceWork: setup and running teardowns are busy; failed teardowns need recovery", () => {
+test("workspaceWork: setup and running teardowns are busy; failed teardowns bb gave up on need recovery", () => {
   assert.deepEqual(workspaceWork([]), { busy: false, needsRecovery: 0 });
   assert.deepEqual(workspaceWork([workspace("ready")]), { busy: false, needsRecovery: 0 });
   assert.deepEqual(workspaceWork([workspace("provisioning")]), { busy: true, needsRecovery: 0 });
@@ -84,6 +89,15 @@ test("workspaceWork: setup and running teardowns are busy; failed teardowns need
       needsRecovery: 2,
     },
   );
+});
+
+// Bug: a failed teardown bb was still retrying counted as needing recovery, so `bb ona status` warned while bb retried.
+test("workspaceWork: a failed teardown bb will retry is busy, not needing recovery", () => {
+  assert.deepEqual(workspaceWork([workspace("error", "teardown", "failed", NOW + MIN)]), {
+    busy: true,
+    needsRecovery: 0,
+  });
+  assert.deepEqual(workspaceWork([workspace("error", "teardown", "failed", null)]), { busy: false, needsRecovery: 1 });
 });
 
 test("an idle machine whose workspaces bb is working on, or that need recovery, is not let go", () => {

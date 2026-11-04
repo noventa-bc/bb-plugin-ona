@@ -101,7 +101,8 @@ you asked for, so safety rule 1 does not gate it.
 
 - **When the plugin starts** (load, reload, bb restart). This check is what reopens the tunnels.
 - **Right away** when a thread is waiting for an Ona machine, or bb is setting
-  up or tearing down a workspace on it (a running box only; this never starts one).
+  up or tearing down a workspace on it, or retrying a failed teardown (a running
+  box only; this never starts one).
 - **45s after** an Ona machine disconnects, so a brief drop (Wi-Fi, Mac sleep) can recover on its own.
 - **30s after** a tunnel comes back up.
 - **Right away** when a tunnel finds its box stopped in Ona.

@@ -15,17 +15,20 @@ export interface MachineActivity {
   workspacesBlock?: boolean;
 }
 
-/** The parts of a bb environment (a thread's workspace) this file reads. */
+/**
+ * The parts of a bb environment (a thread's workspace) this file reads. `retireAt`
+ * is when bb next retries a failed teardown, null once it has given up.
+ */
 export interface WorkspaceView {
   status: string;
-  lifecycle: { phase: string; teardown: { status: string } | null };
+  lifecycle: { phase: string; retireAt: number | null; teardown: { status: string } | null };
 }
 
 /**
- * What bb is doing with a machine's workspaces. `busy`: a setup or teardown
- * is under way, and letting the box go now would interrupt its hook, which
- * leaves bb unable to tell how it ended. `needsRecovery`: teardowns that
- * failed for good; bb won't suspend the machine until someone recovers them.
+ * What bb is doing with a machine's workspaces. `busy`: a setup or teardown is
+ * under way, or bb is still retrying a failed teardown; letting the box go now
+ * would interrupt it. `needsRecovery`: failed teardowns bb has given up on; bb
+ * won't suspend the machine until someone recovers them.
  */
 export function workspaceWork(workspaces: readonly WorkspaceView[]): { busy: boolean; needsRecovery: number } {
   let busy = false;
@@ -33,7 +36,7 @@ export function workspaceWork(workspaces: readonly WorkspaceView[]): { busy: boo
   for (const workspace of workspaces) {
     if (workspace.status === "creating" || workspace.status === "provisioning") busy = true;
     if (workspace.lifecycle.phase !== "teardown") continue;
-    if (workspace.lifecycle.teardown?.status === "failed") needsRecovery++;
+    if (workspace.lifecycle.teardown?.status === "failed" && workspace.lifecycle.retireAt === null) needsRecovery++;
     else busy = true;
   }
   return { busy, needsRecovery };

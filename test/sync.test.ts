@@ -234,16 +234,33 @@ test("bb accepting a suspend without acting on it is a failure, not a release", 
   assert.ok(GIVE_UP_AFTER > 1);
 });
 
-test("an idle box isn't released while bb tears down a workspace, or one needs recovery", async () => {
-  const teardown = (status: string | null): WorkspaceView => ({
+test("an idle box isn't released while bb tears down or retries a workspace, or one needs recovery", async () => {
+  const teardown = (status: string | null, retireAt: number | null = null): WorkspaceView => ({
     status: "ready",
-    lifecycle: { phase: "teardown", teardown: status ? { status } : null },
+    lifecycle: { phase: "teardown", retireAt, teardown: status ? { status } : null },
   });
-  for (const workspace of [teardown("running"), teardown(null), teardown("failed")]) {
+  const workspaces = [teardown("running"), teardown(null), teardown("failed"), teardown("failed", Date.now() + 60_000)];
+  for (const workspace of workspaces) {
     const { sync, calls } = world([idle("h1", { workspaces: [workspace] })]);
     await sync.reconcile(new Set([ALL]), { wait: true });
     assert.deepEqual(calls, [], JSON.stringify(workspace));
   }
+});
+
+// Bug: a teardown bb was still retrying counted as needing recovery, so a disconnected box waited out the grace instead of reconnecting for bb's retry.
+test("a disconnected box reconnects at once for a teardown bb is still retrying", async () => {
+  const retrying: WorkspaceView = {
+    status: "error",
+    lifecycle: { phase: "teardown", retireAt: Date.now() + 60_000, teardown: { status: "failed" } },
+  };
+  const { sync, calls } = world(
+    [idle("h1", { status: "disconnected", lastSeenAt: Date.now() - 5_000, workspaces: [retrying] })],
+    { daemonAlive: false },
+  );
+  await sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(calls, ["probe", "restart daemon"]);
+  const [row] = await sync.statusRows();
+  assert.equal(row!.needsRecovery, 0, "bb is still retrying it, so status doesn't call it needing recovery");
 });
 
 // Bug: after `bb ona rename`, every line kept the name stored when the box was created.
@@ -287,7 +304,10 @@ test("machineOfHost throws when the lookup fails for another reason", async () =
 });
 
 test("status reports workspaces that need recovery", async () => {
-  const failed: WorkspaceView = { status: "error", lifecycle: { phase: "teardown", teardown: { status: "failed" } } };
+  const failed: WorkspaceView = {
+    status: "error",
+    lifecycle: { phase: "teardown", retireAt: null, teardown: { status: "failed" } },
+  };
   const { sync } = world([idle("h1", { workspaces: [failed, failed] })]);
   const [row] = await sync.statusRows();
   assert.equal(row!.needsRecovery, 2);
