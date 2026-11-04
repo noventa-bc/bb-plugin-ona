@@ -7,23 +7,23 @@ predictable and the code is easy to pick up. The reasoning behind these rules
 is recorded in [docs/decisions](decisions/README.md).
 
 **Who decides what.** Ona decides whether a box exists and is running. bb holds
-your intent: a machine is *active* (you're using it) or *suspended* (you're
+your intent: a machine is _active_ (you're using it) or _suspended_ (you're
 not). The plugin compares the two and repairs bb's side. Its automatic repairs
 never start or stop a box; only bb's own Resume and Pause do that.
 
 **What the plugin does** (`decide()` in `src/reconcile.ts`):
 
-| Ona says | bb shows | The plugin | Why |
-|---|---|---|---|
-| running | active, disconnected for 45s+ | checks over SSH whether bb's daemon runs on the box; restarts it only if it doesn't | the box was restarted outside bb and the daemon died with it |
-| running | active, no tunnel (even if still shown connected) | reopens the tunnel | the plugin reloaded or bb restarted; bb shows the old connection until it notices the drop |
-| stopped / stopping | active | marks the machine suspended without stopping anything; if a thread is waiting, lets bb resume it | stopped in Ona's UI, by the CLI, or by Ona's idle timeout |
-| deleted, or missing from two listings in a row | active | marks it suspended and reports it gone in `bb ona status`, or archived if `ona environment get` says so | remove it with `bb machine remove`, or unarchive it in Ona |
-| missing from two listings in a row, but found by `ona environment get` and not archived | anything | acts on the phase `get` reports, as for a listed box | the listing leaves out some boxes (another `ona context`, a long list, a box shared with you); a lookup by id counts as a listing ([0005](decisions/0005-lookup-by-id-counts-as-listing.md)) |
-| running | suspended | nothing: it stays suspended until you use it | starting a box in Ona (say, for its editor) doesn't attach it to bb |
-| anything | resuming / suspending for 10 min+ | asks bb to reconcile the machine (at most every 30 min) | bb or the plugin restarted mid-operation |
-| starting / creating | anything | nothing; a resume waits for Ona to finish instead of starting it again | |
-| unknown (`ona` failed or returned nothing) | anything | nothing; `bb ona status` reports the CLI problem | |
+| Ona says                                                                                | bb shows                                          | The plugin                                                                                              | Why                                                                                                                                                                                          |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| running                                                                                 | active, disconnected for 45s+                     | checks over SSH whether bb's daemon runs on the box; restarts it only if it doesn't                     | the box was restarted outside bb and the daemon died with it                                                                                                                                 |
+| running                                                                                 | active, no tunnel (even if still shown connected) | reopens the tunnel                                                                                      | the plugin reloaded or bb restarted; bb shows the old connection until it notices the drop                                                                                                   |
+| stopped / stopping                                                                      | active                                            | marks the machine suspended without stopping anything; if a thread is waiting, lets bb resume it        | stopped in Ona's UI, by the CLI, or by Ona's idle timeout                                                                                                                                    |
+| deleted, or missing from two listings in a row                                          | active                                            | marks it suspended and reports it gone in `bb ona status`, or archived if `ona environment get` says so | remove it with `bb machine remove`, or unarchive it in Ona                                                                                                                                   |
+| missing from two listings in a row, but found by `ona environment get` and not archived | anything                                          | acts on the phase `get` reports, as for a listed box                                                    | the listing leaves out some boxes (another `ona context`, a long list, a box shared with you); a lookup by id counts as a listing ([0005](decisions/0005-lookup-by-id-counts-as-listing.md)) |
+| running                                                                                 | suspended                                         | nothing: it stays suspended until you use it                                                            | starting a box in Ona (say, for its editor) doesn't attach it to bb                                                                                                                          |
+| anything                                                                                | resuming / suspending for 10 min+                 | asks bb to reconcile the machine (at most every 30 min)                                                 | bb or the plugin restarted mid-operation                                                                                                                                                     |
+| starting / creating                                                                     | anything                                          | nothing; a resume waits for Ona to finish instead of starting it again                                  |                                                                                                                                                                                              |
+| unknown (`ona` failed or returned nothing)                                              | anything                                          | nothing; `bb ona status` reports the CLI problem                                                        |                                                                                                                                                                                              |
 
 The idle rule from [How it works](../README.md#how-it-works) sits alongside these: after
 `idleDisconnect` with no thread activity, an active box is marked suspended
@@ -74,12 +74,12 @@ you asked for, so safety rule 1 does not gate it.
    machine connected.
    These commands you run yourself are not gated and may wake a box:
    `ona environment open`, `bb ona reconnect` and `bb ona ssh --thread`.
-   *Why: an accidental start costs money and keeps the box up.*
+   _Why: an accidental start costs money and keeps the box up._
 2. **Never stop a box.** Suspends the plugin makes because of what it saw in Ona
-   skip the provider's stop. *Why: a wrong or stale listing must not stop a box with your work on it.*
+   skip the provider's stop. _Why: a wrong or stale listing must not stop a box with your work on it._
 3. **Never restart a live daemon.** The daemon is restarted only when the check
    finds no daemon process. If SSH can't tell, nothing is restarted.
-   *Why: a restart kills running agent turns.*
+   _Why: a restart kills running agent turns._
 4. **Unknown is not gone.** A failed or empty `ona environment list` changes
    nothing, and "missing" needs two listings in a row. A lookup by id
    (`ona environment get`) that fails is unknown too; only Ona saying the id
@@ -156,7 +156,6 @@ running (safety rule 1). It stops bb's daemon and moves bb's data folder aside;
 the box is never deleted.
 To add or change a rule, update `decide()`, its test in
 `test/reconcile.test.ts`, and the table above, all in the same change.
-
 
 CI checks parts of these rules with Semgrep (`.semgrep/rules.yml`):
 
