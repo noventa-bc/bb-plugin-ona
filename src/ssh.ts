@@ -3,7 +3,7 @@
 // own loopback address.
 import { spawn } from "node:child_process";
 import type { MachineExecutor, PluginLogger } from "@get-bb/plugin-sdk";
-import { NotReadyError, sshHost } from "./ona.ts";
+import { errorText, NotReadyError, sshHost } from "./ona.ts";
 import { pollUntil, sleep } from "./time.ts";
 
 const SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3"];
@@ -76,7 +76,7 @@ export function sshCheck(executor: MachineExecutor, script: string, signal: Abor
       } catch (error) {
         // Ona saying the box isn't ready ends the wait: it is not a failed try.
         if (signal.aborted || error instanceof NotReadyError) throw error;
-        check.last = error instanceof Error ? error.message : String(error);
+        check.last = errorText(error);
       }
       return false;
     },
@@ -95,10 +95,11 @@ export async function pollSsh(
   options: { minutes: number; intervalMs: number; signal: AbortSignal; hint?: string },
 ) {
   const { minutes, intervalMs, signal, hint = "" } = options;
-  const fail = (when: string) => new Error(`${what} ${when}: ${check.last}${hint}`);
+  const fail = (when: string) => new Error(`${what} ${when}${check.last ? `: ${check.last}` : ""}${hint}`);
   const reached = await pollUntil(check, { deadlineMs: minutes * 60_000, intervalMs, signal }).catch(
     (error: unknown) => {
-      throw signal.aborted && check.last ? fail("before the wait ended") : error;
+      // Ona's own reason (the gate was waiting when the abort came) stays as it is.
+      throw error instanceof NotReadyError || !(signal.aborted && check.last) ? error : fail("before the wait ended");
     },
   );
   if (!reached) throw fail(`within ${minutes} minutes`);

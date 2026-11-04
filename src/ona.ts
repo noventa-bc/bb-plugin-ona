@@ -15,7 +15,10 @@ const environmentSchema = z.object({
     })
     .loose(),
   /** The phase Ona's spec asks for; a box Ona's inactivity timeout stopped keeps RUNNING (docs/ona-notes.md). */
-  spec: z.object({ desiredPhase: z.string().nullish() }).loose().nullish(),
+  spec: z
+    .object({ desiredPhase: z.string().nullish().catch(undefined) })
+    .loose()
+    .nullish(),
   status: z
     .object({
       phase: z.string().optional(),
@@ -33,9 +36,16 @@ const environmentSchema = z.object({
         .loose()
         .optional(),
       /** null while the box starts, and on a box without a dev container. */
-      devcontainer: z.object({ phase: z.string().nullish() }).loose().nullish(),
+      // An odd type in one of these reads as absent, so one box can't fail the whole listing.
+      devcontainer: z
+        .object({ phase: z.string().nullish().catch(undefined) })
+        .loose()
+        .nullish(),
       /** Ona's API documents a list; the CLI has shown null. */
-      failureMessage: z.union([z.string(), z.array(z.string())]).nullish(),
+      failureMessage: z
+        .union([z.string(), z.array(z.string())])
+        .nullish()
+        .catch(undefined),
     })
     .loose()
     .optional(),
@@ -260,6 +270,8 @@ export function isStopped(env: OnaEnvironment): boolean {
 
 type Readiness = { state: "ready" } | { state: "waiting"; reason: string } | { state: "failed"; message: string };
 
+export const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
 /** The first non-blank line, trimmed: one line of Ona's text for a progress line or an error. */
 export function firstLine(text: string): string | undefined {
   return text
@@ -315,6 +327,8 @@ export async function waitForReady(
   started = false,
 ): Promise<void> {
   let waiting = "";
+  // The name from Ona's latest answer: the stored one goes stale after `bb ona rename`.
+  let current = name;
   const wait = (reason: string) => {
     if (reason !== waiting) report.step(`Waiting for Ona: ${reason}`);
     waiting = reason;
@@ -329,23 +343,24 @@ export async function waitForReady(
         if (signal.aborted) throw error;
         // One line only: the rest is Ona's stderr, more than the progress line needs (rule 7).
         if (error instanceof z.ZodError) return wait("Ona's answer could not be read");
-        const message = error instanceof Error ? error.message : String(error);
-        return wait(firstLine(message) ?? message);
+        return wait(firstLine(errorText(error)) ?? errorText(error));
       }
-      if (!env) throw new NotReadyError(`Ona environment ${name} disappeared.`);
+      if (!env) throw new NotReadyError(`Ona environment ${current} disappeared.`);
+      current = env.metadata.name ?? current;
       const state = readiness(env, started);
-      if (state.state === "failed") throw new NotReadyError(`Ona environment ${name} is not ready: ${state.message}`);
+      if (state.state === "failed")
+        throw new NotReadyError(`Ona environment ${current} is not ready: ${state.message}`);
       return state.state === "ready" || wait(state.reason);
     },
     { deadlineMs: 15 * 60_000, intervalMs: 5_000, signal },
   ).catch((error: unknown) => {
     // A caller's own timeout ends the wait first: keep the reason the deadline error would give.
     if (signal.aborted && waiting)
-      throw new NotReadyError(`Ona did not report ${name} ready before the wait ended: ${waiting}`);
+      throw new NotReadyError(`Ona did not report ${current} ready before the wait ended: ${waiting}`);
     throw error;
   });
   if (ready) return;
-  throw new NotReadyError(`Ona did not report ${name} ready within 15 minutes: ${waiting}`);
+  throw new NotReadyError(`Ona did not report ${current} ready within 15 minutes: ${waiting}`);
 }
 
 /** Native SSH host alias written by `ona environment ssh-config`. */
@@ -403,7 +418,7 @@ export class OnaSnapshot {
         return this.last;
       })
       .catch((error: unknown) => {
-        this.lastError = error instanceof Error ? error.message : String(error);
+        this.lastError = errorText(error);
         throw error;
       })
       .finally(() => {

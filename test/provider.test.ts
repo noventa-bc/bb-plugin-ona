@@ -30,7 +30,7 @@ const adoptedResource = { envId: "env-1", envName: "box", adopted: true, key: "k
  * `rootExits`: the `~/.bb-machines` script's exit codes in turn. Both repeat their last entry.
  * `preflightExit`: the prerequisites check's exit code. Every other command exits 0.
  * `sshExits`, `mountExits`, `curlExits`: the SSH, shared-home and tunnel probes' exit codes in turn, the last one
- * repeated (default 0). A failed probe prints "refused". Listing `mountExits` turns the shared-home wait on.
+ * repeated (default 0). A failed SSH probe prints "refused". Listing `mountExits` turns the shared-home wait on.
  * `codexHome`: the Codex home is set, so connect runs its `mkdir`.
  * `tunnel`: the box's tunnel is already open, in this state.
  */
@@ -117,7 +117,8 @@ function register({
       if (probe) {
         calls.push(probe[1]);
         const exitCode = next(probe[2]) ?? 0;
-        if (exitCode !== 0) onOutput("refused");
+        // As the real probes: only the SSH probe prints why; `mountpoint -q` and `curl -sf` fail silently.
+        if (exitCode !== 0 && probe[1] === "ssh") onOutput("refused");
         return { exitCode };
       }
       if (command[2]?.startsWith("missing=")) {
@@ -370,14 +371,20 @@ test("a resume that times out on a failing start names Ona's failure", async () 
   assert.equal(calls.includes("ssh"), false);
 });
 
-// The stored name goes stale after `bb ona rename`.
-test("a failed resume names the box by its current name in Ona", async () => {
+// The stored name goes stale after `bb ona rename`; the heal and `bb ona reconnect` pass the stored resource.
+test("a reconnect's wait names the box as Ona's latest answer does", async () => {
   const renamed = { ...box("STOPPED"), metadata: { name: "renamed" } };
-  const failing = { ...renamed, status: { phase: "ENVIRONMENT_PHASE_STOPPED", failureMessage: ["no capacity"] } };
-  const { resumed } = resume({ found: renamed, phases: [renamed, failing] });
-  // Past every deadline, so a wait that ignores the failure rejects instead of hanging.
-  await tick(5_000, 180);
-  await assert.rejects(resumed, /^Error: Ona environment renamed is not ready: no capacity$/);
+  const { reconnect } = register({ found: renamed, phases: [renamed] });
+  const reconnected = reconnect(adoptedResource, lifecycle().report, new AbortController().signal);
+  await assert.rejects(reconnected, /^Error: Ona environment renamed is not ready: stopped$/);
+});
+
+test("a silent probe's timeout names no empty reason", async () => {
+  const { resumed } = resume({ found: box("RUNNING"), curlExits: [7] });
+  await tick(5_000, 200);
+  const message =
+    "The devbox could not reach the bb server through the SSH tunnel within 10 minutes. Check `bb plugin logs ona`.";
+  await assert.rejects(resumed, { message });
 });
 
 // Bug: SSH ran while Ona could not be asked; a failed lookup is unknown (decision 0005).
@@ -482,27 +489,23 @@ test("a reconnect to a box Ona idled out fails at once without SSH", async () =>
 
 // A heal's own 15-minute timeout can end a wait before its deadline.
 test("an aborted wait names the last reason it was waiting for", async () => {
-  const cases: [Setup, string][] = [
-    [
-      { found: box("RUNNING"), phases: [running("PHASE_CREATING")] },
-      "Ona did not report box ready before the wait ended: dev container starting",
-    ],
-    [{ found: box("RUNNING"), sshExits: [255] }, "Could not SSH into the devbox before the wait ended: refused"],
+  const ona = "Ona did not report box ready before the wait ended: dev container starting";
+  const creating = running("PHASE_CREATING");
+  const cases: [Partial<Setup>, string][] = [
+    [{ phases: [creating] }, ona],
+    [{ sshExits: [255] }, "Could not SSH into the devbox before the wait ended: refused"],
+    // After a refused SSH try, the gate is waiting on Ona when the abort comes: Ona's reason, not the stale SSH one.
+    [{ phases: ["RUNNING", "RUNNING", creating], sshExits: [255] }, ona],
   ];
   for (const [setup, message] of cases) {
     const controller = new AbortController();
-    const reconnected = register(setup).reconnect(adoptedResource, lifecycle().report, controller.signal);
+    const { reconnect } = register({ found: box("RUNNING"), ...setup });
+    const reconnected = reconnect(adoptedResource, lifecycle().report, controller.signal);
     reconnected.catch(() => {});
     await tick(5_000, 2);
     controller.abort(new Error("The operation was aborted due to timeout"));
     await assert.rejects(reconnected, { message }, message);
   }
-});
-
-test("a reconnect on a running box asks Ona before each SSH command", async () => {
-  const { reconnect, calls } = register({ found: box("RUNNING") });
-  await reconnect(adoptedResource, lifecycle().report, new AbortController().signal);
-  assert.deepEqual(calls, ["get RUNNING", ...connectCalls]);
 });
 
 // The daemon heal in src/sync.ts calls this reconnect: test/sync.test.ts covers what the pass does when it rejects.

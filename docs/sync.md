@@ -104,11 +104,12 @@ you asked for, so safety rule 1 does not gate it.
    When the wait ends early (a caller's own timeout), its error still names the
    last reason. After Ona answers ready, SSH gets up to 10 minutes to answer.
    Every SSH command in a connect (each try of the waits, the Codex `mkdir`,
-   the preflight and bb's bootstrap) asks `ona environment get` first and runs
-   only on a ready answer, read as above: a failed box ends the connect with no
-   SSH, and a box on its way or a failed `get` holds the command until Ona says
-   ready, for up to 15 minutes. The reverse tunnel's own `ssh` follows the first
-   answer directly.
+   the `~/.bb-machines` step, the preflight and bb's bootstrap) asks
+   `ona environment get` first and runs only on a ready answer, read as above:
+   a failed box ends the connect with no SSH, and a box on its way or a failed
+   `get` holds the command until Ona says ready, for up to 15 minutes. The
+   reverse tunnel's `ssh` is not gated by these waits; its own `shouldConnect`
+   in `server.ts` asks a fresh listing.
 
    One line of Ona's text is shown: the first non-blank line.
    These commands you run yourself are not gated and may wake a box:

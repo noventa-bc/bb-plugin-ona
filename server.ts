@@ -6,7 +6,7 @@
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { KeepAlives } from "./src/keepalive.ts";
-import { isRunning, isStopped, OnaCli, OnaSnapshot, sshHost } from "./src/ona.ts";
+import { errorText, isRunning, isStopped, OnaCli, OnaSnapshot, sshHost } from "./src/ona.ts";
 import {
   checkOnaLogin,
   createSetup,
@@ -19,7 +19,7 @@ import {
 import { PROVIDER_ID, registerOnaComposition, registerOnaProvider } from "./src/provider.ts";
 import { startDaemonProxy } from "./src/proxy.ts";
 import { commands, onaCommands } from "./src/commands.ts";
-import { connectedAtKey, createSync, errorText, forgetBox, matchesRef, watchRealtime, type Row } from "./src/sync.ts";
+import { connectedAtKey, createSync, forgetBox, matchesRef, watchRealtime, type Row } from "./src/sync.ts";
 import { ALL, HostGuard, PassScheduler } from "./src/reconcile.ts";
 import { createThreadCost } from "./src/cost-service.ts";
 import { rpcContract, type Devbox } from "./src/rpc.ts";

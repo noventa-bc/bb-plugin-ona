@@ -439,9 +439,7 @@ export function onaCommands(deps: OnaCommandDeps) {
             "reconnect",
             "requested with bb ona reconnect",
             async () => {
-              // The name from the listing just fetched, so messages name the box as Ona does now.
-              const resource = { ...row.resource, envName: env?.metadata.name ?? row.resource.envName };
-              await provider.reconnect(resource, report, ctx.signal ?? new AbortController().signal);
+              await provider.reconnect(row.resource, report, ctx.signal ?? new AbortController().signal);
             },
             { force: true, cooldown: false },
           );

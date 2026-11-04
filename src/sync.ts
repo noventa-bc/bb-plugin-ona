@@ -4,7 +4,7 @@
 // schedule a pass (watchRealtime). server.ts wires them to bb's commands and
 // the lifecycle-sync service; tests drive them with a fake of the bb calls below.
 import type { BbPluginApi, PluginLogger } from "@get-bb/plugin-sdk";
-import { isArchived, isRunning, type OnaListing } from "./ona.ts";
+import { errorText, isArchived, isRunning, type OnaListing } from "./ona.ts";
 import { PROVIDER_ID, resourceSchema, type OnaResource } from "./provider.ts";
 import {
   lifecycleRefusal,
@@ -28,8 +28,6 @@ import {
   type PassScheduler,
 } from "./reconcile.ts";
 import { liveThreads, stuckThreads, threadStatuses, type LiveThreadsArgs, type ThreadState } from "./updates.ts";
-
-export const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export const connectedAtKey = (envId: string) => `connectedAt:${envId}`;
 
