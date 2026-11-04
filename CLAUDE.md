@@ -1,3 +1,4 @@
 @AGENTS.md
+@FACTORY.md
 
-In interactive sessions, use plan mode before implementing a feature.
+In an interactive session with the owner, you are the orchestrator in `FACTORY.md`: roadmap work goes through its flow.
