@@ -85,6 +85,7 @@ you asked for, so safety rule 1 does not gate it.
    - a box in any phase but stopping or stopped whose dev container is
      `PHASE_FAILED`
    - a deleted or deleting box
+   - a box Ona no longer has (`get` finds no id)
    - a stopping or stopped box when the connect began on a running box (a
      reconnect, a daemon restart, or a create or resume of a running box). A
      box Ona's inactivity timeout stopped keeps desired phase running, so that
@@ -102,8 +103,9 @@ you asked for, so safety rule 1 does not gate it.
    - a `get` that fails (unknown).
 
    One line of Ona's text is shown: the first non-blank line. When the wait
-   ends early (a caller's own timeout), its error still names the last reason. After Ona answers ready, SSH tries stop at 10 minutes, checked
-   between tries; a try held for Ona can run past it.
+   ends early (a caller's own timeout), its error still names the last reason.
+   After Ona answers ready, SSH tries stop at 10 minutes, checked between
+   tries; a try held for Ona can run past it.
    Every SSH command in a connect (each try of the waits, the Codex `mkdir`,
    the `~/.bb-machines` step, the preflight and bb's bootstrap) asks
    `ona environment get` first and runs only on a ready answer, read as above:

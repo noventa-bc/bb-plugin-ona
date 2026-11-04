@@ -293,7 +293,7 @@ export function readiness(env: OnaEnvironment, started = false): Readiness {
   if (!stopped && env.status?.devcontainer?.phase === "PHASE_FAILED")
     return { state: "failed", message: "dev container failed" };
   if (isRunning(env)) {
-    if (isStopIntent(desired)) return { state: "failed", message: "Ona is stopping the box" };
+    if (isStopIntent(desired)) return { state: "failed", message: "Ona is stopping or deleting the box" };
     const container = env.status?.devcontainer;
     if (!container || container.phase === "PHASE_RUNNING") return { state: "ready" };
     return { state: "waiting", reason: "dev container starting" };

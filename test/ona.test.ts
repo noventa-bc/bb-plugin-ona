@@ -336,7 +336,7 @@ test("readiness: a stopped or stopping box waits only when the plugin started it
 
 // An SSH retry could wake the box once Ona stops it (rule 1); the proto default must not read as a stop.
 test("readiness: a running box fails only when its desired phase is stopped or deleted", () => {
-  const stopping = { state: "failed", message: "Ona is stopping the box" };
+  const stopping = { state: "failed", message: "Ona is stopping or deleting the box" };
   const cases: [string, OnaEnvironment, object][] = [
     ["desired STOPPED", phased("RUNNING", "STOPPED"), stopping],
     ["desired DELETED", phased("RUNNING", "DELETED"), stopping],

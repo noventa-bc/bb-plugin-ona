@@ -47,6 +47,13 @@ test("a resume fails at once with Ona's failure message, no SSH, and closes the 
   assert.deepEqual(tunnels, ["stop env-1"]);
 });
 
+test("a resume fails without SSH when Ona no longer has the box during the wait", async () => {
+  const { resumed, calls } = resume({ found: box("STOPPED"), phases: ["STOPPED", "STARTING", null] });
+  await tick(5_000, 1);
+  await assert.rejects(resumed, /disappeared/);
+  assert.deepEqual(calls, ["get STOPPED", "start", "get STARTING", "get null"]);
+});
+
 // Bug: a box stopped in Ona during the wait was probed over SSH, and Ona's SSH starts a stopped box (rule 1).
 test("a resume fails without SSH when Ona reports the box stopped during the wait", async () => {
   const stopped = { ...box("STOPPED"), spec: { desiredPhase: "ENVIRONMENT_PHASE_STOPPED" } };

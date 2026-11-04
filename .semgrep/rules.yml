@@ -46,6 +46,7 @@ rules:
     pattern-either:
       - pattern: sshExecutor(...)
       - pattern: sshCapture(...)
+      - pattern: sshCheck(...)
 
   - id: remote-script-interpolation
     message: "Remote script text is a constant: pass values as arguments or through shellQuote (Code Review Rule 5)."
@@ -54,6 +55,7 @@ rules:
     patterns:
       - pattern-either:
           - pattern: sshCapture($EXEC, $SCRIPT, ...)
+          - pattern: sshCheck($EXEC, $SCRIPT, ...)
           - pattern: '["bash", $FLAG, $SCRIPT, ...]'
       # An interpolation that is not a shellQuote call. Not anchored on the
       # backtick, so a literal "${" in a plain string also matches: write the

@@ -15,12 +15,12 @@ export const box = (phase: string): OnaEnvironment => ({
 export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, key: "key-1" };
 
 /**
- * `phases`: what each Ona lookup returns in turn: a phase, a box, null (a box Ona no longer has) or an Error
- * (the lookup throws). Without phases, every lookup returns `found`.
+ * `phases`: what each Ona lookup returns in turn, the last one repeated: a phase, a box, null (a box Ona no
+ * longer has) or an Error (the lookup throws). Without phases, every lookup returns `found`.
  * `lookupFails`: every Ona lookup throws.
  * `unpushed`: the box has unpushed commits, so a remove is refused.
  * `reopenDuringMove`: a tunnel opens while an adopted remove's move-aside script runs.
- * `rootExits`: the `~/.bb-machines` script's exit codes in turn. Both repeat their last entry.
+ * `rootExits`: the `~/.bb-machines` script's exit codes in turn, the last one repeated.
  * `preflightExit`: the prerequisites check's exit code. Every other command exits 0.
  * `sshExits`, `mountExits`, `curlExits`: the SSH, shared-home and tunnel probes' exit codes in turn, the last one
  * repeated (default 0). A failed SSH probe prints "refused". Listing `mountExits` turns the shared-home wait on.
