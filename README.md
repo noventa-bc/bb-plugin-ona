@@ -298,13 +298,15 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
   `~/.bb-machines/<server>.old-<UTC time>`; nothing in it is deleted. bb clones
   projects into `<server>/checkouts/<project>` by default, so those clones, and
   any unpushed work in them, move with it. When it leaves the folder (the box
-  wasn't running, or the move failed) or finds none, the remove says so in
+  wasn't running, the daemon couldn't be stopped (the remove exits 4), or the
+  move failed) or finds none, the remove says so in
   `bb plugin logs ona`: start the box, then rename the folder whose `host-id`
   file holds the host id the log line names (in a shell from
   `ssh "$(bb ona host <box>)"`, `grep -l <host-id> ~/.bb-machines/*/host-id`
   finds it). Otherwise bb's installer refuses it with "… on this computer
-  belongs to machine …". After the re-adopt, the old machine's threads can't
-  take new messages, and its project sources must be added again.
+  belongs to machine …". A folder that is or holds the home folder stays too. After the re-adopt, the
+  old machine's threads can't take new messages, and its project sources must
+  be added again.
 - **bb and Ona disagree about a box** (bb says down but it's running, or the
   other way round): run `bb ona status <name>`. It shows both views and what
   the plugin last did about it. `bb ona sync <name>` re-checks now, and

@@ -25,6 +25,7 @@ export const resourceSchema = z.object({
   /**
    * Legacy BB_DATA_DIR from 0.1.0 enrollments; new machines use ~/.bb-machines.
    * Trailing slashes are dropped: `mv` can't move "dir/" to "dir/.old-…".
+   * A relative path is resolved against `$HOME` on the box.
    */
   dataDir: z
     .string()
@@ -86,20 +87,23 @@ export interface ProviderDeps {
 }
 
 /**
- * Run on an adopted box when its machine is removed: stops the processes that
- * run from the data folder of machine "$1" (bb's daemon) and moves the folder
- * aside, never deleting it. bb's installer refuses a folder that names another
- * machine, so a folder left in place blocks adopting the box again. "$2" is
- * the legacy `dataDir`, which bb's installer used as the data folder itself.
- * Exits 3 when no folder names the machine, and another non-zero code when the
- * move failed.
+ * Run on an adopted box when its machine is removed: stops every process whose
+ * command line names the data folder of machine "$1" (bb's daemon among them)
+ * and moves the folder aside, never deleting it. bb's installer refuses a folder
+ * that names another machine, so a folder left in place blocks adopting the box
+ * again. "$2" is the legacy `dataDir`, which bb's installer used as the data
+ * folder itself. Exits 2 for an empty machine id, 3 when no folder names the
+ * machine, 4 when the processes couldn't be listed, didn't stop, or the folder
+ * path has a newline (the folder stays), 5 when the folder is or holds the home
+ * folder or the home folder can't be resolved (nothing is stopped or moved), and
+ * 1 when the folder can't be entered or moved.
  */
 export const MOVE_MACHINE_ASIDE = [
   'host="$1"; legacy="$2"',
+  // A relative legacy dataDir is resolved against $HOME.
+  `case $legacy in /*|'') ;; *) legacy="$HOME/$legacy" ;; esac`,
   // An empty id would match a folder whose host-id file is empty.
   '[ -n "$host" ] || exit 2',
-  // Without a working ps the stop loop sees no daemon, and the folder would move under a live one.
-  "ps -e -o pid= -o args= >/dev/null || exit 4",
   'for id in "$HOME"/.bb-machines/*/host-id ${legacy:+"$legacy/host-id"}; do',
   '  [ -f "$id" ] && [ "$(cat "$id")" = "$host" ] || continue',
   '  data="${id%/host-id}"',
@@ -107,21 +111,33 @@ export const MOVE_MACHINE_ASIDE = [
   '  case "${data##*/}" in *.old-[0-9]*T[0-9]*Z) moved=1; continue ;; esac',
   // A folder that holds other machines' data folders is never stopped or moved.
   '  for other in "$data"/*/host-id; do [ -f "$other" ] && continue 2; done',
-  '  real=$(cd "$data" && pwd -P) || exit 1; export real; n=0',
-  // bb 0.48.1 starts the daemon from the resolved path. The script never stops
-  // itself: the path reaches awk through the environment, the legacy argument
-  // has no trailing slash, and `cat` and `ls` have exited.
-  // shortcut: a daemon started from a `bb-app` on the PATH has no folder in its
-  // command line, so it keeps running while the folder moves; match its BB_DATA_DIR if a box shows one.
-  `  while pids=$(ps -e -o pid= -o args= | awk 'index($0, ENVIRON["real"] "/") {print $1}') && [ -n "$pids" ]; do`,
-  // Repeated so a supervisor's restart is caught too; forced after 10 s.
-  '    n=$((n + 1)); [ "$n" -gt 10 ] && { kill -9 $pids 2>/dev/null; break; }',
-  "    kill $pids 2>/dev/null; sleep 1",
+  '  real=$(cd "$data" && pwd -P) || exit 1; export real given="$data"; n=0',
+  // The home folder, or a folder above it, is never a machine's data folder: it stays. An unresolvable HOME stops here too.
+  '  home=$(cd "${HOME:?}" && pwd -P) || exit 5',
+  '  case "$home/" in "${real%/}"/*) exit 5 ;; esac',
+  // A newline in the path can't be matched within one listing line: the folder stays.
+  '  case "$data$real" in *"',
+  '"*) exit 4 ;; esac',
+  // bb 0.48.1 starts the daemon from the resolved path; one started through ~/.bb-machines names the path as given.
+  // Every process whose command line names the folder is stopped. The script never stops itself: its own shell,
+  // its parent and its children are skipped by pid or ppid, whatever paths their command lines carry.
+  // A ps that exits non-zero, even after printing part of its list, is unknown, and so is a listing
+  // without this shell under its parent (ps ignores -o, or no awk): exit 4, and the folder stays.
+  "  while :; do",
+  "    out=$(ps -e -o pid= -o ppid= -o args=) || exit 4",
+  `    pids=$(printf '%s\\n' "$out" | awk -v me="$$" -v pp="$PPID" '$1 == me && $2 == pp {ok=1} $1 != me && $1 != pp && $2 != me && (index($0, ENVIRON["real"] "/") || index($0, ENVIRON["given"] "/")) {print $1} END {exit !ok}') || exit 4`,
+  '    [ -n "$pids" ] || break',
+  // Each round lists the processes again: TERM in rounds 1-10, KILL in rounds 11-12, one second apart.
+  // Still listed after round 12: exit 4, and the folder stays.
+  '    n=$((n + 1)); [ "$n" -gt 12 ] && exit 4',
+  '    if [ "$n" -gt 10 ]; then kill -9 $pids 2>/dev/null; else kill $pids 2>/dev/null; fi; sleep 1',
   "  done",
   // bb's installer allows one data folder per machine, so the first match is the only one.
   '  mv "$data" "$data.old-$(date -u +%Y%m%dT%H%M%SZ)"; exit',
   "done",
   '[ -n "$moved" ] && exit 0',
+  // A HOME that is set but can't be entered hides ~/.bb-machines, so "no folder" would be a guess.
+  '[ -z "${HOME:-}" ] || cd "$HOME" || exit 5',
   "exit 3",
 ].join("\n");
 
@@ -476,11 +492,19 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
             bb.log.warn(
               `Found no bb data folder for machine ${hostId} on ${name}; nothing moved. If adopting it again fails, ${byHand}.`,
             );
+          } else if (exitCode === 5) {
+            bb.log.warn(
+              `Did not move bb's data folder for machine ${hostId} on ${name}: it is or holds the home folder, or the home folder couldn't be resolved; nothing was stopped or moved.${output.trim() ? ` The box said: ${output.trim().slice(-300)}` : ""}`,
+            );
           } else if (exitCode !== 0) {
             // -1: timed out or SSH failed, so the script may still have finished.
             const what = exitCode === -1 ? "May not have moved" : "Could not move";
+            const cause =
+              exitCode === 4
+                ? " The process listing couldn't be trusted, the folder path has a newline, or the daemon was still running after 12 rounds; it may be stopped or still running."
+                : "";
             bb.log.warn(
-              `${what} bb's data folder on ${name} aside (exit ${exitCode}: ${output.trim().slice(-300)}). ` +
+              `${what} bb's data folder on ${name} aside (exit ${exitCode}: ${output.trim().slice(-300)}).${cause} ` +
                 `Before adopting it again, ${byHand}.`,
             );
           }
@@ -526,8 +550,9 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
   });
 
   /**
-   * Whether bb's daemon runs on a box: true, false, or null when SSH couldn't
-   * tell. Only call it for a box Ona reports RUNNING (SSH starts stopped boxes).
+   * Whether bb's daemon runs on a box: true, false, or null when SSH or the
+   * process check on the box couldn't tell. Only call it for a box Ona reports
+   * RUNNING (SSH starts stopped boxes).
    */
   async function daemonAlive(resource: OnaResource, signal: AbortSignal): Promise<boolean | null> {
     const { exitCode } = await executorFor(deps.sshBinary, resource.envId, [])

@@ -6,7 +6,7 @@ import { test } from "node:test";
 import type { MachineExecutor } from "@get-bb/plugin-sdk";
 import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
 import type { OnaCli, OnaEnvironment } from "../src/ona.ts";
-import { registerOnaProvider } from "../src/provider.ts";
+import { registerOnaProvider, resourceSchema } from "../src/provider.ts";
 import type { TunnelManager } from "../src/ssh.ts";
 import { tick, useFakeClock } from "./fake-clock.ts";
 
@@ -311,4 +311,12 @@ test("a refused remove of a bb-created machine closes its tunnel and keeps its k
   assert.equal(removed.status, "failed");
   assert.deepEqual(tunnels, ["stop env-1"]);
   assert.deepEqual(forgotten, []);
+});
+
+// A relative legacy dataDir is kept: the scripts resolve it against $HOME on the box.
+test("a relative legacy dataDir is kept and a trailing slash is stripped", () => {
+  const resource = { envId: "env-1", envName: "box", adopted: true, key: "key-1" };
+  assert.equal(resourceSchema.parse({ ...resource, dataDir: "data" }).dataDir, "data");
+  assert.equal(resourceSchema.parse({ ...resource, dataDir: "data/" }).dataDir, "data");
+  assert.equal(resourceSchema.parse({ ...resource, dataDir: "/srv/bb/" }).dataDir, "/srv/bb");
 });
