@@ -85,7 +85,8 @@ those and the "skipped or not checked" lines ponytail ends with.
 3. **Check confidence.** If a task needs a decision only the owner can make (a
    version to pin, a safety rule to bend, a behaviour change users will see),
    ask before building. Batch the questions into one message.
-4. **Brief** each builder and reviewer with the template in `docs/owner.md`, plus: the
+4. **Brief** each builder with the template in `docs/owner.md` (a reviewer
+   gets its `Role:` line and the step-6 brief), plus: the
    branch name `agent/<slug>`, the files and line areas involved, the tests to
    write first, the coupled changes from `AGENTS.md`, and what to report back.
 5. **Build** in a worktree (slow commands in the background). The builder runs
@@ -166,8 +167,9 @@ subject`, see `AGENTS.md`): the squash merge makes it the commit on
 
 ## Permissions the owner granted
 
-- For a roadmap item the owner named in the session, the orchestrator may
-  commit on `agent/*` branches (builders leave work staged), push them, open
+- For a roadmap item the owner named in the session (an instruction to change
+  this file or `AGENTS.md` counts), the orchestrator may commit on `agent/*`
+  branches (builders leave work staged), push them, open
   PRs, and merge a PR with `scripts/pr-merge.sh` once its review has no open
   findings and CI is green. Nobody commits to `main`
   directly.
@@ -190,7 +192,7 @@ This file is the memory of the flow. Keep it current:
 - When a rule here conflicts with `AGENTS.md`, fix `AGENTS.md` in the same PR
   so the two agree, and say so in the PR.
 - Keep this file under 300 lines (`docs.yml` checks). An addition names what it removes.
-- A change to this file goes through a PR like any other change; the owner's instruction counts as naming the item.
+- A change to this file goes through a PR like any other change.
 
 ## Owner instructions on record
 
