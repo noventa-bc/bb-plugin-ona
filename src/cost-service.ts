@@ -77,7 +77,7 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
     const old = await bb.storage.kv.get<{ cost: ThreadCost | null; seq?: number | string; checkedAt: number }>(
       oldCostKey(threadId),
     );
-    if (!old) return null;
+    if (!old || (old.cost && old.cost.provider !== provider)) return null;
     const shown = old.cost?.provider === provider && (provider === "claude-code" || old.cost.usd > 0);
     const cost = shown ? old.cost : null;
     // A Claude record an older version settled at its seq stays settled, even with no figure. Any other
