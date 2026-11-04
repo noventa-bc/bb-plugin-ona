@@ -38,22 +38,62 @@ export interface CostDeps {
   snapshot: Pick<OnaSnapshot, "refresh">;
 }
 
-const costKey = (threadId: string) => `cost:${threadId}`;
+/** One thread's record in bb's storage: the latest finished turn's seq, the figure, and the rounds run for that seq. */
+interface StoredCost {
+  cost: ThreadCost | null;
+  seq: string;
+  checkedAt: number;
+  /** Completed rounds for `seq`. A record without it has none. */
+  runs?: number;
+}
+
+// Codex records usage minutes after a turn (docs/ona-notes.md); 12 rounds at the 5-minute floor is about an hour.
+const CODEX_ROUNDS = 12;
+// Claude usage lands as its turn runs, so an empty first read gets one more.
+const CLAUDE_ROUNDS = 2;
+
+// Records under `cost:` predate the Codex usage lag (docs/ona-notes.md); their figures are shown
+// (except a Codex $0.00) until a round writes a `cost2:` record.
+const costKey = (threadId: string) => `cost2:${threadId}`;
+const oldCostKey = (threadId: string) => `cost:${threadId}`;
+
 export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: CostDeps) {
   const costInFlight = new Map<string, Promise<ThreadCost | null>>();
 
-  /** Drop a deleted thread's stored figure so the keys don't pile up. */
+  /** Drop a deleted thread's stored figures under both keys. */
   async function forget(threadId: string): Promise<void> {
-    await bb.storage.kv.delete(costKey(threadId)).catch((error: unknown) => {
-      bb.log.warn(`thread cost for ${threadId}: could not drop it: ${errorText(error)}`);
-    });
+    for (const key of [costKey(threadId), oldCostKey(threadId)]) {
+      await bb.storage.kv.delete(key).catch((error: unknown) => {
+        bb.log.warn(`thread cost for ${threadId}: could not drop it: ${errorText(error)}`);
+      });
+    }
   }
 
   /**
-   * Spend so far for a devbox thread. Cached per thread and recomputed only
-   * after a new turn finishes; a box that isn't connected, or that a fresh
-   * Ona listing doesn't show running, is never woken: its last known figure
-   * is returned instead.
+   * A record kept under the old `cost:` key, read when the thread has no `cost2:` record yet.
+   * A Codex $0.00 there may come from the usage lag (docs/ona-notes.md), so it is not shown.
+   */
+  async function legacyCost(threadId: string, provider: string): Promise<StoredCost | null> {
+    const old = await bb.storage.kv.get<{ cost: ThreadCost | null; seq?: number | string; checkedAt: number }>(
+      oldCostKey(threadId),
+    );
+    if (!old) return null;
+    const own = !old.cost || old.cost.provider === provider;
+    const shown = own && old.cost && (provider === "claude-code" || old.cost.usd > 0);
+    const cost = shown ? old.cost : null;
+    // A Claude record under `cost:` stays settled at its seq, even with no figure. Any other record is
+    // still stored, so the 5-minute floor applies while Ona says the box is stopped.
+    if (provider === "claude-code" && own)
+      return { cost, seq: String(old.seq ?? ""), checkedAt: old.checkedAt, runs: CLAUDE_ROUNDS };
+    return { cost, seq: "", checkedAt: old.checkedAt };
+  }
+
+  /**
+   * Spend so far for a devbox thread. Cached per thread and recomputed after a new turn
+   * finishes: a Claude turn is recomputed once more on a later poll only when its first read priced nothing, and a Codex turn until
+   * CODEX_ROUNDS rounds have run for it.
+   * A box that isn't connected, or that a fresh Ona listing doesn't show running, is never
+   * woken: its last known figure is returned instead.
    */
   async function threadCost(threadId: string): Promise<ThreadCost | null> {
     const devbox = await threadDevbox(threadId);
@@ -62,12 +102,12 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
     const agentProvider = thread.providerId;
     if (agentProvider !== "codex" && agentProvider !== "claude-code") return null;
     const key = costKey(threadId);
-    // Older records hold `seq` as a number; it is compared as a string.
-    const stored = await bb.storage.kv.get<{ cost: ThreadCost | null; seq: number | string; checkedAt: number }>(key);
+    const stored = (await bb.storage.kv.get<StoredCost>(key)) ?? (await legacyCost(threadId, agentProvider));
     if (devbox.status !== "connected") return stored?.cost ?? null;
-    // Recompute once per finished turn, never mid-turn, and at most every 5
-    // minutes: each check is an SSH round trip, and for Codex a short-lived
-    // app-server that talks to OpenAI and reads the box's Codex login.
+    // Recompute at most every 5 minutes, while the newest finished turn has rounds left. Rounds for a
+    // finished turn keep running while a later turn is still working; once that later turn finishes,
+    // it gets its own rounds. Each round is an SSH round trip, and for Codex a short-lived app-server
+    // that talks to OpenAI and reads the box's Codex login.
     const [latest] = await bb.sdk.threads.events.list({
       threadId,
       types: ["turn/completed"],
@@ -75,8 +115,13 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
       limit: "1",
     });
     // bb's seq may be a non-numeric string, so it is compared as given, never as a number.
+    // It is "0" until a turn has finished.
     const seq = String(latest?.seq ?? 0);
-    if (stored && (String(stored.seq) === seq || Date.now() - stored.checkedAt < 5 * 60_000)) return stored.cost;
+    // Claude gets a second round only when its first priced nothing. Codex gets CODEX_ROUNDS
+    // for its usage lag once a turn has finished, and one round before that.
+    const rounds = agentProvider === "codex" ? (latest ? CODEX_ROUNDS : 1) : CLAUDE_ROUNDS;
+    const settled = stored?.seq === seq && (stored.runs ?? 0) >= rounds;
+    if (stored && (settled || Date.now() - stored.checkedAt < 5 * 60_000)) return stored.cost;
 
     let running = costInFlight.get(threadId);
     if (!running) {
@@ -101,7 +146,8 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
           // A failed listing throws into the catch below.
           const env = (await snapshot.refresh()).envs.find((e) => e.id === devbox.envId);
           if (!isRunning(env)) {
-            // Checked, so polls skip Ona for 5 minutes; the stored seq keeps this turn pending until the box runs.
+            // A stored record is marked checked, so polls skip Ona for 5 minutes.
+            // With no record, each poll asks Ona again.
             if (stored) await bb.storage.kv.set(key, { ...stored, checkedAt: Date.now() });
             return stored?.cost ?? null;
           }
@@ -137,16 +183,17 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
             }
           }
         }
-        // Keep the last good figure if this round had nothing to price. An empty
-        // round stores no seq, so the next poll past the 5-minute floor tries this
-        // turn once more; a second empty round settles it until the next turn.
-        const result = cost ?? stored?.cost ?? null;
-        await bb.storage.kv.set(key, {
-          cost: result,
-          seq: cost || stored?.seq === "" ? seq : "",
-          checkedAt: Date.now(),
-        });
-        return result;
+        // A new figure replaces the stored one, except a partial Codex figure (a session not recorded yet) that is lower.
+        const codex = agentProvider === "codex";
+        const best =
+          cost && (!codex || !stored?.cost || !cost.partial || cost.usd >= stored.cost.usd)
+            ? cost
+            : (stored?.cost ?? null);
+        // A Claude round that returns a figure settles the turn, as only an empty round is read again.
+        const pricedClaude = !codex && cost;
+        const runs = pricedClaude ? rounds : stored?.seq === seq ? (stored.runs ?? 0) + 1 : 1;
+        await bb.storage.kv.set(key, { cost: best, seq, checkedAt: Date.now(), runs });
+        return best;
       })().finally(() => costInFlight.delete(threadId));
       costInFlight.set(threadId, running);
     }
@@ -154,8 +201,13 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
       return await running;
     } catch (error) {
       bb.log.warn(`thread cost for ${threadId}: ${errorText(error)}`);
-      // A failed round counts as checked, so the 5-minute floor applies to the retry too.
-      await bb.storage.kv.set(key, { cost: stored?.cost ?? null, seq: stored?.seq ?? "", checkedAt: Date.now() });
+      // A failed round counts as checked, so the 5-minute floor applies to the retry too; it is not one of the turn's rounds.
+      await bb.storage.kv.set(key, {
+        cost: stored?.cost ?? null,
+        seq: stored?.seq ?? "",
+        runs: stored?.runs ?? 0,
+        checkedAt: Date.now(),
+      });
       return stored?.cost ?? null;
     }
   }

@@ -10,6 +10,9 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   running.
 - bb's always-open SSH tunnel counted as activity, so Ona's inactivity timeout
   never fired while bb was open (see decision 0004).
+- Codex records a thread's usage for `account/usage/read` some time after a turn
+  ends; about 30 minutes in one observation, checked 2026-11-03. Until then it
+  answers `estimatedUsageUsdMicros` 0 with no `groups`.
 
 ## Ona CLI
 
