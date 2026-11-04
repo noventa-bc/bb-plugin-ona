@@ -61,7 +61,7 @@ an unattended agent skips a conflicting item.
 1. Read `.agent/HANDOFF.md` in the worktree, then the diff (`git -C <worktree> diff`).
    Decide on anything under "Needs owner review", and check that each added
    piece of complexity is worth what the handoff says it costs.
-2. Run `npm run check` in the worktree (outside the sandbox, so every test runs).
+2. Run `npm run check` in the worktree (outside the sandbox, so every test runs) and read its exit code before the commit in step 3.
 3. Stage files by name and commit.
 4. Apply "Process feedback" proposals to `AGENTS.md` yourself, if they hold up.
 5. Remove the worktree: `git worktree remove <worktree>` and `git branch -D agent/<slug>`.
