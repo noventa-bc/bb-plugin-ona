@@ -100,8 +100,9 @@ those and the "skipped or not checked" lines ponytail ends with.
    adversarial reviewer (brief: the diff, the files it touches, the specific
    ways it could fail, never the orchestrator's own verdict), `code-review`
    (its recipe followed by hand: the Skill itself starts many agents) and
-   `/ponytail-review branch`, each on the branch against `origin/main` and in
-   its own agent, and sends findings
+   `/ponytail-review branch`, each on the branch against `origin/main`, in
+   its own agent, briefed with the builder's worktree path (a fresh agent
+   starts in the main checkout), and sends findings
    back to the builder. All three passes run on the first round of every PR
    this flow opens, with no exception for a small or docs-only change. After
    that, `code-review` runs every round; the adversarial pass and
@@ -111,15 +112,15 @@ those and the "skipped or not checked" lines ponytail ends with.
    opens after a round with no open findings, and only once all three have run
    on code that has not changed since. Check the ten Code Review Rules in
    `AGENTS.md`.
-7. **Open the PR.** Push the branch and open a pull request against `main`.
-   The title is a Conventional Commit (`type(scope): subject`, see
-   `AGENTS.md`): the squash merge makes it the commit on `main`, and it
-   decides the release. Before pushing, run
+7. **Open the PR.** The title is a Conventional Commit (`type(scope):
+subject`, see `AGENTS.md`): the squash merge makes it the commit on
+   `main`, and it decides the release. First run
    `sh -c "cd <worktree> && scripts/bump.sh \"<title>\""` (a bare call from
    the main checkout bumps that checkout), run the check, and commit what it
    changes: it bumps `package.json` as the title requires (or does
    nothing), and CI checks the same rule. A version bump is not a code change
-   for the review passes. The description carries: the roadmap labels, what changed and why, how it
+   for the review passes. Then push the branch and open a pull request
+   against `main`. The description carries: the roadmap labels, what changed and why, how it
    was tested, the three review passes and what each found, the owner
    live-test steps from the handoff, and anything left out. Nothing from the
    "Weaknesses for the roadmap" handoff section goes in the PR; the

@@ -58,7 +58,7 @@ an unattended agent skips a conflicting item.
 
 ## Review a handoff
 
-1. Read `.agent/HANDOFF.md` in the worktree, then the diff (`git -C <worktree> diff`).
+1. Read `.agent/HANDOFF.md` in the worktree, then the diff (`git -C <worktree> diff HEAD`; the work is staged).
    Decide on anything under "Needs owner review", and check that each added
    piece of complexity is worth what the handoff says it costs.
 2. Run `npm run check` in the worktree (outside the sandbox, so every test runs) and read its exit code before the commit in step 3.
