@@ -29,7 +29,8 @@ the quick fix is right and when it is not.
   it hunts for the input, timing or state that makes it wrong, and reports
   only findings with a concrete failing case. Plus the repo's `code-review`
   pass and `/ponytail-review`: three passes on every PR this flow opens, all
-  independent of the orchestrator. Findings go back to the builder until clean.
+  independent of the orchestrator. Blocking findings go back to the builder
+  (step 6 says which block).
 
 Subagents run on Haiku at max effort by default (for example: builders of
 small changes, reviewers of tests, docs, lint and CI, mechanical work). Use
@@ -40,8 +41,8 @@ a Haiku subagent's output and briefs it with exact commands and a stop
 condition.
 
 Merging on green is only as safe as CI. Every PR adds a test for the behaviour
-it changes; a gap CI cannot see (untested module, missing lint, unchecked
-script) becomes a roadmap item and is named in the PR.
+it changes, where a test is possible; a gap CI cannot see and the PR did not open (untested module, missing lint, unchecked
+script) becomes a roadmap item and is named in the PR by its label only.
 
 ## Ponytail
 
@@ -103,16 +104,34 @@ those and the "skipped or not checked" lines ponytail ends with.
    (its recipe followed by hand: the Skill itself starts many agents) and
    `/ponytail-review branch`, each on the branch against `origin/main`, in
    its own agent, briefed with the builder's worktree path (a fresh agent
-   starts in the main checkout), and sends findings
+   starts in the main checkout), and sends blocking findings
    back to the builder. All three passes run on the first round of every PR
    this flow opens, with no exception for a small or docs-only change. After
    that, `code-review` runs every round; the adversarial pass and
    `/ponytail-review` run on every round whose diff changed code since they
    last ran (comments, lint messages and docs are not code, except the Code
    Review Rules in `AGENTS.md` and the rules table in `docs/sync.md`). A PR
-   opens after a round with no open findings, and only once all three have run
+   opens after a round with no blocking finding, and only once all three have run
    on code that has not changed since. Check the ten Code Review Rules in
    `AGENTS.md`.
+
+   **Converge.** The item's code is the PR's scope, and reviewer briefs name
+   it and ask for anything outside it under a separate "Pre-existing" heading.
+   A finding blocks only when the branch introduced the defect or makes one
+   reachable or worse, when the branch breaks a safety rule or a coupled
+   change, leaves its own behaviour untested where a test is possible,
+   leaves a doc in the diff contradicting the code, or is a big change the
+   owner has not reviewed (`AGENTS.md` "Complexity"). A finding that was
+   already on `main` and that the branch does not make reachable or worse
+   becomes a roadmap item, with its guard, and the PR names it by its label
+   only, whatever severity the reviewer gave it; a credential or a data-loss
+   risk goes to the owner at once as well. After the first round the builder
+   adds no behaviour beyond a fix for a blocking finding: a fix that needs
+   behaviour beyond that is its own item.
+   Code converges in three rounds; from round 4 on, the orchestrator opens
+   the PR once nothing blocks and the passes above have run on the code as
+   it stands.
+
 7. **Open the PR.** The title is a Conventional Commit (`type(scope):
 subject`, see `AGENTS.md`): the squash merge makes it the commit on
    `main`, and it decides the release. First run
@@ -139,7 +158,7 @@ subject`, see `AGENTS.md`): the squash merge makes it the commit on
    `scripts/pr-merge.sh <pr>` from the main checkout (the branch is deleted
    on merge, which fails from a worktree that has it checked out). It waits
    for the runs the PR needs and merges only a fully green head (see the
-   script). It runs as soon as the review has no open findings. A push
+   script). It runs as soon as the review has no blocking finding. A push
    to `main` then tags and releases the version in `package.json` on its own
    (`release.yml`); no step here does it. PRs that touch the same files merge
    one at a time: merge `main` into the next branch (a merge commit;
@@ -170,8 +189,8 @@ subject`, see `AGENTS.md`): the squash merge makes it the commit on
 - For a roadmap item the owner named in the session (an instruction to change
   this file or `AGENTS.md` counts), the orchestrator may commit on `agent/*`
   branches (builders leave work staged), push them, open
-  PRs, and merge a PR with `scripts/pr-merge.sh` once its review has no open
-  findings and CI is green. Nobody commits to `main`
+  PRs, and merge a PR with `scripts/pr-merge.sh` once its review has no
+  blocking finding and CI is green. Nobody commits to `main`
   directly.
 - Installing or bumping a dependency inside an owner-approved task is allowed;
   say in the PR which packages changed. Anything else needs a new approval.
@@ -186,7 +205,8 @@ This file is the memory of the flow. Keep it current:
 - When a step failed or wasted time, record what to do instead, next to the step.
 - When a bug, a source of noise or a repo hazard shows up (in the code, in CI,
   in a review or in the flow itself), add the guardrail that stops it recurring
-  before the PR opens: a test with the failing case, a lint rule, a CI step, a
+  before the PR opens (a finding already on `main` that the branch does not
+  make reachable or worse takes its guard in its roadmap item, step 6): a test with the failing case, a lint rule, a CI step, a
   `.gitignore` line, or a rule here or in `AGENTS.md`. A finding that is only
   fixed, with no guard, is not closed.
 - When a rule here conflicts with `AGENTS.md`, fix `AGENTS.md` in the same PR
