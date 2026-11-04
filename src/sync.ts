@@ -237,6 +237,7 @@ export function createSync(deps: SyncDeps) {
   const idleMs = parseDuration(idleDisconnect);
   async function releaseIdleMachines(rows: Row[]): Promise<void> {
     if (idleMs <= 0) return;
+    const now = Date.now();
     const candidates = rows.filter((row) => row.phase === "active" && guard.mayAct(row.hostId));
     const activity: MachineActivity[] = [];
     for (const row of candidates) {
@@ -251,10 +252,12 @@ export function createSync(deps: SyncDeps) {
           ...threads.map((thread) => Math.max(thread.updatedAt, thread.lastReadAt ?? 0)),
         ),
         // Letting the box go mid-hook leaves bb unable to recover the workspace; a retry needs the machine active in bb (docs/ona-notes.md).
-        workspacesBlock: await workspaces(row.hostId).then((work) => work.busy || work.needsRecovery > 0),
+        workspacesBlock: await workspaces(row.hostId, now).then(
+          (work) => work === null || work.busy || work.needsRecovery > 0,
+        ),
       });
     }
-    for (const hostId of machinesToRelease(activity, Date.now(), idleMs)) {
+    for (const hostId of machinesToRelease(activity, now, idleMs)) {
       const row = candidates.find((r) => r.hostId === hostId)!;
       const reason = `idle for ${idleDisconnect}; Ona's own timeout will stop the box`;
       await guard
@@ -316,14 +319,14 @@ export function createSync(deps: SyncDeps) {
   }
 
   /**
-   * bb's workspace work on a machine; a failed lookup counts as none.
+   * bb's workspace work on a machine; null when the lookup failed, and a failed lookup holds the box.
    */
-  async function workspaces(hostId: string, now = Date.now()): Promise<{ busy: boolean; needsRecovery: number }> {
+  async function workspaces(hostId: string, now: number): Promise<{ busy: boolean; needsRecovery: number } | null> {
     try {
       return workspaceWork(await bb.sdk.environments.list({ hostId }), now);
     } catch (error) {
       bb.log.info(`couldn't list workspaces on ${hostId}: ${errorText(error)}`);
-      return { busy: false, needsRecovery: 0 };
+      return null;
     }
   }
 
@@ -428,10 +431,12 @@ export function createSync(deps: SyncDeps) {
               ? await threadWaiting(row.hostId).catch(() => false)
               : false,
           workspaceWaiting:
-            row.phase === "active" && row.status !== "connected" ? (await workspaces(row.hostId, now)).busy : false,
+            row.phase === "active" && row.status !== "connected"
+              ? ((await workspaces(row.hostId, now))?.busy ?? false)
+              : false,
         };
         const decision = decide(view, await onaView(row.resource.envId, listing), now);
-        // With autoRepair off, only observed stops and deletions reach bb, and tunnels reopen after a reload.
+        // With autoRepair off, only observed stops and deletions (and the resume a waiting thread asks for) reach bb; tunnels reopen after a reload, and idle releases run below.
         const skipped = !autoRepair && !["none", "suspend-observed", "ensure-tunnel"].includes(decision.action);
         guard.note(
           row.hostId,
@@ -448,6 +453,7 @@ export function createSync(deps: SyncDeps) {
   }
 
   async function statusRows(ref?: string): Promise<StatusRow[]> {
+    const now = Date.now();
     const listing = await snapshot.get().catch(() => snapshot.latest);
     // Once a listing fails, rows keep the last good phase but not its facts: the facts would look current.
     const listingOk = snapshot.lastError === null;
@@ -490,7 +496,7 @@ export function createSync(deps: SyncDeps) {
                 ? `gave up after ${record.failures} failures; run \`bb ona sync ${row.machine}\``
                 : `retrying after ${new Date(record.quietUntil).toLocaleTimeString()}`,
           keepAliveUntil: deps.keepAliveUntil(row.resource.envId),
-          needsRecovery: (await workspaces(row.hostId)).needsRecovery,
+          needsRecovery: (await workspaces(row.hostId, now))?.needsRecovery ?? 0,
           stuckThreads: stuckThreads(
             await liveThreads(bb.sdk.threads, row.hostId).catch((error: unknown) => {
               bb.log.info(`couldn't list threads on ${row.hostId}: ${errorText(error)}`);

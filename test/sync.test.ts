@@ -75,6 +75,18 @@ test("an idle box isn't released while bb tears down or retries a workspace, or 
   }
 });
 
+test("a failed workspace lookup holds an idle box, and status reports no recovery for it", async () => {
+  const retrying: WorkspaceView = {
+    status: "error",
+    lifecycle: { phase: "teardown", retireAt: NOW + 60_000, teardown: { status: "failed" } },
+  };
+  const { sync, calls } = world([idle("h1", { workspaces: [retrying] })], { workspacesFail: true });
+  await sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(calls, []);
+  const [row] = await sync.statusRows();
+  assert.equal(row!.needsRecovery, 0);
+});
+
 // Bug: a teardown bb was still retrying counted as needing recovery, so a disconnected box waited out the grace instead of reconnecting for bb's retry.
 test("a disconnected box reconnects at once for a teardown bb is still retrying", async () => {
   const retrying: WorkspaceView = {
@@ -295,7 +307,7 @@ test("the first pass after a reload reopens the tunnel of a running box bb still
   }
 });
 
-test("autoRepair off still suspends a stopped box, resumes it for a waiting thread, and only reports a disconnected one", async () => {
+test("autoRepair off still suspends a stopped or idle box, resumes a stopped box for a waiting thread, and only reports a disconnected or stuck one", async () => {
   const waiting: ThreadRecord = {
     id: "t1",
     status: "idle",
@@ -315,6 +327,14 @@ test("autoRepair off still suspends a stopped box, resumes it for a waiting thre
   assert.deepEqual(down.calls, []);
   const [row] = await down.sync.statusRows();
   assert.match(row!.now!.reason, /autoRepair is off/);
+  const idleBox = world([idle("h1")], { autoRepair: false });
+  await idleBox.sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(idleBox.calls, ["suspend h1"]);
+  const stuck = world([idle("h1", { phase: "resuming" })], { autoRepair: false });
+  await stuck.sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(stuck.calls, []);
+  const [stuckRow] = await stuck.sync.statusRows();
+  assert.match(stuckRow!.now!.reason, /autoRepair is off/);
 });
 
 test("a failed or empty Ona listing changes nothing", async () => {

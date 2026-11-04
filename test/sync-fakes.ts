@@ -44,6 +44,8 @@ export function world(
     listing?: "fail" | "empty";
     /** The message a failing listing throws; "" counts as a failure too. */
     listingError?: string;
+    /** bb's workspace list throws. */
+    workspacesFail?: boolean;
     /** bb's host lookup fails: with a plain error, or with only the SDK's `not_found` code (no status). */
     hostGet?: "fail" | "not_found";
     autoRepair?: boolean;
@@ -130,7 +132,12 @@ export function world(
             );
           },
         },
-        environments: { list: async ({ hostId }) => byHost.get(hostId)?.workspaces ?? [] },
+        environments: {
+          list: async ({ hostId }) => {
+            if (options.workspacesFail) throw new Error("bb is down");
+            return byHost.get(hostId)?.workspaces ?? [];
+          },
+        },
       },
       experimental_machines: {
         getResource: async (hostId) => ({ envId: byHost.get(hostId)!.envId, envName: "box", adopted: true, key: "k" }),
