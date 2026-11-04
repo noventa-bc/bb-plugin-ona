@@ -303,10 +303,8 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
   [docs/ona-notes.md](docs/ona-notes.md)). bb writes no `Needs recovery:` text for a
   workspace whose message says it belongs to a different plugin or has no recorded
   owner (checked 2026-11-04); the plugin's line still shows after 60 s and an active
-  box stays awake ([docs/ona-notes.md](docs/ona-notes.md)). For such a workspace on an
-  adopted box, start over (remove the machine, then `bb ona adopt`) once the plugin's
-  line shows. Keep the box running and run
-  `bb machine remove <machine>`. If it succeeds, run `bb ona adopt <box>` (see the bullet
+  box stays awake ([docs/ona-notes.md](docs/ona-notes.md)). To start over, keep the box
+  running and run `bb machine remove <machine>`. If it succeeds, run `bb ona adopt <box>` (see the bullet
   on adopting). When its cleanup fails, keep the box running, stop every bb daemon on it,
   and anything running from a checkout in it, with
   `ssh "$(bb ona host <box>)" 'pkill -f "$(readlink -f ~/.bb-machines)/"'`, and run
@@ -317,7 +315,9 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
   `bb ona adopt <box>`.
 - **"bb's workspace or thread list couldn't be read" in `bb ona status`:** bb's own list of
   that machine's threads or workspaces failed; the box isn't let go while it lasts.
-  `bb plugin logs ona` has the error; the next pass clears it once bb answers.
+  `bb plugin logs ona` has the error; the next `bb ona status` shows it cleared once bb answers.
+- **"Ona lists no environments" in `bb ona status`:** `ona environment list` answered with no boxes
+  (a different `ona context` or login, say); idle boxes are not released while it lasts, and the Ona column reads `unknown`.
 - **Adopting a box again after removing its machine:** removing an adopted
   machine while its box is running stops bb's daemon there and moves bb's data
   folder aside, from `~/.bb-machines/<server>` to

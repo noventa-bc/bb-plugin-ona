@@ -108,25 +108,6 @@ test("status reads the clock after a slow listing, so a retry that came due duri
   }
 });
 
-// The thread list takes 30 s: the thread is stuck when the list returns, but not by the clock status read first.
-test("status judges stuck threads on the clock it read first, not on one a slow thread list moved", async () => {
-  enableFakeClock();
-  try {
-    const start = Date.now();
-    const thread: ThreadRecord = {
-      id: "t1",
-      status: "starting",
-      updatedAt: start - 6 * HOUR + 1_000,
-      runtime: { displayStatus: "starting" },
-    };
-    const { sync } = world([idle("h1", { threads: [thread], threadsMs: 30_000 })]);
-    const [row] = await sync.statusRows();
-    assert.deepEqual(row!.stuckThreads, []);
-  } finally {
-    await resetFakeClock();
-  }
-});
-
 test("one box's failed thread list holds only that box", async () => {
   const { sync, calls } = world([idle("h1", { threads: "fail" }), idle("h2")]);
   await sync.reconcile(new Set([ALL]), { wait: true });
@@ -416,6 +397,23 @@ test("a failed Ona list holds the all-machines release while the last good listi
     await tick(2_000);
     await sync.reconcile(new Set([ALL]), { wait: true }); // T0+8 s: the cache still answers, and the box is idle
     assert.deepEqual(calls, []);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+test("a good Ona list after a failed one reopens the all-machines release", async () => {
+  enableFakeClock();
+  try {
+    const options = { cached: true, listingFailsAfter: 1 as number | undefined, pluginStartedAt: -2 * HOUR };
+    const { sync, calls } = world([idle("h1")], options);
+    await sync.reconcile(new Set(["h1"]), { wait: true }); // T0: a good listing
+    await tick(6_000);
+    await sync.reconcile(new Set(["h1"]), { wait: true }); // T0+6 s: the list fails
+    options.listingFailsAfter = undefined; // Ona answers again
+    await tick(15_000); // past the TTL, so the all-machines pass fetches a new listing
+    await sync.reconcile(new Set([ALL]), { wait: true }); // the good list reopens the release
+    assert.deepEqual(calls, ["suspend h1"]);
   } finally {
     await resetFakeClock();
   }

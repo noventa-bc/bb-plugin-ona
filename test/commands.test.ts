@@ -190,7 +190,7 @@ test("status text: one block per machine with what the plugin saw, did and is wa
 
 test("status explains an unknown box only when the Ona listing is empty, not when the CLI failed", () => {
   const empty = formatStatus([row({ ona: "unknown" })], HEALTHY, NOW);
-  assert.match(empty, /Ona lists no environments; an idle box is kept until it does/);
+  assert.match(empty, /Ona lists no environments; idle boxes are not released until it does/);
   const failed = formatStatus([row({ ona: "unknown" })], { ...HEALTHY, lastError: "not logged in" }, NOW);
   assert.doesNotMatch(failed, /lists no environments/);
 });

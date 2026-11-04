@@ -184,7 +184,7 @@ export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()
   const lines = rows.map((row) => {
     const rowLines = [`${row.machine}  bb:${row.bb}  tunnel:${row.tunnel}  ona:${row.ona}`];
     if (row.ona === "unknown" && ona.lastError === null)
-      rowLines.push("  Ona lists no environments; an idle box is kept until it does");
+      rowLines.push("  Ona lists no environments; idle boxes are not released until it does");
     const box = row.facts ? boxLine(row.facts) : null;
     if (box) rowLines.push(box);
     if (row.now) rowLines.push(`  now: ${row.now.reason} (since ${ago(row.now.since)})`);
