@@ -241,6 +241,47 @@ test("a relative legacy folder under HOME is moved aside and its daemon stopped"
   assert.equal(stopped(), true, "the daemon run from HOME must be stopped");
 });
 
+// The home folder is never a machine's data folder: a legacy dataDir of "." names it, so it stays.
+test('a legacy dataDir of "." leaves the home folder and its daemon in place', sandboxed, async (t) => {
+  const { home, remove } = devbox(t);
+  writeFileSync(join(home, "host-id"), "host-home\n");
+  const daemon = await standIn(t, `${realpathSync(home)}/npm/bin/bb-app`);
+  assert.equal(await remove("host-home", "."), 4);
+  assert.equal(existsSync(join(home, "host-id")), true, "the home folder stays");
+  assert.equal(daemon.exitCode === null && daemon.signalCode === null, true, "the daemon keeps running");
+});
+
+// The same folder, spelled as $HOME.
+test("a legacy dataDir of $HOME leaves the home folder and its daemon in place", sandboxed, async (t) => {
+  const { home, remove } = devbox(t);
+  writeFileSync(join(home, "host-id"), "host-home\n");
+  const daemon = await standIn(t, `${realpathSync(home)}/npm/bin/bb-app`);
+  assert.equal(await remove("host-home", home), 4);
+  assert.equal(existsSync(join(home, "host-id")), true, "the home folder stays");
+  assert.equal(daemon.exitCode === null && daemon.signalCode === null, true, "the daemon keeps running");
+});
+
+// A folder above the home folder holds it, so it stays too.
+test("a legacy dataDir above the home folder leaves it in place", sandboxed, async (t) => {
+  const above = mkdtempSync(join(tmpdir(), "bb-ona-above-"));
+  t.after(() => rmSync(above, { recursive: true, force: true }));
+  const home = join(above, "home");
+  mkdirSync(home);
+  writeFileSync(join(above, "host-id"), "host-up\n");
+  const code = await promisify(execFile)("/bin/bash", ["-c", MOVE_MACHINE_ASIDE, "bb-ona-remove", "host-up", ".."], {
+    env: { ...process.env, HOME: home },
+  }).then(
+    () => 0,
+    (error: unknown) => (error as { code: number | null }).code,
+  );
+  assert.equal(code, 4);
+  assert.equal(
+    existsSync(join(above, "host-id")) && existsSync(home),
+    true,
+    "the folder above and the home folder stay",
+  );
+});
+
 // Bug: a remove that moved nothing said nothing, as if the folder had moved.
 test("removing a machine whose data folder isn't on the box changes nothing and exits 3", sandboxed, async (t) => {
   const { disk, remove, running } = devbox(t);
