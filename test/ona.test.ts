@@ -266,9 +266,10 @@ test("readiness: a stopped box with Ona's failure message, a string or a list, f
   const failed = (message: string) => ({ state: "failed", message });
   assert.deepEqual(readiness(env(["image pull failed\ndetail", "second"])), failed("image pull failed"));
   assert.deepEqual(readiness(env("disk full")), failed("disk full"));
-  assert.deepEqual(readiness(env([])), { state: "waiting", reason: "starting" });
-  assert.deepEqual(readiness(env([""])), { state: "waiting", reason: "starting" });
-  assert.deepEqual(readiness(env(null)), { state: "waiting", reason: "starting" });
+  // Right after the plugin's start, a stopped box with no failure is still on its way.
+  assert.deepEqual(readiness(env([]), true), { state: "waiting", reason: "starting" });
+  assert.deepEqual(readiness(env([""]), true), { state: "waiting", reason: "starting" });
+  assert.deepEqual(readiness(env(null), true), { state: "waiting", reason: "starting" });
 });
 
 // A failure message there may be left from an earlier start.
@@ -299,7 +300,7 @@ test("readiness: a running box with a running dev container is ready despite a s
 });
 
 // Ona can still show STOPPED right after `ona environment start`; older Ona sends no desired phase.
-test("readiness: a stopped or stopping box is starting unless Ona's desired phase is something other than RUNNING", () => {
+test("readiness: a stopped or stopping box is starting unless its desired phase is stopped; deleted or deleting always fails", () => {
   const env = (phase: string, desiredPhase?: string): OnaEnvironment => ({
     id: "env-0001",
     metadata: {},
@@ -307,12 +308,12 @@ test("readiness: a stopped or stopping box is starting unless Ona's desired phas
     ...(desiredPhase && { spec: { desiredPhase: `ENVIRONMENT_PHASE_${desiredPhase}` } }),
   });
   const starting = { state: "waiting", reason: "starting" };
-  assert.deepEqual(readiness(env("STOPPED", "RUNNING")), starting);
-  assert.deepEqual(readiness(env("STOPPING", "RUNNING")), starting);
+  assert.deepEqual(readiness(env("STOPPED", "RUNNING"), true), starting);
+  assert.deepEqual(readiness(env("STOPPING", "RUNNING"), true), starting);
   assert.deepEqual(readiness(env("STOPPED", "STOPPED")), { state: "failed", message: "stopped" });
   assert.deepEqual(readiness(env("STOPPING", "STOPPED")), { state: "failed", message: "stopping" });
-  assert.deepEqual(readiness(env("STOPPED")), starting, "older Ona: no desired phase");
-  assert.deepEqual(readiness(env("STOPPING")), starting, "older Ona: no desired phase");
+  assert.deepEqual(readiness(env("STOPPED"), true), starting, "older Ona: no desired phase");
+  assert.deepEqual(readiness(env("STOPPING"), true), starting, "older Ona: no desired phase");
   assert.deepEqual(readiness(env("DELETED")), { state: "failed", message: "deleted" });
   assert.deepEqual(readiness(env("DELETED", "RUNNING")), { state: "failed", message: "deleted" });
   assert.deepEqual(readiness(env("DELETING", "RUNNING")), { state: "failed", message: "deleting" });
@@ -326,7 +327,7 @@ test("readiness: a stopped box whose desired phase is RUNNING waits, with its fa
     spec: { desiredPhase: "ENVIRONMENT_PHASE_RUNNING" },
     status: { phase: "ENVIRONMENT_PHASE_STOPPED", failureMessage: ["no capacity"] },
   };
-  assert.deepEqual(readiness(env), { state: "waiting", reason: "no capacity" });
+  assert.deepEqual(readiness(env, true), { state: "waiting", reason: "no capacity" });
 });
 
 test("readiness: a failure message's first non-blank line is used, trimmed", () => {
@@ -357,7 +358,7 @@ test("readiness: a failed dev container fails a starting box too, but not a stop
     status: { phase: `ENVIRONMENT_PHASE_${phase}`, devcontainer: { phase: "PHASE_FAILED" } },
   });
   assert.deepEqual(readiness(env("STARTING")), { state: "failed", message: "dev container failed" });
-  assert.deepEqual(readiness(env("STOPPED")), { state: "waiting", reason: "starting" });
+  assert.deepEqual(readiness(env("STOPPED"), true), { state: "waiting", reason: "starting" });
 });
 
 // An SSH retry could wake the box once Ona stops it (rule 1).
@@ -374,6 +375,32 @@ test("readiness: a running box Ona means to stop fails; without a desired phase 
   });
   assert.deepEqual(readiness(env("ENVIRONMENT_PHASE_RUNNING")), { state: "ready" });
   assert.deepEqual(readiness(env()), { state: "ready" });
+});
+
+// A box Ona's inactivity timeout stopped keeps desired phase RUNNING.
+test("readiness: a stopped box waits only right after the plugin's own start", () => {
+  const env = (phase: string): OnaEnvironment => ({
+    id: "env-0001",
+    metadata: {},
+    spec: { desiredPhase: "ENVIRONMENT_PHASE_RUNNING" },
+    status: { phase: `ENVIRONMENT_PHASE_${phase}` },
+  });
+  assert.deepEqual(readiness(env("STOPPED")), { state: "failed", message: "stopped" });
+  assert.deepEqual(readiness(env("STOPPING")), { state: "failed", message: "stopping" });
+  assert.deepEqual(readiness(env("STOPPED"), true), { state: "waiting", reason: "starting" });
+});
+
+// The proto default must not read as "Ona means to stop it".
+test("readiness: only a desired phase of stopped or deleted counts as Ona stopping the box", () => {
+  const env = (phase: string, desiredPhase: string): OnaEnvironment => ({
+    id: "env-0001",
+    metadata: {},
+    spec: { desiredPhase: `ENVIRONMENT_PHASE_${desiredPhase}` },
+    status: { phase: `ENVIRONMENT_PHASE_${phase}` },
+  });
+  assert.deepEqual(readiness(env("RUNNING", "UNSPECIFIED")), { state: "ready" });
+  assert.deepEqual(readiness(env("RUNNING", "DELETED")), { state: "failed", message: "Ona is stopping the box" });
+  assert.deepEqual(readiness(env("STOPPED", "UNSPECIFIED"), true), { state: "waiting", reason: "starting" });
 });
 
 // A schema that rejects the live shape makes every `get` unknown.

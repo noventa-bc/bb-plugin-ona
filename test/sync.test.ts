@@ -367,7 +367,7 @@ test("a running box whose daemon dropped is probed, and restarted only if the da
   }
 });
 
-// Bug: a heal's reconnect now waits for Ona and can fail; a failed one must not read as done or retry at once.
+// A failed reconnect is a failure: no restart is reported, and it backs off.
 test("a daemon restart that Ona fails is a failure: no restart reported, and it backs off", async () => {
   const { sync, calls, guard } = world([idle("h1", { status: "disconnected", lastSeenAt: NOW - HOUR })], {
     daemonAlive: false,

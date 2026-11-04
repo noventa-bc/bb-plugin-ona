@@ -261,28 +261,19 @@ export function isStopped(env: OnaEnvironment): boolean {
 type Readiness = { state: "ready" } | { state: "waiting"; reason: string } | { state: "failed"; message: string };
 
 /** The first non-blank line, trimmed: one line of Ona's text for a progress line or an error. */
-function firstLine(text: string): string | undefined {
+export function firstLine(text: string): string | undefined {
   return text
     .split("\n")
     .map((line) => line.trim())
     .find(Boolean);
 }
 
-/**
- * Whether Ona says a box can take SSH. A failed dev container fails a box in
- * any phase but stopping or stopped. RUNNING is ready with its dev container
- * running or none at all, failed when Ona means to stop it (a desired phase
- * other than RUNNING), and waiting otherwise.
- * Deleted or deleting is failed. Stopped or stopping with a desired phase of
- * RUNNING is waiting, with an earlier start's failure as the reason: a connect
- * to a stopped box comes right after the plugin's own `ona environment start`,
- * and Ona can lag before it reports STARTING. Otherwise it is failed with Ona's
- * failure message or a desired phase set to anything else, and waiting when
- * Ona sends neither (older Ona).
- * Any other phase is waiting: a failure message there may be left from an
- * earlier start.
- */
-export function readiness(env: OnaEnvironment): Readiness {
+/** A desired phase that means Ona is taking the box down; any other value (RUNNING, the proto default) doesn't. */
+const isStopIntent = (desired: string | null | undefined) =>
+  desired === "ENVIRONMENT_PHASE_STOPPED" || desired === "ENVIRONMENT_PHASE_DELETED";
+
+/** Whether Ona says a box can take SSH: the rule is in docs/sync.md, safety rule 1. */
+export function readiness(env: OnaEnvironment, started = false): Readiness {
   const desired = env.spec?.desiredPhase;
   const phase = (env.status?.phase ?? "unknown").replace("ENVIRONMENT_PHASE_", "").toLowerCase();
   const stopped = isStopped(env) || phase === "stopping";
@@ -290,8 +281,7 @@ export function readiness(env: OnaEnvironment): Readiness {
   if (!stopped && env.status?.devcontainer?.phase === "PHASE_FAILED")
     return { state: "failed", message: "dev container failed" };
   if (isRunning(env)) {
-    if (desired && desired !== "ENVIRONMENT_PHASE_RUNNING")
-      return { state: "failed", message: "Ona is stopping the box" };
+    if (isStopIntent(desired)) return { state: "failed", message: "Ona is stopping the box" };
     const container = env.status?.devcontainer;
     if (!container || container.phase === "PHASE_RUNNING") return { state: "ready" };
     return { state: "waiting", reason: "dev container starting" };
@@ -299,10 +289,9 @@ export function readiness(env: OnaEnvironment): Readiness {
   if (isDeleted(env)) return { state: "failed", message: phase };
   if (stopped) {
     const failure = [env.status?.failureMessage ?? []].flat().map(firstLine).find(Boolean);
-    if (desired === "ENVIRONMENT_PHASE_RUNNING") return { state: "waiting", reason: failure ?? "starting" };
-    if (failure) return { state: "failed", message: failure };
-    if (desired) return { state: "failed", message: phase };
-    return { state: "waiting", reason: "starting" };
+    if (!started || isStopIntent(desired) || (!desired && failure))
+      return { state: "failed", message: failure ?? phase };
+    return { state: "waiting", reason: failure ?? "starting" };
   }
   return { state: "waiting", reason: phase };
 }
@@ -311,7 +300,8 @@ export function readiness(env: OnaEnvironment): Readiness {
  * Safety rule 1 for every connect: no SSH until `ona environment get`, asked
  * right before, says the box and its dev container run. A failed `get` is
  * unknown (decision 0005): keep asking, never SSH on it. Each new reason to
- * wait goes to `report` as the user's progress line.
+ * wait goes to `report` as the user's progress line. `started`: the box wasn't
+ * running when the connect began (see `readiness`).
  */
 export async function waitForReady(
   ona: OnaCli,
@@ -319,6 +309,7 @@ export async function waitForReady(
   name: string,
   report: { step(text: string): void },
   signal: AbortSignal,
+  started = false,
 ): Promise<void> {
   let waiting = "";
   const wait = (reason: string) => {
@@ -339,14 +330,38 @@ export async function waitForReady(
         return wait(firstLine(message) ?? message);
       }
       if (!env) throw new Error(`Ona environment ${name} disappeared.`);
-      const state = readiness(env);
+      const state = readiness(env, started);
       if (state.state === "failed") throw new Error(`Ona environment ${name} failed to start: ${state.message}`);
       return state.state === "ready" || wait(state.reason);
     },
     { deadlineMs: 15 * 60_000, intervalMs: 5_000, signal },
-  );
+  ).catch((error: unknown) => {
+    // A caller's own timeout ends the wait first: keep the reason the deadline error would give.
+    if (signal.aborted && waiting)
+      throw new Error(`Ona did not report ${name} ready before the wait ended: ${waiting}`);
+    throw error;
+  });
   if (ready) return;
   throw new Error(`Ona did not report ${name} ready within 15 minutes: ${waiting}`);
+}
+
+/**
+ * Safety rule 1 between SSH retries: asks Ona again. False when Ona can't be
+ * asked (unknown: skip this probe); throws when the box is no longer ready.
+ */
+export async function stillReady(ona: OnaCli, envId: string, name: string, signal: AbortSignal): Promise<boolean> {
+  let env: OnaEnvironment | null;
+  try {
+    env = await ona.getEnvironmentIfExists(envId, signal);
+  } catch (error) {
+    if (signal.aborted) throw error;
+    return false;
+  }
+  const state: Readiness = env ? readiness(env) : { state: "failed", message: "gone" };
+  if (state.state === "ready") return true;
+  throw new Error(
+    `Ona environment ${name} is no longer ready: ${state.state === "failed" ? state.message : state.reason}`,
+  );
 }
 
 /** Native SSH host alias written by `ona environment ssh-config`. */

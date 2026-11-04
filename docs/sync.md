@@ -80,23 +80,31 @@ you asked for, so safety rule 1 does not gate it.
    the box is running and so is its dev container, if it has one
    (`waitForReady()` in `src/ona.ts`, [0005](decisions/0005-lookup-by-id-counts-as-listing.md)).
    No SSH runs before that answer. These end the connect at once, with no SSH:
-   - a running box whose `spec.desiredPhase` is set to anything but running
-     (Ona is stopping it)
+   - a running box whose `spec.desiredPhase` is stopped or deleted (Ona is
+     stopping it); any other desired phase counts as running
    - a box in any phase but stopping or stopped whose dev container is
      `PHASE_FAILED`
    - a deleted or deleting box
-   - a stopping or stopped box whose desired phase isn't running, when it
-     carries Ona's failure message (shown) or any desired phase.
+   - a stopping or stopped box when the connect began on a running box (a
+     reconnect, a daemon restart, or a create or resume of a running box). A
+     box Ona's inactivity timeout stopped keeps desired phase running, so that
+     can't tell a start from an idle stop. Ona's failure message, if any, is
+     shown.
+   - a stopping or stopped box that was not running when the connect began,
+     but whose desired phase is stopped or deleted, or that carries a failure
+     message and no desired phase (older Ona).
 
    The connect keeps asking in these cases:
-   - a stopping or stopped box whose desired phase is running. A connect to a
-     stopped box comes right after the plugin's own `ona environment start`, and
-     Ona can lag before it reports starting. An earlier failure message becomes
-     the progress line and the timeout's reason.
-   - a stopping or stopped box with neither a failure message nor a desired
-     phase (older Ona), which the start may have just woken
+   - any other stopping or stopped box that was not running when the connect
+     began: Ona can lag behind a start before it reports starting. An earlier
+     failure message becomes the progress line and the timeout's reason.
    - any other phase. A failure message there may be left from an earlier start.
    - a `get` that fails (unknown).
+
+   When the wait ends early (a caller's own timeout), its error still names the
+   last reason. After Ona answers ready, SSH gets up to 10 minutes to answer, and each SSH retry while sshd comes up asks
+   `ona environment get` again, and a box that is no longer ready ends the
+   connect with no further SSH; a failed `get` skips that probe.
 
    One line of Ona's text is shown: the first non-blank line.
    These commands you run yourself are not gated and may wake a box:
