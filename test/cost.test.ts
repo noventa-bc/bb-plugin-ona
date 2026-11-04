@@ -64,12 +64,43 @@ test("model ids match the most specific price entry", () => {
 
 test("Codex cost sums OpenAI's estimates and lists threads without one", () => {
   const { usd, missing } = codexCost({
-    a: { estimatedUsageUsdMicros: 2_886_018 },
+    a: { estimatedUsageUsdMicros: 2_886_018, groups: [{}] },
     b: { estimatedUsageUsdMicros: null },
     c: { error: "nope" },
   });
   close(usd, 2.886018);
   assert.deepEqual(missing, ["b", "c"]);
+});
+
+test("a Codex usage with no groups counts as missing, not $0 (fails if an unrecorded thread is priced at $0)", () => {
+  // Bug: Codex answers $0 with no groups until it records a turn's usage, and that $0 was priced and shown.
+  const { usd, missing } = codexCost({
+    recorded: { estimatedUsageUsdMicros: 2_000_000, groups: [{}] },
+    unrecorded: { estimatedUsageUsdMicros: 0, groups: [] },
+    absent: { estimatedUsageUsdMicros: 0 },
+  });
+  close(usd, 2);
+  assert.deepEqual(missing, ["unrecorded", "absent"]);
+});
+
+test("a Codex usage with a positive usd counts as recorded, even without groups (fails if a recorded figure counts as unrecorded)", () => {
+  // Bug: a figure Codex reports without groups was treated as unrecorded, so it was never priced.
+  const { usd, missing } = codexCost({
+    withEmptyGroups: { estimatedUsageUsdMicros: 2_000_000, groups: [] },
+    withoutGroups: { estimatedUsageUsdMicros: 3_000_000 },
+  });
+  close(usd, 5);
+  assert.deepEqual(missing, []);
+});
+
+test("a Codex thread priced at $0 with groups shows $0 (fails if a real $0 is hidden)", () => {
+  // Guard: a zero with groups is a recorded figure; only a zero with no groups is unrecorded.
+  const { usd, missing } = codexCost({
+    zero: { estimatedUsageUsdMicros: 0, groups: [{}] },
+    unrecorded: { estimatedUsageUsdMicros: 0, groups: [] },
+  });
+  close(usd, 0);
+  assert.deepEqual(missing, ["unrecorded"]);
 });
 
 test("provider sessions are collected once each, in order", () => {
