@@ -57,7 +57,7 @@ Before dispatching, check the task against the accepted records in
 `docs/decisions/`. If it conflicts, decide first and say so in the brief, since
 an unattended agent skips a conflicting item.
 
-## Review a handoff
+## Review a handoff outside the orchestrated flow
 
 1. Read `.agent/HANDOFF.md` in the worktree, then the diff (`git -C <worktree> diff HEAD`; the work is staged).
    Decide on anything under "Needs owner review", and check that each added

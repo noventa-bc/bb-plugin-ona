@@ -85,7 +85,7 @@ those and the "skipped or not checked" lines ponytail ends with.
 3. **Check confidence.** If a task needs a decision only the owner can make (a
    version to pin, a safety rule to bend, a behaviour change users will see),
    ask before building. Batch the questions into one message.
-4. **Brief** each builder with the template in `docs/owner.md`, plus: the
+4. **Brief** each builder and reviewer with the template in `docs/owner.md`, plus: the
    branch name `agent/<slug>`, the files and line areas involved, the tests to
    write first, the coupled changes from `AGENTS.md`, and what to report back.
 5. **Build** in a worktree (slow commands in the background). The builder runs
@@ -190,7 +190,7 @@ This file is the memory of the flow. Keep it current:
 - When a rule here conflicts with `AGENTS.md`, fix `AGENTS.md` in the same PR
   so the two agree, and say so in the PR.
 - Keep this file under 300 lines (`docs.yml` checks). An addition names what it removes.
-- A change to this file goes through a PR like any other change.
+- A change to this file goes through a PR like any other change; the owner's instruction counts as naming the item.
 
 ## Owner instructions on record
 
