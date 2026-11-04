@@ -568,3 +568,32 @@ test("a Codex figure above $0.00 under the old cost: key gets fresh rounds on a 
   assert.equal((await w.costs.threadCost("t1"))?.usd, 2);
   assert.deepEqual(w.collectorRuns, ["env-1"]);
 });
+
+test("an old record with no figure settled at this turn is not read again on a box Ona says is stopped (fails if each poll lists Ona)", async () => {
+  const w = world({ ona: "ENVIRONMENT_PHASE_STOPPED", turnSeq: 8 });
+  w.kv.set(OLD_KEY, { cost: null, seq: 8, checkedAt: OLD });
+  for (let i = 0; i < 3; i++) {
+    assert.equal(await w.costs.threadCost("t1"), null);
+    await later(1);
+  }
+  assert.equal(w.listings.count, 0);
+});
+
+test("an old Codex $0.00 record on a box Ona says is stopped waits for the 5-minute floor (fails if each poll lists Ona)", async () => {
+  const w = world({ ona: "ENVIRONMENT_PHASE_STOPPED", turnSeq: 8, provider: "codex" });
+  w.kv.set(OLD_KEY, { cost: { ...CODEX_FIGURE, usd: 0 }, seq: 8, checkedAt: OLD });
+  for (let i = 0; i < 3; i++) {
+    assert.equal(await w.costs.threadCost("t1"), null);
+    await later(1);
+  }
+  assert.equal(w.listings.count, 1);
+});
+
+test("an old Claude record with no figure settled at this turn is not read on a running box (fails if it is read)", async () => {
+  const w = world({ turnSeq: 8, collect: async () => ({ buckets: [] }) });
+  w.kv.set(OLD_KEY, { cost: null, seq: 8, checkedAt: OLD });
+  assert.equal(await w.costs.threadCost("t1"), null);
+  await pastFloor();
+  assert.equal(await w.costs.threadCost("t1"), null);
+  assert.deepEqual(w.collectorRuns, []);
+});

@@ -53,7 +53,7 @@ const CODEX_ROUNDS = 12;
 const CLAUDE_ROUNDS = 2;
 
 // Records under `cost:` predate the Codex usage lag (docs/ona-notes.md); their figures are shown
-// (except a Codex $0.00) until a new round runs.
+// (except a Codex $0.00) until a round writes a `cost2:` record.
 const costKey = (threadId: string) => `cost2:${threadId}`;
 const oldCostKey = (threadId: string) => `cost:${threadId}`;
 
@@ -70,18 +70,21 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
   }
 
   /**
-   * A figure kept under the old `cost:` key, as a record with no round run for the current turn.
-   * A Codex $0.00 there may come from the usage lag (docs/ona-notes.md), so it is not used.
+   * A record kept under the old `cost:` key, read when the thread has no `cost2:` record yet.
+   * A Codex $0.00 there may come from the usage lag (docs/ona-notes.md), so it is not shown.
    */
   async function legacyCost(threadId: string, provider: string): Promise<StoredCost | null> {
     const old = await bb.storage.kv.get<{ cost: ThreadCost | null; seq?: number | string; checkedAt: number }>(
       oldCostKey(threadId),
     );
-    if (old?.cost?.provider !== provider) return null;
-    // A Claude figure an older version settled stays settled; a Codex one gets fresh rounds.
-    if (old.cost.provider === "claude-code")
-      return { cost: old.cost, seq: String(old.seq ?? ""), checkedAt: old.checkedAt, runs: CLAUDE_ROUNDS };
-    return old.cost.usd > 0 ? { cost: old.cost, seq: "", checkedAt: old.checkedAt } : null;
+    if (!old) return null;
+    const shown = old.cost?.provider === provider && (provider === "claude-code" || old.cost.usd > 0);
+    const cost = shown ? old.cost : null;
+    // A Claude record an older version settled at its seq stays settled, even with no figure. Any other
+    // record is still stored, so the 5-minute floor applies while Ona says the box is stopped.
+    if (provider === "claude-code")
+      return { cost, seq: String(old.seq ?? ""), checkedAt: old.checkedAt, runs: CLAUDE_ROUNDS };
+    return { cost, seq: "", checkedAt: old.checkedAt };
   }
 
   /**
