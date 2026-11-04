@@ -9,7 +9,8 @@ is recorded in [docs/decisions](decisions/README.md).
 **Who decides what.** Ona decides whether a box exists and is running. bb holds
 your intent: a machine is _active_ (you're using it) or _suspended_ (you're
 not). The plugin compares the two and repairs bb's side. Its automatic repairs
-never start or stop a box; only bb's own Resume and Pause do that.
+never start or stop a box; bb does that only on your action in bb (decisions 0001 and
+0002 list them).
 
 **What the plugin does** (`decide()` in `src/reconcile.ts`):
 
