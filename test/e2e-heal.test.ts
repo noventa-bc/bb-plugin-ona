@@ -95,7 +95,9 @@ test("bb ona sync on a running box whose daemon is gone restarts the daemon with
   assert.equal(result.exitCode, 0, result.stderr);
   assert.match(result.stdout ?? "", /last action: heal-daemon: .*daemon was down; restarted it/);
   assert.deepEqual(bootstraps, ["key-1", "key-1"]);
-  assert.deepEqual(onaCalls(), []);
+  // Each `get` is a readiness check before SSH (rule 1); no start or stop.
+  const calls = onaCalls();
+  assert.ok(calls.length > 0 && calls.every((call) => call === "environment get env-1"), calls.join("\n"));
 });
 
 test("bb ona sync leaves a live daemon alone (rule 3)", local, async () => {

@@ -60,8 +60,9 @@ you asked for, so safety rule 1 does not gate it.
 1. **Never wake a box.** Ona's SSH starts a stopped box, so the plugin uses SSH
    (tunnel connect and reconnect, `bb ona reconnect`, daemon check, cost collector, and the cleanup
    when you remove an adopted box's machine) only when Ona, asked right before it, says
-   the box is running: an `ona environment list`, or for that cleanup
-   `ona environment get` ([0005](decisions/0005-lookup-by-id-counts-as-listing.md)). A
+   the box is running: an `ona environment list` for tunnels, the daemon check
+   and the cost collector, or `ona environment get` for a connect and that cleanup
+   ([0005](decisions/0005-lookup-by-id-counts-as-listing.md)). A
    daemon restart asks Ona again after the daemon check, right before it
    starts. A cached listing, bb showing the machine connected, a box that is
    starting or stopping, or a listing that lacks the box is not enough. If Ona
@@ -75,10 +76,49 @@ you asked for, so safety rule 1 does not gate it.
    once bb no longer shows the machine connected. Create and resume start the
    box you asked for (`ona environment create` for a new box, else
    `ona environment start` when Ona shows it neither running nor starting), then
-   connect.
+   connect. Every connect (create, resume, `bb ona reconnect`, a daemon restart)
+   first asks `ona environment get` every 5s, for up to 15 minutes, until it says
+   the box is running and so is its dev container, if it has one
+   (`waitForReady()` in `src/ona.ts`, [0005](decisions/0005-lookup-by-id-counts-as-listing.md)).
+   No SSH runs before that answer. These end the connect at once, with no SSH:
+   - a running box whose `spec.desiredPhase` is stopped or deleted (Ona is
+     stopping or deleting it); any other desired phase counts as running
+   - a box in any phase but stopping or stopped whose dev container is
+     `PHASE_FAILED`
+   - a deleted or deleting box
+   - a box Ona no longer has (`get` finds no id)
+   - a stopping or stopped box when the connect began on a running box (a
+     reconnect, a daemon restart, or a create or resume of a running box). A
+     box Ona's inactivity timeout stopped keeps desired phase running, so that
+     can't tell a start from an idle stop. Ona's failure message, if any, is
+     shown.
+   - a stopping or stopped box that was not running when the connect began,
+     but whose desired phase is stopped or deleted, or that carries a failure
+     message and no desired phase (older Ona).
+
+   The connect keeps asking in these cases:
+   - any other stopping or stopped box that was not running when the connect
+     began: Ona can lag behind a start before it reports starting. An earlier
+     failure message becomes the progress line and the timeout's reason.
+   - any other phase. A failure message there may be left from an earlier start.
+   - a `get` that fails (unknown).
+
+   One line of Ona's text is shown: the first non-blank line. When the wait
+   ends early (a caller's own timeout), its error still names the last reason.
+   After Ona answers ready, SSH tries stop at 10 minutes, checked between
+   tries; a try held for Ona can run past it.
+   Every SSH command in a connect (each try of the waits, the Codex `mkdir`,
+   the `~/.bb-machines` step, the preflight and bb's bootstrap) asks
+   `ona environment get` first and runs only on a ready answer, read as above:
+   a failed box ends the connect with no SSH, and a box on its way or a failed
+   `get` holds the command until Ona says ready, for up to 15 minutes. The
+   reverse tunnel's `ssh` is not gated by these waits; its own `shouldConnect`
+   in `server.ts` asks a fresh listing.
+
    These commands you run yourself are not gated and may wake a box:
    `ona environment open` and `bb ona ssh --thread`.
    _Why: an accidental start costs money and keeps the box up._
+
 2. **Never stop a box.** Suspends the plugin makes because of what it saw in Ona
    skip the provider's stop. _Why: a wrong or stale listing must not stop a box with your work on it._
 3. **Restart a daemon only when the check finds none.** The check looks for a

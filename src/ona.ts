@@ -3,6 +3,7 @@
 import { execFile, spawn } from "node:child_process";
 import { z } from "zod";
 import { keepAliveArgs, type KeepAliveChild } from "./keepalive.ts";
+import { pollUntil } from "./time.ts";
 
 const environmentSchema = z.object({
   id: z.string(),
@@ -13,6 +14,11 @@ const environmentSchema = z.object({
       archivedAt: z.string().optional(),
     })
     .loose(),
+  /** The phase Ona's spec asks for; a box Ona's inactivity timeout stopped keeps RUNNING (docs/ona-notes.md). */
+  spec: z
+    .object({ desiredPhase: z.string().nullish().catch(undefined) })
+    .loose()
+    .nullish(),
   status: z
     .object({
       phase: z.string().optional(),
@@ -29,6 +35,17 @@ const environmentSchema = z.object({
         })
         .loose()
         .optional(),
+      /** null while the box starts, and on a box without a dev container. */
+      // An odd phase reads as absent, so one box can't fail the whole listing.
+      devcontainer: z
+        .object({ phase: z.string().nullish().catch(undefined) })
+        .loose()
+        .nullish(),
+      /** Ona's API documents a list; the CLI has shown null. */
+      failureMessage: z
+        .union([z.string(), z.array(z.string())])
+        .nullish()
+        .catch(undefined),
     })
     .loose()
     .optional(),
@@ -251,6 +268,102 @@ export function isStopped(env: OnaEnvironment): boolean {
   return phase === "ENVIRONMENT_PHASE_STOPPED" || phase === "ENVIRONMENT_PHASE_DELETED";
 }
 
+type Readiness = { state: "ready" } | { state: "waiting"; reason: string } | { state: "failed"; message: string };
+
+export const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/** The first non-blank line, trimmed: one line of Ona's text for a progress line or an error. */
+export function firstLine(text: string): string | undefined {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .find(Boolean);
+}
+
+/** A desired phase that means Ona is taking the box down; any other value (RUNNING, the proto default) doesn't. */
+const isStopIntent = (desired: string | null | undefined) =>
+  desired === "ENVIRONMENT_PHASE_STOPPED" || desired === "ENVIRONMENT_PHASE_DELETED";
+
+/** Whether Ona says a box can take SSH: the rule is in docs/sync.md, safety rule 1. */
+export function readiness(env: OnaEnvironment, started = false): Readiness {
+  const desired = env.spec?.desiredPhase;
+  const phase = (env.status?.phase ?? "unknown").replace("ENVIRONMENT_PHASE_", "").toLowerCase();
+  const stopped = isStopped(env) || phase === "stopping";
+  // A dev container can't recover from failed on its own; a stopped box's may predate the plugin's start.
+  if (!stopped && env.status?.devcontainer?.phase === "PHASE_FAILED")
+    return { state: "failed", message: "dev container failed" };
+  if (isRunning(env)) {
+    if (isStopIntent(desired)) return { state: "failed", message: "Ona is stopping or deleting the box" };
+    const container = env.status?.devcontainer;
+    if (!container || container.phase === "PHASE_RUNNING") return { state: "ready" };
+    return { state: "waiting", reason: "dev container starting" };
+  }
+  if (isDeleted(env)) return { state: "failed", message: phase };
+  if (stopped) {
+    const failure = [env.status?.failureMessage ?? []].flat().map(firstLine).find(Boolean);
+    if (!started || isStopIntent(desired) || (!desired && failure))
+      return { state: "failed", message: failure ?? phase };
+    return { state: "waiting", reason: failure ?? (phase === "stopping" ? "stopping" : "starting") };
+  }
+  return { state: "waiting", reason: phase };
+}
+
+/** Ona did not say the box is ready: the connect ends, no SSH runs, and no SSH check counts it as a failed try. */
+export class NotReadyError extends Error {}
+
+/**
+ * Safety rule 1 for every connect: no SSH until `ona environment get`, asked
+ * right before, says the box and its dev container run. A failed `get` is
+ * unknown (decision 0005): keep asking, never SSH on it. Each new reason to
+ * wait goes to `report` as the user's progress line. `started`: the box wasn't
+ * running when the connect began (see `readiness`).
+ */
+export async function waitForReady(
+  ona: OnaCli,
+  envId: string,
+  name: string,
+  report: { step(text: string): void },
+  signal: AbortSignal,
+  started = false,
+): Promise<void> {
+  let waiting = "";
+  // The name from Ona's latest answer: the stored one goes stale after `bb ona rename`.
+  let current = name;
+  const wait = (reason: string) => {
+    if (reason !== waiting) report.step(`Waiting for Ona: ${reason}`);
+    waiting = reason;
+    return false;
+  };
+  const ready = await pollUntil(
+    async () => {
+      let env: OnaEnvironment | null;
+      try {
+        env = await ona.getEnvironmentIfExists(envId, signal);
+      } catch (error) {
+        if (signal.aborted) throw error;
+        // One line only: the rest is Ona's stderr, more than the progress line needs (rule 7).
+        if (error instanceof z.ZodError) return wait("Ona's answer could not be read");
+        return wait(firstLine(errorText(error)) ?? "no reason given");
+      }
+      if (!env) throw new NotReadyError(`Ona environment ${current} disappeared.`);
+      current = env.metadata.name ?? current;
+      const state = readiness(env, started);
+      if (state.state === "failed")
+        throw new NotReadyError(`Ona environment ${current} is not ready: ${state.message}`);
+      return state.state === "ready" || wait(state.reason);
+    },
+    { deadlineMs: 15 * 60_000, intervalMs: 5_000, signal },
+  ).catch((error: unknown) => {
+    // A caller's own timeout ends the wait first: keep the reason the deadline error would give. Ona's own
+    // answer (a stop that lands with the abort) stays as it is.
+    if (!(error instanceof NotReadyError) && signal.aborted && waiting)
+      throw new NotReadyError(`Ona did not report ${current} ready before the wait ended: ${waiting}`);
+    throw error;
+  });
+  if (ready) return;
+  throw new NotReadyError(`Ona did not report ${current} ready within 15 minutes: ${waiting}`);
+}
+
 /** Native SSH host alias written by `ona environment ssh-config`. */
 export function sshHost(envId: string): string {
   return `${envId}.ona.environment`;
@@ -306,7 +419,7 @@ export class OnaSnapshot {
         return this.last;
       })
       .catch((error: unknown) => {
-        this.lastError = error instanceof Error ? error.message : String(error);
+        this.lastError = errorText(error);
         throw error;
       })
       .finally(() => {

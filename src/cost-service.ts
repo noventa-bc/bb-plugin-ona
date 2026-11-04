@@ -10,9 +10,8 @@ import {
   providerSessions,
   type ClaudeUsageBucket,
 } from "./cost.ts";
-import { isRunning, type OnaSnapshot } from "./ona.ts";
+import { errorText, isRunning, type OnaSnapshot } from "./ona.ts";
 import type { Devbox, ThreadCost } from "./rpc.ts";
-import { errorText } from "./sync.ts";
 
 /** The parts of bb's plugin API the cost check uses; the real `bb` satisfies it. */
 export interface CostBb {

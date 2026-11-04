@@ -40,6 +40,8 @@ function world(
   options: {
     refuse?: string;
     daemonAlive?: boolean | null;
+    /** The daemon restart (the provider's reconnect) rejects with this message. */
+    reconnectFails?: string;
     /** Ona lists every box STOPPED once the daemon check has run. */
     stopDuringProbe?: boolean;
     /** Keep a listing 15s fresh on a still clock, so only `refresh()` sees a change. */
@@ -175,7 +177,10 @@ function world(
         if (options.stopDuringProbe) for (const box of boxes) box.ona = "STOPPED";
         return options.daemonAlive ?? true;
       },
-      reconnect: async () => void calls.push("restart daemon"),
+      reconnect: async () => {
+        calls.push("restart daemon");
+        if (options.reconnectFails) throw new Error(options.reconnectFails);
+      },
     },
     keepAliveUntil: () => null,
     hostByEnv: new Map(),
@@ -407,6 +412,21 @@ test("a running box whose daemon dropped is probed, and restarted only if the da
     await sync.reconcile(new Set(["h1"]), { wait: true });
     assert.deepEqual(calls, daemonAlive === false ? ["probe", "restart daemon"] : ["probe"], String(daemonAlive));
   }
+});
+
+// A failed reconnect is a failure: no restart is reported, and it backs off.
+test("a daemon restart that Ona fails is a failure: no restart reported, and it backs off", async () => {
+  const { sync, calls, guard } = world([idle("h1", { status: "disconnected", lastSeenAt: NOW - HOUR })], {
+    daemonAlive: false,
+    reconnectFails: "Ona environment box is not ready: no capacity",
+  });
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  const record = guard.records.get("h1")!;
+  assert.equal(record.failures, 1);
+  assert.match(record.error ?? "", /is not ready: no capacity/);
+  assert.doesNotMatch(record.reason, /restarted/);
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.deepEqual(calls, ["probe", "restart daemon"], "no second probe (SSH) while backing off");
 });
 
 test("a box stopped in Ona while its daemon is checked is not restarted", async () => {

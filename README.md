@@ -189,7 +189,15 @@ bb machine create --provider ona --inputs '{"mode":"create","project":"my-app"}'
 # optional: "classId": "<id from ona environment list-classes>"
 ```
 
-If Ona is slow to start an environment, setup keeps waiting for up to 10 minutes.
+Before its first SSH, setup waits up to 15 minutes for Ona to report the box and
+its dev container running, and shows Ona's progress. It fails at once, without
+SSH, when Ona reports the box deleted or deleting, a box Ona no longer has, a
+running box Ona is stopping or deleting, its dev container failed in any phase
+but stopping or stopped, or the box stopping or stopped; a box this plugin just
+started waits instead, unless Ona says it is stopping or deleting it or reports
+a failure with no desired phase. Every SSH command during setup asks Ona first,
+so a box Ona stopped before a command is not woken;
+[docs/sync.md](docs/sync.md) (safety rule 1) has the cases.
 
 ### Run threads on it
 
