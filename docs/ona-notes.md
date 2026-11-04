@@ -73,6 +73,10 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   component, so it can't show the cost chip. It could replace the DOM
   workaround in `app.tsx` that hides bb's native "Open in" button.
 - SDK 0.6.104 has no `machine_busy` suspend error code.
+- bb 0.48.1's `startMachineResume` accepts a machine that is `active`,
+  `suspended`, `suspending` or `resuming`, and answers 409 for `creating`,
+  `removing` and `destroyed` (checked 2026-11-03 in `server/dist/start-server.js`
+  under the bb app's bundled `bb-app` package, function `startMachineResume`).
 - bb 0.48.1's `threads.list` leaves out hidden threads (workflow steps, side
   chats) unless asked with `includeHidden: true`, drops archived ones on the
   server with `archived: false`, and applies no limit when none is passed.

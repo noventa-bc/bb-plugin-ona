@@ -21,12 +21,15 @@ let envs: E2eHost["envs"];
 let state: E2eHost["state"];
 let patchBox: E2eHost["patchBox"];
 let onaCalls: E2eHost["onaCalls"];
+let sshCalls: E2eHost["sshCalls"];
 let close: E2eHost["close"];
 let resource: OnaResource;
 const hosts: BbHost[] = [];
 const threads: ThreadRecord[] = [];
 const bootstraps: string[] = [];
 const suspends = () => host.harness.inspection.sdk.callsTo("hosts.experimental_suspend");
+/** `environment list` calls in the fake Ona's log so far; the tunnel loop lists too, so compare with `>`. */
+const listings = () => readFileSync(log, "utf8").match(/^environment list/gm)?.length ?? 0;
 
 function cli(currentVersion: string, latestVersion: string) {
   const needsUpdate = currentVersion !== latestVersion;
@@ -35,7 +38,7 @@ function cli(currentVersion: string, latestVersion: string) {
 
 before(async () => {
   if (local.skip) return;
-  ({ host, provider, log, envs, state, patchBox, onaCalls, close } = await startHost({
+  ({ host, provider, log, envs, state, patchBox, onaCalls, sshCalls, close } = await startHost({
     machineBootstrap: {
       async bootstrap({ key }) {
         bootstraps.push(key);
@@ -166,15 +169,78 @@ test("bb ona keep-alive refuses a stopped box, holds a running one and ends on `
   assert.deepEqual(onaCalls(), [`environment keep-alive --environment-id ${ref} -q -- sleep 60`]);
 });
 
-test("bb ona reconnect bootstraps the daemon again (fails if it skips the bootstrap or calls Ona)", local, async () => {
+test("bb ona reconnect refuses a suspended machine (fails if it opens a tunnel or calls Ona)", local, async () => {
   bootstraps.length = 0;
+  // Close the tunnel here, not in the earlier test: the provider's suspend does, and a stopped box gets no stop.
+  patchBox(resource.envId, { phase: STOPPED });
+  await provider.suspend!({ ...ctx, resource, hostId: "host-1" });
+  // The suspend's Ona lookup is not what this test checks.
+  onaCalls();
+  patchBox(resource.envId, { phase: RUNNING });
+  Object.assign(hosts[0]!, {
+    status: "disconnected",
+    lifecycle: { phase: "suspended", message: null, suspendedAt: 1 },
+  });
+  assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:off/);
+  const result = await host.harness.behavior.runCli(["reconnect", resource.envId]);
+  assert.equal(result.exitCode, 1);
+  assert.match(
+    result.stderr ?? "",
+    /is suspended in bb, so it was not reconnected\. Resume it with `bb machine resume ona:/,
+  );
+  assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:off/);
+  assert.deepEqual(bootstraps, []);
+  assert.deepEqual(onaCalls(), []);
+});
+
+test("bb ona reconnect refuses a box Ona shows stopped (fails if it connects without asking Ona)", local, async () => {
+  bootstraps.length = 0;
+  Object.assign(hosts[0]!, { status: "connected", lifecycle: { phase: "active", message: null, suspendedAt: null } });
+  patchBox(resource.envId, { phase: STOPPED });
+  const asked = listings();
+  sshCalls(); // Only the calls from here on count.
+  const result = await host.harness.behavior.runCli(["reconnect", resource.envId]);
+  patchBox(resource.envId, { phase: RUNNING });
+  assert.equal(result.exitCode, 1, result.stdout);
+  assert.match(
+    result.stderr ?? "",
+    /^ona:\S+ is stopped in Ona, so it was not reconnected\. Once bb no longer shows it connected, `bb ona sync ona:\S+` marks it suspended; then run `bb machine resume ona:/,
+  );
+  assert.ok(listings() > asked, "the refusal came after Ona answered a listing");
+  assert.deepEqual(sshCalls(), []);
+  assert.deepEqual(bootstraps, []);
+  assert.deepEqual(onaCalls(), []);
+});
+
+test("bb ona reconnect refuses when Ona cannot be asked (fails if it connects anyway)", local, async () => {
+  bootstraps.length = 0;
+  Object.assign(hosts[0]!, { status: "connected", lifecycle: { phase: "active", message: null, suspendedAt: null } });
+  sshCalls();
+  process.env.FAKE_ONA_FAIL = "Error: Ona is unreachable";
+  const result = await host.harness.behavior.runCli(["reconnect", resource.envId]);
+  delete process.env.FAKE_ONA_FAIL;
+  assert.equal(result.exitCode, 1, result.stdout);
+  assert.match(
+    result.stderr ?? "",
+    /^Can't ask Ona whether ona:\S+ is running \(.*\); not reconnected\. Check `ona login` and try again\./s,
+  );
+  assert.deepEqual(sshCalls(), []);
+  assert.deepEqual(bootstraps, []);
+});
+
+test("bb ona reconnect bootstraps the daemon again (fails if it skips the bootstrap or Ona)", local, async () => {
+  bootstraps.length = 0;
+  Object.assign(hosts[0]!, { status: "connected", lifecycle: { phase: "active", message: null, suspendedAt: null } });
+  const asked = listings();
   const result = await host.harness.behavior.runCli(["reconnect", resource.envId]);
   assert.equal(result.exitCode, 0, result.stderr);
   assert.ok(
     result.stdout?.endsWith(`Installing and enrolling the bb daemon\nReconnected ona:${resource.envName}`),
     result.stdout,
   );
+  assert.ok(listings() > asked, "reconnect asks Ona first");
   assert.deepEqual(bootstraps, ["key-1"]);
+  // A listing is not an action, and onaCalls() leaves listings out: only Ona actions would show here.
   assert.deepEqual(onaCalls(), []);
 });
 

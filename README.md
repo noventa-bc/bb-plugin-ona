@@ -149,6 +149,10 @@ View them with `bb plugin config ona`, and change one with `bb plugin config ona
 | `codexSqliteHome`   | `/workspaces/.codex-sqlite-bb` | Where Codex launched by bb keeps its SQLite state on the devbox's local disk.                                                                                                                                                                                                 |
 | `machineDataDir`    | `/workspaces/.bb-machines`     | Local folder that `~/.bb-machines` is symlinked to on every devbox. Empty leaves `~/.bb-machines` alone.                                                                                                                                                                      |
 
+A changed setting applies after `bb plugin reload ona`.
+
+`waitForSharedHome`, `codexSqliteHome` and `machineDataDir` reach a box on its next connect (`bb ona reconnect`, a resume or the daemon's restart); `inactivityTimeout` applies to boxes created after the change.
+
 The last two exist because Ona devboxes can share an NFS-mounted home. SQLite
 breaks on network filesystems, and bb allows only one machine identity per data
 folder, so both are kept on each devbox's local disk. bb only restarts a daemon
@@ -156,8 +160,7 @@ whose data folder is directly inside `~/.bb-machines`, so the plugin makes
 `~/.bb-machines` a symlink to `machineDataDir`. On a shared home that one
 symlink resolves to each devbox's own disk. If `~/.bb-machines` already exists
 as a real folder, setup stops and asks you to move it aside
-(`mv ~/.bb-machines ~/.bb-machines.shared`). Settings apply to machines added
-after you change them.
+(`mv ~/.bb-machines ~/.bb-machines.shared`).
 
 ## Usage
 
@@ -257,7 +260,7 @@ bb ona sync [name]             # re-check Ona now and repair out-of-step machine
 bb ona keep-alive <name> 2h    # keep a running box from Ona's idle timeout (at most 12h)
 bb ona keep-alive <name> off   # end it early
 bb ona rename <name> [new]     # rename env + bb machine (random fun name if omitted)
-bb ona reconnect <name>        # reopen the tunnel and restart the bb daemon
+bb ona reconnect <name>        # active machines: reopen the tunnel and restart the bb daemon; refused unless bb shows the machine active and Ona shows its box running
 bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
 bb machine resume ona:<name>   # starts it, reopens the tunnel, restarts the daemon (Play button)
 bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's daemon, moves its data folder aside
@@ -310,7 +313,8 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
 - **bb and Ona disagree about a box** (bb says down but it's running, or the
   other way round): run `bb ona status <name>`. It shows both views and what
   the plugin last did about it. `bb ona sync <name>` re-checks now, and
-  `bb ona reconnect <name>` restarts the daemon outright. Two lines to look for:
+  `bb ona reconnect <name>` restarts the daemon of an active machine that Ona shows running;
+  one suspended in bb but running in Ona needs `bb machine resume ona:<name>`. Two lines to look for:
   - "ERROR … (run `ona login`?)" at the top: the plugin can't reach Ona, so it
     changes nothing.
   - "gave up after 3 failures": the last error is shown next to it.

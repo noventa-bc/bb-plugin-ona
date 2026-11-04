@@ -1,6 +1,6 @@
-// The provider's bootstrap waits, driven through `create` (adopt mode) in the SDK's fake
-// host with a fake `ona` and a fake command channel. setTimeout and Date are mocked, so
-// each tick is one poll interval and the tests are instant.
+// The provider's bootstrap waits, driven through `create` (adopt mode) and `resume` in the
+// SDK's fake host with a fake `ona`, a fake command channel and a fake tunnel manager.
+// setTimeout and Date are mocked, so each tick is one poll interval and the tests are instant.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { MachineExecutor } from "@get-bb/plugin-sdk";
@@ -18,23 +18,63 @@ const box = (phase: string): OnaEnvironment => ({
   status: { phase: `ENVIRONMENT_PHASE_${phase}` },
 });
 
+const adoptedResource = { envId: "env-1", envName: "box", adopted: true, key: "key-1" };
+
 /**
  * `phases`: what each Ona lookup returns in turn (null is a box Ona no longer has).
- * `rootExits`: the `~/.bb-machines` script's exit codes in turn; every other command exits 0.
- * Both repeat their last entry.
+ * `lookupFails`: every Ona lookup throws.
+ * `unpushed`: the box has unpushed commits, so a remove is refused.
+ * `reopenDuringMove`: a tunnel opens while an adopted remove's move-aside script runs.
+ * `rootExits`: the `~/.bb-machines` script's exit codes in turn. Both repeat their last entry.
+ * `preflightExit`: the prerequisites check's exit code. Every other command exits 0.
+ * `tunnel`: the box's tunnel is already open, in this state.
  */
-type Setup = { found: OnaEnvironment; phases?: (string | null)[]; rootExits?: number[]; rootOutput?: string };
+type Setup = {
+  found: OnaEnvironment;
+  phases?: (string | null)[];
+  lookupFails?: boolean;
+  unpushed?: boolean;
+  reopenDuringMove?: boolean;
+  rootExits?: number[];
+  rootOutput?: string;
+  preflightExit?: number;
+  tunnel?: "up" | "connecting";
+};
 
 /** The next entry in turn, the last one repeated. */
 const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
 
-function start({ found, phases = [], rootExits = [], rootOutput = "" }: Setup) {
+/** The provider in a fake host. `calls` logs Ona lookups and the root script; `tunnels`, tunnel opens and closes. */
+function register({
+  found,
+  phases = [],
+  lookupFails,
+  unpushed,
+  reopenDuringMove,
+  rootExits = [],
+  rootOutput = "",
+  preflightExit = 0,
+  tunnel,
+}: Setup) {
   const calls: string[] = [];
+  const tunnels: string[] = [];
+  const open = new Map(tunnel ? [[found.id, tunnel]] : []);
+  const forgotten: string[] = [];
+  // As the tunnel manager does: an ensure on an open tunnel changes nothing.
+  const ensure = (envId: string) => {
+    tunnels.push(`ensure ${envId}`);
+    if (!open.has(envId)) open.set(envId, "connecting");
+  };
   const ona = {
     findEnvironment: async () => found,
     getEnvironmentIfExists: async (_id: string, signal: AbortSignal) => {
       // As the real CLI call would: a loop that probes past an abort fails instead of spinning.
       signal.throwIfAborted();
+      if (lookupFails) throw new Error("Ona is unreachable");
+      if (unpushed) {
+        const git = { totalUnpushedCommits: 2, branch: "feat" };
+        return { ...box("RUNNING"), status: { phase: "ENVIRONMENT_PHASE_RUNNING", content: { git } } };
+      }
       const phase = next(phases);
       calls.push(`get ${phase}`);
       return phase === null || phase === undefined ? null : box(phase);
@@ -43,6 +83,12 @@ function start({ found, phases = [], rootExits = [], rootOutput = "" }: Setup) {
   } as unknown as OnaCli;
   const executor: MachineExecutor = {
     async exec({ command, onOutput }) {
+      if (command[2]?.startsWith("missing=")) {
+        onOutput("missing: node");
+        return { exitCode: preflightExit };
+      }
+      // The remove's move-aside script: a sync pass can open the tunnel while it runs.
+      if (command[3] === "bb-ona-remove" && reopenDuringMove) ensure(found.id);
       if (command[3] !== "bb-ona-root") return { exitCode: 0 };
       calls.push("root");
       onOutput(rootOutput);
@@ -57,7 +103,14 @@ function start({ found, phases = [], rootExits = [], rootOutput = "" }: Setup) {
     availability: async () => ({ status: "available" }),
     ona,
     sshBinary: "ssh",
-    tunnels: { ensure() {}, stop() {} } as unknown as TunnelManager,
+    tunnels: {
+      status: (envId: string) => open.get(envId) ?? "off",
+      ensure,
+      stop(envId: string) {
+        tunnels.push(`stop ${envId}`);
+        open.delete(envId);
+      },
+    } as unknown as TunnelManager,
     defaultProject: "",
     inactivityTimeout: "",
     codexSqliteHome: "",
@@ -67,21 +120,40 @@ function start({ found, phases = [], rootExits = [], rootOutput = "" }: Setup) {
     port: () => 1,
     markConnected: async () => {},
     releasing: new Set(),
-    forgetBox: async () => {},
+    forgetBox: async (envId: string) => void forgotten.push(envId),
     executorFor: () => executor,
   });
+  return { provider: host.harness.registrations.machineProviders.get("ona")!, calls, tunnels, open, forgotten };
+}
+
+const lifecycle = () => ({ report: { step() {}, log() {} }, checkpoint: async () => {} });
+
+/** `create` in adopt mode, started. */
+function start(setup: Setup) {
+  const { provider, ...rest } = register(setup);
   const controller = new AbortController();
-  const created = host.harness.registrations.machineProviders.get("ona")!.create({
+  const created = provider.create({
+    ...lifecycle(),
     inputs: { mode: "adopt", environment: "box" },
     key: "key-1",
     attempt: 1,
-    report: { step() {}, log() {} },
     signal: controller.signal,
-    checkpoint: async () => {},
   });
   // Settled either way; the test awaits `created` itself.
   created.catch(() => {});
-  return { created, calls, controller };
+  return { created, controller, ...rest };
+}
+
+/** `resume` of the adopted machine, started. */
+function resume(setup: Setup) {
+  const { provider, ...rest } = register(setup);
+  const resumed = provider.resume!({
+    ...lifecycle(),
+    hostId: "host-1",
+    resource: adoptedResource,
+    signal: new AbortController().signal,
+  });
+  return { resumed, ...rest };
 }
 
 test("~/.bb-machines retries on exit 6 (fails if a real folder on a not-yet-mounted home is final)", async () => {
@@ -105,10 +177,14 @@ test("~/.bb-machines exit 6 past the deadline throws with the script output (fai
 });
 
 test("a STARTING box that settles to STOPPING waits for the stop, then starts (fails if it starts a stopping box)", async () => {
-  const { created, calls } = start({ found: box("STARTING"), phases: ["STARTING", "STOPPING", "STOPPING", "STOPPED"] });
+  const { created, calls, tunnels } = start({
+    found: box("STARTING"),
+    phases: ["STARTING", "STOPPING", "STOPPING", "STOPPED"],
+  });
   await tick(5_000, 3);
   assert.equal((await created).status, "created");
   assert.deepEqual(calls, ["get STARTING", "get STOPPING", "get STOPPING", "get STOPPED", "start"]);
+  assert.deepEqual(tunnels, ["ensure env-1"]);
 });
 
 test("a box that disappears while starting throws (fails if a missing box counts as settled)", async () => {
@@ -130,6 +206,112 @@ test(
     assert.deepEqual(calls, ["get STARTING"]);
   },
 );
+
+// Bug: connect() opens the tunnel before the tunnel wait, preflight and bootstrap, so a resume or
+// create that failed after it left the tunnel open, keeping awake a box bb doesn't show active (decision 0003).
+test("a resume that fails at preflight closes the tunnel it opened and rethrows (fails if the tunnel stays open)", async () => {
+  const { resumed, tunnels } = resume({ found: box("RUNNING"), phases: ["RUNNING"], preflightExit: 3 });
+  await assert.rejects(resumed, /^Error: Devbox is missing bb prerequisites: missing: node$/);
+  assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"]);
+});
+
+test("a create that fails at preflight closes the tunnel it opened and rethrows (fails if the tunnel stays open)", async () => {
+  const { created, tunnels } = start({ found: box("RUNNING"), preflightExit: 3 });
+  await assert.rejects(created, /^Error: Devbox is missing bb prerequisites: missing: node$/);
+  assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"]);
+});
+
+// Bug: a failed adopt left an already-open tunnel up; bb's cleanup remove() closes it later anyway, so nothing
+// keeps it for another machine on the box.
+test("a failed adopt on a box with a tunnel up closes it", async () => {
+  const { created, tunnels } = start({ found: box("RUNNING"), preflightExit: 3, tunnel: "up" });
+  await assert.rejects(created, /^Error: Devbox is missing bb prerequisites: missing: node$/);
+  assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"]);
+});
+
+// Bug: the close keyed on "this call opened the tunnel", so a resume re-run after a stuck one found it
+// open and left it open on failure, keeping awake a box bb doesn't show active (decision 0003).
+test("a resume that fails with the box's tunnel already open, connecting or up, closes it", async () => {
+  for (const tunnel of ["connecting", "up"] as const) {
+    const { resumed, tunnels } = resume({ found: box("RUNNING"), phases: ["RUNNING"], preflightExit: 3, tunnel });
+    await assert.rejects(resumed, /^Error: Devbox is missing bb prerequisites: missing: node$/);
+    assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"], tunnel);
+  }
+});
+
+// The lookup-throws test below guards the order: the tunnel closes after the move-aside, and on a failed lookup.
+test("remove of an adopted machine closes its tunnel", async () => {
+  const { provider, tunnels } = register({ found: box("RUNNING"), phases: ["RUNNING"], tunnel: "up" });
+  const removed = await provider.remove({
+    report: lifecycle().report,
+    hostId: "host-1",
+    resource: adoptedResource,
+    signal: new AbortController().signal,
+  });
+  assert.equal(removed.status, "removed");
+  assert.deepEqual(tunnels, ["stop env-1"]);
+});
+
+test("remove of an adopted machine whose Ona lookup throws still closes its tunnel", async () => {
+  const { provider, tunnels, forgotten } = register({ found: box("RUNNING"), lookupFails: true, tunnel: "up" });
+  await assert.rejects(
+    provider.remove({
+      report: lifecycle().report,
+      hostId: "host-1",
+      resource: adoptedResource,
+      signal: new AbortController().signal,
+    }),
+    /Ona is unreachable/,
+  );
+  assert.deepEqual(tunnels, ["stop env-1"]);
+  assert.deepEqual(forgotten, [], "the keys stay for bb's retry");
+});
+
+test("remove of a bb-created machine whose Ona lookup throws still closes its tunnel", async () => {
+  const { provider, tunnels, forgotten } = register({ found: box("RUNNING"), lookupFails: true, tunnel: "up" });
+  await assert.rejects(
+    provider.remove({
+      report: lifecycle().report,
+      hostId: "host-1",
+      resource: { envId: "env-1", envName: "box", adopted: false, key: "key-1" },
+      signal: new AbortController().signal,
+    }),
+    /Ona is unreachable/,
+  );
+  assert.deepEqual(tunnels, ["stop env-1"]);
+  assert.deepEqual(forgotten, [], "the keys stay for bb's retry");
+});
+
+test("remove of an adopted machine closes a tunnel that reopened during the move-aside", async () => {
+  const { provider, open, tunnels } = register({
+    found: box("RUNNING"),
+    phases: ["RUNNING"],
+    tunnel: "up",
+    reopenDuringMove: true,
+  });
+  const removed = await provider.remove({
+    report: lifecycle().report,
+    hostId: "host-1",
+    resource: adoptedResource,
+    signal: new AbortController().signal,
+  });
+  assert.equal(open.get("env-1") ?? "off", "off");
+  assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"]);
+  assert.equal(removed.status, "removed");
+});
+
+test("a refused remove of a bb-created machine closes its tunnel and keeps its keys", async () => {
+  const { provider, tunnels, forgotten } = register({ found: box("RUNNING"), unpushed: true, tunnel: "up" });
+  const removed = await provider.remove({
+    report: lifecycle().report,
+    hostId: "host-1",
+    resource: { envId: "env-1", envName: "box", adopted: false, key: "key-1" },
+    signal: new AbortController().signal,
+  });
+  assert.equal(removed.status, "failed");
+  assert.deepEqual(tunnels, ["stop env-1"]);
+  assert.deepEqual(forgotten, []);
+});
 
 // A relative legacy dataDir is kept: the scripts resolve it against $HOME on the box.
 test("a relative legacy dataDir is kept and a trailing slash is stripped", () => {
