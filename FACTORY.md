@@ -29,7 +29,8 @@ the quick fix is right and when it is not.
   it hunts for the input, timing or state that makes it wrong, and reports
   only findings with a concrete failing case. Plus the repo's `code-review`
   pass and `/ponytail-review`: three passes on every PR this flow opens, all
-  independent of the orchestrator. Findings go back to the builder until clean.
+  independent of the orchestrator. Blocking findings go back to the builder
+  (step 6 says which block).
 
 Subagents run on Haiku at max effort by default (for example: builders of
 small changes, reviewers of tests, docs, lint and CI, mechanical work). Use
@@ -103,25 +104,26 @@ those and the "skipped or not checked" lines ponytail ends with.
    (its recipe followed by hand: the Skill itself starts many agents) and
    `/ponytail-review branch`, each on the branch against `origin/main`, in
    its own agent, briefed with the builder's worktree path (a fresh agent
-   starts in the main checkout), and sends findings
+   starts in the main checkout), and sends blocking findings
    back to the builder. All three passes run on the first round of every PR
    this flow opens, with no exception for a small or docs-only change. After
    that, `code-review` runs every round; the adversarial pass and
    `/ponytail-review` run on every round whose diff changed code since they
    last ran (comments, lint messages and docs are not code, except the Code
    Review Rules in `AGENTS.md` and the rules table in `docs/sync.md`). A PR
-   opens after a round with no open findings, and only once all three have run
+   opens after a round with no blocking finding, and only once all three have run
    on code that has not changed since. Check the ten Code Review Rules in
    `AGENTS.md`.
    **Converge.** The item's code is the PR's scope, and reviewer briefs name
    it and ask for anything outside it under a separate "Pre-existing" heading.
-   A finding goes back to the builder only when the branch introduced the
-   defect, a safety rule or a coupled change is broken, or a doc in the diff
-   contradicts the code. A finding that was already on `main` becomes a
-   roadmap item named in the PR, whatever severity the reviewer gave it. After
-   the first round no new behaviour enters the branch: a fix that needs new
-   behaviour is its own item. Code converges in three rounds; from round 4 on
-   only findings that would make the PR wrong block it, and nits never do.
+   A finding blocks only when the branch introduced the defect or makes one
+   reachable or worse, breaks a safety rule or a coupled change, or leaves a
+   doc in the diff contradicting the code. A finding that was already on
+   `main` becomes a roadmap item, with its guard, and the PR names it by its
+   label only, whatever severity the reviewer gave it. After the first round
+   no new behaviour enters the branch beyond a fix for a blocking finding: a
+   fix that needs more is its own item. Code converges in three rounds; from
+   round 4 on, the orchestrator opens the PR once nothing blocks.
 7. **Open the PR.** The title is a Conventional Commit (`type(scope):
 subject`, see `AGENTS.md`): the squash merge makes it the commit on
    `main`, and it decides the release. First run
@@ -148,7 +150,7 @@ subject`, see `AGENTS.md`): the squash merge makes it the commit on
    `scripts/pr-merge.sh <pr>` from the main checkout (the branch is deleted
    on merge, which fails from a worktree that has it checked out). It waits
    for the runs the PR needs and merges only a fully green head (see the
-   script). It runs as soon as the review has no open findings. A push
+   script). It runs as soon as the review has no blocking finding. A push
    to `main` then tags and releases the version in `package.json` on its own
    (`release.yml`); no step here does it. PRs that touch the same files merge
    one at a time: merge `main` into the next branch (a merge commit;
