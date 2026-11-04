@@ -6,8 +6,8 @@ read and write their working folder and their own state (`~/.claude`,
 `~/.ssh`, `~/.ona` or `~/.bb`, can't write anywhere else, and can't reach
 localhost, so `ona`, `ssh` to boxes and the live bb server are out of reach.
 Agents never commit to `main`. Outside the orchestrated flow they don't push
-either; you review and merge. Under the flow in `FACTORY.md` the orchestrator
-commits on `agent/*` branches, opens PRs and merges them once green.
+either; you review and merge. Inside it, `FACTORY.md` (Permissions) says what
+the orchestrator may do.
 
 ## One-time setup
 

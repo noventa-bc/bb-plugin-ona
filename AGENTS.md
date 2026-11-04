@@ -25,7 +25,7 @@ Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
 - Ona devboxes cost money while they run.
 - Ona's SSH starts stopped devboxes. Any SSH to a devbox can wake it.
 - Never run `ona` actions, `ssh` to devboxes, or `bb machine` or `bb plugin` changes.
-- Never commit to `main` or push, except as `FACTORY.md` allows: the orchestrator commits on `agent/*` branches, pushes them, opens PRs and merges them when green.
+- Never commit to `main` or push, except as `FACTORY.md` allows: the orchestrator commits on `agent/*` branches, pushes them, opens PRs and merges them once the review is clean and CI is green.
 - Commit messages and PR titles are Conventional Commits, `type(scope): subject` (`scripts/conventional.sh` has the rule; `.githooks/commit-msg` and `.githooks/pre-commit` run the checks, and those files say which; `check.yml` checks the PR). `feat` bumps the minor version, `fix` and `perf` the patch, `!` the major: that PR bumps `package.json` (`scripts/bump.sh "<title>"` does it). Other types, and any Markdown-only change, need no bump. A push to `main` tags and releases the version with notes generated from the merged PR titles.
 - Read-only `bb ona status` is fine, but only when the owner is present.
 

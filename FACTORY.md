@@ -107,7 +107,8 @@ those and the "skipped or not checked" lines ponytail ends with.
    opens after a round with no open findings, and only once all three have run
    on code that has not changed since. Check the ten Code Review Rules in
    `AGENTS.md`.
-7. **Open the PR.** Push the branch and open a pull request against `main`.
+7. **Open the PR.** Commit the builder's staged work, push the branch and open
+   a pull request against `main`.
    The title is a Conventional Commit (`type(scope): subject`, see
    `AGENTS.md`): the squash merge makes it the commit on `main`, and it
    decides the release. Run `scripts/bump.sh "<title>"` first: it bumps
