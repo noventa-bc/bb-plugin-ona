@@ -15,5 +15,5 @@ Ona decides whether a devbox exists and whether it runs. bb decides intent: a ma
 ## Consequences
 
 - bb's view can lag Ona's. `bb ona status` shows both views and `bb ona sync` repairs the gap.
-- Starting and stopping is done only by user actions in bb: 0002 lists the ones that start a box, and `bb machine suspend` or the Pause button stops one.
+- bb starts or stops a box only on your action in bb: 0002 lists the ones that start a box, and `bb machine suspend` or the Pause button stops one.
 - A box missing from Ona is marked suspended and reported; removing it is left to `bb machine remove`.
