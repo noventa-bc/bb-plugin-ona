@@ -134,7 +134,7 @@ export interface StatusRow {
   bb: string;
   tunnel: string;
   ona: string;
-  /** What Ona's listing says about the box (`boxFacts`); null when Ona gave no listing or doesn't list the box. */
+  /** What Ona's listing says about the box (`boxFacts`); null when the latest listing failed or doesn't list the box. */
   facts: BoxFacts | null;
   /** What the latest check concluded, and since when. */
   now: { reason: string; since: number } | null;

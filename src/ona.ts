@@ -304,7 +304,7 @@ const epochMs = (text?: string | null): number | null => {
 };
 
 export function boxFacts(env: OnaEnvironment): BoxFacts {
-  // At most 12 digits: a 13-digit count can pass 2^53 ms.
+  // At most 12 digits: a 13-digit number of seconds can pass 2^53 ms.
   const seconds = /^(\d{1,12})s$/.exec(env.spec?.timeout?.disconnected ?? "");
   const signal = env.status?.activitySignal;
   const source = signal?.source;

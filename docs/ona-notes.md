@@ -22,18 +22,22 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   wait as `--timeout` on every call (`onaTimeoutArgs` in `src/ona.ts`) except
   `keep-alive` (its argv ends with `-- sleep …`) and `ssh-config`.
 - `ona environment list -o json` exposes these fields:
-  - `status.activitySignal`: `{ source, timestamp }`, e.g. source `SSH connections`. On a stopped box too, as the
-    last signal before the stop (checked 2026-11-04).
-  - `spec.timeout.disconnected`: seconds as a string, e.g. `10800s`; `0s` disables auto-stop (`ona environment create --help`, checked 2026-11-04).
+  - `status.activitySignal`: `{ source, timestamp }`, e.g. source
+    `SSH connections`. On a stopped box too, as the last signal before
+    the stop (checked 2026-11-04).
+  - `spec.timeout.disconnected`: seconds as a string, e.g. `10800s`;
+    `0s` disables auto-stop (`ona environment create --help`,
+    checked 2026-11-04).
   - `spec.desiredPhase`
   - `spec.machine.class`
   - `status.content.git`: `branch`, `cloneUrl`, `latestCommit`,
-    `totalUnpushedCommits` (a number; `unpushedWork` in `src/ona.ts` also reads a numeric string) and `unpushedCommits` (one string per
+    `totalUnpushedCommits` (a number) and `unpushedCommits` (one string per
     commit). Absent when the box has no git content (checked 2026-10-30 on a
     live listing).
   - `status.devcontainer.phase`
   - `status.environmentUrls.*`
-  - `metadata.lastStartedAt`: RFC 3339 with microseconds, on a running and a stopped box (checked 2026-11-04).
+  - `metadata.lastStartedAt`: RFC 3339 with microseconds, on a running and a
+    stopped box (checked 2026-11-04).
 - Commands the plugin may use or could use:
   - `ona environment exec` (goes through the EnvironmentOps API, not SSH)
   - `ona environment keep-alive`: watches a process (`--pid`, or a command

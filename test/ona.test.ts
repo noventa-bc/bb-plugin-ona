@@ -504,7 +504,7 @@ test("boxFacts: a fact Ona leaves out or sends oddly is null, and an unsafe coun
     0,
     "a negative count",
   );
-  for (const totalUnpushedCommits of ["Infinity", 2.5]) {
+  for (const totalUnpushedCommits of ["Infinity", 2.5, "9007199254740993"]) {
     const git = { totalUnpushedCommits };
     assert.equal(boxFacts(env({ status: { content: { git } } })).unpushed, 0, String(totalUnpushedCommits));
   }

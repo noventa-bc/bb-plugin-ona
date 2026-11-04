@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { OnaSnapshot, type OnaEnvironment } from "../src/ona.ts";
+import { boxFacts, OnaSnapshot, type OnaEnvironment } from "../src/ona.ts";
 import type { WorkspaceView } from "../src/lifecycle.ts";
 import { ALL, GIVE_UP_AFTER, GRACE_MS, HostGuard } from "../src/reconcile.ts";
 import {
@@ -329,7 +329,7 @@ test("status shows a box's facts only while the listing is good, and none for a 
   const opts: { listing?: "fail"; listingError?: string } = {};
   const { sync } = world([idle("h1", { listed }), idle("h2", { ona: null })], opts);
   const [row, unlisted] = await sync.statusRows();
-  assert.equal(row!.facts?.branch, "feature-y", "a good listing fills the facts");
+  assert.deepEqual(row!.facts, boxFacts(listed), "a good listing fills the facts");
   assert.equal(unlisted!.facts, null, "Ona doesn't list the box");
   opts.listing = "fail";
   const [stale] = await sync.statusRows();
