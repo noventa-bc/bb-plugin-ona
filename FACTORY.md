@@ -49,7 +49,7 @@ The ponytail plugin (`docs/owner.md` has the install) is the "least code"
 ruleset for every agent in the flow. At session start the orchestrator checks
 its skills are listed (`/reload-plugins` after an install) and sets `/ponytail full`. Its hooks inject the ruleset into
 subagents, so briefs state the scope and need not repeat it. Reviews run
-`/ponytail-review` on a named target (`staged`, `branch`, or the PR link). A
+`/ponytail-review` on a named target (`branch`, or the PR link). A
 builder marks a known limit with a `shortcut:` comment (never an unfixed
 weakness: that goes to the private roadmap); its handoff carries
 those and the "skipped or not checked" lines ponytail ends with.
@@ -99,8 +99,9 @@ those and the "skipped or not checked" lines ponytail ends with.
    runs the
    adversarial reviewer (brief: the diff, the files it touches, the specific
    ways it could fail, never the orchestrator's own verdict), `code-review`
-   and `/ponytail-review branch`, each on the branch against `origin/main` and
-   in its own agent, and sends findings
+   (its recipe followed by hand: the Skill itself starts many agents) and
+   `/ponytail-review branch`, each on the branch against `origin/main` and in
+   its own agent, and sends findings
    back to the builder. All three passes run on the first round of every PR
    this flow opens, with no exception for a small or docs-only change. After
    that, `code-review` runs every round; the adversarial pass and
@@ -163,9 +164,10 @@ those and the "skipped or not checked" lines ponytail ends with.
 
 ## Permissions the owner granted
 
-- The orchestrator may commit on `agent/*` branches (builders leave work
-  staged), push them, open PRs, and merge a PR with `scripts/pr-merge.sh` once
-  its review has no open findings and CI is green. Nobody commits to `main`
+- For a roadmap item the owner named in the session, the orchestrator may
+  commit on `agent/*` branches (builders leave work staged), push them, open
+  PRs, and merge a PR with `scripts/pr-merge.sh` once its review has no open
+  findings and CI is green. Nobody commits to `main`
   directly.
 - Installing or bumping a dependency inside an owner-approved task is allowed;
   say in the PR which packages changed. Anything else needs a new approval.
