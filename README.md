@@ -292,11 +292,10 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
 - **"workspace(s) may need recovery" in `bb ona status`:** bb makes five attempts on a
   thread workspace's failed teardown, waiting at least 1, 2, 4 and 8 minutes between
   them (checked 2026-11-04). Until bb gives up, it keeps retrying; it waits while a
-  live thread is on the workspace, or drops the failed teardown when a thread still
-  owns the workspace, and an owner mismatch holds it while the mismatch lasts (checked
-  2026-11-04). While a workspace may need recovery, an active box stays awake until
-  they clear; the plugin does not let its machine go idle. A retry more than a minute
-  overdue also shows here. Check what's left in it
+  live thread is on the workspace, but drops the failed teardown when the workspace still
+  has an owner (checked 2026-11-04). The line shows once bb has given up or a retry is more
+  than a minute overdue. While it shows, an active box stays awake until they clear.
+  Check what's left in it
   (`bb environment list --host <machine>`, then the workspace path on the box).
   bb's `bb environment cleanup <id> --recover` refuses on Ona boxes while
   they're connected, because it can't inspect Ona's SSH processes. For an

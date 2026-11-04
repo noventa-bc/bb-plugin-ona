@@ -118,7 +118,7 @@ test("a retry the pass judged busy stays busy after a sibling's wait moves the c
         idle("a", { status: "disconnected", lastSeenAt: start - 5_000, listingMs: 30_000 }),
         idle("b", { status: "disconnected", lastSeenAt: start - 5_000, workspaces: [retrying] }),
       ],
-      { daemonAlive: false },
+      { daemonAlive: false, pluginStartedAt: start },
     );
     await sync.reconcile(new Set([ALL]), { wait: true });
     assert.deepEqual(calls, ["probe", "restart daemon"]);

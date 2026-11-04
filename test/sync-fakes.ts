@@ -31,6 +31,7 @@ export function world(
   options: {
     refuse?: string;
     daemonAlive?: boolean | null;
+    pluginStartedAt?: number;
     /** The daemon restart (the provider's reconnect) rejects with this message. */
     reconnectFails?: string;
     /** Ona lists every box STOPPED once the daemon check has run. */
@@ -179,7 +180,7 @@ export function world(
     hostByEnv: new Map(),
     autoRepair: options.autoRepair ?? true,
     idleDisconnect: "1h",
-    pluginStartedAt: NOW - 2 * HOUR,
+    pluginStartedAt: options.pluginStartedAt ?? NOW - 2 * HOUR,
   });
   return { sync, calls, guard, kv, hosts, releasing, hostReads };
 }

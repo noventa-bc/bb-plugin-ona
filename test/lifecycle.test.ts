@@ -113,6 +113,27 @@ test("a failed teardown exactly a minute overdue is still busy", () => {
   });
 });
 
+test("a failed teardown one millisecond past a minute overdue needs recovery", () => {
+  assert.deepEqual(workspaceWork([workspace("error", "teardown", "failed", NOW - MIN - 1)], NOW), {
+    busy: false,
+    needsRecovery: 1,
+  });
+});
+
+test("a given-up teardown needs recovery beside a ready workspace", () => {
+  assert.deepEqual(workspaceWork([workspace("ready"), workspace("error", "teardown", "failed", null)], NOW), {
+    busy: false,
+    needsRecovery: 1,
+  });
+});
+
+test("a provisioning workspace stays busy beside a ready one", () => {
+  assert.deepEqual(workspaceWork([workspace("provisioning"), workspace("ready")], NOW), {
+    busy: true,
+    needsRecovery: 0,
+  });
+});
+
 test("a failed teardown outside the teardown phase counts as nothing", () => {
   assert.deepEqual(workspaceWork([workspace("ready", "active", "failed")], NOW), { busy: false, needsRecovery: 0 });
 });

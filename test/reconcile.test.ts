@@ -53,6 +53,11 @@ test("R1: bb working on a workspace skips the grace period, but never resumes a 
   assert.equal(decide(brief, ona("STOPPED"), NOW).resumeAfter, false);
 });
 
+test("R1: the grace period is 45 s: a box disconnected for 45 s is healed, one for 44 s is not", () => {
+  assert.equal(decide(machine({ lastSeenAt: NOW - 45_000 }), ona("RUNNING"), NOW).action, "heal-daemon");
+  assert.equal(decide(machine({ lastSeenAt: NOW - 44_000 }), ona("RUNNING"), NOW).action, "none");
+});
+
 test("R1: running in Ona with no tunnel -> open the tunnel, even while bb still shows it connected", () => {
   assert.equal(decide(machine({ tunnel: "off" }), ona("RUNNING"), NOW).action, "ensure-tunnel");
   // Right after a reload: the old tunnel is gone but bb hasn't seen the daemon drop yet.
@@ -77,6 +82,11 @@ test("R3: deleted, or missing from two good listings -> suspend and report it go
   assert.match(decide(machine(), ona("DELETED"), NOW).reason, /gone/);
   assert.equal(decide(machine(), { kind: "missing", streak: 1 }, NOW).action, "none");
   assert.equal(decide(machine(), { kind: "missing", streak: 2 }, NOW).action, "suspend-observed");
+});
+
+test("R3: a box Ona is deleting is suspended and reported gone, like a deleted one", () => {
+  assert.equal(decide(machine(), ona("DELETING"), NOW).action, "suspend-observed");
+  assert.match(decide(machine(), ona("DELETING"), NOW).reason, /gone/);
 });
 
 test("R3: an archived box is suspended and reported archived, not gone", () => {

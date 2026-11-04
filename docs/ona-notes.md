@@ -132,11 +132,13 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   `bb.log.*` also goes to `bb plugin logs <id>`; `report.step` text is cleared
   when the remove finishes (`lifecycleReporter` and `emitLog` in
   `server/dist/start-server.js`) (checked 2026-11-03).
-- bb 0.48.1 retries a failed environment teardown (`writeEnvironmentTeardownFailure`
-  in `server/dist/start-server.js`): after the first to fourth failed attempt,
-  `lifecycle.retireAt` is the next retry, 1, 2, 4 or 8 minutes later
-  (`REMOVE_RETRY_MS` doubled per failure); after the fifth (`MAX_REMOVE_ATTEMPTS`
-  is 5) it is null and the message starts "Needs recovery:" (checked 2026-11-04).
+- bb 0.48.1 retries a failed environment teardown (`writeEnvironmentTeardownFailure` in
+  `server/dist/start-server.js`): after the first to fourth failed attempt,
+  `lifecycle.retireAt` is the next retry, 1, 2, 4 or 8 minutes later (`REMOVE_RETRY_MS`
+  doubled per failure); after the fifth (`MAX_REMOVE_ATTEMPTS` is 5) it is null and the
+  message starts "Needs recovery:" (checked 2026-11-04). bb sets `retireAt` from
+  `Date.now()` (lines 108503, 108515 and 108605), so its unit is epoch ms; the SDK types
+  it `number | null` (checked 2026-11-04).
 - bb's periodic sweep runs every 10 s (`setInterval` with `1e4` in
   `server/dist/start-server.js`). A tick is skipped while the previous run of the
   job is still going (`runPeriodicSweepJob`). A run waits for each workspace it
@@ -166,12 +168,11 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   removed (lines 108650-108669). `requestEnvironmentRemoval` returns false, before any
   write, when a live thread is on the environment and the machine is not being removed
   (lines 108494-108495) (checked 2026-11-04).
-- A workspace with an owner and a teardown status is released by the sweep. With a live
-  thread on the environment, the release clears `ownerThreadId`, `claimPath`, `retireAt`
-  and `teardownStatus` (lines 108651-108660), and the sweep returns (lines
-  108666-108669). A `ready` workspace with a path is cleared the same way with no live
-  thread (line 108651). Neither runs while the machine is being removed (line 108651)
-  (checked 2026-11-04).
+- The sweep releases a workspace that has an owner and a teardown status when a live
+  thread is on the environment, or when it is `ready` with a path, and never while the
+  machine is being removed (lines 108651-108660). The release clears `ownerThreadId`,
+  `claimPath`, `retireAt` and `teardownStatus`; with a live thread the sweep then
+  returns (lines 108666-108669) (checked 2026-11-04).
 - bb blocks automatic cleanup of a workspace whose hook outcome is unknown after an
   interruption. `cancelPendingEnvironmentHook` throws "Environment hook outcome is unknown
   after interruption. Automatic cleanup is blocked; inspect the workspace before recovering
