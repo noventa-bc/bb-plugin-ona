@@ -91,14 +91,23 @@ export function claudeCost(buckets: readonly ClaudeUsageBucket[]): { usd: number
   return { usd, unknownModels: [...unknown] };
 }
 
-/** Codex `account/usage/read` results per thread id; null when unavailable. */
+/**
+ * Codex `account/usage/read` results per thread id; null when unavailable. A
+ * result is recorded when it has groups or a positive figure: a $0 with no
+ * groups is Codex saying the usage is not recorded yet (docs/ona-notes.md).
+ */
 export function codexCost(
-  results: Record<string, { estimatedUsageUsdMicros?: number | null } | { error: string } | null>,
+  results: Record<string, { estimatedUsageUsdMicros?: number | null; groups?: unknown[] } | { error: string } | null>,
 ): { usd: number; missing: string[] } {
   let usd = 0;
   const missing: string[] = [];
   for (const [threadId, result] of Object.entries(results)) {
-    const micros = result && "estimatedUsageUsdMicros" in result ? result.estimatedUsageUsdMicros : null;
+    const micros =
+      result &&
+      "estimatedUsageUsdMicros" in result &&
+      (result.groups?.length || (result.estimatedUsageUsdMicros ?? 0) > 0)
+        ? result.estimatedUsageUsdMicros
+        : null;
     if (typeof micros === "number") usd += micros / 1_000_000;
     else missing.push(threadId);
   }
