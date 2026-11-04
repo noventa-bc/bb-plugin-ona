@@ -46,6 +46,7 @@ nothing and don't push; you review, commit and merge. Inside it, `FACTORY.md`
 ### Task brief template
 
 ```
+Role: builder or reviewer (never the orchestrator)
 Goal: <one sentence, user-visible outcome>
 Scope: <files or area>; out of scope: <...>
 Done when: <tests or behaviour>; `npm run check` passes.

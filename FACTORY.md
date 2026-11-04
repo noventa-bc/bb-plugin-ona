@@ -208,7 +208,7 @@ Rules the owner gave that no section above states. Checked 2026-11-02.
   grep (the exit code is grep's). `.githooks/pre-commit` (set by `npm install`)
   runs the checks on every commit; a checkout without the hook reads the exit
   code by hand (checked 2026-11-03).
-- A subagent cannot see the owner's approvals and refuses to install, commit or
+- A subagent cannot see the owner's approvals and refuses to install packages (the step-5 `npm ci` is its own), commit or
   push. Builders leave work staged; the orchestrator commits, pushes and runs
   approved installs in the builder's worktree, then tells it to continue.
 - A builder that was stopped (the owner's credits ran out, the session ended)
