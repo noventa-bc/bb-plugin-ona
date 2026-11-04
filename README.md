@@ -190,10 +190,16 @@ bb machine create --provider ona --inputs '{"mode":"create","project":"my-app"}'
 ```
 
 Before its first SSH, setup waits up to 15 minutes for Ona to report the box and
-its dev container running, and shows Ona's progress. A box that Ona reports
-deleted, or stopped and not meant to run, fails at once and names its phase. A
-box that stopped after a failed start, and that Ona isn't bringing up again,
-fails with Ona's failure message.
+its dev container running, and shows Ona's progress. Setup fails at once,
+without SSH, when Ona reports one of these:
+
+- the box deleted
+- the box stopped and not meant to run (with Ona's failure message, if any)
+- the box being stopped
+- its dev container failed
+
+While Ona is bringing a stopped box up after a failed start, the progress line
+shows that failure.
 
 ### Run threads on it
 

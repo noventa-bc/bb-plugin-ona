@@ -336,6 +336,19 @@ test("a resume waits on a box Ona shows stopped with an old failure but is asked
   assert.deepEqual(calls, ["get STOPPED", "start", "get STOPPED", "get RUNNING", "ssh"]);
 });
 
+// Bug: the 15-minute timeout on a box Ona kept failing to bring up said only "starting", losing Ona's reason.
+test("a resume that times out on a failing start names Ona's failure", async () => {
+  const failing = {
+    ...box("STOPPED"),
+    spec: { desiredPhase: "ENVIRONMENT_PHASE_RUNNING" },
+    status: { phase: "ENVIRONMENT_PHASE_STOPPED", failureMessage: ["no capacity"] },
+  };
+  const { resumed, calls } = resume({ found: box("STOPPED"), phases: ["STOPPED", failing] });
+  await tick(5_000, 180);
+  await assert.rejects(resumed, /^Error: Ona did not report box ready within 15 minutes: no capacity$/);
+  assert.equal(calls.includes("ssh"), false);
+});
+
 // Bug: after `bb ona rename`, a failed resume named the box by its stored, old name.
 test("a failed resume names the box by its current name in Ona", async () => {
   const renamed = { ...box("STOPPED"), metadata: { name: "renamed" } };
@@ -358,7 +371,8 @@ test("a resume makes no SSH while Ona can't be asked, then connects once it says
   assert.deepEqual(calls, ["get STOPPED", "start", "get failed", "get failed", "get RUNNING", "ssh"]);
 });
 
-// Bug: a progress line from a failed `get` carried every stderr line Ona printed (rule 7: no more than needed).
+// Bug: a progress line from a failed `get` carried every stderr line Ona printed (rule 7), and was empty when
+// the error's first line was blank.
 test("a failed lookup shows only the first line of Ona's error as progress", async () => {
   const unreachable = new Error("\n ona environment get failed: dial tcp: timeout \nsecond line\nthird line");
   const { resumed, steps } = resume({ found: box("STOPPED"), phases: ["STOPPED", unreachable, "RUNNING"] });

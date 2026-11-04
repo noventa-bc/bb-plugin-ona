@@ -60,8 +60,8 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   - `status.phase` is `ENVIRONMENT_PHASE_STARTING`, then `ENVIRONMENT_PHASE_RUNNING`.
   - `status.devcontainer` is null while the box starts, then an object with
     `phase: "PHASE_RUNNING"`, the container's id and name, the remote user and
-    workspace folder. Its phase values while the container builds, and on
-    failure, are not known.
+    workspace folder. Its phase values while the container builds are not
+    known. Ona's API docs list `PHASE_FAILED`, which has not been seen live.
   - `status.content.phase` was `CONTENT_PHASE_READY` and `status.machine.phase`
     was `PHASE_RUNNING` in both states.
   - `status.failureMessage` was null. Ona's public API

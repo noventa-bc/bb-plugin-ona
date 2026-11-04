@@ -260,30 +260,45 @@ export function isStopped(env: OnaEnvironment): boolean {
 
 type Readiness = { state: "ready" } | { state: "waiting"; reason: string } | { state: "failed"; message: string };
 
+/** The first non-blank line, trimmed: one line of Ona's text for a progress line or an error. */
+function firstLine(text: string): string | undefined {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .find(Boolean);
+}
+
 /**
- * Whether Ona says a box can take SSH: RUNNING, with its dev container running
- * or none at all. Deleted or deleting is final. Stopped or stopping with a
- * desired phase of RUNNING is on its way up, whatever an earlier start's failure
- * message says; otherwise it is final with Ona's failure message or a desired
- * phase set to anything else, and on its way when Ona sends neither (older Ona).
- * In any other phase the box is on its way: a failure message there may be left
- * from an earlier start.
+ * Whether Ona says a box can take SSH. RUNNING is ready with its dev container
+ * running or none at all, failed when Ona means to stop it (a desired phase
+ * other than RUNNING) or the dev container failed, and waiting otherwise.
+ * Deleted or deleting is failed. Stopped or stopping is waiting while Ona is
+ * bringing it up (desired phase RUNNING), with an earlier start's failure as
+ * the reason; otherwise it is failed with Ona's failure message or a desired
+ * phase set to anything else, and waiting when Ona sends neither (older Ona).
+ * Any other phase is waiting: a failure message there may be left from an
+ * earlier start.
  */
 export function readiness(env: OnaEnvironment): Readiness {
-  const devcontainer = env.status?.devcontainer;
-  const containerUp = !devcontainer || devcontainer.phase === "PHASE_RUNNING";
-  if (isRunning(env) && containerUp) return { state: "ready" };
+  const desired = env.spec?.desiredPhase;
   const phase = (env.status?.phase ?? "unknown").replace("ENVIRONMENT_PHASE_", "").toLowerCase();
+  if (isRunning(env)) {
+    if (desired && desired !== "ENVIRONMENT_PHASE_RUNNING")
+      return { state: "failed", message: "Ona is stopping the box" };
+    const container = env.status?.devcontainer?.phase;
+    if (container === "PHASE_FAILED") return { state: "failed", message: "dev container failed" };
+    if (!env.status?.devcontainer || container === "PHASE_RUNNING") return { state: "ready" };
+    return { state: "waiting", reason: "dev container starting" };
+  }
   if (isDeleted(env)) return { state: "failed", message: phase };
   if (isStopped(env) || phase === "stopping") {
-    const desired = env.spec?.desiredPhase;
-    if (desired === "ENVIRONMENT_PHASE_RUNNING") return { state: "waiting", reason: "starting" };
-    const failure = [env.status?.failureMessage ?? []].flat().find(Boolean);
-    if (failure) return { state: "failed", message: failure.split("\n")[0]! };
+    const failure = [env.status?.failureMessage ?? []].flat().map(firstLine).find(Boolean);
+    if (desired === "ENVIRONMENT_PHASE_RUNNING") return { state: "waiting", reason: failure ?? "starting" };
+    if (failure) return { state: "failed", message: failure };
     if (desired) return { state: "failed", message: phase };
     return { state: "waiting", reason: "starting" };
   }
-  return { state: "waiting", reason: isRunning(env) ? "dev container starting" : phase };
+  return { state: "waiting", reason: phase };
 }
 
 /**
@@ -315,12 +330,7 @@ export async function waitForReady(
         // One line only: the rest is Ona's stderr, more than the progress line needs (rule 7).
         if (error instanceof z.ZodError) return wait("Ona's answer could not be read");
         const message = error instanceof Error ? error.message : String(error);
-        return wait(
-          message
-            .split("\n")
-            .map((line) => line.trim())
-            .find(Boolean) ?? message,
-        );
+        return wait(firstLine(message) ?? message);
       }
       if (!env) throw new Error(`Ona environment ${name} disappeared.`);
       const state = readiness(env);

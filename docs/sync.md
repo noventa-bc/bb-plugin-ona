@@ -79,16 +79,26 @@ you asked for, so safety rule 1 does not gate it.
    first asks `ona environment get` every 5s, for up to 15 minutes, until it says
    the box is running and so is its dev container, if it has one
    (`waitForReady()` in `src/ona.ts`, [0005](decisions/0005-lookup-by-id-counts-as-listing.md)).
-   No SSH runs before that answer. A deleted box, or a box stopping or stopped
-   whose `spec.desiredPhase` isn't running and that carries Ona's failure message
-   or a desired phase, ends the connect with no SSH. A stopped box Ona is bringing
-   up (desired phase running, whatever an earlier failure message says) or that
-   has neither (older Ona) may be one the start just woke, and a failure message
-   on a box in any other phase may be left from an earlier start, so the connect
-   keeps asking, as it does when `get` fails (unknown).
+   No SSH runs before that answer. These end the connect at once, with no SSH:
+   - a running box whose `spec.desiredPhase` is set to anything but running
+     (Ona is stopping it), or whose dev container is `PHASE_FAILED`
+   - a deleted or deleting box
+   - a stopping or stopped box whose desired phase isn't running, when it
+     carries Ona's failure message (shown) or any desired phase.
+
+   The connect keeps asking in these cases:
+   - a stopping or stopped box Ona is bringing up (desired phase running). An
+     earlier failure message becomes the progress line and the timeout's reason.
+   - a stopping or stopped box with neither a failure message nor a desired
+     phase (older Ona), which the start may have just woken
+   - any other phase. A failure message there may be left from an earlier start.
+   - a `get` that fails (unknown).
+
+   One line of Ona's text is shown: the first non-blank line.
    These commands you run yourself are not gated and may wake a box:
    `ona environment open` and `bb ona ssh --thread`.
    _Why: an accidental start costs money and keeps the box up._
+
 2. **Never stop a box.** Suspends the plugin makes because of what it saw in Ona
    skip the provider's stop. _Why: a wrong or stale listing must not stop a box with your work on it._
 3. **Restart a daemon only when the check finds none.** The check looks for a
