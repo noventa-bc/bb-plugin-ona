@@ -276,8 +276,8 @@ export function unpushedWork(env: OnaEnvironment): { branch?: string; count: num
 }
 
 /**
- * What `bb ona status` shows about a box from Ona's listing. A fact Ona leaves out, or sends oddly, is null,
- * except `unpushed`, which is 0.
+ * What `bb ona status` shows about a box from Ona's listing. A fact Ona leaves out is null, as is an odd start,
+ * timeout or activity; `unpushed` is 0 instead.
  */
 export interface BoxFacts {
   /** Epoch ms of the box's last start. */
@@ -295,12 +295,12 @@ const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})
 
 /**
  * Epoch ms of an RFC 3339 time with a zone (Ona's microseconds included). Null when the text has the wrong
- * shape or Date.parse gives NaN.
+ * shape, Date.parse gives NaN, or the time is at or before the epoch (Go's zero time, 0001-01-01, is "unset").
  */
 const epochMs = (text?: string | null): number | null => {
   if (!text || !RFC3339.test(text)) return null;
   const ms = Date.parse(text);
-  return Number.isNaN(ms) ? null : ms;
+  return Number.isNaN(ms) || ms <= 0 ? null : ms;
 };
 
 export function boxFacts(env: OnaEnvironment): BoxFacts {
