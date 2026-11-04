@@ -223,7 +223,7 @@ export const usage = [
   "  bb ona rename <ref> [name]    Rename the Ona environment (random fun name if omitted) and its bb machine",
   "  bb ona reconnect <ref>        Reopen an active machine's tunnel and restart its bb daemon",
   "                                Refused unless bb shows the machine active and Ona shows its box running.",
-  "  bb ona status [ref] [--json]  bb's view of each devbox next to Ona's, the box's start, idle timeout, activity and branch, and what the plugin last did",
+  "  bb ona status [ref] [--json]  bb's view of each devbox next to Ona's, its box facts, and what the plugin last did",
   "  bb ona sync [ref]             Re-check Ona now and repair (ignores cooldowns, keeps the safety rules)",
   "  bb ona keep-alive <ref> <duration|off>  Keep a running devbox from Ona's inactivity timeout (at most 12h)",
   "  bb ona update [ref] [--force] Apply pending Claude Code / Codex updates now (also runs weekdays 09:00)",

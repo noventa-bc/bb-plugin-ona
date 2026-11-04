@@ -56,7 +56,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
 - `bb ona open <ref>` — open in your Ona editor.
 - `bb ona reconnect <ref>` — reopen the tunnel and restart the daemon. A changed setting applies after `bb plugin reload ona`; `waitForSharedHome`, `codexSqliteHome` and `machineDataDir` reach a box on its next connect (`bb ona reconnect`, a resume or the daemon's restart).
   Refused unless bb shows the machine active and Ona shows its box running; `bb machine resume <m>` resumes a suspended one.
-- `bb ona status [ref]` — bb's view of each devbox next to Ona's, the box's start, idle timeout, activity and branch, and what the plugin last did and why.
+- `bb ona status [ref]` — bb's view of each devbox next to Ona's, the box's start, idle timeout, activity, branch and unpushed commits, and what the plugin last did and why.
   Use it first when bb and Ona disagree (box changed outside bb); `bb ona sync [ref]` re-checks and repairs now.
 - `bb ona keep-alive <ref> <duration>` — keep a running devbox from Ona's inactivity timeout
   (e.g. `2h`, at most `12h`); `bb ona keep-alive <ref> off` ends it. Only when the user asks for it:
