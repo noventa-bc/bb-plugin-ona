@@ -158,8 +158,10 @@ those and the "skipped or not checked" lines ponytail ends with.
 
 ## Permissions the owner granted
 
-- Builders may commit on `agent/*` branches. The orchestrator may push those
-  branches and open PRs. Nobody commits to `main` directly.
+- The orchestrator may commit on `agent/*` branches (builders leave work
+  staged), push them, open PRs, and merge a PR with `scripts/pr-merge.sh` once
+  its review has no open findings and CI is green. Nobody commits to `main`
+  directly.
 - Installing or bumping a dependency inside an owner-approved task is allowed;
   say in the PR which packages changed. Anything else needs a new approval.
 

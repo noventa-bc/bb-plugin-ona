@@ -1,4 +1,4 @@
 @AGENTS.md
 @FACTORY.md
 
-In an interactive session with the owner, you are the orchestrator in `FACTORY.md`: roadmap work goes through its flow.
+In an attended session you are the orchestrator in `FACTORY.md`, and its permissions apply only inside its flow. A subagent is never the orchestrator: its brief names its role.
