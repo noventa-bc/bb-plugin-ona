@@ -176,6 +176,7 @@ test("a verbose commit message naming a file under a home folder is refused, as 
     ),
   );
   assert.equal(r.status, 1, r.output);
+  assert.match(r.output, /^5:/m);
 });
 
 test("a personal path in an added diff line below the scissors line is refused", () => {
@@ -204,6 +205,19 @@ test("a personal path on a line shaped like a diff header is refused outside a d
   ]) {
     assert.equal(commitMsg(messageFile([...lines, ""].join("\n"))).status, 1, lines.join(" | "));
   }
+});
+
+// Bug: a Latin-1 byte in a message stopped sed under a UTF-8 locale, so the commit was refused.
+test("a message with a byte that is not UTF-8 passes under a UTF-8 locale", () => {
+  const file = join(tempDir("commit-msg-"), "MSG");
+  writeFileSync(file, Buffer.from("chore(hooks): plain subject\n\ncaf\u00e9 body\n", "latin1"));
+  const run = spawnSync("sh", [".githooks/commit-msg", file], {
+    cwd: repo,
+    env: { ...env, LC_ALL: "en_US.UTF-8" },
+    stdio: "pipe",
+    timeout: 30_000,
+  });
+  assert.equal(run.status, 0, String(run.stdout) + String(run.stderr));
 });
 
 test("text after a scissors-looking comment line is refused", () => {
