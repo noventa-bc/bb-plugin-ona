@@ -141,7 +141,7 @@ export interface StatusRow {
   retry: string | null;
   /** When a `bb ona keep-alive` ends, epoch ms. */
   keepAliveUntil: number | null;
-  /** Workspaces whose teardown failed for good; bb won't suspend the machine. */
+  /** Workspaces whose teardown needs recovery (see workspaceWork); bb won't suspend the machine. */
   needsRecovery: number;
   /** Busy threads with no update for `STUCK_THREAD_MS`; they hold the box. */
   stuckThreads: { id: string; status: string; updatedAt: number }[];
@@ -248,8 +248,9 @@ export function createSync(deps: SyncDeps) {
           connectedAt,
           ...threads.map((thread) => Math.max(thread.updatedAt, thread.lastReadAt ?? 0)),
         ),
-        // Letting the box go mid-hook leaves bb unable to recover the workspace.
-        workspacesBlock: await workspaces(row.hostId).then((work) => work.busy || work.needsRecovery > 0),
+        // Letting the box go mid-hook leaves bb unable to recover the workspace. The box is
+        // also kept while bb waits to retry a failed teardown.
+        workspacesBlock: await workspaces(row.hostId, Date.now()).then((work) => work.busy || work.needsRecovery > 0),
       });
     }
     for (const hostId of machinesToRelease(activity, Date.now(), idleMs)) {
@@ -314,9 +315,9 @@ export function createSync(deps: SyncDeps) {
   }
 
   /** bb's workspace work on a machine; a failed lookup counts as none (the behaviour before this check). */
-  async function workspaces(hostId: string): Promise<{ busy: boolean; needsRecovery: number }> {
+  async function workspaces(hostId: string, now: number): Promise<{ busy: boolean; needsRecovery: number }> {
     try {
-      return workspaceWork(await bb.sdk.environments.list({ hostId }));
+      return workspaceWork(await bb.sdk.environments.list({ hostId }), now);
     } catch (error) {
       bb.log.info(`couldn't list workspaces on ${hostId}: ${errorText(error)}`);
       return { busy: false, needsRecovery: 0 };
@@ -424,7 +425,7 @@ export function createSync(deps: SyncDeps) {
               ? await threadWaiting(row.hostId).catch(() => false)
               : false,
           workspaceWaiting:
-            row.phase === "active" && row.status !== "connected" ? (await workspaces(row.hostId)).busy : false,
+            row.phase === "active" && row.status !== "connected" ? (await workspaces(row.hostId, now)).busy : false,
         };
         const decision = decide(view, await onaView(row.resource.envId, listing), now);
         // With autoRepair off, only observed stops and deletions reach bb, and tunnels reopen after a reload.
@@ -483,7 +484,7 @@ export function createSync(deps: SyncDeps) {
                 ? `gave up after ${record.failures} failures; run \`bb ona sync ${row.machine}\``
                 : `retrying after ${new Date(record.quietUntil).toLocaleTimeString()}`,
           keepAliveUntil: deps.keepAliveUntil(row.resource.envId),
-          needsRecovery: (await workspaces(row.hostId)).needsRecovery,
+          needsRecovery: (await workspaces(row.hostId, Date.now())).needsRecovery,
           stuckThreads: stuckThreads(
             await liveThreads(bb.sdk.threads, row.hostId).catch((error: unknown) => {
               bb.log.info(`couldn't list threads on ${row.hostId}: ${errorText(error)}`);

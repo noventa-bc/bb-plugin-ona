@@ -76,14 +76,14 @@ const workspace = (
 });
 
 test("workspaceWork: setup and running teardowns are busy; failed teardowns bb gave up on need recovery", () => {
-  assert.deepEqual(workspaceWork([]), { busy: false, needsRecovery: 0 });
-  assert.deepEqual(workspaceWork([workspace("ready")]), { busy: false, needsRecovery: 0 });
-  assert.deepEqual(workspaceWork([workspace("provisioning")]), { busy: true, needsRecovery: 0 });
-  assert.deepEqual(workspaceWork([workspace("creating")]), { busy: true, needsRecovery: 0 });
-  assert.deepEqual(workspaceWork([workspace("ready", "teardown", "running")]), { busy: true, needsRecovery: 0 });
-  assert.deepEqual(workspaceWork([workspace("ready", "teardown")]), { busy: true, needsRecovery: 0 });
+  assert.deepEqual(workspaceWork([], NOW), { busy: false, needsRecovery: 0 });
+  assert.deepEqual(workspaceWork([workspace("ready")], NOW), { busy: false, needsRecovery: 0 });
+  assert.deepEqual(workspaceWork([workspace("provisioning")], NOW), { busy: true, needsRecovery: 0 });
+  assert.deepEqual(workspaceWork([workspace("creating")], NOW), { busy: true, needsRecovery: 0 });
+  assert.deepEqual(workspaceWork([workspace("ready", "teardown", "running")], NOW), { busy: true, needsRecovery: 0 });
+  assert.deepEqual(workspaceWork([workspace("ready", "teardown")], NOW), { busy: true, needsRecovery: 0 });
   assert.deepEqual(
-    workspaceWork([workspace("error", "teardown", "failed"), workspace("error", "teardown", "failed")]),
+    workspaceWork([workspace("error", "teardown", "failed"), workspace("error", "teardown", "failed")], NOW),
     {
       busy: false,
       needsRecovery: 2,
@@ -93,11 +93,28 @@ test("workspaceWork: setup and running teardowns are busy; failed teardowns bb g
 
 // Bug: a failed teardown bb was still retrying counted as needing recovery, so `bb ona status` warned while bb retried.
 test("workspaceWork: a failed teardown bb will retry is busy, not needing recovery", () => {
-  assert.deepEqual(workspaceWork([workspace("error", "teardown", "failed", NOW + MIN)]), {
+  assert.deepEqual(workspaceWork([workspace("error", "teardown", "failed", NOW + MIN)], NOW), {
     busy: true,
     needsRecovery: 0,
   });
-  assert.deepEqual(workspaceWork([workspace("error", "teardown", "failed", null)]), { busy: false, needsRecovery: 1 });
+});
+
+test("workspaceWork: a failed teardown whose retry is over a minute overdue needs recovery", () => {
+  assert.deepEqual(workspaceWork([workspace("error", "teardown", "failed", NOW - 2 * MIN)], NOW), {
+    busy: false,
+    needsRecovery: 1,
+  });
+});
+
+test("workspaceWork: a failed teardown whose retry is a minute away, or exactly a minute overdue, is busy", () => {
+  assert.deepEqual(workspaceWork([workspace("error", "teardown", "failed", NOW + MIN)], NOW), {
+    busy: true,
+    needsRecovery: 0,
+  });
+  assert.deepEqual(workspaceWork([workspace("error", "teardown", "failed", NOW - MIN)], NOW), {
+    busy: true,
+    needsRecovery: 0,
+  });
 });
 
 test("an idle machine whose workspaces bb is working on, or that need recovery, is not let go", () => {

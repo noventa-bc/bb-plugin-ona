@@ -25,18 +25,29 @@ export interface WorkspaceView {
 }
 
 /**
+ * bb sweeps every 10 s (checked 2026-11-04); a minute past `retireAt` is slack for
+ * that sweep, so a retry further overdue counts as given up.
+ */
+const OVERDUE_MS = 60_000;
+
+/**
  * What bb is doing with a machine's workspaces. `busy`: a setup or teardown is
  * under way, or bb is still retrying a failed teardown; letting the box go now
- * would interrupt it. `needsRecovery`: failed teardowns bb has given up on; bb
- * won't suspend the machine until someone recovers them.
+ * would interrupt it. `needsRecovery`: failed teardowns bb has given up on, or
+ * whose retry is more than OVERDUE_MS overdue; bb won't suspend the machine until
+ * someone recovers them.
  */
-export function workspaceWork(workspaces: readonly WorkspaceView[]): { busy: boolean; needsRecovery: number } {
+export function workspaceWork(
+  workspaces: readonly WorkspaceView[],
+  now: number,
+): { busy: boolean; needsRecovery: number } {
   let busy = false;
   let needsRecovery = 0;
   for (const workspace of workspaces) {
     if (workspace.status === "creating" || workspace.status === "provisioning") busy = true;
     if (workspace.lifecycle.phase !== "teardown") continue;
-    if (workspace.lifecycle.teardown?.status === "failed" && workspace.lifecycle.retireAt === null) needsRecovery++;
+    const { retireAt, teardown } = workspace.lifecycle;
+    if (teardown?.status === "failed" && (retireAt === null || retireAt < now - OVERDUE_MS)) needsRecovery++;
     else busy = true;
   }
   return { busy, needsRecovery };

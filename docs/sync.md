@@ -29,9 +29,10 @@ never start or stop a box; bb does that only on your action in bb (decisions 000
 The idle rule from [How it works](../README.md#how-it-works) sits alongside these: after
 `idleDisconnect` with no thread activity, an active box is marked suspended
 without being stopped. A box isn't let go while bb is setting up or tearing
-down one of its thread workspaces: closing the tunnel mid-hook leaves bb unable
-to tell how the hook ended, and it then refuses to suspend the machine until
-the workspace is recovered. A thread with a turn in flight also holds the box,
+down one of its thread workspaces, or while bb waits to retry a failed teardown.
+Closing the tunnel mid-hook leaves bb unable to tell how the hook ended, and it
+then refuses to suspend the machine until the workspace is recovered. A thread
+with a turn in flight also holds the box,
 hidden ones (workflow steps, side chats) included, but an archived thread
 counts for neither busyness nor activity, whatever status bb still shows for
 it.
@@ -101,8 +102,9 @@ you asked for, so safety rule 1 does not gate it.
 
 - **When the plugin starts** (load, reload, bb restart). This check is what reopens the tunnels.
 - **Right away** when a thread is waiting for an Ona machine, or bb is setting
-  up or tearing down a workspace on it, or retrying a failed teardown (a running
-  box only; this never starts one).
+  up or tearing down a workspace on it, or retrying a failed teardown (until bb
+  has given up on it, or its retry is more than a minute overdue; a running box
+  only; this never starts one).
 - **45s after** an Ona machine disconnects, so a brief drop (Wi-Fi, Mac sleep) can recover on its own.
 - **30s after** a tunnel comes back up.
 - **Right away** when a tunnel finds its box stopped in Ona.

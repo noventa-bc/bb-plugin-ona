@@ -263,6 +263,21 @@ test("a disconnected box reconnects at once for a teardown bb is still retrying"
   assert.equal(row!.needsRecovery, 0, "bb is still retrying it, so status doesn't call it needing recovery");
 });
 
+test("a disconnected box waits out the grace for a teardown whose retry is over a minute overdue", async () => {
+  const overdue: WorkspaceView = {
+    status: "error",
+    lifecycle: { phase: "teardown", retireAt: Date.now() - 2 * 60_000, teardown: { status: "failed" } },
+  };
+  const { sync, calls } = world(
+    [idle("h1", { status: "disconnected", lastSeenAt: Date.now() - 5_000, workspaces: [overdue] })],
+    { daemonAlive: false },
+  );
+  await sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(calls, []);
+  const [row] = await sync.statusRows();
+  assert.equal(row!.needsRecovery, 1);
+});
+
 // Bug: after `bb ona rename`, every line kept the name stored when the box was created.
 test("rows carry the name Ona lists, not the one stored at creation", async () => {
   const { sync } = world([idle("h1", { name: "renamed" }), idle("h2")]);
