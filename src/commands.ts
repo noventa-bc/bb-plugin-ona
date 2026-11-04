@@ -162,7 +162,8 @@ export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()
   const ago = (at: number) => {
     // Ona's clock can run ahead of bb's, so a time after `now` reads as 0s ago.
     const s = Math.max(0, Math.round((now - at) / 1000));
-    return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : `${Math.round(s / 3600)}h ago`;
+    const m = Math.round(s / 60);
+    return s < 60 ? `${s}s ago` : m < 60 ? `${m}m ago` : `${Math.round(s / 3600)}h ago`;
   };
   /** The `box:` line: what Ona's listing says about the box. A part Ona doesn't give is left out. */
   const boxLine = (facts: BoxFacts): string | null => {
@@ -182,8 +183,7 @@ export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()
   if (rows.length === 0) return `${header}\nNo Ona machines yet.`;
   const lines = rows.map((row) => {
     const rowLines = [`${row.machine}  bb:${row.bb}  tunnel:${row.tunnel}  ona:${row.ona}`];
-    // Under an ERROR header the facts come from an older listing, so they are not shown.
-    const box = ona.lastError === null && row.facts ? boxLine(row.facts) : null;
+    const box = row.facts ? boxLine(row.facts) : null;
     if (box) rowLines.push(box);
     if (row.now) rowLines.push(`  now: ${row.now.reason} (since ${ago(row.now.since)})`);
     if (row.last) {

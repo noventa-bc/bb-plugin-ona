@@ -246,11 +246,12 @@ test("status text: a time ahead of bb's clock reads as 0s ago", () => {
   assert.equal(formatStatus([row({ facts })], HEALTHY, NOW).split("\n")[2], "  box: last started 0s ago");
 });
 
-// Under an ERROR header the facts come from an older listing, so no box line prints.
-test("status text: no box line under an ERROR header", () => {
-  const error = { lastError: "not logged in", listedAt: NOW - 3_600_000, autoRepair: true };
-  const text = formatStatus([row({ facts: { ...NO_FACTS, branch: "main", unpushed: 2 } })], error, NOW);
-  assert.doesNotMatch(text, /box:/);
+// Minutes are rounded before the unit is picked, so 3570 s is 1h, not 60m.
+test("status text: an age just under an hour reads in minutes up to 59m, then 1h", () => {
+  const ok = (listedMsAgo: number) =>
+    formatStatus([], { lastError: null, listedAt: NOW - listedMsAgo, autoRepair: true }, NOW).split("\n")[0];
+  assert.equal(ok(3_570_000), "Ona CLI: ok, listed 1h ago");
+  assert.equal(ok(3_569_000), "Ona CLI: ok, listed 59m ago");
 });
 
 // The box line sits under the row line, before `now` and `last action`.

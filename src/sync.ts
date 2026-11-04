@@ -85,6 +85,8 @@ export interface SyncDeps {
     get(maxAgeMs?: number): Promise<OnaListing>;
     refresh(): Promise<OnaListing>;
     readonly latest: OnaListing | null;
+    /** The last failed listing's message; null once a listing succeeds. An empty message is still a failure. */
+    readonly lastError: string | null;
   };
   ona: {
     getEnvironmentIfExists(envId: string, signal?: AbortSignal): Promise<Parameters<typeof isArchived>[0] | null>;
@@ -445,6 +447,8 @@ export function createSync(deps: SyncDeps) {
 
   async function statusRows(ref?: string): Promise<StatusRow[]> {
     const listing = await snapshot.get().catch(() => snapshot.latest);
+    // Once a listing fails, rows keep the last good phase but not its facts: the facts would look current.
+    const listingOk = snapshot.lastError === null;
     const rows = (await machines()).filter((r) => !ref || matchesRef(r, ref));
     return Promise.all(
       rows.map(async (row) => {
@@ -465,7 +469,7 @@ export function createSync(deps: SyncDeps) {
               : seen?.archived
                 ? "archived"
                 : "missing",
-          facts: env ? boxFacts(env) : null,
+          facts: env && listingOk ? boxFacts(env) : null,
           now: guard.seen.get(row.hostId) ?? null,
           last: busy
             ? { action: busy, reason: "in progress", at: Date.now() }

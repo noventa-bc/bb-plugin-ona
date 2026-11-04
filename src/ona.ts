@@ -275,7 +275,10 @@ export function unpushedWork(env: OnaEnvironment): { branch?: string; count: num
   return git?.branch ? { branch: git.branch, count } : { count };
 }
 
-/** What `bb ona status` shows about a box from Ona's listing; a fact Ona leaves out, or sends oddly, is null. */
+/**
+ * What `bb ona status` shows about a box from Ona's listing. A fact Ona leaves out, or sends oddly, is null,
+ * except `unpushed`, which is 0.
+ */
 export interface BoxFacts {
   /** Epoch ms of the box's last start. */
   startedAt: number | null;
@@ -284,13 +287,16 @@ export interface BoxFacts {
   /** Ona's last activity signal: its source, and when, in epoch ms. */
   activity: { source: string; at: number } | null;
   branch: string | null;
-  /** Commits on the box that were never pushed; 0 when there are none. */
+  /** Commits on the box that were never pushed; 0 when there are none or Ona doesn't say. */
   unpushed: number;
 }
 
 const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
-/** Epoch ms of an RFC 3339 time with a zone (Ona's microseconds included), or null otherwise. */
+/**
+ * Epoch ms of an RFC 3339 time with a zone (Ona's microseconds included). Null when the text has the wrong
+ * shape or Date.parse gives NaN.
+ */
 const epochMs = (text?: string | null): number | null => {
   if (!text || !RFC3339.test(text)) return null;
   const ms = Date.parse(text);
@@ -298,17 +304,18 @@ const epochMs = (text?: string | null): number | null => {
 };
 
 export function boxFacts(env: OnaEnvironment): BoxFacts {
-  // At most 12 digits: a longer count times 1000 passes 2^53 ms and loses precision.
+  // At most 12 digits: a 13-digit count can pass 2^53 ms.
   const seconds = /^(\d{1,12})s$/.exec(env.spec?.timeout?.disconnected ?? "");
   const signal = env.status?.activitySignal;
   const source = signal?.source;
   const at = epochMs(signal?.timestamp);
+  const count = unpushedWork(env)?.count ?? 0;
   return {
     startedAt: epochMs(env.metadata.lastStartedAt),
     idleTimeoutMs: seconds ? Number(seconds[1]) * 1000 : null,
     activity: source && at !== null ? { source, at } : null,
     branch: env.status?.content?.git?.branch || null,
-    unpushed: unpushedWork(env)?.count ?? 0,
+    unpushed: Number.isSafeInteger(count) ? count : 0,
   };
 }
 

@@ -51,6 +51,8 @@ function world(
     cached?: boolean;
     archived?: boolean | "not-found" | "fail";
     listing?: "fail" | "empty";
+    /** The message a failing listing throws; "" counts as a failure too. */
+    listingError?: string;
     /** bb's host lookup fails: with a plain error, or with only the SDK's `not_found` code (no status). */
     hostGet?: "fail" | "not_found";
     autoRepair?: boolean;
@@ -151,7 +153,7 @@ function world(
     // No cache and a ticking clock (unless `cached`): every pass gets its own listing.
     snapshot: new OnaSnapshot(
       async () => {
-        if (options.listing === "fail") throw new Error("not logged in");
+        if (options.listing === "fail") throw new Error(options.listingError ?? "not logged in");
         return envs();
       },
       options.cached ? 15_000 : 0,
@@ -321,23 +323,20 @@ test("status still lists a machine whose thread listing fails", async () => {
   assert.deepEqual(row!.stuckThreads, []);
 });
 
-// Facts come from the last good listing, the one the ona: field reads. A box Ona doesn't list has none.
-test("status keeps the last good listing's facts when a later listing fails, and none for a box Ona doesn't list", async () => {
+// Facts show only while the listing is good, so the text and --json agree. A box Ona doesn't list has none.
+test("status shows a box's facts only while the listing is good, and none for a box Ona doesn't list", async () => {
   const listed = JSON.parse(readFileSync(new URL("./fixtures/ona/facts-environment.json", import.meta.url), "utf8"));
-  const opts: { listing?: "fail" } = {};
+  const opts: { listing?: "fail"; listingError?: string } = {};
   const { sync } = world([idle("h1", { listed }), idle("h2", { ona: null })], opts);
   const [row, unlisted] = await sync.statusRows();
-  assert.deepEqual(row!.facts, {
-    startedAt: Date.parse("2026-11-03T09:12:40.512306Z"),
-    idleTimeoutMs: 3 * HOUR,
-    activity: { source: "SSH connections", at: Date.parse("2026-11-03T11:02:15Z") },
-    branch: "feature-y",
-    unpushed: 2,
-  });
+  assert.equal(row!.facts?.branch, "feature-y", "a good listing fills the facts");
   assert.equal(unlisted!.facts, null, "Ona doesn't list the box");
   opts.listing = "fail";
   const [stale] = await sync.statusRows();
-  assert.deepEqual(stale!.facts, row!.facts, "the listing fails: the facts of the last good one");
+  assert.equal(stale!.facts, null, "a failed listing has no facts");
+  opts.listingError = "";
+  const [empty] = await sync.statusRows();
+  assert.equal(empty!.facts, null, "an empty error is an error too");
 });
 
 test("a box missing from two listings is looked up once: archived or gone", async () => {

@@ -480,14 +480,14 @@ test("listEnvironments parses a box whose activity signal, start time and timeou
   });
 });
 
-test("boxFacts: a fact Ona leaves out or sends in a form bb can't read is null, and a negative count reads as 0", () => {
+test("boxFacts: a fact Ona leaves out or sends oddly is null, and an unsafe count reads as 0", () => {
   const nothing = { startedAt: null, idleTimeoutMs: null, activity: null, branch: null, unpushed: 0 };
   const env = (extra: Partial<OnaEnvironment>): OnaEnvironment => ({ id: "env-0001", metadata: {}, ...extra });
   assert.deepEqual(boxFacts(env({})), nothing, "nothing given");
   for (const disconnected of ["3h", "1h30s", "10800", "1234567890123s"]) {
     assert.equal(boxFacts(env({ spec: { timeout: { disconnected } } })).idleTimeoutMs, null, disconnected);
   }
-  for (const lastStartedAt of ["yesterday", "42", "2026-11-03T09:12:40"]) {
+  for (const lastStartedAt of ["yesterday", "42", "2026-11-03T09:12:40", "2026-13-01T00:00:00Z"]) {
     assert.equal(boxFacts(env({ metadata: { lastStartedAt } })).startedAt, null, lastStartedAt);
   }
   for (const timestamp of ["soon", "42", "2026-11-03T11:02:15"]) {
@@ -503,6 +503,15 @@ test("boxFacts: a fact Ona leaves out or sends in a form bb can't read is null, 
     boxFacts(env({ status: { content: { git: { totalUnpushedCommits: -1 } } } })).unpushed,
     0,
     "a negative count",
+  );
+  for (const totalUnpushedCommits of ["Infinity", 2.5]) {
+    const git = { totalUnpushedCommits };
+    assert.equal(boxFacts(env({ status: { content: { git } } })).unpushed, 0, String(totalUnpushedCommits));
+  }
+  assert.deepEqual(
+    boxFacts(env({ status: { content: { git: { branch: "main" } } } })),
+    { ...nothing, branch: "main" },
+    "a branch with no unpushed count",
   );
   assert.equal(
     boxFacts(env({ spec: { timeout: { disconnected: "0s" } } })).idleTimeoutMs,

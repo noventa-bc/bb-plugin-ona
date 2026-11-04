@@ -28,7 +28,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   - `spec.desiredPhase`
   - `spec.machine.class`
   - `status.content.git`: `branch`, `cloneUrl`, `latestCommit`,
-    `totalUnpushedCommits` (a number, or a numeric string not yet seen live) and `unpushedCommits` (one string per
+    `totalUnpushedCommits` (a number; `unpushedWork` in `src/ona.ts` also reads a numeric string) and `unpushedCommits` (one string per
     commit). Absent when the box has no git content (checked 2026-10-30 on a
     live listing).
   - `status.devcontainer.phase`
