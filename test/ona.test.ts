@@ -460,7 +460,6 @@ test("boxFacts reads the start time, timeout, activity signal, branch and unpush
 
 // An odd start, timeout or activity signal must not fail the listing: that box shows the fact as absent.
 test("listEnvironments parses a box whose activity signal, start time and timeout have odd types", async () => {
-  setFake({});
   const file = join(dir, "odd-facts.json");
   const odd = {
     id: "env-0001",
@@ -484,7 +483,7 @@ test("boxFacts: a fact Ona leaves out or sends oddly is null, and an unsafe coun
   const nothing = { startedAt: null, idleTimeoutMs: null, activity: null, branch: null, unpushed: 0 };
   const env = (extra: Partial<OnaEnvironment>): OnaEnvironment => ({ id: "env-0001", metadata: {}, ...extra });
   assert.deepEqual(boxFacts(env({})), nothing, "nothing given");
-  for (const disconnected of ["3h", "1h30s", "10800", "1234567890123s"]) {
+  for (const disconnected of ["3h", "1h30s", "10800", "9999999999999s"]) {
     assert.equal(boxFacts(env({ spec: { timeout: { disconnected } } })).idleTimeoutMs, null, disconnected);
   }
   for (const lastStartedAt of [

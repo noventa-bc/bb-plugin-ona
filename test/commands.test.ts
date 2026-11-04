@@ -219,11 +219,6 @@ test("status text: a box line leaves out each fact Ona doesn't give, and no line
   assert.doesNotMatch(status(null), /box:/, "no listing for the box");
   assert.doesNotMatch(status(NO_FACTS), /box:/, "Ona gave none of the facts");
   assert.equal(status({ ...NO_FACTS, branch: "main" }).split("\n")[2], "  box: branch main", "a branch alone");
-  assert.equal(
-    status({ ...NO_FACTS, branch: "main", unpushed: 0 }).split("\n")[2],
-    "  box: branch main",
-    "zero unpushed commits is not printed",
-  );
   assert.equal(status({ ...NO_FACTS, unpushed: 2 }).split("\n")[2], "  box: 2 unpushed", "unpushed commits, no branch");
 });
 

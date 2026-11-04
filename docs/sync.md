@@ -157,7 +157,7 @@ the cache (rule 1); callers that ask while a list is running share the next one.
 **Seeing and fixing it yourself.**
 
 ```sh
-bb ona status [name] [--json]  # bb's view, tunnel, Ona's view, and what the plugin last did and why
+bb ona status [name] [--json]  # bb's view, tunnel, Ona's view, the box's facts, and what the plugin last did and why
 bb ona sync [name]             # re-check Ona now and repair (skips cooldowns, never the safety rules)
 ```
 

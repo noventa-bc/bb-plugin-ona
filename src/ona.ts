@@ -291,6 +291,7 @@ export interface BoxFacts {
   unpushed: number;
 }
 
+// Date.parse alone reads "42" as the year 2042 and a zone-less time as local time, so the shape is checked first.
 const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
 /**

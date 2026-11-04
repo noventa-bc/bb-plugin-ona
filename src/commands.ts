@@ -152,8 +152,8 @@ export interface OnaHealth {
 /** A duration in its largest whole unit: 10800000 ms is `3h`, 2700000 is `45m`, 90000 is `90s`. */
 const duration = (ms: number) => {
   const s = Math.round(ms / 1000);
-  if (s > 0 && s % 3600 === 0) return `${s / 3600}h`;
-  if (s > 0 && s % 60 === 0) return `${s / 60}m`;
+  if (s % 3600 === 0) return `${s / 3600}h`;
+  if (s % 60 === 0) return `${s / 60}m`;
   return `${s}s`;
 };
 
