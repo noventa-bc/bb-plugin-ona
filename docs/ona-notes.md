@@ -147,18 +147,31 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 - bb 0.48.1's owner-mismatch failure (`PROVIDER_OWNER_MISMATCH_MESSAGE` in
   `server/dist/start-server.js`) sets `lifecycle.teardown.status` to failed and leaves
   `retireAt` as it was; no retry runs while the mismatch lasts (checked 2026-11-04).
-- A retry's teardown hook goes through `runEnvironmentHook` (`server/dist/start-server.js`
-  line 63806), which calls `callHostOnlineRpcForWork` (line 63840). That waits for a
-  reconnecting daemon and prepares the host before it makes the call (lines 102725-102728)
-  (checked 2026-11-04).
-- bb holds a retry while a live thread is on the environment. `environmentHasLiveThreads`
-  (`server/dist/start-server.js` lines 43977-43978) counts a thread on the environment that
-  is not archived or deleted, plus any thread whose status is `active` or `stopping`,
-  whatever its archive or delete state. The periodic sweep returns before the retry while
-  that holds, except while the machine is being removed (lines 108650-108669).
-  `requestEnvironmentRemoval` returns false, before any write, when a live thread is on
-  the environment and the machine is not being removed (lines 108494-108495) (checked
+- A retry's teardown hook goes through `runEnvironmentHook`
+  (`server/dist/start-server.js` line 63806), which calls `callHostOnlineRpcForWork`
+  (line 63840). That waits for a reconnecting daemon on an active host
+  (`waitForReconnectingDaemon`, line 102862), then asserts the host is active
+  (`prepareHostForWork`, lines 102777-102782). The hook call never wakes the host:
+  `hostCommandMayWake` is false for a teardown (lines 63697-63700). An inactive host
+  fails the attempt with `host_unavailable` (lines 102762-102776), unless the machine is
+  being removed and cleanup is allowed (`isCleanupRpc`, lines 102759-102761). The
+  attempt counts toward the five when it starts (lines 108701-108707) (checked
   2026-11-04).
+- bb holds a retry while a live thread is on the environment, except that a workspace
+  with an owner and a teardown status is released instead (next bullet).
+  `environmentHasLiveThreads` (`server/dist/start-server.js` lines 43977-43978) counts a
+  thread on the environment that is not archived or deleted, plus any thread whose
+  status is `active` or `stopping`, whatever its archive or delete state. The periodic
+  sweep returns before the retry while that holds, except while the machine is being
+  removed (lines 108650-108669). `requestEnvironmentRemoval` returns false, before any
+  write, when a live thread is on the environment and the machine is not being removed
+  (lines 108494-108495) (checked 2026-11-04).
+- A workspace with an owner and a teardown status is released by the sweep. With a live
+  thread on the environment, the release clears `ownerThreadId`, `claimPath`, `retireAt`
+  and `teardownStatus` (lines 108651-108660), and the sweep returns (lines
+  108666-108669). A `ready` workspace with a path is cleared the same way with no live
+  thread (line 108651). Neither runs while the machine is being removed (line 108651)
+  (checked 2026-11-04).
 - bb blocks automatic cleanup of a workspace whose hook outcome is unknown after an
   interruption. `cancelPendingEnvironmentHook` throws "Environment hook outcome is unknown
   after interruption. Automatic cleanup is blocked; inspect the workspace before recovering
