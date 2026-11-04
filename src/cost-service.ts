@@ -50,8 +50,8 @@ interface StoredCost {
 // Codex records usage minutes after a turn (docs/ona-notes.md); 12 rounds at the 5-minute floor is about an hour.
 const CODEX_ROUNDS = 12;
 
-// Records under `cost:` predate the Codex usage lag (docs/ona-notes.md); only Claude figures from
-// them are shown, until a new round runs.
+// Records under `cost:` predate the Codex usage lag (docs/ona-notes.md); their figures are shown
+// (except a Codex $0.00) until a new round runs.
 const costKey = (threadId: string) => `cost2:${threadId}`;
 const oldCostKey = (threadId: string) => `cost:${threadId}`;
 
@@ -67,15 +67,19 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
     }
   }
 
-  /** A Claude figure kept under the old `cost:` key, as a record with no round run for the current turn. */
-  async function legacyClaudeCost(threadId: string): Promise<StoredCost | null> {
+  /**
+   * A figure kept under the old `cost:` key, as a record with no round run for the current turn.
+   * A Codex $0.00 there may come from the usage lag (docs/ona-notes.md), so it is not used.
+   */
+  async function legacyCost(threadId: string): Promise<StoredCost | null> {
     const old = await bb.storage.kv.get<{ cost: ThreadCost | null; checkedAt: number }>(oldCostKey(threadId));
-    return old?.cost?.provider === "claude-code" ? { cost: old.cost, seq: "", checkedAt: old.checkedAt } : null;
+    const usable = old?.cost && (old.cost.provider === "claude-code" || old.cost.usd > 0);
+    return usable ? { cost: old.cost, seq: "", checkedAt: old.checkedAt } : null;
   }
 
   /**
    * Spend so far for a devbox thread. Cached per thread and recomputed after a new turn
-   * finishes: a Claude turn is recomputed once more on a later poll, and a Codex turn until
+   * finishes: a Claude turn is recomputed once more on a later poll only when its first read priced nothing, and a Codex turn until
    * CODEX_ROUNDS rounds have run for it.
    * A box that isn't connected, or that a fresh Ona listing doesn't show running, is never
    * woken: its last known figure is returned instead.
@@ -87,7 +91,7 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
     const agentProvider = thread.providerId;
     if (agentProvider !== "codex" && agentProvider !== "claude-code") return null;
     const key = costKey(threadId);
-    const stored = (await bb.storage.kv.get<StoredCost>(key)) ?? (await legacyClaudeCost(threadId));
+    const stored = (await bb.storage.kv.get<StoredCost>(key)) ?? (await legacyCost(threadId));
     if (devbox.status !== "connected") return stored?.cost ?? null;
     // Recompute at most every 5 minutes, while the newest finished turn has rounds left. Rounds for a
     // finished turn keep running while a later turn is still working; once that later turn finishes,
@@ -168,11 +172,15 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
             }
           }
         }
-        // A complete figure replaces the stored one; a partial one (a Codex session not recorded yet) only when it is not lower.
+        // A new figure replaces the stored one, except a partial Codex figure (a session not recorded yet) that is lower.
+        const codex = agentProvider === "codex";
         const best =
-          cost && (!stored?.cost || !cost.partial || cost.usd >= stored.cost.usd) ? cost : (stored?.cost ?? null);
+          cost && (!codex || !stored?.cost || !cost.partial || cost.usd >= stored.cost.usd)
+            ? cost
+            : (stored?.cost ?? null);
         // A Claude round that priced something settles the turn, as only an empty round is read again.
-        const runs = agentProvider !== "codex" && cost ? rounds : stored?.seq === seq ? (stored.runs ?? 0) + 1 : 1;
+        const pricedClaude = !codex && cost;
+        const runs = pricedClaude ? rounds : stored?.seq === seq ? (stored.runs ?? 0) + 1 : 1;
         await bb.storage.kv.set(key, { cost: best, seq, checkedAt: Date.now(), runs });
         return best;
       })().finally(() => costInFlight.delete(threadId));

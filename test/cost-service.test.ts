@@ -137,12 +137,27 @@ test("a paused Claude thread with only a record under the old cost: key keeps th
   assert.deepEqual(w.collectorRuns, []);
 });
 
-test("a paused Codex thread with only a record under the old cost: key shows no figure (fails if an old Codex figure is kept)", async () => {
-  // Guard: a Codex record under the old key may be $0 from the bug (docs/ona-notes.md), so it is not used.
-  const w = world({ status: "suspended", provider: "codex", turnSeq: 8 });
-  w.kv.set(OLD_KEY, { cost: CODEX_FIGURE, seq: 7, checkedAt: OLD });
-  assert.equal(await w.costs.threadCost("t1"), null);
-  assert.deepEqual(w.collectorRuns, []);
+test("a paused Codex thread keeps an old cost: figure above $0.00 and drops a $0.00 one (fails if either is handled the other way)", async () => {
+  // Guard: a Codex $0.00 under the old key may come from the usage lag (docs/ona-notes.md), so only it is dropped.
+  const kept = world({ status: "suspended", provider: "codex", turnSeq: 8 });
+  kept.kv.set(OLD_KEY, { cost: CODEX_FIGURE, seq: 7, checkedAt: OLD });
+  assert.deepEqual(await kept.costs.threadCost("t1"), CODEX_FIGURE);
+  const dropped = world({ status: "suspended", provider: "codex", turnSeq: 8 });
+  dropped.kv.set(OLD_KEY, { cost: { ...CODEX_FIGURE, usd: 0 }, seq: 7, checkedAt: OLD });
+  assert.equal(await dropped.costs.threadCost("t1"), null);
+  assert.deepEqual([...kept.collectorRuns, ...dropped.collectorRuns], []);
+});
+
+test("a lower partial Claude figure replaces the stored one, as on main (fails if the Codex-only rule applies to Claude)", async () => {
+  // Guard: only a partial Codex figure waits for usage not recorded yet; a Claude figure is always the latest read.
+  const w = world({
+    turnSeq: 8,
+    stored: { cost: { ...FIGURE, usd: 5 }, seq: "7", checkedAt: OLD, runs: 2 },
+    collect: async () => ({ buckets: [{ ...ONE_DOLLAR_BUCKET, model: "claude-unknown-9" }] }),
+  });
+  const cost = await w.costs.threadCost("t1");
+  assert.equal(cost?.partial, true);
+  assert.equal(cost?.usd < 5, true);
 });
 
 test("bb says connected but a fresh Ona listing says stopped: the stored figure comes back, no collector runs, and the floor applies", async () => {
