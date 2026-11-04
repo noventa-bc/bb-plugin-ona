@@ -41,7 +41,7 @@ a Haiku subagent's output and briefs it with exact commands and a stop
 condition.
 
 Merging on green is only as safe as CI. Every PR adds a test for the behaviour
-it changes; a gap CI cannot see (untested module, missing lint, unchecked
+it changes, where a test is possible; a gap CI cannot see (untested module, missing lint, unchecked
 script) becomes a roadmap item and is named in the PR by its label only.
 
 ## Ponytail
@@ -119,8 +119,9 @@ those and the "skipped or not checked" lines ponytail ends with.
    it and ask for anything outside it under a separate "Pre-existing" heading.
    A finding blocks only when the branch introduced the defect or makes one
    reachable or worse, when the branch breaks a safety rule or a coupled
-   change, leaves its own behaviour untested where a test is possible, or
-   leaves a doc in the diff contradicting the code. A finding that was
+   change, leaves its own behaviour untested where a test is possible,
+   leaves a doc in the diff contradicting the code, or is a big change the
+   owner has not reviewed (`AGENTS.md` "Complexity"). A finding that was
    already on `main` and that the branch does not make reachable or worse
    becomes a roadmap item, with its guard, and the PR names it by its label
    only, whatever severity the reviewer gave it; a credential or a data-loss
@@ -205,7 +206,7 @@ This file is the memory of the flow. Keep it current:
 - When a bug, a source of noise or a repo hazard shows up (in the code, in CI,
   in a review or in the flow itself), add the guardrail that stops it recurring
   before the PR opens (a finding already on `main` that the branch does not
-  make worse takes its guard in its roadmap item, step 6): a test with the failing case, a lint rule, a CI step, a
+  make reachable or worse takes its guard in its roadmap item, step 6): a test with the failing case, a lint rule, a CI step, a
   `.gitignore` line, or a rule here or in `AGENTS.md`. A finding that is only
   fixed, with no guard, is not closed.
 - When a rule here conflicts with `AGENTS.md`, fix `AGENTS.md` in the same PR
