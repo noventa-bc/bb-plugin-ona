@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { OnaSnapshot, type OnaEnvironment } from "../src/ona.ts";
+import { boxFacts, OnaSnapshot, type OnaEnvironment } from "../src/ona.ts";
 import type { WorkspaceView } from "../src/lifecycle.ts";
 import { ALL, GIVE_UP_AFTER, GRACE_MS, HostGuard } from "../src/reconcile.ts";
 import {
@@ -33,6 +34,8 @@ interface Box {
   workspaces?: WorkspaceView[];
   ona?: string | null;
   tunnel?: "up" | "off";
+  /** Ona's listing fields beyond the phase: start time, timeout, activity signal, git (read by `boxFacts`). */
+  listed?: Partial<OnaEnvironment>;
 }
 
 function world(
@@ -48,6 +51,8 @@ function world(
     cached?: boolean;
     archived?: boolean | "not-found" | "fail";
     listing?: "fail" | "empty";
+    /** The message a failing listing throws; "" counts as a failure too. */
+    listingError?: string;
     /** bb's host lookup fails: with a plain error, or with only the SDK's `not_found` code (no status). */
     hostGet?: "fail" | "not_found";
     autoRepair?: boolean;
@@ -94,8 +99,9 @@ function world(
           .filter((box) => box.ona !== null)
           .map((box) => ({
             id: box.envId,
-            metadata: box.name ? { name: box.name } : {},
-            status: { phase: `ENVIRONMENT_PHASE_${box.ona ?? "RUNNING"}` },
+            metadata: { ...(box.name ? { name: box.name } : {}), ...box.listed?.metadata },
+            spec: box.listed?.spec,
+            status: { phase: `ENVIRONMENT_PHASE_${box.ona ?? "RUNNING"}`, ...box.listed?.status },
           }));
   const guard = new HostGuard();
   let tick = 0;
@@ -147,7 +153,7 @@ function world(
     // No cache and a ticking clock (unless `cached`): every pass gets its own listing.
     snapshot: new OnaSnapshot(
       async () => {
-        if (options.listing === "fail") throw new Error("not logged in");
+        if (options.listing === "fail") throw new Error(options.listingError ?? "not logged in");
         return envs();
       },
       options.cached ? 15_000 : 0,
@@ -315,6 +321,22 @@ test("status still lists a machine whose thread listing fails", async () => {
   const { sync } = world([idle("h1", { threads: "fail" })]);
   const [row] = await sync.statusRows();
   assert.deepEqual(row!.stuckThreads, []);
+});
+
+// Facts show only while the listing is good, so the text and --json agree. A box Ona doesn't list has none.
+test("status shows a box's facts only while the listing is good, and none for a box Ona doesn't list", async () => {
+  const listed = JSON.parse(readFileSync(new URL("./fixtures/ona/facts-environment.json", import.meta.url), "utf8"));
+  const opts: { listing?: "fail"; listingError?: string } = {};
+  const { sync } = world([idle("h1", { listed }), idle("h2", { ona: null })], opts);
+  const [row, unlisted] = await sync.statusRows();
+  assert.deepEqual(row!.facts, boxFacts(listed), "a good listing fills the facts");
+  assert.equal(unlisted!.facts, null, "Ona doesn't list the box");
+  opts.listing = "fail";
+  const [stale] = await sync.statusRows();
+  assert.equal(stale!.facts, null, "a failed listing has no facts");
+  opts.listingError = "";
+  const [empty] = await sync.statusRows();
+  assert.equal(empty!.facts, null, "an empty error is an error too");
 });
 
 test("a box missing from two listings is looked up once: archived or gone", async () => {

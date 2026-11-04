@@ -9,7 +9,7 @@ import {
   type KeepAliveDeps,
   type OnaCommandDeps,
 } from "../src/commands.ts";
-import type { OnaEnvironment } from "../src/ona.ts";
+import type { BoxFacts, OnaEnvironment } from "../src/ona.ts";
 import { HostGuard } from "../src/reconcile.ts";
 import type { StatusRow } from "../src/sync.ts";
 
@@ -127,9 +127,12 @@ const row = (overrides: Partial<StatusRow> = {}): StatusRow => ({
   keepAliveUntil: null,
   needsRecovery: 0,
   stuckThreads: [],
+  facts: null,
   ...overrides,
 });
 const NOW = 1_000_000_000;
+const NO_FACTS: BoxFacts = { startedAt: null, idleTimeoutMs: null, activity: null, branch: null, unpushed: 0 };
+const HEALTHY = { lastError: null, listedAt: NOW, autoRepair: true };
 
 test("status text: header for a healthy, failing or unrepaired CLI", () => {
   const healthy = { lastError: null, listedAt: NOW - 8_000, autoRepair: true };
@@ -193,6 +196,77 @@ test("status text names a busy thread with no update for over 6h", () => {
     text.split("\n")[2],
     "  thread thr_1 is active, last updated 9h ago; it holds this box until it ends or is archived",
   );
+});
+
+// The box line: what Ona's listing says about the box, in the order the owner reads it.
+test("status text: a box line gives the start, idle timeout, last activity, branch and unpushed commits", () => {
+  const facts: BoxFacts = {
+    startedAt: NOW - 3_600_000,
+    idleTimeoutMs: 3 * 3_600_000,
+    activity: { source: "SSH connections", at: NOW - 12 * 60_000 },
+    branch: "main",
+    unpushed: 2,
+  };
+  assert.equal(
+    formatStatus([row({ facts })], HEALTHY, NOW).split("\n")[2],
+    "  box: last started 1h ago, idle timeout 3h, last activity SSH connections 12m ago, branch main (2 unpushed)",
+  );
+});
+
+// A box line names only facts Ona gave: none given means no line at all.
+test("status text: a box line leaves out each fact Ona doesn't give, and no line when it gives none", () => {
+  const status = (facts: BoxFacts | null) => formatStatus([row({ facts })], HEALTHY, NOW);
+  assert.doesNotMatch(status(null), /box:/, "no listing for the box");
+  assert.doesNotMatch(status(NO_FACTS), /box:/, "Ona gave none of the facts");
+  assert.equal(
+    status({ ...NO_FACTS, branch: "main" }).split("\n")[2],
+    "  box: branch main",
+    "a branch alone, zero unpushed not printed",
+  );
+  assert.equal(status({ ...NO_FACTS, unpushed: 2 }).split("\n")[2], "  box: 2 unpushed", "unpushed commits, no branch");
+});
+
+// The timeout reads in its largest whole unit (3h, 45m, 90s); 0 is Ona's auto-stop turned off.
+test("status text: an idle timeout reads in whole hours, minutes or seconds, and off at 0", () => {
+  for (const [idleTimeoutMs, span] of [
+    [3 * 3_600_000, "3h"],
+    [2_700_000, "45m"],
+    [90_000, "90s"],
+    [0, "off"],
+  ] as const) {
+    const text = formatStatus([row({ facts: { ...NO_FACTS, idleTimeoutMs } })], HEALTHY, NOW);
+    assert.equal(text.split("\n")[2], `  box: idle timeout ${span}`);
+  }
+});
+
+// Ona's clock can run ahead of bb's, so a time after `now` reads as 0s ago, not a negative age.
+test("status text: a time ahead of bb's clock reads as 0s ago", () => {
+  const facts = { ...NO_FACTS, startedAt: NOW + 3_000 };
+  assert.equal(formatStatus([row({ facts })], HEALTHY, NOW).split("\n")[2], "  box: last started 0s ago");
+});
+
+// Minutes are rounded before the unit is picked, so 3570 s is 1h, not 60m.
+test("status text: an age just under an hour reads in minutes up to 59m, then 1h", () => {
+  const ok = (listedMsAgo: number) =>
+    formatStatus([], { lastError: null, listedAt: NOW - listedMsAgo, autoRepair: true }, NOW).split("\n")[0];
+  assert.equal(ok(3_570_000), "Ona CLI: ok, listed 1h ago");
+  assert.equal(ok(3_569_000), "Ona CLI: ok, listed 59m ago");
+});
+
+// The box line sits under the row line, before `now` and `last action`.
+test("status text: the box line sits under the row, before now and last action", () => {
+  const text = formatStatus(
+    [
+      row({
+        facts: { ...NO_FACTS, branch: "main" },
+        now: { reason: "connected", since: NOW - 120_000 },
+        last: { action: "release-idle", reason: "idle for 1h", at: NOW - 3_600_000 },
+      }),
+    ],
+    HEALTHY,
+    NOW,
+  );
+  assert.match(text, /\n  box: branch main\n  now: connected \(since 2m ago\)\n  last action: /);
 });
 
 // Dispatch only; list, sync, status and keep-alive also run end to end in

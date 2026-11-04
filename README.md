@@ -263,7 +263,7 @@ bb ona open <name>                       # open the devbox in your Ona editor
 
 ```sh
 bb ona list                    # machines, Ona env, tunnel status
-bb ona status [name]           # bb's view next to Ona's, and what the plugin last did
+bb ona status [name]           # bb's view next to Ona's, the box's start, idle timeout, activity, branch and unpushed commits, and what the plugin last did
 bb ona sync [name]             # re-check Ona now and repair out-of-step machines
 bb ona keep-alive <name> 2h    # keep a running box from Ona's idle timeout (at most 12h)
 bb ona keep-alive <name> off   # end it early
