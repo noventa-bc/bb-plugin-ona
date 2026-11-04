@@ -30,7 +30,7 @@ const OVERDUE_MS = 60_000;
 /**
  * What bb is doing with a machine's workspaces. `busy`: a setup or teardown is
  * under way, or bb is still retrying a failed teardown; letting the box go now
- * would interrupt it. `needsRecovery`: failed teardowns bb has given up on, or
+ * would interrupt or block it. `needsRecovery`: failed teardowns bb has given up on, or
  * whose retry is more than OVERDUE_MS overdue; the plugin won't let an active machine go
  * idle until they clear.
  */

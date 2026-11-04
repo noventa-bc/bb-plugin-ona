@@ -317,10 +317,13 @@ export function createSync(deps: SyncDeps) {
     }
   }
 
-  /** bb's workspace work on a machine; a failed lookup counts as none (the behaviour before this check). */
-  async function workspaces(hostId: string): Promise<{ busy: boolean; needsRecovery: number }> {
+  /**
+   * bb's workspace work on a machine; a failed lookup counts as none (the behaviour before this check).
+   * reconcile passes its pass clock, so every row of a pass is judged at one time.
+   */
+  async function workspaces(hostId: string, now = Date.now()): Promise<{ busy: boolean; needsRecovery: number }> {
     try {
-      return workspaceWork(await bb.sdk.environments.list({ hostId }), Date.now());
+      return workspaceWork(await bb.sdk.environments.list({ hostId }), now);
     } catch (error) {
       bb.log.info(`couldn't list workspaces on ${hostId}: ${errorText(error)}`);
       return { busy: false, needsRecovery: 0 };
@@ -428,7 +431,7 @@ export function createSync(deps: SyncDeps) {
               ? await threadWaiting(row.hostId).catch(() => false)
               : false,
           workspaceWaiting:
-            row.phase === "active" && row.status !== "connected" ? (await workspaces(row.hostId)).busy : false,
+            row.phase === "active" && row.status !== "connected" ? (await workspaces(row.hostId, now)).busy : false,
         };
         const decision = decide(view, await onaView(row.resource.envId, listing), now);
         // With autoRepair off, only observed stops and deletions reach bb, and tunnels reopen after a reload.

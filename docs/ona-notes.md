@@ -121,8 +121,12 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   cleanup slot: one active cleanup per host, four in all
   (`withEnvironmentCleanupSlot`) (checked 2026-11-04).
 - bb 0.48.1's owner-mismatch failure (`PROVIDER_OWNER_MISMATCH_MESSAGE` in
-  `server/dist/start-server.js`) sets `teardownStatus` to failed and leaves
+  `server/dist/start-server.js`) sets `lifecycle.teardown.status` to failed and leaves
   `retireAt` as it was; no retry runs while the mismatch lasts (checked 2026-11-04).
+- A retry's teardown hook goes through `runEnvironmentHook` (`server/dist/start-server.js`
+  line 63806), which calls `callHostOnlineRpcForWork` (line 63840). That waits for a
+  reconnecting daemon and prepares the host before it makes the call (lines 102725-102728)
+  (checked 2026-11-04).
 - In SDK 0.6.109 a provider resource is written by the provider's own lifecycle
   hooks (`create`, `suspend`, `resume`, through `checkpoint` or the returned
   `resource`) and read with `bb.experimental_machines.getResource` (checked 2026-11-03).

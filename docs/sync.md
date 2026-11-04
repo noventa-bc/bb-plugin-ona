@@ -30,8 +30,9 @@ The idle rule from [How it works](../README.md#how-it-works) sits alongside thes
 `idleDisconnect` with no thread activity, an active box is marked suspended
 without being stopped. A box isn't let go while bb is setting up or tearing
 down one of its thread workspaces, or while bb waits to retry a failed teardown,
-and a retry needs the box up. Closing the tunnel mid-hook leaves bb unable to
-tell how the hook ended, and it then refuses to suspend the machine until the
+or while one needs recovery. A retry needs the box up ([ona-notes](ona-notes.md) has
+the bb fact). Closing the tunnel mid-hook leaves bb unable to tell how the hook ended,
+and it then refuses to suspend the machine until the
 workspace is recovered. A thread
 with a turn in flight also holds the box,
 hidden ones (workflow steps, side chats) included, but an archived thread
