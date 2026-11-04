@@ -84,6 +84,7 @@ test("keep-alive refuses, and starts nothing, for a stopped, unknown or unlistab
     [keepAlive(null), /Ona lists no devbox matching/],
     [keepAlive("RUNNING", { listing: "fail" }), /Can't ask Ona.*not logged in.*nothing changed/],
     [keepAlive("RUNNING", { listing: "fail", listingError: "" }), /Can't ask Ona.*\(no listing\); nothing changed/],
+    [keepAlive("RUNNING", { listing: "fail", listingError: "\nnot logged in" }), /\(not logged in\); nothing changed/],
     [
       keepAlive("RUNNING", { listing: "fail", listingError: "unauthenticated\nRun 'ona login' first" }),
       /Can't ask Ona.*\(unauthenticated\nRun 'ona login' first\); nothing changed/,

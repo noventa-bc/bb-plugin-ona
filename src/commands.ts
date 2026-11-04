@@ -74,7 +74,7 @@ export async function keepAliveCommand(
   if (!listing) {
     return {
       exitCode: 1,
-      stderr: `Can't ask Ona whether ${ref} is running (${snapshot.lastError || "no listing"}); nothing changed.`,
+      stderr: `Can't ask Ona whether ${ref} is running (${snapshot.lastError?.trim() || "no listing"}); nothing changed.`,
     };
   }
   const row = await findMachine(ref);
@@ -150,7 +150,12 @@ export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()
   };
   const header =
     ona.lastError !== null
-      ? `Ona CLI: ERROR ${ona.lastError.split("\n").find((line) => line.trim()) ?? "no listing"} (run \`ona login\`?)`
+      ? `Ona CLI: ERROR ${
+          ona.lastError
+            .split("\n")
+            .find((line) => line.trim())
+            ?.trim() ?? "no listing"
+        } (run \`ona login\`?)`
       : `Ona CLI: ok${ona.listedAt !== null ? `, listed ${ago(ona.listedAt)}` : ""}${ona.autoRepair ? "" : "  (autoRepair is off)"}`;
   if (rows.length === 0) return `${header}\nNo Ona machines yet.`;
   const lines = rows.map((row) => {
@@ -407,7 +412,11 @@ export function onaCommands(deps: OnaCommandDeps) {
           // Safety rule 1 (docs/sync.md): SSH starts a stopped box, so Ona is asked right before the connect.
           const listing = await snapshot.refresh().catch(() => null);
           if (!listing) {
-            const reason = snapshot.lastError?.split("\n").find((line) => line.trim()) ?? "no listing";
+            const reason =
+              snapshot.lastError
+                ?.split("\n")
+                .find((line) => line.trim())
+                ?.trim() ?? "no listing";
             return {
               exitCode: 1,
               stderr: `Can't ask Ona whether ${row.machine} is running (${reason}); not reconnected. Check \`ona login\` and try again.`,
@@ -419,7 +428,7 @@ export function onaCommands(deps: OnaCommandDeps) {
           if (current.hostId !== row.hostId)
             return {
               exitCode: 1,
-              stderr: `${row.machine} changed while Ona was asked; run \`bb ona reconnect ${row.machine}\` again.`,
+              stderr: `${row.machine} changed while Ona was asked; run \`bb ona reconnect ${current.machine}\` again.`,
             };
           if (current.phase !== "active") return notActiveRefusal(current);
           const env = listing.envs.find((e) => e.id === row.resource.envId);
