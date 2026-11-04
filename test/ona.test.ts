@@ -476,43 +476,38 @@ test("listEnvironments parses a box whose activity signal, start time and timeou
     idleTimeoutMs: null,
     activity: null,
     branch: null,
-    unpushed: null,
+    unpushed: 0,
   });
 });
 
-test("boxFacts: a fact Ona leaves out or sends in a form bb can't read is null, and zero unpushed is a count", () => {
-  const nothing = { startedAt: null, idleTimeoutMs: null, activity: null, branch: null, unpushed: null };
+test("boxFacts: a fact Ona leaves out or sends in a form bb can't read is null, and a negative count reads as 0", () => {
+  const nothing = { startedAt: null, idleTimeoutMs: null, activity: null, branch: null, unpushed: 0 };
   const env = (extra: Partial<OnaEnvironment>): OnaEnvironment => ({ id: "env-0001", metadata: {}, ...extra });
   assert.deepEqual(boxFacts(env({})), nothing, "nothing given");
-  assert.equal(
-    boxFacts(env({ spec: { timeout: { disconnected: "3h" } } })).idleTimeoutMs,
-    null,
-    "a timeout not in seconds",
-  );
-  assert.equal(
-    boxFacts(env({ metadata: { lastStartedAt: "yesterday" } })).startedAt,
-    null,
-    "a start time that won't parse",
-  );
-  assert.equal(
-    boxFacts(env({ status: { activitySignal: { source: "SSH connections", timestamp: "soon" } } })).activity,
-    null,
-    "an activity time that won't parse",
-  );
+  for (const disconnected of ["3h", "1h30s", "10800", "1234567890123s"]) {
+    assert.equal(boxFacts(env({ spec: { timeout: { disconnected } } })).idleTimeoutMs, null, disconnected);
+  }
+  for (const lastStartedAt of ["yesterday", "42", "2026-11-03T09:12:40"]) {
+    assert.equal(boxFacts(env({ metadata: { lastStartedAt } })).startedAt, null, lastStartedAt);
+  }
+  for (const timestamp of ["soon", "42", "2026-11-03T11:02:15"]) {
+    const activitySignal = { source: "SSH connections", timestamp };
+    assert.equal(boxFacts(env({ status: { activitySignal } })).activity, null, timestamp);
+  }
   assert.equal(
     boxFacts(env({ status: { activitySignal: { timestamp: "2026-11-03T11:02:15Z" } } })).activity,
     null,
     "an activity with no source",
   );
-  assert.deepEqual(
-    boxFacts(env({ status: { content: { git: { branch: "main", totalUnpushedCommits: 0 } } } })),
-    { ...nothing, branch: "main", unpushed: 0 },
-    "zero unpushed is a count, not unknown",
+  assert.equal(
+    boxFacts(env({ status: { content: { git: { totalUnpushedCommits: -1 } } } })).unpushed,
+    0,
+    "a negative count",
   );
   assert.equal(
-    boxFacts(env({ status: { content: { git: { totalUnpushedCommits: "2" } } } })).unpushed,
-    2,
-    "a count sent as a string",
+    boxFacts(env({ spec: { timeout: { disconnected: "0s" } } })).idleTimeoutMs,
+    0,
+    "0s is kept: auto-stop is off",
   );
 });
 

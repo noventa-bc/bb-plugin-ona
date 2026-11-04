@@ -21,11 +21,7 @@ const environmentSchema = z.object({
     .object({
       desiredPhase: z.string().nullish().catch(undefined),
       /** Ona's inactivity timeout as seconds, e.g. `10800s`; an odd value reads as absent. */
-      timeout: z
-        .object({ disconnected: z.string().nullish().catch(undefined) })
-        .loose()
-        .nullish()
-        .catch(undefined),
+      timeout: z.object({ disconnected: z.string().nullish() }).loose().nullish().catch(undefined),
     })
     .loose()
     .nullish(),
@@ -34,7 +30,7 @@ const environmentSchema = z.object({
       phase: z.string().optional(),
       /** Ona's last activity signal; an odd value reads as absent. */
       activitySignal: z
-        .object({ source: z.string().nullish().catch(undefined), timestamp: z.string().nullish().catch(undefined) })
+        .object({ source: z.string().nullish(), timestamp: z.string().nullish() })
         .loose()
         .nullish()
         .catch(undefined),
@@ -283,34 +279,36 @@ export function unpushedWork(env: OnaEnvironment): { branch?: string; count: num
 export interface BoxFacts {
   /** Epoch ms of the box's last start. */
   startedAt: number | null;
-  /** Ona's inactivity timeout, in ms. */
+  /** Ona's inactivity timeout in ms; 0 when Ona's auto-stop is off. */
   idleTimeoutMs: number | null;
   /** Ona's last activity signal: its source, and when, in epoch ms. */
   activity: { source: string; at: number } | null;
   branch: string | null;
   /** Commits on the box that were never pushed; 0 when there are none. */
-  unpushed: number | null;
+  unpushed: number;
 }
 
-/** Epoch ms of an RFC 3339 time (Ona's microseconds included), or null when it doesn't parse. */
+const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+
+/** Epoch ms of an RFC 3339 time with a zone (Ona's microseconds included), or null otherwise. */
 const epochMs = (text?: string | null): number | null => {
-  const ms = Date.parse(text ?? "");
+  if (!text || !RFC3339.test(text)) return null;
+  const ms = Date.parse(text);
   return Number.isNaN(ms) ? null : ms;
 };
 
 export function boxFacts(env: OnaEnvironment): BoxFacts {
-  const seconds = /^(\d+)s$/.exec(env.spec?.timeout?.disconnected ?? "");
+  // At most 12 digits: a longer count times 1000 passes 2^53 ms and loses precision.
+  const seconds = /^(\d{1,12})s$/.exec(env.spec?.timeout?.disconnected ?? "");
   const signal = env.status?.activitySignal;
   const source = signal?.source;
   const at = epochMs(signal?.timestamp);
-  const git = env.status?.content?.git;
-  const unpushed = Number(git?.totalUnpushedCommits);
   return {
     startedAt: epochMs(env.metadata.lastStartedAt),
     idleTimeoutMs: seconds ? Number(seconds[1]) * 1000 : null,
     activity: source && at !== null ? { source, at } : null,
-    branch: git?.branch || null,
-    unpushed: Number.isFinite(unpushed) ? unpushed : null,
+    branch: env.status?.content?.git?.branch || null,
+    unpushed: unpushedWork(env)?.count ?? 0,
   };
 }
 

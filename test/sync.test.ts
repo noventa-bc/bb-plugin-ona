@@ -321,10 +321,11 @@ test("status still lists a machine whose thread listing fails", async () => {
   assert.deepEqual(row!.stuckThreads, []);
 });
 
-// Facts come from Ona's listing (boxFacts); a box Ona doesn't list, or a failed listing, has none.
-test("status rows carry the facts Ona's listing gives, and null facts when Ona lists no box or the listing fails", async () => {
+// Facts come from the last good listing, the one the ona: field reads. A box Ona doesn't list has none.
+test("status keeps the last good listing's facts when a later listing fails, and none for a box Ona doesn't list", async () => {
   const listed = JSON.parse(readFileSync(new URL("./fixtures/ona/facts-environment.json", import.meta.url), "utf8"));
-  const { sync } = world([idle("h1", { listed }), idle("h2", { ona: null })]);
+  const opts: { listing?: "fail" } = {};
+  const { sync } = world([idle("h1", { listed }), idle("h2", { ona: null })], opts);
   const [row, unlisted] = await sync.statusRows();
   assert.deepEqual(row!.facts, {
     startedAt: Date.parse("2026-11-03T09:12:40.512306Z"),
@@ -334,7 +335,9 @@ test("status rows carry the facts Ona's listing gives, and null facts when Ona l
     unpushed: 2,
   });
   assert.equal(unlisted!.facts, null, "Ona doesn't list the box");
-  assert.equal((await world([idle("h1")], { listing: "fail" }).sync.statusRows())[0]!.facts, null, "the listing fails");
+  opts.listing = "fail";
+  const [stale] = await sync.statusRows();
+  assert.deepEqual(stale!.facts, row!.facts, "the listing fails: the facts of the last good one");
 });
 
 test("a box missing from two listings is looked up once: archived or gone", async () => {

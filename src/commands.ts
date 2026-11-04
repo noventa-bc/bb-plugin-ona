@@ -160,18 +160,19 @@ const duration = (ms: number) => {
 /** `bb ona status` as text. */
 export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()): string {
   const ago = (at: number) => {
-    const s = Math.round((now - at) / 1000);
+    // Ona's clock can run ahead of bb's, so a time after `now` reads as 0s ago.
+    const s = Math.max(0, Math.round((now - at) / 1000));
     return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : `${Math.round(s / 3600)}h ago`;
   };
   /** The `box:` line: what Ona's listing says about the box. A part Ona doesn't give is left out. */
   const boxLine = (facts: BoxFacts): string | null => {
     const parts: string[] = [];
-    if (facts.startedAt !== null) parts.push(`started ${ago(facts.startedAt)}`);
-    if (facts.idleTimeoutMs !== null) parts.push(`idle timeout ${duration(facts.idleTimeoutMs)}`);
+    if (facts.startedAt !== null) parts.push(`last started ${ago(facts.startedAt)}`);
+    if (facts.idleTimeoutMs !== null)
+      parts.push(`idle timeout ${facts.idleTimeoutMs === 0 ? "off" : duration(facts.idleTimeoutMs)}`);
     if (facts.activity) parts.push(`last activity ${facts.activity.source} ${ago(facts.activity.at)}`);
-    const unpushed = facts.unpushed ?? 0;
-    if (facts.branch) parts.push(`branch ${facts.branch}${unpushed > 0 ? ` (${unpushed} unpushed)` : ""}`);
-    else if (unpushed > 0) parts.push(`${unpushed} unpushed`);
+    if (facts.branch) parts.push(`branch ${facts.branch}${facts.unpushed > 0 ? ` (${facts.unpushed} unpushed)` : ""}`);
+    else if (facts.unpushed > 0) parts.push(`${facts.unpushed} unpushed`);
     return parts.length > 0 ? `  box: ${parts.join(", ")}` : null;
   };
   const header =
@@ -181,7 +182,8 @@ export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()
   if (rows.length === 0) return `${header}\nNo Ona machines yet.`;
   const lines = rows.map((row) => {
     const rowLines = [`${row.machine}  bb:${row.bb}  tunnel:${row.tunnel}  ona:${row.ona}`];
-    const box = row.facts ? boxLine(row.facts) : null;
+    // Under an ERROR header the facts come from an older listing, so they are not shown.
+    const box = ona.lastError === null && row.facts ? boxLine(row.facts) : null;
     if (box) rowLines.push(box);
     if (row.now) rowLines.push(`  now: ${row.now.reason} (since ${ago(row.now.since)})`);
     if (row.last) {

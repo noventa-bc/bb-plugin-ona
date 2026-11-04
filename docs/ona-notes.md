@@ -24,11 +24,11 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 - `ona environment list -o json` exposes these fields:
   - `status.activitySignal`: `{ source, timestamp }`, e.g. source `SSH connections`. On a stopped box too, as the
     last signal before the stop (checked 2026-11-04).
-  - `spec.timeout.disconnected`: seconds as a string, e.g. `10800s` (checked 2026-11-04).
+  - `spec.timeout.disconnected`: seconds as a string, e.g. `10800s`; `0s` disables auto-stop (`ona environment create --help`, checked 2026-11-04).
   - `spec.desiredPhase`
   - `spec.machine.class`
   - `status.content.git`: `branch`, `cloneUrl`, `latestCommit`,
-    `totalUnpushedCommits` (a number) and `unpushedCommits` (one string per
+    `totalUnpushedCommits` (a number, or a numeric string not yet seen live) and `unpushedCommits` (one string per
     commit). Absent when the box has no git content (checked 2026-10-30 on a
     live listing).
   - `status.devcontainer.phase`

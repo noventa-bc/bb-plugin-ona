@@ -131,7 +131,7 @@ const row = (overrides: Partial<StatusRow> = {}): StatusRow => ({
   ...overrides,
 });
 const NOW = 1_000_000_000;
-const NO_FACTS: BoxFacts = { startedAt: null, idleTimeoutMs: null, activity: null, branch: null, unpushed: null };
+const NO_FACTS: BoxFacts = { startedAt: null, idleTimeoutMs: null, activity: null, branch: null, unpushed: 0 };
 const HEALTHY = { lastError: null, listedAt: NOW, autoRepair: true };
 
 test("status text: header for a healthy, failing or unrepaired CLI", () => {
@@ -209,7 +209,7 @@ test("status text: a box line gives the start, idle timeout, last activity, bran
   };
   assert.equal(
     formatStatus([row({ facts })], HEALTHY, NOW).split("\n")[2],
-    "  box: started 1h ago, idle timeout 3h, last activity SSH connections 12m ago, branch main (2 unpushed)",
+    "  box: last started 1h ago, idle timeout 3h, last activity SSH connections 12m ago, branch main (2 unpushed)",
   );
 });
 
@@ -227,16 +227,46 @@ test("status text: a box line leaves out each fact Ona doesn't give, and no line
   assert.equal(status({ ...NO_FACTS, unpushed: 2 }).split("\n")[2], "  box: 2 unpushed", "unpushed commits, no branch");
 });
 
-// The timeout reads in its largest whole unit: 3h, 45m, or 90s when neither divides it.
-test("status text: an idle timeout reads in whole hours, minutes or seconds", () => {
+// The timeout reads in its largest whole unit (3h, 45m, 90s); 0 is Ona's auto-stop turned off.
+test("status text: an idle timeout reads in whole hours, minutes or seconds, and off at 0", () => {
   for (const [idleTimeoutMs, span] of [
     [3 * 3_600_000, "3h"],
     [2_700_000, "45m"],
     [90_000, "90s"],
+    [0, "off"],
   ] as const) {
     const text = formatStatus([row({ facts: { ...NO_FACTS, idleTimeoutMs } })], HEALTHY, NOW);
     assert.equal(text.split("\n")[2], `  box: idle timeout ${span}`);
   }
+});
+
+// Ona's clock can run ahead of bb's, so a time after `now` reads as 0s ago, not a negative age.
+test("status text: a time ahead of bb's clock reads as 0s ago", () => {
+  const facts = { ...NO_FACTS, startedAt: NOW + 3_000 };
+  assert.equal(formatStatus([row({ facts })], HEALTHY, NOW).split("\n")[2], "  box: last started 0s ago");
+});
+
+// Under an ERROR header the facts come from an older listing, so no box line prints.
+test("status text: no box line under an ERROR header", () => {
+  const error = { lastError: "not logged in", listedAt: NOW - 3_600_000, autoRepair: true };
+  const text = formatStatus([row({ facts: { ...NO_FACTS, branch: "main", unpushed: 2 } })], error, NOW);
+  assert.doesNotMatch(text, /box:/);
+});
+
+// The box line sits under the row line, before `now` and `last action`.
+test("status text: the box line sits under the row, before now and last action", () => {
+  const text = formatStatus(
+    [
+      row({
+        facts: { ...NO_FACTS, branch: "main" },
+        now: { reason: "connected", since: NOW - 120_000 },
+        last: { action: "release-idle", reason: "idle for 1h", at: NOW - 3_600_000 },
+      }),
+    ],
+    HEALTHY,
+    NOW,
+  );
+  assert.match(text, /\n  box: branch main\n  now: connected \(since 2m ago\)\n  last action: /);
 });
 
 // Dispatch only; list, sync, status and keep-alive also run end to end in
