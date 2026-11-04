@@ -75,25 +75,46 @@ test("an idle box isn't released while bb tears down or retries a workspace, or 
   }
 });
 
-test("a failed workspace lookup holds an idle box, and status says why and reports no recovery", async () => {
+test("a failed workspace lookup holds an idle box, and status shows its list as unreadable", async () => {
   const { sync, calls } = world([idle("h1")], { workspacesFail: "h1" });
   await sync.reconcile(new Set([ALL]), { wait: true });
   assert.deepEqual(calls, []);
   const [row] = await sync.statusRows();
-  assert.equal(row!.needsRecovery, 0);
-  assert.equal(row!.now!.reason, "bb's workspace or thread list couldn't be read, so an idle box is kept");
+  assert.equal(row!.needsRecovery, null);
 });
 
 test("one box's failed workspace lookup holds only that box", async () => {
   const { sync, calls } = world([idle("h1"), idle("h2")], { workspacesFail: "h1" });
   await sync.reconcile(new Set([ALL]), { wait: true });
   assert.deepEqual(calls, ["suspend h2"]);
+  const rows = await sync.statusRows();
+  assert.equal(rows.find((row) => row.hostId === "h1")!.needsRecovery, null);
+  assert.equal(rows.find((row) => row.hostId === "h2")!.needsRecovery, 0);
+});
+
+test("status reads the clock after a slow listing, so a retry that came due during it reads as overdue", async () => {
+  enableFakeClock();
+  try {
+    const start = Date.now();
+    const retrying: WorkspaceView = {
+      status: "error",
+      lifecycle: { phase: "teardown", retireAt: start - 40_000, teardown: { status: "failed" } },
+    };
+    const { sync } = world([idle("h1", { workspaces: [retrying] })], { listingMs: 30_000 });
+    const [row] = await sync.statusRows();
+    assert.equal(row!.needsRecovery, 1);
+  } finally {
+    await resetFakeClock();
+  }
 });
 
 test("one box's failed thread list holds only that box", async () => {
   const { sync, calls } = world([idle("h1", { threads: "fail" }), idle("h2")]);
   await sync.reconcile(new Set([ALL]), { wait: true });
   assert.deepEqual(calls, ["suspend h2"]);
+  const rows = await sync.statusRows();
+  assert.equal(rows.find((row) => row.hostId === "h1")!.needsRecovery, null);
+  assert.equal(rows.find((row) => row.hostId === "h2")!.needsRecovery, 0);
 });
 
 test("a disconnected box whose workspace lookup fails gets no daemon check at once", async () => {
@@ -227,9 +248,9 @@ test("status still lists a machine whose thread listing fails", async () => {
 });
 
 // Facts show only while the listing is good, so the text and --json agree. A box Ona doesn't list has none.
-test("status shows a box's facts only while the listing is good, and none for a box Ona doesn't list", async () => {
+test("status shows facts only while the listing is good, reads the Ona column unknown for an empty listing, and none for a box Ona doesn't list", async () => {
   const listed = JSON.parse(readFileSync(new URL("./fixtures/ona/facts-environment.json", import.meta.url), "utf8"));
-  const opts: { listing?: "fail"; listingError?: string } = {};
+  const opts: { listing?: "fail" | "empty"; listingError?: string } = {};
   const { sync } = world([idle("h1", { listed }), idle("h2", { ona: null })], opts);
   const [row, unlisted] = await sync.statusRows();
   assert.deepEqual(row!.facts, boxFacts(listed), "a good listing fills the facts");
@@ -240,6 +261,9 @@ test("status shows a box's facts only while the listing is good, and none for a 
   opts.listingError = "";
   const [empty] = await sync.statusRows();
   assert.equal(empty!.facts, null, "an empty error is an error too");
+  opts.listing = "empty";
+  const [none] = await sync.statusRows();
+  assert.equal(none!.ona, "unknown", "an empty listing reads as unknown too");
 });
 
 test("a box missing from two listings is looked up once: archived or gone", async () => {

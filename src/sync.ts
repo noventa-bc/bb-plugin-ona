@@ -143,8 +143,8 @@ export interface StatusRow {
   retry: string | null;
   /** When a `bb ona keep-alive` ends, epoch ms. */
   keepAliveUntil: number | null;
-  /** Workspaces bb gave up on, or whose retry is over a minute late (see workspaceWork). */
-  needsRecovery: number;
+  /** Workspaces bb gave up on, or whose retry is over a minute late (see workspaceWork); null when bb's workspace or thread list couldn't be read. */
+  needsRecovery: number | null;
   /** Busy threads with no update for `STUCK_THREAD_MS`; they hold the box. */
   stuckThreads: { id: string; status: string; updatedAt: number }[];
 }
@@ -238,7 +238,6 @@ export function createSync(deps: SyncDeps) {
   async function releaseIdleMachines(rows: Row[]): Promise<void> {
     if (idleMs <= 0) return;
     const now = Date.now();
-    const unreadable = "bb's workspace or thread list couldn't be read, so an idle box is kept";
     const candidates = rows.filter((row) => row.phase === "active" && guard.mayAct(row.hostId));
     const activity: MachineActivity[] = [];
     for (const row of candidates) {
@@ -246,13 +245,9 @@ export function createSync(deps: SyncDeps) {
         bb.log.info(`couldn't list threads on ${row.hostId}: ${errorText(error)}`);
         return null;
       });
-      if (threads === null) {
-        guard.note(row.hostId, unreadable);
-        continue;
-      }
+      if (threads === null) continue;
       const connectedAt = (await bb.storage.kv.get<number>(connectedAtKey(row.resource.envId))) ?? pluginStartedAt;
       const work = await workspaces(row.hostId, now);
-      if (work === null) guard.note(row.hostId, unreadable);
       activity.push({
         hostId: row.hostId,
         phase: row.phase,
@@ -474,12 +469,17 @@ export function createSync(deps: SyncDeps) {
         const phase = env ? (env.status?.phase ?? "?") : seen?.phase;
         const record = guard.records.get(row.hostId);
         const busy = guard.busyWith(row.hostId);
+        const threads = await liveThreads(bb.sdk.threads, row.hostId).catch((error: unknown) => {
+          bb.log.info(`couldn't list threads on ${row.hostId}: ${errorText(error)}`);
+          return null;
+        });
+        const work = await workspaces(row.hostId, now);
         return {
           machine: row.machine,
           hostId: row.hostId,
           bb: row.phase === "active" ? row.status : row.phase,
           tunnel: tunnels.status(row.resource.envId),
-          ona: !listing
+          ona: !listing?.envs.length
             ? "unknown"
             : phase !== undefined
               ? (phase || "?").replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase()
@@ -505,14 +505,8 @@ export function createSync(deps: SyncDeps) {
                 ? `gave up after ${record.failures} failures; run \`bb ona sync ${row.machine}\``
                 : `retrying after ${new Date(record.quietUntil).toLocaleTimeString()}`,
           keepAliveUntil: deps.keepAliveUntil(row.resource.envId),
-          needsRecovery: (await workspaces(row.hostId, now))?.needsRecovery ?? 0,
-          stuckThreads: stuckThreads(
-            await liveThreads(bb.sdk.threads, row.hostId).catch((error: unknown) => {
-              bb.log.info(`couldn't list threads on ${row.hostId}: ${errorText(error)}`);
-              return [];
-            }),
-            Date.now(),
-          ),
+          needsRecovery: work === null || threads === null ? null : work.needsRecovery,
+          stuckThreads: threads === null ? [] : stuckThreads(threads, Date.now()),
         };
       }),
     );

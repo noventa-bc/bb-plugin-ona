@@ -193,7 +193,9 @@ export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()
     }
     if (row.retry) rowLines.push(`  ${row.retry}`);
     if (row.keepAliveUntil) rowLines.push(`  keep-alive until ${clockTime(row.keepAliveUntil)}`);
-    if (row.needsRecovery > 0) {
+    if (row.needsRecovery === null) {
+      rowLines.push("  bb's workspace or thread list couldn't be read; an idle box is kept until it can");
+    } else if (row.needsRecovery > 0) {
       rowLines.push(
         `  ${row.needsRecovery} workspace(s) may need recovery; an active box stays awake until they clear. See \`bb environment list --host ${row.hostId}\``,
       );

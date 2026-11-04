@@ -11,7 +11,7 @@ export interface MachineActivity {
   threadStatuses: readonly string[];
   /** Latest thread activity or (re)connect, epoch ms. */
   lastActivityAt: number;
-  /** bb is setting up or tearing down a workspace on it, retrying a failed teardown, or one needs recovery. */
+  /** bb is setting up or tearing down a workspace on it, retrying a failed teardown, or one needs recovery, or its lookup failed. */
   workspacesBlock?: boolean;
 }
 
@@ -24,7 +24,7 @@ export interface WorkspaceView {
   lifecycle: { phase: string; retireAt: number | null; teardown: { status: string } | null };
 }
 
-/** A failed teardown more than this far past retireAt reads as needing recovery: it no longer counts as busy or hurries a heal, but it still keeps an idle box awake. A cutoff, not a guarantee: bb's sweep runs every 10 s but can wait minutes behind a hook (docs/ona-notes.md). */
+/** A failed teardown more than this far past retireAt reads as needing recovery: it doesn't count as busy or hurry a heal, but still keeps an idle box awake. A cutoff, not a guarantee (docs/ona-notes.md has bb's sweep timing). */
 const OVERDUE_MS = 60_000;
 
 /**

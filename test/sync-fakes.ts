@@ -42,9 +42,10 @@ export function world(
     cached?: boolean;
     archived?: boolean | "not-found" | "fail";
     listing?: "fail" | "empty";
+    /** Moves the mocked clock this far when Ona's listing is fetched, as a slow listing would. */
+    listingMs?: number;
     /** The message a failing listing throws; "" counts as a failure too. */
     listingError?: string;
-    /** bb's workspace list throws. */
     /** The host whose workspace list throws. */
     workspacesFail?: string;
     /** bb's host lookup fails: with a plain error, or with only the SDK's `not_found` code (no status). */
@@ -155,6 +156,7 @@ export function world(
     snapshot: new OnaSnapshot(
       async () => {
         if (options.listing === "fail") throw new Error(options.listingError ?? "not logged in");
+        if (options.listingMs) await tickClock(options.listingMs);
         return envs();
       },
       options.cached ? 15_000 : 0,

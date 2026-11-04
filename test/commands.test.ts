@@ -188,6 +188,14 @@ test("status text: one block per machine with what the plugin saw, did and is wa
   );
 });
 
+test("status says when bb's workspace or thread list can't be read, and says nothing for zero", () => {
+  assert.match(
+    formatStatus([row({ needsRecovery: null })], HEALTHY, NOW),
+    /bb's workspace or thread list couldn't be read; an idle box is kept until it can/,
+  );
+  assert.doesNotMatch(formatStatus([row({ needsRecovery: 0 })], HEALTHY, NOW), /couldn't be read|may need recovery/);
+});
+
 // Bug: a box held awake by a thread bb left "active" gave the owner no reason in status.
 test("status text names a busy thread with no update for over 6h", () => {
   const text = formatStatus(
