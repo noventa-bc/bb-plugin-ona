@@ -22,7 +22,7 @@ interface Box {
   ona?: string | null;
   tunnel?: "up" | "off";
   /** Moves the mocked clock this far when the box's threads are listed, as a slow sibling would. */
-  listingMs?: number;
+  threadsMs?: number;
   /** Ona's listing fields beyond the phase: start time, timeout, activity signal, git (read by `boxFacts`). */
   listed?: Partial<OnaEnvironment>;
 }
@@ -38,10 +38,12 @@ export function world(
     reconnectFails?: string;
     /** Ona lists every box STOPPED once the daemon check has run. */
     stopDuringProbe?: boolean;
-    /** Keep a listing 15s fresh on a still clock, so only `refresh()` sees a change. */
+    /** Keep a listing 15s fresh, so only `refresh()` sees a change; the clock is the mocked Date when enabled. */
     cached?: boolean;
     archived?: boolean | "not-found" | "fail";
     listing?: "fail" | "empty";
+    /** Listings after this many good ones throw, as when Ona goes down after a good list. */
+    listingFailsAfter?: number;
     /** Moves the mocked clock this far when Ona's listing is fetched, as a slow listing would. */
     listingMs?: number;
     /** The message a failing listing throws; "" counts as a failure too. */
@@ -100,6 +102,7 @@ export function world(
           }));
   const guard = new HostGuard();
   let tick = 0;
+  let listingsServed = 0;
   const sync = createSync({
     bb: {
       sdk: {
@@ -126,7 +129,7 @@ export function world(
           // Like bb: hidden threads only when asked, archived ones dropped when asked.
           list: async ({ hostId, includeHidden, archived }) => {
             const box = byHost.get(hostId);
-            if (box?.listingMs) await tickClock(box.listingMs);
+            if (box?.threadsMs) await tickClock(box.threadsMs);
             const threads = box?.threads ?? [];
             if (threads === "fail") throw new Error("bb is down");
             return [...threads, ...(includeHidden ? (box?.hiddenThreads ?? []) : [])].filter(
@@ -155,12 +158,14 @@ export function world(
     // No cache and a ticking clock (unless `cached`): every pass gets its own listing.
     snapshot: new OnaSnapshot(
       async () => {
-        if (options.listing === "fail") throw new Error(options.listingError ?? "not logged in");
+        if (options.listing === "fail" || listingsServed >= (options.listingFailsAfter ?? Infinity))
+          throw new Error(options.listingError ?? "not logged in");
         if (options.listingMs) await tickClock(options.listingMs);
+        listingsServed++;
         return envs();
       },
       options.cached ? 15_000 : 0,
-      options.cached ? () => tick : () => (tick += 60_000),
+      options.cached ? () => Date.now() : () => (tick += 60_000),
     ),
     ona: {
       getEnvironmentIfExists: async (envId) => {

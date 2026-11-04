@@ -143,10 +143,10 @@ export interface StatusRow {
   retry: string | null;
   /** When a `bb ona keep-alive` ends, epoch ms. */
   keepAliveUntil: number | null;
-  /** Workspaces bb gave up on, or whose retry is over a minute late (see workspaceWork); null when bb's workspace or thread list couldn't be read. */
+  /** Workspaces bb gave up on, or whose retry is over a minute late (see workspaceWork); null when bb's workspace list couldn't be read. */
   needsRecovery: number | null;
-  /** Busy threads with no update for `STUCK_THREAD_MS`; they hold the box. */
-  stuckThreads: { id: string; status: string; updatedAt: number }[];
+  /** Busy threads with no update for `STUCK_THREAD_MS`; they hold the box. Null when bb's thread list couldn't be read. */
+  stuckThreads: { id: string; status: string; updatedAt: number }[] | null;
 }
 
 export type Sync = ReturnType<typeof createSync>;
@@ -322,7 +322,7 @@ export function createSync(deps: SyncDeps) {
   }
 
   /**
-   * bb's workspace work on a machine; null when the lookup failed. The idle release holds a box on null; reconcile and status read null as none.
+   * bb's workspace work on a machine; null when the lookup failed. The idle release holds a box on null; reconcile reads null as none; status shows it as unreadable.
    */
   async function workspaces(hostId: string, now: number): Promise<{ busy: boolean; needsRecovery: number } | null> {
     try {
@@ -449,7 +449,7 @@ export function createSync(deps: SyncDeps) {
         actions.push(act(row, decision, options.force ?? false));
       }
       // A failed or empty listing is unknown (docs/sync.md rule 4): no idle release that pass.
-      if (keys.has(ALL) && listing?.envs.length) await releaseIdleMachines(rows);
+      if (keys.has(ALL) && listing?.envs.length && snapshot.lastError === null) await releaseIdleMachines(rows);
       if (options.wait) await Promise.all(actions);
     } catch (error) {
       bb.log.warn(`reconcile failed: ${errorText(error)}`);
@@ -505,8 +505,8 @@ export function createSync(deps: SyncDeps) {
                 ? `gave up after ${record.failures} failures; run \`bb ona sync ${row.machine}\``
                 : `retrying after ${new Date(record.quietUntil).toLocaleTimeString()}`,
           keepAliveUntil: deps.keepAliveUntil(row.resource.envId),
-          needsRecovery: work === null || threads === null ? null : work.needsRecovery,
-          stuckThreads: threads === null ? [] : stuckThreads(threads, Date.now()),
+          needsRecovery: work?.needsRecovery ?? null,
+          stuckThreads: threads === null ? null : stuckThreads(threads, now),
         };
       }),
     );

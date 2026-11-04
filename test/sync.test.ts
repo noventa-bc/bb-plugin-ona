@@ -13,7 +13,7 @@ import {
   type RealtimeBb,
   type ThreadRecord,
 } from "../src/sync.ts";
-import { enableFakeClock, resetFakeClock } from "./fake-clock.ts";
+import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
 import { HOUR, NOW, idle, world } from "./sync-fakes.ts";
 
 test("an idle box is released: bb suspends it without stopping the box, and the flag is used once", async () => {
@@ -108,12 +108,32 @@ test("status reads the clock after a slow listing, so a retry that came due duri
   }
 });
 
+// The thread list takes 30 s: the thread is stuck when the list returns, but not by the clock status read first.
+test("status judges stuck threads on the clock it read first, not on one a slow thread list moved", async () => {
+  enableFakeClock();
+  try {
+    const start = Date.now();
+    const thread: ThreadRecord = {
+      id: "t1",
+      status: "starting",
+      updatedAt: start - 6 * HOUR + 1_000,
+      runtime: { displayStatus: "starting" },
+    };
+    const { sync } = world([idle("h1", { threads: [thread], threadsMs: 30_000 })]);
+    const [row] = await sync.statusRows();
+    assert.deepEqual(row!.stuckThreads, []);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
 test("one box's failed thread list holds only that box", async () => {
   const { sync, calls } = world([idle("h1", { threads: "fail" }), idle("h2")]);
   await sync.reconcile(new Set([ALL]), { wait: true });
   assert.deepEqual(calls, ["suspend h2"]);
   const rows = await sync.statusRows();
-  assert.equal(rows.find((row) => row.hostId === "h1")!.needsRecovery, null);
+  assert.equal(rows.find((row) => row.hostId === "h1")!.stuckThreads, null, "bb's thread list failed");
+  assert.equal(rows.find((row) => row.hostId === "h1")!.needsRecovery, 0, "bb's workspace list still answers");
   assert.equal(rows.find((row) => row.hostId === "h2")!.needsRecovery, 0);
 });
 
@@ -154,7 +174,7 @@ test("a disconnected box waits out the grace for a teardown whose retry is over 
   assert.equal(row!.needsRecovery, 1);
 });
 
-// Box a's slow listing (listed first) moves the clock; b's cutoff must still use the pass clock.
+// Box a's slow thread list (listed first) moves the clock; b's cutoff must still use the pass clock.
 test("a retry the pass judged busy stays busy after a sibling's wait moves the clock past its cutoff", async () => {
   enableFakeClock();
   try {
@@ -166,7 +186,7 @@ test("a retry the pass judged busy stays busy after a sibling's wait moves the c
     // The fake clock starts at 0, so the default pluginStartedAt would sit in the future and disable the idle check.
     const { sync, calls } = world(
       [
-        idle("a", { status: "disconnected", lastSeenAt: start - 5_000, listingMs: 30_000 }),
+        idle("a", { status: "disconnected", lastSeenAt: start - 5_000, threadsMs: 30_000 }),
         idle("b", { status: "disconnected", lastSeenAt: start - 5_000, workspaces: [retrying] }),
       ],
       { daemonAlive: false, pluginStartedAt: start },
@@ -244,7 +264,7 @@ test("status lists a busy thread with no update for over 6h", async () => {
 test("status still lists a machine whose thread listing fails", async () => {
   const { sync } = world([idle("h1", { threads: "fail" })]);
   const [row] = await sync.statusRows();
-  assert.deepEqual(row!.stuckThreads, []);
+  assert.equal(row!.stuckThreads, null);
 });
 
 // Facts show only while the listing is good, so the text and --json agree. A box Ona doesn't list has none.
@@ -382,6 +402,22 @@ test("a failed or empty Ona listing changes nothing", async () => {
     const { sync, calls } = world([box], { listing });
     await sync.reconcile(new Set(["h1"]), { wait: true });
     assert.deepEqual(calls, [], listing);
+  }
+});
+
+// The list fails after a good one. The cache still serves that good listing for 15 s; the release must not use it.
+test("a failed Ona list holds the all-machines release while the last good listing is still cached", async () => {
+  enableFakeClock();
+  try {
+    const { sync, calls } = world([idle("h1")], { cached: true, listingFailsAfter: 1, pluginStartedAt: -2 * HOUR });
+    await sync.reconcile(new Set(["h1"]), { wait: true }); // T0: a good listing
+    await tick(6_000);
+    await sync.reconcile(new Set(["h1"]), { wait: true }); // T0+6 s: the list fails
+    await tick(2_000);
+    await sync.reconcile(new Set([ALL]), { wait: true }); // T0+8 s: the cache still answers, and the box is idle
+    assert.deepEqual(calls, []);
+  } finally {
+    await resetFakeClock();
   }
 });
 

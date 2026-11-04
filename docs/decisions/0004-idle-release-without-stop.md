@@ -14,7 +14,7 @@ After `idleDisconnect` (default `1h`) with no thread activity, the plugin closes
 
 ## Consequences
 
-- A box isn't released while bb sets up or tears down one of its workspaces, or while one needs recovery; the release waits for the next check.
+- A box isn't released while bb sets up or tears down one of its workspaces, while bb waits to retry a failed teardown, while one needs recovery (bb has given up, or a retry is more than 60 s overdue), while bb's thread or workspace list for the machine can't be read, or while the Ona listing failed or came back empty; the release waits for the next check. `docs/sync.md` has the full rule.
 - Setting `idleDisconnect` to empty or `0` keeps every box connected.
 - The next message on the machine resumes it as usual (see 0003).
 - An idle box keeps running until Ona's timeout stops it. Devboxes bb creates use `inactivityTimeout` (default `3h`); adopted ones keep their own.
