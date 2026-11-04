@@ -9,7 +9,7 @@ import {
   type KeepAliveDeps,
   type OnaCommandDeps,
 } from "../src/commands.ts";
-import type { OnaEnvironment } from "../src/ona.ts";
+import type { BoxFacts, OnaEnvironment } from "../src/ona.ts";
 import { HostGuard } from "../src/reconcile.ts";
 import type { StatusRow } from "../src/sync.ts";
 
@@ -127,9 +127,12 @@ const row = (overrides: Partial<StatusRow> = {}): StatusRow => ({
   keepAliveUntil: null,
   needsRecovery: 0,
   stuckThreads: [],
+  facts: null,
   ...overrides,
 });
 const NOW = 1_000_000_000;
+const NO_FACTS: BoxFacts = { startedAt: null, idleTimeoutMs: null, activity: null, branch: null, unpushed: null };
+const HEALTHY = { lastError: null, listedAt: NOW, autoRepair: true };
 
 test("status text: header for a healthy, failing or unrepaired CLI", () => {
   const healthy = { lastError: null, listedAt: NOW - 8_000, autoRepair: true };
@@ -193,6 +196,47 @@ test("status text names a busy thread with no update for over 6h", () => {
     text.split("\n")[2],
     "  thread thr_1 is active, last updated 9h ago; it holds this box until it ends or is archived",
   );
+});
+
+// The box line: what Ona's listing says about the box, in the order the owner reads it.
+test("status text: a box line gives the start, idle timeout, last activity, branch and unpushed commits", () => {
+  const facts: BoxFacts = {
+    startedAt: NOW - 3_600_000,
+    idleTimeoutMs: 3 * 3_600_000,
+    activity: { source: "SSH connections", at: NOW - 12 * 60_000 },
+    branch: "main",
+    unpushed: 2,
+  };
+  assert.equal(
+    formatStatus([row({ facts })], HEALTHY, NOW).split("\n")[2],
+    "  box: started 1h ago, idle timeout 3h, last activity SSH connections 12m ago, branch main (2 unpushed)",
+  );
+});
+
+// A box line names only facts Ona gave: none given means no line at all.
+test("status text: a box line leaves out each fact Ona doesn't give, and no line when it gives none", () => {
+  const status = (facts: BoxFacts | null) => formatStatus([row({ facts })], HEALTHY, NOW);
+  assert.doesNotMatch(status(null), /box:/, "no listing for the box");
+  assert.doesNotMatch(status(NO_FACTS), /box:/, "Ona gave none of the facts");
+  assert.equal(status({ ...NO_FACTS, branch: "main" }).split("\n")[2], "  box: branch main", "a branch alone");
+  assert.equal(
+    status({ ...NO_FACTS, branch: "main", unpushed: 0 }).split("\n")[2],
+    "  box: branch main",
+    "zero unpushed commits is not printed",
+  );
+  assert.equal(status({ ...NO_FACTS, unpushed: 2 }).split("\n")[2], "  box: 2 unpushed", "unpushed commits, no branch");
+});
+
+// The timeout reads in its largest whole unit: 3h, 45m, or 90s when neither divides it.
+test("status text: an idle timeout reads in whole hours, minutes or seconds", () => {
+  for (const [idleTimeoutMs, span] of [
+    [3 * 3_600_000, "3h"],
+    [2_700_000, "45m"],
+    [90_000, "90s"],
+  ] as const) {
+    const text = formatStatus([row({ facts: { ...NO_FACTS, idleTimeoutMs } })], HEALTHY, NOW);
+    assert.equal(text.split("\n")[2], `  box: idle timeout ${span}`);
+  }
 });
 
 // Dispatch only; list, sync, status and keep-alive also run end to end in

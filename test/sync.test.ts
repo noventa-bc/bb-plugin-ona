@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { OnaSnapshot, type OnaEnvironment } from "../src/ona.ts";
 import type { WorkspaceView } from "../src/lifecycle.ts";
@@ -33,6 +34,8 @@ interface Box {
   workspaces?: WorkspaceView[];
   ona?: string | null;
   tunnel?: "up" | "off";
+  /** Ona's listing fields beyond the phase: start time, timeout, activity signal, git (read by `boxFacts`). */
+  listed?: Partial<OnaEnvironment>;
 }
 
 function world(
@@ -94,8 +97,9 @@ function world(
           .filter((box) => box.ona !== null)
           .map((box) => ({
             id: box.envId,
-            metadata: box.name ? { name: box.name } : {},
-            status: { phase: `ENVIRONMENT_PHASE_${box.ona ?? "RUNNING"}` },
+            metadata: { ...(box.name ? { name: box.name } : {}), ...box.listed?.metadata },
+            spec: box.listed?.spec,
+            status: { phase: `ENVIRONMENT_PHASE_${box.ona ?? "RUNNING"}`, ...box.listed?.status },
           }));
   const guard = new HostGuard();
   let tick = 0;
@@ -315,6 +319,22 @@ test("status still lists a machine whose thread listing fails", async () => {
   const { sync } = world([idle("h1", { threads: "fail" })]);
   const [row] = await sync.statusRows();
   assert.deepEqual(row!.stuckThreads, []);
+});
+
+// Facts come from Ona's listing (boxFacts); a box Ona doesn't list, or a failed listing, has none.
+test("status rows carry the facts Ona's listing gives, and null facts when Ona lists no box or the listing fails", async () => {
+  const listed = JSON.parse(readFileSync(new URL("./fixtures/ona/facts-environment.json", import.meta.url), "utf8"));
+  const { sync } = world([idle("h1", { listed }), idle("h2", { ona: null })]);
+  const [row, unlisted] = await sync.statusRows();
+  assert.deepEqual(row!.facts, {
+    startedAt: Date.parse("2026-11-03T09:12:40.512306Z"),
+    idleTimeoutMs: 3 * HOUR,
+    activity: { source: "SSH connections", at: Date.parse("2026-11-03T11:02:15Z") },
+    branch: "feature-y",
+    unpushed: 2,
+  });
+  assert.equal(unlisted!.facts, null, "Ona doesn't list the box");
+  assert.equal((await world([idle("h1")], { listing: "fail" }).sync.statusRows())[0]!.facts, null, "the listing fails");
 });
 
 test("a box missing from two listings is looked up once: archived or gone", async () => {

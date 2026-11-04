@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, after, test } from "node:test";
 import {
+  boxFacts,
   isArchived,
   isDeleted,
   isRunning,
@@ -443,6 +444,76 @@ test("unpushedWork is null for zero commits and when Ona doesn't say", async () 
   setFake({});
   assert.equal(unpushedWork((await cli.listEnvironments())[0]!), null, "no content at all");
   assert.deepEqual(unpushedWork(env({ totalUnpushedCommits: "2" })), { count: 2 }, "count as a string, no branch");
+});
+
+// What `bb ona status` shows about a box: every fact from one live get.
+test("boxFacts reads the start time, timeout, activity signal, branch and unpushed count of a live get", async () => {
+  setFake({ FAKE_ONA_GET: fixture("facts-environment.json") });
+  assert.deepEqual(boxFacts(await cli.getEnvironment("env-4ccc")), {
+    startedAt: Date.parse("2026-11-03T09:12:40.512306Z"),
+    idleTimeoutMs: 3 * 3_600_000,
+    activity: { source: "SSH connections", at: Date.parse("2026-11-03T11:02:15Z") },
+    branch: "feature-y",
+    unpushed: 2,
+  });
+});
+
+// One odd fact must not fail the listing: that box shows the fact as absent.
+test("listEnvironments parses a box whose activity signal, start time and timeout have odd types", async () => {
+  setFake({});
+  const file = join(dir, "odd-facts.json");
+  const odd = {
+    id: "env-0001",
+    metadata: { lastStartedAt: 42 },
+    spec: { timeout: "3h" },
+    status: { phase: "ENVIRONMENT_PHASE_RUNNING", activitySignal: "SSH connections" },
+  };
+  writeFileSync(file, JSON.stringify([odd]));
+  process.env.FAKE_ONA_ENVIRONMENTS = file;
+  const [env] = await cli.listEnvironments();
+  assert.deepEqual(boxFacts(env!), {
+    startedAt: null,
+    idleTimeoutMs: null,
+    activity: null,
+    branch: null,
+    unpushed: null,
+  });
+});
+
+test("boxFacts: a fact Ona leaves out or sends in a form bb can't read is null, and zero unpushed is a count", () => {
+  const nothing = { startedAt: null, idleTimeoutMs: null, activity: null, branch: null, unpushed: null };
+  const env = (extra: Partial<OnaEnvironment>): OnaEnvironment => ({ id: "env-0001", metadata: {}, ...extra });
+  assert.deepEqual(boxFacts(env({})), nothing, "nothing given");
+  assert.equal(
+    boxFacts(env({ spec: { timeout: { disconnected: "3h" } } })).idleTimeoutMs,
+    null,
+    "a timeout not in seconds",
+  );
+  assert.equal(
+    boxFacts(env({ metadata: { lastStartedAt: "yesterday" } })).startedAt,
+    null,
+    "a start time that won't parse",
+  );
+  assert.equal(
+    boxFacts(env({ status: { activitySignal: { source: "SSH connections", timestamp: "soon" } } })).activity,
+    null,
+    "an activity time that won't parse",
+  );
+  assert.equal(
+    boxFacts(env({ status: { activitySignal: { timestamp: "2026-11-03T11:02:15Z" } } })).activity,
+    null,
+    "an activity with no source",
+  );
+  assert.deepEqual(
+    boxFacts(env({ status: { content: { git: { branch: "main", totalUnpushedCommits: 0 } } } })),
+    { ...nothing, branch: "main", unpushed: 0 },
+    "zero unpushed is a count, not unknown",
+  );
+  assert.equal(
+    boxFacts(env({ status: { content: { git: { totalUnpushedCommits: "2" } } } })).unpushed,
+    2,
+    "a count sent as a string",
+  );
 });
 
 function exited(child: ReturnType<OnaCli["keepAlive"]>): Promise<string> {

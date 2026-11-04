@@ -1,0 +1,26 @@
+{
+  "id": "env-4ccc",
+  "metadata": {
+    "name": "quick-heron",
+    "projectId": "proj-0001",
+    "lastStartedAt": "2026-11-03T09:12:40.512306Z"
+  },
+  "spec": {
+    "desiredPhase": "ENVIRONMENT_PHASE_RUNNING",
+    "timeout": { "disconnected": "10800s" }
+  },
+  "status": {
+    "phase": "ENVIRONMENT_PHASE_RUNNING",
+    "activitySignal": { "source": "SSH connections", "timestamp": "2026-11-03T11:02:15Z" },
+    "content": {
+      "contentLocationInMachine": "/workspaces/app",
+      "git": {
+        "branch": "feature-y",
+        "cloneUrl": "https://example.com/team/app.git",
+        "latestCommit": "3f9c2ab",
+        "totalUnpushedCommits": 2,
+        "unpushedCommits": ["7d1e4f0 Add retry to the sync pass", "a80b3c2 Fix the typo"]
+      }
+    }
+  }
+}

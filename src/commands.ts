@@ -11,6 +11,7 @@ import {
   isStarting,
   matchEnvironment,
   sshHost,
+  type BoxFacts,
   type OnaCli,
   type OnaEnvironment,
   type OnaListing,
@@ -148,11 +149,30 @@ export interface OnaHealth {
   autoRepair: boolean;
 }
 
+/** A duration in its largest whole unit: 10800000 ms is `3h`, 2700000 is `45m`, 90000 is `90s`. */
+const duration = (ms: number) => {
+  const s = Math.round(ms / 1000);
+  if (s > 0 && s % 3600 === 0) return `${s / 3600}h`;
+  if (s > 0 && s % 60 === 0) return `${s / 60}m`;
+  return `${s}s`;
+};
+
 /** `bb ona status` as text. */
 export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()): string {
   const ago = (at: number) => {
     const s = Math.round((now - at) / 1000);
     return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : `${Math.round(s / 3600)}h ago`;
+  };
+  /** The `box:` line: what Ona's listing says about the box. A part Ona doesn't give is left out. */
+  const boxLine = (facts: BoxFacts): string | null => {
+    const parts: string[] = [];
+    if (facts.startedAt !== null) parts.push(`started ${ago(facts.startedAt)}`);
+    if (facts.idleTimeoutMs !== null) parts.push(`idle timeout ${duration(facts.idleTimeoutMs)}`);
+    if (facts.activity) parts.push(`last activity ${facts.activity.source} ${ago(facts.activity.at)}`);
+    const unpushed = facts.unpushed ?? 0;
+    if (facts.branch) parts.push(`branch ${facts.branch}${unpushed > 0 ? ` (${unpushed} unpushed)` : ""}`);
+    else if (unpushed > 0) parts.push(`${unpushed} unpushed`);
+    return parts.length > 0 ? `  box: ${parts.join(", ")}` : null;
   };
   const header =
     ona.lastError !== null
@@ -161,6 +181,8 @@ export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()
   if (rows.length === 0) return `${header}\nNo Ona machines yet.`;
   const lines = rows.map((row) => {
     const rowLines = [`${row.machine}  bb:${row.bb}  tunnel:${row.tunnel}  ona:${row.ona}`];
+    const box = row.facts ? boxLine(row.facts) : null;
+    if (box) rowLines.push(box);
     if (row.now) rowLines.push(`  now: ${row.now.reason} (since ${ago(row.now.since)})`);
     if (row.last) {
       rowLines.push(
