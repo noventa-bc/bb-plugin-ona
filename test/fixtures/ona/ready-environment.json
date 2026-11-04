@@ -2,6 +2,7 @@
   {
     "id": "env-6bbb",
     "metadata": { "name": "eager-finch", "projectId": "proj-0001" },
+    "spec": null,
     "status": {
       "phase": "ENVIRONMENT_PHASE_RUNNING",
       "content": { "contentLocationInMachine": "/workspaces/app", "phase": "CONTENT_PHASE_READY" },

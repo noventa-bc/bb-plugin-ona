@@ -261,7 +261,6 @@ test("readiness: a stopped box with Ona's failure message, a string or a list, f
   const env = (failureMessage: string | string[] | null): OnaEnvironment => ({
     id: "env-0001",
     metadata: {},
-    spec: { desiredPhase: "ENVIRONMENT_PHASE_RUNNING" },
     status: { phase: "ENVIRONMENT_PHASE_STOPPED", failureMessage },
   });
   const failed = (message: string) => ({ state: "failed", message });
@@ -321,17 +320,15 @@ test("readiness: a stopped or stopping box is starting unless Ona's desired phas
   assert.deepEqual(readiness(env("DELETING", "RUNNING")), { state: "failed", message: "deleting" });
 });
 
-// Bug: a box stopped or deleted in Ona during the wait was probed over SSH, which wakes a stopped box (rule 1).
-test("readiness: failed for a box stopping, stopped or deleted that Ona means to stop", () => {
-  for (const phase of ["STOPPING", "STOPPED", "DELETING", "DELETED"]) {
-    const env: OnaEnvironment = {
-      id: "env-0001",
-      metadata: {},
-      spec: { desiredPhase: "ENVIRONMENT_PHASE_STOPPED" },
-      status: { phase: `ENVIRONMENT_PHASE_${phase}` },
-    };
-    assert.deepEqual(readiness(env), { state: "failed", message: phase.toLowerCase() });
-  }
+// Bug: a resume after a failed start failed at once on the earlier start's message while Ona brought the box up.
+test("readiness: a stopped box Ona is asked to run is starting, whatever its failure message", () => {
+  const env: OnaEnvironment = {
+    id: "env-0001",
+    metadata: {},
+    spec: { desiredPhase: "ENVIRONMENT_PHASE_RUNNING" },
+    status: { phase: "ENVIRONMENT_PHASE_STOPPED", failureMessage: ["no capacity"] },
+  };
+  assert.deepEqual(readiness(env), { state: "waiting", reason: "starting" });
 });
 
 // Bug: a schema that rejects the live shape (an array, nulls, a warning string) makes every `get` unknown.

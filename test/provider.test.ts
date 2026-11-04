@@ -8,6 +8,7 @@ import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
 import type { OnaCli, OnaEnvironment } from "../src/ona.ts";
 import { registerOnaProvider, resourceSchema } from "../src/provider.ts";
 import type { TunnelManager } from "../src/ssh.ts";
+import { z } from "zod";
 import { tick, useFakeClock } from "./fake-clock.ts";
 
 useFakeClock();
@@ -283,10 +284,9 @@ test("a resume waits for Ona to report the box and its dev container running bef
 
 // Bug: a box Ona reported failed was probed over SSH for 10 minutes, then failed without Ona's reason.
 test("a resume fails at once with Ona's failure message, no SSH, and closes the tunnel", async () => {
-  // A start that failed: Ona sets the message and the box is stopped again, though asked to run.
+  // A start that failed: Ona sets the message and the box is stopped again.
   const failing = {
     ...box("STOPPED"),
-    spec: { desiredPhase: "ENVIRONMENT_PHASE_RUNNING" },
     status: { phase: "ENVIRONMENT_PHASE_STOPPED", failureMessage: ["no capacity"] },
   };
   const { resumed, calls, tunnels } = resume({ found: box("STOPPED"), phases: ["STOPPED", "STARTING", failing] });
@@ -323,6 +323,29 @@ test("a resume waits on a box Ona shows stopped with no desired phase, then conn
   assert.deepEqual(calls, ["get STOPPED", "start", "get STOPPED", "get RUNNING", "ssh"]);
 });
 
+// Bug: a resume right after a failed start failed on that start's message while Ona brought the box up.
+test("a resume waits on a box Ona shows stopped with an old failure but is asked to run, then connects", async () => {
+  const waking = {
+    ...box("STOPPED"),
+    spec: { desiredPhase: "ENVIRONMENT_PHASE_RUNNING" },
+    status: { phase: "ENVIRONMENT_PHASE_STOPPED", failureMessage: ["no capacity"] },
+  };
+  const { resumed, calls } = resume({ found: box("STOPPED"), phases: ["STOPPED", waking, "RUNNING"] });
+  await tick(5_000, 1);
+  await resumed;
+  assert.deepEqual(calls, ["get STOPPED", "start", "get STOPPED", "get RUNNING", "ssh"]);
+});
+
+// Bug: after `bb ona rename`, a failed resume named the box by its stored, old name.
+test("a failed resume names the box by its current name in Ona", async () => {
+  const renamed = { ...box("STOPPED"), metadata: { name: "renamed" } };
+  const failing = { ...renamed, status: { phase: "ENVIRONMENT_PHASE_STOPPED", failureMessage: ["no capacity"] } };
+  const { resumed } = resume({ found: renamed, phases: [renamed, failing] });
+  // Past every deadline, so a wait that ignores the failure rejects instead of hanging.
+  await tick(5_000, 180);
+  await assert.rejects(resumed, /^Error: Ona environment renamed failed to start: no capacity$/);
+});
+
 // Bug: a failed Ona lookup must mean unknown (decision 0005): no SSH until Ona answers RUNNING.
 test("a resume makes no SSH while Ona can't be asked, then connects once it says RUNNING", async () => {
   const unreachable = new Error("Ona is unreachable");
@@ -337,11 +360,20 @@ test("a resume makes no SSH while Ona can't be asked, then connects once it says
 
 // Bug: a progress line from a failed `get` carried every stderr line Ona printed (rule 7: no more than needed).
 test("a failed lookup shows only the first line of Ona's error as progress", async () => {
-  const unreachable = new Error("ona environment get failed: dial tcp: timeout \nsecond line\nthird line");
+  const unreachable = new Error("\n ona environment get failed: dial tcp: timeout \nsecond line\nthird line");
   const { resumed, steps } = resume({ found: box("STOPPED"), phases: ["STOPPED", unreachable, "RUNNING"] });
   await tick(5_000, 1);
   await resumed;
   assert.equal(steps[1], "Waiting for Ona: ona environment get failed: dial tcp: timeout");
+});
+
+// Bug: an answer from Ona that didn't parse showed "[" (the first line of a ZodError) as progress.
+test("an answer from Ona that can't be read shows a plain progress line", async () => {
+  const unreadable = z.object({ id: z.string() }).safeParse({}).error!;
+  const { resumed, steps } = resume({ found: box("STOPPED"), phases: ["STOPPED", unreadable, "RUNNING"] });
+  await tick(5_000, 1);
+  await resumed;
+  assert.equal(steps[1], "Waiting for Ona: Ona's answer could not be read");
 });
 
 // Bug: with Ona unreachable the wait must end, never fall through to SSH.

@@ -464,7 +464,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       const current = { ...owned, envName: nameOf(env, owned) };
       await checkpoint(current);
       // bootstrap with the creation key restarts the already-enrolled daemon.
-      await connectOrClose(owned, report, signal);
+      await connectOrClose(current, report, signal);
       return { resource: current };
     },
     async remove({ resource, hostId, report, signal }) {

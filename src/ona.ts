@@ -258,15 +258,15 @@ export function isStopped(env: OnaEnvironment): boolean {
   return phase === "ENVIRONMENT_PHASE_STOPPED" || phase === "ENVIRONMENT_PHASE_DELETED";
 }
 
-export type Readiness =
-  { state: "ready" } | { state: "waiting"; reason: string } | { state: "failed"; message: string };
+type Readiness = { state: "ready" } | { state: "waiting"; reason: string } | { state: "failed"; message: string };
 
 /**
  * Whether Ona says a box can take SSH: RUNNING, with its dev container running
- * or none at all. Deleted or deleting is final. Stopped or stopping is final
- * with Ona's failure message, or when its desired phase is set to anything but
- * RUNNING; otherwise (older Ona sends none) `start` may have just woken it. In
- * any other phase the box is on its way: a failure message there may be left
+ * or none at all. Deleted or deleting is final. Stopped or stopping with a
+ * desired phase of RUNNING is on its way up, whatever an earlier start's failure
+ * message says; otherwise it is final with Ona's failure message or a desired
+ * phase set to anything else, and on its way when Ona sends neither (older Ona).
+ * In any other phase the box is on its way: a failure message there may be left
  * from an earlier start.
  */
 export function readiness(env: OnaEnvironment): Readiness {
@@ -276,10 +276,11 @@ export function readiness(env: OnaEnvironment): Readiness {
   const phase = (env.status?.phase ?? "unknown").replace("ENVIRONMENT_PHASE_", "").toLowerCase();
   if (isDeleted(env)) return { state: "failed", message: phase };
   if (isStopped(env) || phase === "stopping") {
+    const desired = env.spec?.desiredPhase;
+    if (desired === "ENVIRONMENT_PHASE_RUNNING") return { state: "waiting", reason: "starting" };
     const failure = [env.status?.failureMessage ?? []].flat().find(Boolean);
     if (failure) return { state: "failed", message: failure.split("\n")[0]! };
-    const desired = env.spec?.desiredPhase;
-    if (desired && desired !== "ENVIRONMENT_PHASE_RUNNING") return { state: "failed", message: phase };
+    if (desired) return { state: "failed", message: phase };
     return { state: "waiting", reason: "starting" };
   }
   return { state: "waiting", reason: isRunning(env) ? "dev container starting" : phase };
@@ -311,8 +312,15 @@ export async function waitForReady(
         env = await ona.getEnvironmentIfExists(envId, signal);
       } catch (error) {
         if (signal.aborted) throw error;
-        // The first line only: the rest is Ona's stderr, more than the progress line needs (rule 7).
-        return wait((error instanceof Error ? error.message : String(error)).split("\n")[0]!.trim());
+        // One line only: the rest is Ona's stderr, more than the progress line needs (rule 7).
+        if (error instanceof z.ZodError) return wait("Ona's answer could not be read");
+        const message = error instanceof Error ? error.message : String(error);
+        return wait(
+          message
+            .split("\n")
+            .map((line) => line.trim())
+            .find(Boolean) ?? message,
+        );
       }
       if (!env) throw new Error(`Ona environment ${name} disappeared.`);
       const state = readiness(env);

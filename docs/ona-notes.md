@@ -64,13 +64,14 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
     failure, are not known.
   - `status.content.phase` was `CONTENT_PHASE_READY` and `status.machine.phase`
     was `PHASE_RUNNING` in both states.
-  - `status.failureMessage` was null. Ona's public API documents
-    `failureMessage` and `warningMessage` as lists of strings, a non-empty
+  - `status.failureMessage` was null. Ona's public API
+    (<https://ona.com/docs/api-reference/generated/environment/get-environment>)
+    documents `failureMessage` and `warningMessage` as lists of strings, a non-empty
     `failureMessage` meaning the environment failed.
   - `status.machine.warningMessage` appeared as a single string (a slow-disk
     warning) on the running box.
 - `spec.desiredPhase` is in the live field list above. Its meaning and values
-  come from Ona's API docs, not a live box: the phase Ona is driving the box
+  come from the same API page, not a live box: the phase Ona is driving the box
   to, with the same values as `status.phase` (`ENVIRONMENT_PHASE_RUNNING`, …).
   A non-empty `failureMessage` meaning a failed environment is also from the
   API docs; on a live box (checked 2026-11-04) it was null while starting and

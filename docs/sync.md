@@ -80,11 +80,12 @@ you asked for, so safety rule 1 does not gate it.
    the box is running and so is its dev container, if it has one
    (`waitForReady()` in `src/ona.ts`, [0005](decisions/0005-lookup-by-id-counts-as-listing.md)).
    No SSH runs before that answer. A deleted box, or a box stopping or stopped
-   with Ona's failure message or a `spec.desiredPhase` set to anything but
-   running, ends the connect with no SSH. A stopped box with neither may be one
-   the start just woke, and a failure message on a box in any other phase may be
-   left from an earlier start, so the connect keeps asking, as it does when `get`
-   fails (unknown).
+   whose `spec.desiredPhase` isn't running and that carries Ona's failure message
+   or a desired phase, ends the connect with no SSH. A stopped box Ona is bringing
+   up (desired phase running, whatever an earlier failure message says) or that
+   has neither (older Ona) may be one the start just woke, and a failure message
+   on a box in any other phase may be left from an earlier start, so the connect
+   keeps asking, as it does when `get` fails (unknown).
    These commands you run yourself are not gated and may wake a box:
    `ona environment open` and `bb ona ssh --thread`.
    _Why: an accidental start costs money and keeps the box up._
