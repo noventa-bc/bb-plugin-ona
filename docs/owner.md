@@ -5,9 +5,9 @@ read and write their working folder and their own state (`~/.claude`,
 `~/.codex`), read the toolchain, and reach only the model APIs. They can't read
 `~/.ssh`, `~/.ona` or `~/.bb`, can't write anywhere else, and can't reach
 localhost, so `ona`, `ssh` to boxes and the live bb server are out of reach.
-Agents never commit to `main` or push; you review and merge. Under the
-orchestrated flow in `FACTORY.md` they commit on `agent/*` branches and the
-orchestrator opens PRs.
+Agents never commit to `main`. Outside the orchestrated flow they commit
+nothing and don't push; you review, commit and merge. Inside it, `FACTORY.md`
+(Permissions) says what the orchestrator may do.
 
 ## One-time setup
 
@@ -46,6 +46,7 @@ orchestrator opens PRs.
 ### Task brief template
 
 ```
+Role: builder or reviewer (never the orchestrator)
 Goal: <one sentence, user-visible outcome>
 Scope: <files or area>; out of scope: <...>
 Done when: <tests or behaviour>; `npm run check` passes.
@@ -56,9 +57,9 @@ Before dispatching, check the task against the accepted records in
 `docs/decisions/`. If it conflicts, decide first and say so in the brief, since
 an unattended agent skips a conflicting item.
 
-## Review a handoff
+## Review a handoff outside the orchestrated flow
 
-1. Read `.agent/HANDOFF.md` in the worktree, then the diff (`git -C <worktree> diff`).
+1. Read `.agent/HANDOFF.md` in the worktree, then the diff (`git -C <worktree> diff HEAD`; the work is staged).
    Decide on anything under "Needs owner review", and check that each added
    piece of complexity is worth what the handoff says it costs.
 2. Run `npm run check` in the worktree (outside the sandbox, so every test runs) and read its exit code before the commit in step 3.

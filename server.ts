@@ -247,7 +247,7 @@ export default async function plugin(bb: BbPluginApi) {
     idleDisconnect,
     pluginStartedAt,
   });
-  const { machines, reconcile, statusRows } = sync;
+  const { machines, machineOfHost, reconcile, statusRows } = sync;
 
   bb.background.service("lifecycle-sync", {
     async start(signal) {
@@ -289,8 +289,8 @@ export default async function plugin(bb: BbPluginApi) {
     return (await machines()).find((r) => matchesRef(r, ref)) ?? null;
   }
 
-  async function devboxes(): Promise<Devbox[]> {
-    return (await machines()).map((row) => ({
+  function devboxOf(row: Row): Devbox {
+    return {
       machine: row.machine,
       hostId: row.hostId,
       envId: row.resource.envId,
@@ -299,7 +299,11 @@ export default async function plugin(bb: BbPluginApi) {
       tunnel: tunnels.status(row.resource.envId),
       adopted: row.resource.adopted,
       sshCommand: `ssh ${sshHost(row.resource.envId)}`,
-    }));
+    };
+  }
+
+  async function devboxes(): Promise<Devbox[]> {
+    return (await machines()).map(devboxOf);
   }
 
   const shellBackend: ShellBackend = {
@@ -347,7 +351,8 @@ export default async function plugin(bb: BbPluginApi) {
     const thread = await bb.sdk.threads.get({ threadId });
     if (!thread.environmentId) return null;
     const environment = await bb.sdk.environments.get({ environmentId: thread.environmentId });
-    return (await devboxes()).find((box) => box.hostId === environment.hostId) ?? null;
+    const row = await machineOfHost(environment.hostId);
+    return row ? devboxOf(row) : null;
   }
 
   const costs = createThreadCost({ bb, runCollector: provider.runCollector, threadDevbox, snapshot });
@@ -359,7 +364,8 @@ export default async function plugin(bb: BbPluginApi) {
    * `ssh` to the box; a thread already on that box just gets a shell there.
    */
   async function openThreadTerminal(threadId: string, ref: string, size: { cols: number; rows: number }) {
-    const row = await findMachine(ref);
+    const machineRows = await machines();
+    const row = machineRows.find((r) => matchesRef(r, ref));
     if (!row) throw new Error(`No Ona-backed bb machine matches "${ref}". See \`bb ona list\`.`);
     const thread = await bb.sdk.threads.get({ threadId });
     if (!thread.environmentId) throw new Error("This thread has no environment yet; try again once it has started.");
@@ -368,7 +374,7 @@ export default async function plugin(bb: BbPluginApi) {
     const plan = threadTerminalPlan({
       threadHostId: environment.hostId,
       target: { hostId: row.hostId, envId: row.resource.envId, boxName: row.resource.envName },
-      otherDevboxHostIds: (await machines()).map((r) => r.hostId).filter((id) => id !== row.hostId),
+      otherDevboxHostIds: machineRows.map((r) => r.hostId).filter((id) => id !== row.hostId),
       cwd: env?.status?.content?.contentLocationInMachine ?? null,
       sshBinary: sshPath,
       sshHost: sshHost(row.resource.envId),
