@@ -354,8 +354,9 @@ export async function waitForReady(
     },
     { deadlineMs: 15 * 60_000, intervalMs: 5_000, signal },
   ).catch((error: unknown) => {
-    // A caller's own timeout ends the wait first: keep the reason the deadline error would give.
-    if (signal.aborted && waiting)
+    // A caller's own timeout ends the wait first: keep the reason the deadline error would give. Ona's own
+    // answer (a stop that lands with the abort) stays as it is.
+    if (!(error instanceof NotReadyError) && signal.aborted && waiting)
       throw new NotReadyError(`Ona did not report ${current} ready before the wait ended: ${waiting}`);
     throw error;
   });

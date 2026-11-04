@@ -192,8 +192,8 @@ bb machine create --provider ona --inputs '{"mode":"create","project":"my-app"}'
 Before its first SSH, setup waits up to 15 minutes for Ona to report the box and
 its dev container running, and shows Ona's progress. It fails at once, without
 SSH, when Ona reports the box deleted, its dev container failed, or Ona is
-stopping or has stopped it (except while a start this plugin made is under way);
-otherwise it waits. Every SSH command during setup asks Ona first, so a box
+stopping or has stopped it (except while a start this plugin made is under way
+and Ona still wants it running); otherwise it waits. Every SSH command during setup asks Ona first, so a box
 stopped meanwhile is not woken. [docs/sync.md](docs/sync.md) (safety rule 1)
 has the cases.
 

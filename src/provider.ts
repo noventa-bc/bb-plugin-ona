@@ -199,11 +199,6 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     await ona.start(env.id, signal);
   }
 
-  async function waitForSsh(executor: MachineExecutor, signal: AbortSignal) {
-    const check = sshCheck(executor, "true", signal, CHECK_TIMEOUT_MS);
-    await pollSsh(check, "Could not SSH into the devbox", { minutes: 10, intervalMs: 5_000, signal });
-  }
-
   /**
    * Right after Ona starts a devbox, SSH can work before the shared NFS home is
    * mounted. Anything started then (the bb daemon, Codex) writes to the
@@ -266,7 +261,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       },
     };
     report.step("Waiting for the dev container to accept SSH");
-    await waitForSsh(executor, signal);
+    const sshUp = sshCheck(executor, "true", signal, CHECK_TIMEOUT_MS);
+    await pollSsh(sshUp, "Could not SSH into the devbox", { minutes: 10, intervalMs: 5_000, signal });
     if (deps.waitForSharedHome) await waitForSharedHome(executor, report, signal);
     if (deps.codexSqliteHome) {
       await sshCapture(executor, `mkdir -p ${shellQuote(deps.codexSqliteHome)}`, signal, CHECK_TIMEOUT_MS);
