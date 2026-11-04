@@ -283,15 +283,17 @@ test("a resume waits for Ona to report the box and its dev container running bef
 
 // Bug: a box Ona reported failed was probed over SSH for 10 minutes, then failed without Ona's reason.
 test("a resume fails at once with Ona's failure message, no SSH, and closes the tunnel", async () => {
+  // A start that failed: Ona sets the message and the box is stopped again, though asked to run.
   const failing = {
-    ...box("STARTING"),
-    status: { phase: "ENVIRONMENT_PHASE_STARTING", failureMessage: ["no capacity"] },
+    ...box("STOPPED"),
+    spec: { desiredPhase: "ENVIRONMENT_PHASE_RUNNING" },
+    status: { phase: "ENVIRONMENT_PHASE_STOPPED", failureMessage: ["no capacity"] },
   };
-  const { resumed, calls, tunnels } = resume({ found: box("STOPPED"), phases: ["STOPPED", failing] });
+  const { resumed, calls, tunnels } = resume({ found: box("STOPPED"), phases: ["STOPPED", "STARTING", failing] });
   // Past every deadline, so a wait that ignores the failure rejects with the wrong message instead of hanging.
   await tick(5_000, 180);
   await assert.rejects(resumed, /^Error: Ona environment box failed to start: no capacity$/);
-  assert.deepEqual(calls, ["get STOPPED", "start", "get STARTING"]);
+  assert.deepEqual(calls, ["get STOPPED", "start", "get STARTING", "get STOPPED"]);
   assert.deepEqual(tunnels, ["stop env-1"]);
 });
 
@@ -333,6 +335,16 @@ test("a resume makes no SSH while Ona can't be asked, then connects once it says
   assert.deepEqual(calls, ["get STOPPED", "start", "get failed", "get failed", "get RUNNING", "ssh"]);
 });
 
+// Bug: a progress line from a failed `get` carried every stderr line Ona printed (rule 7: no more than needed).
+test("a failed lookup shows only the first line of Ona's error as progress", async () => {
+  const unreachable = new Error("ona environment get failed: dial tcp: timeout \nsecond line\nthird line");
+  const { resumed, steps } = resume({ found: box("STOPPED"), phases: ["STOPPED", unreachable, "RUNNING"] });
+  await tick(5_000, 1);
+  await resumed;
+  assert.equal(steps[1], "Waiting for Ona: ona environment get failed: dial tcp: timeout");
+});
+
+// Bug: with Ona unreachable the wait must end, never fall through to SSH.
 test("a resume while Ona can't be asked fails after 15 minutes without SSH", async () => {
   const { resumed, calls } = resume({ found: box("STOPPED"), phases: ["STOPPED", new Error("Ona is unreachable")] });
   await tick(5_000, 180);
@@ -340,7 +352,7 @@ test("a resume while Ona can't be asked fails after 15 minutes without SSH", asy
   assert.equal(calls.includes("ssh"), false);
 });
 
-// Guards the rule against over-reach: a box without a dev container is ready once RUNNING.
+// Bug: requiring a dev container would leave a box without one waiting until the deadline.
 test("a box without a dev container connects once Ona says RUNNING", async () => {
   const { resumed, calls } = resume({ found: running(null), phases: [running(null)] });
   await resumed;

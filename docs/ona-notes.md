@@ -69,11 +69,12 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
     `failureMessage` meaning the environment failed.
   - `status.machine.warningMessage` appeared as a single string (a slow-disk
     warning) on the running box.
-- `spec.desiredPhase` is the phase Ona is driving the box to. Ona's API docs
-  give it the same values as `status.phase` (`ENVIRONMENT_PHASE_RUNNING`, …).
-  `readiness()` in `src/ona.ts` reads a stopped or stopping box as failed only
-  when its desired phase is set to something other than RUNNING. `status.phase`
-  can lag a start, and older Ona may not send the field.
+- `spec.desiredPhase` is in the live field list above. Its meaning and values
+  come from Ona's API docs, not a live box: the phase Ona is driving the box
+  to, with the same values as `status.phase` (`ENVIRONMENT_PHASE_RUNNING`, …).
+  A non-empty `failureMessage` meaning a failed environment is also from the
+  API docs; on a live box (checked 2026-11-04) it was null while starting and
+  running. `readiness()` in `src/ona.ts` holds what the plugin makes of them.
 - `ona environment ssh --proxy-connect` (the ProxyCommand form) has a `--start`
   flag that defaults to true. A plugin-owned SSH config that passes
   `--start=false` means SSH can never wake a stopped box.

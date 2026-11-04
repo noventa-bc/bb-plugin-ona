@@ -214,6 +214,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         }
         return false;
       },
+      // Ona already reported the dev container running, so this only waits for sshd to answer.
       { deadlineMs: 2 * 60_000, intervalMs: 5_000, signal },
     );
     if (reached) return;

@@ -59,8 +59,9 @@ you asked for, so safety rule 1 does not gate it.
 1. **Never wake a box.** Ona's SSH starts a stopped box, so the plugin uses SSH
    (tunnel connect and reconnect, `bb ona reconnect`, daemon check, cost collector, and the cleanup
    when you remove an adopted box's machine) only when Ona, asked right before it, says
-   the box is running: an `ona environment list`, or for that cleanup
-   `ona environment get` ([0005](decisions/0005-lookup-by-id-counts-as-listing.md)). A
+   the box is running: an `ona environment list` for tunnels, the daemon check
+   and the cost collector, or `ona environment get` for a connect and that cleanup
+   ([0005](decisions/0005-lookup-by-id-counts-as-listing.md)). A
    daemon restart asks Ona again after the daemon check, right before it
    starts. A cached listing, bb showing the machine connected, a box that is
    starting or stopping, or a listing that lacks the box is not enough. If Ona
@@ -78,11 +79,12 @@ you asked for, so safety rule 1 does not gate it.
    first asks `ona environment get` every 5s, for up to 15 minutes, until it says
    the box is running and so is its dev container, if it has one
    (`waitForReady()` in `src/ona.ts`, [0005](decisions/0005-lookup-by-id-counts-as-listing.md)).
-   No SSH runs before that answer. Short of it, Ona's failure message, a deleted
-   box, or a box stopping or stopped whose `spec.desiredPhase` is set to anything
-   but running ends the connect with no SSH. A stopped box with no desired phase
-   may be one the start just woke, so the connect keeps asking, as it does when
-   `get` fails (unknown).
+   No SSH runs before that answer. A deleted box, or a box stopping or stopped
+   with Ona's failure message or a `spec.desiredPhase` set to anything but
+   running, ends the connect with no SSH. A stopped box with neither may be one
+   the start just woke, and a failure message on a box in any other phase may be
+   left from an earlier start, so the connect keeps asking, as it does when `get`
+   fails (unknown).
    These commands you run yourself are not gated and may wake a box:
    `ona environment open` and `bb ona ssh --thread`.
    _Why: an accidental start costs money and keeps the box up._

@@ -15,7 +15,7 @@ const environmentSchema = z.object({
     })
     .loose(),
   /** The phase Ona is driving the box to: RUNNING right after a start, before `status.phase` catches up. */
-  spec: z.object({ desiredPhase: z.string().optional() }).loose().optional(),
+  spec: z.object({ desiredPhase: z.string().nullish() }).loose().nullish(),
   status: z
     .object({
       phase: z.string().optional(),
@@ -33,7 +33,7 @@ const environmentSchema = z.object({
         .loose()
         .optional(),
       /** null while the box starts, and on a box without a dev container. */
-      devcontainer: z.object({ phase: z.string().optional() }).loose().nullish(),
+      devcontainer: z.object({ phase: z.string().nullish() }).loose().nullish(),
       /** Ona's API documents a list; the CLI has shown null. */
       failureMessage: z.union([z.string(), z.array(z.string())]).nullish(),
     })
@@ -263,27 +263,26 @@ export type Readiness =
 
 /**
  * Whether Ona says a box can take SSH: RUNNING, with its dev container running
- * or none at all; a failure message left from an earlier start doesn't undo
- * that. Otherwise final: Ona's failure message, a box deleted or deleting, or
- * one stopping or stopped whose desired phase is set to anything but RUNNING.
- * A stopped box with no desired phase (older Ona) may be one `start` just
- * woke, so it and any other value, known or not, is still on its way.
+ * or none at all. Deleted or deleting is final. Stopped or stopping is final
+ * with Ona's failure message, or when its desired phase is set to anything but
+ * RUNNING; otherwise (older Ona sends none) `start` may have just woken it. In
+ * any other phase the box is on its way: a failure message there may be left
+ * from an earlier start.
  */
 export function readiness(env: OnaEnvironment): Readiness {
   const devcontainer = env.status?.devcontainer;
   const containerUp = !devcontainer || devcontainer.phase === "PHASE_RUNNING";
   if (isRunning(env) && containerUp) return { state: "ready" };
-  const failure = [env.status?.failureMessage ?? []].flat().find(Boolean);
-  if (failure) return { state: "failed", message: failure.split("\n")[0]! };
   const phase = (env.status?.phase ?? "unknown").replace("ENVIRONMENT_PHASE_", "").toLowerCase();
   if (isDeleted(env)) return { state: "failed", message: phase };
   if (isStopped(env) || phase === "stopping") {
+    const failure = [env.status?.failureMessage ?? []].flat().find(Boolean);
+    if (failure) return { state: "failed", message: failure.split("\n")[0]! };
     const desired = env.spec?.desiredPhase;
     if (desired && desired !== "ENVIRONMENT_PHASE_RUNNING") return { state: "failed", message: phase };
     return { state: "waiting", reason: "starting" };
   }
-  if (!isRunning(env)) return { state: "waiting", reason: phase };
-  return { state: "waiting", reason: "dev container starting" };
+  return { state: "waiting", reason: isRunning(env) ? "dev container starting" : phase };
 }
 
 /**
@@ -312,7 +311,8 @@ export async function waitForReady(
         env = await ona.getEnvironmentIfExists(envId, signal);
       } catch (error) {
         if (signal.aborted) throw error;
-        return wait(error instanceof Error ? error.message : String(error));
+        // The first line only: the rest is Ona's stderr, more than the progress line needs (rule 7).
+        return wait((error instanceof Error ? error.message : String(error)).split("\n")[0]!.trim());
       }
       if (!env) throw new Error(`Ona environment ${name} disappeared.`);
       const state = readiness(env);
