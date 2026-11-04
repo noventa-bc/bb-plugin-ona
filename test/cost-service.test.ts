@@ -256,12 +256,14 @@ test("a collector error warns, returns the stored figure, and retries only after
   assert.deepEqual(w.collectorRuns, ["env-1", "env-1"]);
 });
 
-test("a Claude round with nothing to price keeps the last good figure and is read again after the floor (fails if the empty round is not read again)", async () => {
+test("a Claude round with nothing to price keeps the last good figure, is read once more, then settles (fails if the empty round is not read again, or a third runs)", async () => {
   const w = world({
     turnSeq: 8,
     stored: { cost: FIGURE, seq: "7", checkedAt: OLD, runs: 1 },
     collect: async () => ({ buckets: [] }),
   });
+  assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
+  await pastFloor();
   assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
   await pastFloor();
   assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
@@ -276,18 +278,6 @@ test("a first round with nothing to price collects again after the floor (fails 
   buckets = [ONE_DOLLAR_BUCKET];
   await pastFloor();
   assert.equal((await w.costs.threadCost("t1"))?.usd, 1);
-  assert.deepEqual(w.collectorRuns, ["env-1", "env-1"]);
-});
-
-test("two Claude rounds that price nothing settle the turn with no figure (fails if a third round runs)", async () => {
-  let buckets: ClaudeUsageBucket[] = [];
-  const w = world({ turnSeq: 8, collect: async () => ({ buckets }) });
-  assert.equal(await w.costs.threadCost("t1"), null);
-  await pastFloor();
-  assert.equal(await w.costs.threadCost("t1"), null);
-  buckets = [ONE_DOLLAR_BUCKET];
-  await pastFloor();
-  assert.equal(await w.costs.threadCost("t1"), null);
   assert.deepEqual(w.collectorRuns, ["env-1", "env-1"]);
 });
 
