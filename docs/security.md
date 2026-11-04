@@ -9,11 +9,11 @@ projects and threads, open terminals, or start a thread on your own machine.
 **The fix: a daemon-only proxy.** The tunnel never lands on bb's port. It lands
 on a proxy the plugin runs on `127.0.0.1` (random port), which forwards only:
 
-| Allowed | Why |
-|---|---|
-| `GET /health`, `/install.sh`, `/install/version`, `/install/bb-app.tgz` | Installing and health-checking the daemon (same files bb serves to any machine) |
-| The daemon's `/internal` routes, by method and path (the list in `src/proxy.ts`) | Daemon API; bb requires the daemon's credentials on it |
-| WebSocket `/internal/ws` | Daemon connection; bb authenticates it |
+| Allowed                                                                          | Why                                                                             |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `GET /health`, `/install.sh`, `/install/version`, `/install/bb-app.tgz`          | Installing and health-checking the daemon (same files bb serves to any machine) |
+| The daemon's `/internal` routes, by method and path (the list in `src/proxy.ts`) | Daemon API; bb requires the daemon's credentials on it                          |
+| WebSocket `/internal/ws`                                                         | Daemon connection; bb authenticates it                                          |
 
 Everything else gets `403` and never reaches bb, including the user API
 (`/api/*`), the app and terminal sockets (`/ws`, `/ws/terminals/*`) and the web
@@ -66,4 +66,3 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:<bb port>/health      
 - Commands sent to devboxes pass values as arguments, never by pasting them
   into shell scripts, and Ona names and folder settings are validated.
 - Devbox traffic stays between Ona and your Mac, with no third-party relay.
-

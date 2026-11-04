@@ -12,6 +12,7 @@ lands on a daemon-only proxy, so the server stays on loopback. Agents
 (claude-code, codex), git, tests and terminals all run in the devbox.
 
 ## Security
+
 Inside a devbox, `http://127.0.0.1:<bb port>` is the proxy, not bb. It forwards
 only the daemon's routes (its `/internal` calls, `/internal/ws`, the installer
 files and `/health`) and answers 403 to everything else, including bb's user
@@ -19,12 +20,14 @@ API `/api/*`, `/ws` and `/internal/hosts/enroll-key`. Do not try to work around
 it from a devbox. Use `bb` commands from a thread instead; bb routes them correctly.
 
 ## One-time setup
+
 - `bb ona setup` lists what is missing; `bb ona setup --yes` applies the Ona SSH
   config and bb's machine access settings. Ask the user before running it with
   `--yes`: it changes their SSH config and bb settings.
 - Optional: `bb plugin config ona set defaultProject my-app`.
 
 ## Machines
+
 - Shortcuts: `bb ona adopt <environment>`, `bb ona new [project]`.
 - Adopt an existing environment (never deleted by bb):
   `bb machine create --provider ona --inputs '{"mode":"adopt","environment":"box-1"}'`
@@ -43,6 +46,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
 - Thread in a fresh devbox: `bb thread spawn --project <id> --environment-provider ona-devbox --prompt "..."`.
 
 ## Shell access
+
 - `bb ona list` — machines, Ona env, tunnel status.
 - `bb ona shell <ref> -- <cmd…>` — run one command in the devbox checkout; prints output, keeps the exit code.
 - `bb ona ssh <ref> --thread <thread-id>` — open another terminal to the devbox in that thread's
@@ -60,6 +64,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
   It ends when the plugin reloads.
 
 ## Codex state
+
 `~/.codex` may live on a shared NFS home where SQLite WAL corrupts. bb's daemon
 runs with `CODEX_SQLITE_HOME` (setting `codexSqliteHome`, default
 `/workspaces/.codex-sqlite-bb`, local disk) so Codex launched by bb keeps its
@@ -69,9 +74,11 @@ For the same reason `~/.bb-machines` is a symlink to a local folder (setting
 `machineDataDir`, default `/workspaces/.bb-machines`), so two devboxes sharing
 an NFS home never collide on one machine identity. If `~/.bb-machines` is a
 real folder, setup stops and asks to move it aside.
+
 - bb terminals on the machine work too (terminal panel or `bb terminal`).
 
 ## Constraints
+
 - Devbox needs node ≥ 22.19, npm, curl and git (preflight refuses otherwise).
 - Tunnels live only while the bb server machine is awake.
 - Never put secrets in machine inputs; they are readable by every plugin.
