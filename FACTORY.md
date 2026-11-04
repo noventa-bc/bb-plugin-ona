@@ -114,9 +114,10 @@ those and the "skipped or not checked" lines ponytail ends with.
 7. **Open the PR.** Push the branch and open a pull request against `main`.
    The title is a Conventional Commit (`type(scope): subject`, see
    `AGENTS.md`): the squash merge makes it the commit on `main`, and it
-   decides the release. Before pushing, run `scripts/bump.sh "<title>"` in the
-   branch's worktree (the `sh -c` form below), run the check, and commit what
-   it changes: it bumps `package.json` as the title requires (or does
+   decides the release. Before pushing, run
+   `sh -c "cd <worktree> && scripts/bump.sh \"<title>\""` (a bare call from
+   the main checkout bumps that checkout), run the check, and commit what it
+   changes: it bumps `package.json` as the title requires (or does
    nothing), and CI checks the same rule. A version bump is not a code change
    for the review passes. The description carries: the roadmap labels, what changed and why, how it
    was tested, the three review passes and what each found, the owner
@@ -146,7 +147,7 @@ those and the "skipped or not checked" lines ponytail ends with.
    merging `main` is never skipped. Never merge a red PR. A PR that changes
    `package.json` and is behind `main` is refused: merge `main`, set the version
    in `package.json` and `package-lock.json` back to `main`'s (a clean merge
-   keeps the PR's), then run `scripts/bump.sh "<title>"` again.
+   keeps the PR's), then run the `scripts/bump.sh` command from step 7 again.
 10. **Sync the roadmap.** Status lives only in the table at the top of the
     roadmap, one linked row per item, with the landing commit in the Item cell.
     When a PR opens, set the item to In review; when it merges, set it to Done,
