@@ -57,7 +57,7 @@ you asked for, so safety rule 1 does not gate it.
 **Safety rules.** Every automatic action keeps these:
 
 1. **Never wake a box.** Ona's SSH starts a stopped box, so the plugin uses SSH
-   (tunnel connect and reconnect, daemon check, cost collector, and the cleanup
+   (tunnel connect and reconnect, `bb ona reconnect`, daemon check, cost collector, and the cleanup
    when you remove an adopted box's machine) only when Ona, asked right before it, says
    the box is running: an `ona environment list`, or for that cleanup
    `ona environment get` ([0005](decisions/0005-lookup-by-id-counts-as-listing.md)). A
@@ -69,11 +69,14 @@ you asked for, so safety rule 1 does not gate it.
    listing (so does each reconnect after `ssh` exits), plus a check when Ona shows the box
    stopped. A refused tunnel tries again every 10s for a minute,
    then every minute (every minute while Ona can't be asked). A tunnel closes
-   when bb suspends or removes the machine, or the plugin stops; a check that
-   sees the box stopped asks bb to suspend it once bb no longer shows the
-   machine connected.
+   when bb suspends or removes the machine, when a create or resume fails, or
+   the plugin stops; a check that sees the box stopped asks bb to suspend it
+   once bb no longer shows the machine connected. Create and resume start the
+   box you asked for (`ona environment create` for a new box, else
+   `ona environment start` when Ona shows it neither running nor starting), then
+   connect.
    These commands you run yourself are not gated and may wake a box:
-   `ona environment open`, `bb ona reconnect` and `bb ona ssh --thread`.
+   `ona environment open` and `bb ona ssh --thread`.
    _Why: an accidental start costs money and keeps the box up._
 2. **Never stop a box.** Suspends the plugin makes because of what it saw in Ona
    skip the provider's stop. _Why: a wrong or stale listing must not stop a box with your work on it._
@@ -153,7 +156,8 @@ service. The `bb ona` commands are in `src/commands.ts`.
 The shared listing is `OnaSnapshot` in `src/ona.ts`. Removing an Ona machine
 drops the box's stored keys (`forgetBox()` in `src/sync.ts`, called from the provider's `remove()`).
 `remove()` refuses to delete a created box that Ona reports unpushed commits
-on (`unpushedWork()` in `src/ona.ts`), before it disconnects or forgets anything.
+on (`unpushedWork()` in `src/ona.ts`), before it deletes or forgets anything.
+Every `remove()` path closes the box's tunnel (`remove` in `src/provider.ts`).
 For an adopted box, `remove()` runs `MOVE_MACHINE_ASIDE` (`src/provider.ts`)
 over SSH, only when `ona environment get`, made just before, says the box is
 running (safety rule 1). It stops every process whose command line names bb's
