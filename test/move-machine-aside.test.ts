@@ -315,6 +315,13 @@ test("a legacy folder is kept and its daemon left running when HOME is unset", s
   assert.equal(daemon.exitCode === null && daemon.signalCode === null, true, "the daemon keeps running");
 });
 
+// Bug: without HOME, a machine with no data folder exited 5 and lost the "found no bb data folder" hint.
+test("a machine with no data folder exits 3 even when HOME is unset", sandboxed, async () => {
+  const env = { ...process.env };
+  delete env.HOME;
+  assert.equal(await runScript(env, ""), 3);
+});
+
 // A HOME that can't be entered can't be resolved either: `cd` fails, and the guard must not read that as no home.
 test("a legacy folder is kept and its daemon left running when HOME can't be entered", sandboxed, async (t) => {
   const home = mkdtempSync(join(tmpdir(), "bb-ona-home-"));

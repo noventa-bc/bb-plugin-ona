@@ -104,8 +104,6 @@ export const MOVE_MACHINE_ASIDE = [
   `case $legacy in /*|'') ;; *) legacy="$HOME/$legacy" ;; esac`,
   // An empty id would match a folder whose host-id file is empty.
   '[ -n "$host" ] || exit 2',
-  // Resolved once, before any folder: an unresolvable HOME must not skip the guard below.
-  'home=$(cd "${HOME:?}" && pwd -P) || exit 5',
   'for id in "$HOME"/.bb-machines/*/host-id ${legacy:+"$legacy/host-id"}; do',
   '  [ -f "$id" ] && [ "$(cat "$id")" = "$host" ] || continue',
   '  data="${id%/host-id}"',
@@ -114,7 +112,8 @@ export const MOVE_MACHINE_ASIDE = [
   // A folder that holds other machines' data folders is never stopped or moved.
   '  for other in "$data"/*/host-id; do [ -f "$other" ] && continue 2; done',
   '  real=$(cd "$data" && pwd -P) || exit 1; export real given="$data"; n=0',
-  // The home folder, or a folder above it, is never a machine's data folder: it stays.
+  // The home folder, or a folder above it, is never a machine's data folder: it stays. An unresolvable HOME stops here too.
+  '  home=$(cd "${HOME:?}" && pwd -P) || exit 5',
   '  case "$home/" in "${real%/}"/*) exit 5 ;; esac',
   // A newline in the path can't be matched within one listing line: the folder stays.
   '  case "$data$real" in *"',
@@ -476,7 +475,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
             );
           } else if (exitCode === 5) {
             bb.log.warn(
-              `Did not move bb's data folder for machine ${hostId} on ${name}: it is or holds the home folder, or the home folder couldn't be resolved; nothing was stopped or moved.`,
+              `Did not move bb's data folder for machine ${hostId} on ${name}: it is or holds the home folder, or the home folder couldn't be resolved; nothing was stopped or moved.${output.trim() ? ` The box said: ${output.trim().slice(-300)}` : ""}`,
             );
           } else if (exitCode !== 0) {
             // -1: timed out or SSH failed, so the script may still have finished.
