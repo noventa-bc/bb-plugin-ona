@@ -143,10 +143,10 @@ export interface StatusRow {
   retry: string | null;
   /** When a `bb ona keep-alive` ends, epoch ms. */
   keepAliveUntil: number | null;
-  /** Workspaces whose teardown failed for good; bb won't suspend the machine. */
-  needsRecovery: number;
-  /** Busy threads with no update for `STUCK_THREAD_MS`; they hold the box. */
-  stuckThreads: { id: string; status: string; updatedAt: number }[];
+  /** Workspaces bb gave up on, or whose retry is over a minute late (see workspaceWork); null when bb's workspace list couldn't be read. */
+  needsRecovery: number | null;
+  /** Busy threads with no update for `STUCK_THREAD_MS`; they hold the box. Null when bb's thread list couldn't be read. */
+  stuckThreads: { id: string; status: string; updatedAt: number }[] | null;
 }
 
 export type Sync = ReturnType<typeof createSync>;
@@ -237,11 +237,17 @@ export function createSync(deps: SyncDeps) {
   const idleMs = parseDuration(idleDisconnect);
   async function releaseIdleMachines(rows: Row[]): Promise<void> {
     if (idleMs <= 0) return;
+    const now = Date.now();
     const candidates = rows.filter((row) => row.phase === "active" && guard.mayAct(row.hostId));
     const activity: MachineActivity[] = [];
     for (const row of candidates) {
-      const threads = await liveThreads(bb.sdk.threads, row.hostId);
+      const threads = await liveThreads(bb.sdk.threads, row.hostId).catch((error: unknown) => {
+        bb.log.info(`couldn't list threads on ${row.hostId}: ${errorText(error)}`);
+        return null;
+      });
+      if (threads === null) continue;
       const connectedAt = (await bb.storage.kv.get<number>(connectedAtKey(row.resource.envId))) ?? pluginStartedAt;
+      const work = await workspaces(row.hostId, now);
       activity.push({
         hostId: row.hostId,
         phase: row.phase,
@@ -250,11 +256,11 @@ export function createSync(deps: SyncDeps) {
           connectedAt,
           ...threads.map((thread) => Math.max(thread.updatedAt, thread.lastReadAt ?? 0)),
         ),
-        // Letting the box go mid-hook leaves bb unable to recover the workspace.
-        workspacesBlock: await workspaces(row.hostId).then((work) => work.busy || work.needsRecovery > 0),
+        // Letting the box go mid-hook leaves bb unable to recover the workspace; a retry needs the machine active in bb (docs/ona-notes.md).
+        workspacesBlock: work === null || work.busy || work.needsRecovery > 0,
       });
     }
-    for (const hostId of machinesToRelease(activity, Date.now(), idleMs)) {
+    for (const hostId of machinesToRelease(activity, now, idleMs)) {
       const row = candidates.find((r) => r.hostId === hostId)!;
       const reason = `idle for ${idleDisconnect}; Ona's own timeout will stop the box`;
       await guard
@@ -315,13 +321,15 @@ export function createSync(deps: SyncDeps) {
     }
   }
 
-  /** bb's workspace work on a machine; a failed lookup counts as none (the behaviour before this check). */
-  async function workspaces(hostId: string): Promise<{ busy: boolean; needsRecovery: number }> {
+  /**
+   * bb's workspace work on a machine; null when the lookup failed. The idle release holds a box on null; reconcile reads null as none; status shows it as unreadable.
+   */
+  async function workspaces(hostId: string, now: number): Promise<{ busy: boolean; needsRecovery: number } | null> {
     try {
-      return workspaceWork(await bb.sdk.environments.list({ hostId }));
+      return workspaceWork(await bb.sdk.environments.list({ hostId }), now);
     } catch (error) {
       bb.log.info(`couldn't list workspaces on ${hostId}: ${errorText(error)}`);
-      return { busy: false, needsRecovery: 0 };
+      return null;
     }
   }
 
@@ -426,10 +434,12 @@ export function createSync(deps: SyncDeps) {
               ? await threadWaiting(row.hostId).catch(() => false)
               : false,
           workspaceWaiting:
-            row.phase === "active" && row.status !== "connected" ? (await workspaces(row.hostId)).busy : false,
+            row.phase === "active" && row.status !== "connected"
+              ? ((await workspaces(row.hostId, now))?.busy ?? false)
+              : false,
         };
         const decision = decide(view, await onaView(row.resource.envId, listing), now);
-        // With autoRepair off, only observed stops and deletions reach bb, and tunnels reopen after a reload.
+        // With autoRepair off, only observed stops and deletions (and the resume a waiting thread asks for) reach bb; tunnels reopen after a reload, and idle releases run below.
         const skipped = !autoRepair && !["none", "suspend-observed", "ensure-tunnel"].includes(decision.action);
         guard.note(
           row.hostId,
@@ -438,7 +448,8 @@ export function createSync(deps: SyncDeps) {
         if (decision.action === "none" || skipped) continue;
         actions.push(act(row, decision, options.force ?? false));
       }
-      if (keys.has(ALL)) await releaseIdleMachines(rows);
+      // A failed or empty listing is unknown (docs/sync.md rule 4): no idle release that pass.
+      if (keys.has(ALL) && listing?.envs.length && snapshot.lastError === null) await releaseIdleMachines(rows);
       if (options.wait) await Promise.all(actions);
     } catch (error) {
       bb.log.warn(`reconcile failed: ${errorText(error)}`);
@@ -447,6 +458,7 @@ export function createSync(deps: SyncDeps) {
 
   async function statusRows(ref?: string): Promise<StatusRow[]> {
     const listing = await snapshot.get().catch(() => snapshot.latest);
+    const now = Date.now();
     // Once a listing fails, rows keep the last good phase but not its facts: the facts would look current.
     const listingOk = snapshot.lastError === null;
     const rows = (await machines()).filter((r) => !ref || matchesRef(r, ref));
@@ -457,12 +469,17 @@ export function createSync(deps: SyncDeps) {
         const phase = env ? (env.status?.phase ?? "?") : seen?.phase;
         const record = guard.records.get(row.hostId);
         const busy = guard.busyWith(row.hostId);
+        const threads = await liveThreads(bb.sdk.threads, row.hostId).catch((error: unknown) => {
+          bb.log.info(`couldn't list threads on ${row.hostId}: ${errorText(error)}`);
+          return null;
+        });
+        const work = await workspaces(row.hostId, now);
         return {
           machine: row.machine,
           hostId: row.hostId,
           bb: row.phase === "active" ? row.status : row.phase,
           tunnel: tunnels.status(row.resource.envId),
-          ona: !listing
+          ona: !listing?.envs.length
             ? "unknown"
             : phase !== undefined
               ? (phase || "?").replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase()
@@ -488,20 +505,14 @@ export function createSync(deps: SyncDeps) {
                 ? `gave up after ${record.failures} failures; run \`bb ona sync ${row.machine}\``
                 : `retrying after ${new Date(record.quietUntil).toLocaleTimeString()}`,
           keepAliveUntil: deps.keepAliveUntil(row.resource.envId),
-          needsRecovery: (await workspaces(row.hostId)).needsRecovery,
-          stuckThreads: stuckThreads(
-            await liveThreads(bb.sdk.threads, row.hostId).catch((error: unknown) => {
-              bb.log.info(`couldn't list threads on ${row.hostId}: ${errorText(error)}`);
-              return [];
-            }),
-            Date.now(),
-          ),
+          needsRecovery: work?.needsRecovery ?? null,
+          stuckThreads: threads === null ? null : stuckThreads(threads, now),
         };
       }),
     );
   }
 
-  return { machines, machineOfHost, reconcile, statusRows, missing, workspaces, suspendWithoutStop };
+  return { machines, machineOfHost, reconcile, statusRows, missing, suspendWithoutStop };
 }
 
 /** The parts of bb's plugin API the realtime events use; the real `bb` satisfies it. */

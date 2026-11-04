@@ -137,6 +137,48 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   `bb.log.*` also goes to `bb plugin logs <id>`; `report.step` text is cleared
   when the remove finishes (`lifecycleReporter` and `emitLog` in
   `server/dist/start-server.js`) (checked 2026-11-03).
+- bb 0.48.1 retries a failed environment teardown (`writeEnvironmentTeardownFailure` in
+  `server/dist/start-server.js`): after the first to fourth failed attempt,
+  `lifecycle.retireAt` is the next retry, 1, 2, 4 or 8 minutes later (`REMOVE_RETRY_MS`
+  doubled per failure); after the fifth (`MAX_REMOVE_ATTEMPTS` is 5) it is null and the
+  message starts "Needs recovery:" (checked 2026-11-04). bb sets `retireAt` from
+  `Date.now()` in `requestEnvironmentRemoval` and `writeEnvironmentTeardownFailure`, so
+  its unit is epoch ms; the SDK types it `number | null` (checked 2026-11-04).
+- bb's periodic sweep runs every 10 s (`setInterval` with `1e4` in
+  `server/dist/start-server.js`). A tick is skipped while the previous run of the
+  job is still going (`runPeriodicSweepJob`). A run waits for each workspace it
+  sweeps, including that workspace's teardown hook, which can take up to 15 min
+  (`ENVIRONMENT_HOOK_TIMEOUT_MS`). A teardown retry starts through its host's
+  cleanup slot: one active cleanup per host, four in all
+  (`withEnvironmentCleanupSlot`) (checked 2026-11-04).
+- bb 0.48.1's owner-mismatch failure (`PROVIDER_OWNER_MISMATCH_MESSAGE` in
+  `server/dist/start-server.js`) sets `lifecycle.teardown.status` to failed and leaves
+  `retireAt` as it was; no retry runs while the mismatch lasts (checked 2026-11-04). The
+  message says the workspace belongs to a different plugin or has no recorded owner, and
+  bb writes no `Needs recovery:` text for it (checked 2026-11-04).
+- A retry's teardown hook needs its host active: an inactive host fails the attempt with
+  `host_unavailable` (`assertHostActiveForRead`), except while the machine is being
+  removed (`isCleanupRpc`). A teardown never wakes the host (`hostCommandMayWake`)
+  (checked 2026-11-04).
+- bb pauses a retry while a live thread is on the environment, except while the machine
+  is being removed; the next bullet says when it releases the workspace.
+  `environmentHasLiveThreads` counts a thread on the environment that is not archived or
+  deleted, plus any thread whose status is `active` or `stopping`, whatever its archive
+  or delete state. `sweepProviderEnvironmentInSlot` returns before the retry while that
+  holds. `requestEnvironmentRemoval` returns false, before any write, when a live thread
+  is on the environment and the machine is not being removed (checked 2026-11-04).
+- `sweepProviderEnvironmentInSlot` releases a workspace that has an owner and a teardown
+  status when a live thread is on the environment, or when it is `ready` with a path,
+  and never while the machine is being removed. The release clears `ownerThreadId`,
+  `claimPath`, `retireAt` and `teardownStatus`; with a live thread the function then
+  returns. A released workspace has no teardown status and no `retireAt`, so bb reports
+  its phase as `active` (`toEnvironmentResponseWithHostLifecycle` derives the phase from
+  the teardown status), and the plugin reads it as active (checked 2026-11-04).
+- bb blocks automatic cleanup of a workspace whose hook outcome is unknown after an
+  interruption. `cancelPendingEnvironmentHook` throws "Environment hook outcome is
+  unknown after interruption. Automatic cleanup is blocked; inspect the workspace before
+  recovering it." `sweepProviderEnvironmentInSlot` records that error as a failed
+  teardown (checked 2026-11-04).
 - In SDK 0.6.109 a provider resource is written by the provider's own lifecycle
   hooks (`create`, `suspend`, `resume`, through `checkpoint` or the returned
   `resource`) and read with `bb.experimental_machines.getResource` (checked 2026-11-03).

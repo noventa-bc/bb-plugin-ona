@@ -38,8 +38,12 @@ through (see [Security model](docs/security.md)). The server stays on loopback,
 and nothing goes through getbb.app or any other third-party relay. Tunnels only
 work while your Mac is awake and bb is running. An open tunnel counts as
 activity to Ona, so the plugin only keeps it open while you use the box. After
-`idleDisconnect` (1h by default) without thread activity, it closes the tunnel
-and marks the bb machine suspended, but it doesn't stop the environment. Ona's
+`idleDisconnect` (1h by default) without thread activity, unless bb is setting up,
+tearing down or retrying one of the machine's workspaces, or one needs recovery, or
+bb's workspace or thread list can't be read, or the Ona listing fails or comes back
+empty (see [How bb and Ona stay in sync](docs/sync.md)),
+it closes the tunnel and marks the bb machine suspended, but it doesn't stop the
+environment. Ona's
 own inactivity timeout stops it later, unless you still have an Ona editor open
 on it. The tunnel never reconnects to an environment that Ona has stopped or is
 stopping. When Ona stops a devbox, the plugin marks its bb machine suspended.
@@ -137,17 +141,17 @@ Run `bb ona setup` again at any time to check that everything is still in place.
 
 View them with `bb plugin config ona`, and change one with `bb plugin config ona set <key> <value>`.
 
-| Setting             | Default                        | What it does                                                                                                                                                                                                                                                                  |
-| ------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `onaPath`           | `/opt/homebrew/bin/ona`        | Path to the `ona` CLI. Change it on Intel Macs or non-Homebrew installs (`which ona`).                                                                                                                                                                                        |
-| `sshPath`           | `/usr/bin/ssh`                 | Path to `ssh`.                                                                                                                                                                                                                                                                |
-| `defaultProject`    | _(empty)_                      | Ona project used when creating a devbox without one, e.g. `my-app`.                                                                                                                                                                                                           |
-| `inactivityTimeout` | `3h`                           | Auto-stop timeout for devboxes bb creates. Adopted ones keep their own.                                                                                                                                                                                                       |
-| `autoRepair`        | `true`                         | Repair bb's view of devboxes changed outside bb (see [How bb and Ona stay in sync](docs/sync.md)). Off: stopped or deleted boxes are still marked suspended and tunnels still reopen; everything else is only reported by `bb ona status`.                                    |
-| `idleDisconnect`    | `1h`                           | After this long with no thread activity, bb closes its tunnel to a devbox and marks the machine suspended so Ona's timeout can stop it. The next message wakes it. Empty or `0` keeps every box connected.                                                                    |
-| `waitForSharedHome` | `true`                         | After a devbox starts, wait until its NFS home is mounted before starting bb's daemon and agents. Starting earlier lets Codex write threads into the container's own home, where the mount hides them ("no rollout found"). Turn off if your environments don't share a home. |
-| `codexSqliteHome`   | `/workspaces/.codex-sqlite-bb` | Where Codex launched by bb keeps its SQLite state on the devbox's local disk.                                                                                                                                                                                                 |
-| `machineDataDir`    | `/workspaces/.bb-machines`     | Local folder that `~/.bb-machines` is symlinked to on every devbox. Empty leaves `~/.bb-machines` alone.                                                                                                                                                                      |
+| Setting             | Default                        | What it does                                                                                                                                                                                                                                                                                                                                  |
+| ------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `onaPath`           | `/opt/homebrew/bin/ona`        | Path to the `ona` CLI. Change it on Intel Macs or non-Homebrew installs (`which ona`).                                                                                                                                                                                                                                                        |
+| `sshPath`           | `/usr/bin/ssh`                 | Path to `ssh`.                                                                                                                                                                                                                                                                                                                                |
+| `defaultProject`    | _(empty)_                      | Ona project used when creating a devbox without one, e.g. `my-app`.                                                                                                                                                                                                                                                                           |
+| `inactivityTimeout` | `3h`                           | Auto-stop timeout for devboxes bb creates. Adopted ones keep their own.                                                                                                                                                                                                                                                                       |
+| `autoRepair`        | `true`                         | Repair bb's view of devboxes changed outside bb (see [How bb and Ona stay in sync](docs/sync.md)). Off: stopped or deleted boxes are still marked suspended, tunnels still reopen, idle boxes are still let go after `idleDisconnect`, and a waiting thread still resumes a stopped box; everything else is only reported by `bb ona status`. |
+| `idleDisconnect`    | `1h`                           | After this long with no thread activity, bb closes its tunnel to a devbox and marks the machine suspended so Ona's timeout can stop it (exceptions in How it works). The next message wakes it. Empty or `0` keeps every box connected.                                                                                                       |
+| `waitForSharedHome` | `true`                         | After a devbox starts, wait until its NFS home is mounted before starting bb's daemon and agents. Starting earlier lets Codex write threads into the container's own home, where the mount hides them ("no rollout found"). Turn off if your environments don't share a home.                                                                 |
+| `codexSqliteHome`   | `/workspaces/.codex-sqlite-bb` | Where Codex launched by bb keeps its SQLite state on the devbox's local disk.                                                                                                                                                                                                                                                                 |
+| `machineDataDir`    | `/workspaces/.bb-machines`     | Local folder that `~/.bb-machines` is symlinked to on every devbox. Empty leaves `~/.bb-machines` alone.                                                                                                                                                                                                                                      |
 
 A changed setting applies after `bb plugin reload ona`.
 
@@ -289,20 +293,32 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
   runs in a thread bb hides from its sidebar; archive it with
   `bb thread archive <id>`, or archive the thread that started it, which
   archives it too.
-- **"workspace(s) need recovery" in `bb ona status`:** a thread workspace's
-  teardown failed for good, and bb won't suspend the machine until it's
-  recovered, so the box stays awake. Check what's left in it
-  (`bb environment list --host <machine>`, then the workspace path on the box).
-  bb's `bb environment cleanup <id> --recover` refuses on Ona boxes while
-  they're connected, because it can't inspect Ona's SSH processes. For an
-  adopted box, start over: run `bb machine remove <machine>`. When its cleanup
-  fails, keep the box running, stop every bb daemon on it, and anything
-  running from a checkout in it, with
-  `ssh "$(bb ona host <box>)" 'pkill -f "$(readlink -f ~/.bb-machines)/"'`,
-  and run `bb machine remove <machine> --force` (bb accepts `--force` only after
-  a normal remove failed, and only while the daemon is disconnected). Because
-  the box is running, the forced remove moves bb's data folder aside. Then run
+- **"workspace(s) may need recovery" in `bb ona status`:** a thread workspace's
+  teardown failed and bb is retrying it: five attempts, 1, 2, 4 and 8 minutes apart
+  (checked 2026-11-04). The line shows once bb has given up or a retry is more than 60
+  s overdue. While it shows, an active box stays awake until they clear. Check what's
+  left in the workspace (`bb environment list --host <machine>`, then the workspace
+  path on the box). For an adopted box, start over only once
+  `bb environment list --host <machine>` shows `Needs recovery:` for the workspace (see
+  [docs/ona-notes.md](docs/ona-notes.md)). bb writes no `Needs recovery:` text for a
+  workspace whose message says it belongs to a different plugin or has no recorded
+  owner (checked 2026-11-04); the plugin's line still shows after 60 s and an active
+  box stays awake ([docs/ona-notes.md](docs/ona-notes.md)). To start over on an adopted
+  box (never a created one: there `bb machine remove` deletes the environment), keep the
+  box running and run `bb machine remove <machine>`. If it succeeds, run `bb ona adopt <box>` (see the bullet
+  on adopting). On an adopted box, when its cleanup fails, keep the box running, stop every bb daemon on it,
+  and anything running from a checkout in it, with
+  `ssh "$(bb ona host <box>)" 'pkill -f "$(readlink -f ~/.bb-machines)/"'`, and run
+  `bb machine remove <machine> --force` (bb accepts `--force` only after a normal
+  remove failed, and only while the daemon is disconnected;
+  [docs/ona-notes.md](docs/ona-notes.md) has bb's conditions). Because the box is
+  running, the forced remove moves bb's data folder aside. Then run
   `bb ona adopt <box>`.
+- **"bb's workspace or thread list couldn't be read" in `bb ona status`:** bb's own list of
+  that machine's threads or workspaces failed; the box isn't let go while it lasts.
+  `bb plugin logs ona` has the error; the next `bb ona status` shows it cleared once bb answers.
+- **"Ona lists no environments" in `bb ona status`:** `ona environment list` answered with no boxes
+  (a different `ona context` or login, say); idle boxes are not released while it lasts, and the Ona column reads `unknown`.
 - **Adopting a box again after removing its machine:** removing an adopted
   machine while its box is running stops bb's daemon there and moves bb's data
   folder aside, from `~/.bb-machines/<server>` to

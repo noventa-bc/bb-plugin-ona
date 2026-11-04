@@ -14,30 +14,30 @@ never start or stop a box; bb does that only on your action in bb (decisions 000
 
 **What the plugin does** (`decide()` in `src/reconcile.ts`):
 
-| Ona says                                                                                | bb shows                                          | The plugin                                                                                              | Why                                                                                                                                                                                          |
-| --------------------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| running                                                                                 | active, disconnected for 45s+                     | checks over SSH whether bb's daemon runs on the box; restarts it only if it doesn't                     | the box was restarted outside bb and the daemon died with it                                                                                                                                 |
-| running                                                                                 | active, no tunnel (even if still shown connected) | reopens the tunnel                                                                                      | the plugin reloaded or bb restarted; bb shows the old connection until it notices the drop                                                                                                   |
-| stopped / stopping                                                                      | active                                            | marks the machine suspended without stopping anything; if a thread is waiting, lets bb resume it        | stopped in Ona's UI, by the CLI, or by Ona's idle timeout                                                                                                                                    |
-| deleted, or missing from two listings in a row                                          | active                                            | marks it suspended and reports it gone in `bb ona status`, or archived if `ona environment get` says so | remove it with `bb machine remove`, or unarchive it in Ona                                                                                                                                   |
-| missing from two listings in a row, but found by `ona environment get` and not archived | anything                                          | acts on the phase `get` reports, as for a listed box                                                    | the listing leaves out some boxes (another `ona context`, a long list, a box shared with you); a lookup by id counts as a listing ([0005](decisions/0005-lookup-by-id-counts-as-listing.md)) |
-| running                                                                                 | suspended                                         | nothing: it stays suspended until you use it                                                            | starting a box in Ona (say, for its editor) doesn't attach it to bb                                                                                                                          |
-| anything                                                                                | resuming / suspending for 10 min+                 | asks bb to reconcile the machine (at most every 30 min)                                                 | bb or the plugin restarted mid-operation                                                                                                                                                     |
-| starting / creating                                                                     | anything                                          | nothing; a resume waits for Ona to finish instead of starting it again                                  |                                                                                                                                                                                              |
-| unknown (`ona` failed or returned nothing)                                              | anything                                          | nothing; `bb ona status` reports the CLI problem                                                        |                                                                                                                                                                                              |
+| Ona says                                                                                | bb shows                                                                                                              | The plugin                                                                                              | Why                                                                                                                                                                                          |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| running                                                                                 | active, tunnel up or connecting, disconnected for 45s+, or at once while a thread or bb's workspace work waits for it | checks over SSH whether bb's daemon runs on the box; restarts it only if it doesn't                     | the box was restarted outside bb and the daemon died with it                                                                                                                                 |
+| running                                                                                 | active, no tunnel (even if still shown connected)                                                                     | reopens the tunnel                                                                                      | the plugin reloaded or bb restarted; bb shows the old connection until it notices the drop                                                                                                   |
+| stopped / stopping                                                                      | active, disconnected                                                                                                  | marks the machine suspended without stopping anything; if a thread is waiting, lets bb resume it        | stopped in Ona's UI, by the CLI, or by Ona's idle timeout                                                                                                                                    |
+| deleted or deleting, or missing from two listings in a row                              | active                                                                                                                | marks it suspended and reports it gone in `bb ona status`, or archived if `ona environment get` says so | remove it with `bb machine remove`, or unarchive it in Ona                                                                                                                                   |
+| missing from two listings in a row, but found by `ona environment get` and not archived | anything                                                                                                              | acts on the phase `get` reports, as for a listed box                                                    | the listing leaves out some boxes (another `ona context`, a long list, a box shared with you); a lookup by id counts as a listing ([0005](decisions/0005-lookup-by-id-counts-as-listing.md)) |
+| running                                                                                 | suspended                                                                                                             | nothing: it stays suspended until you use it                                                            | starting a box in Ona (say, for its editor) doesn't attach it to bb                                                                                                                          |
+| anything                                                                                | resuming / suspending for 10 min+                                                                                     | asks bb to reconcile the machine (5 min after the last ask; 5, then 10 min after failures)              | bb or the plugin restarted mid-operation                                                                                                                                                     |
+| anything                                                                                | creating, removing or destroyed                                                                                       | nothing                                                                                                 | bb is creating or removing the machine, or the machine is gone                                                                                                                               |
+| starting / creating                                                                     | anything                                                                                                              | nothing; a resume waits for Ona to finish instead of starting it again                                  |                                                                                                                                                                                              |
+| unknown (`ona` failed or returned nothing)                                              | anything                                                                                                              | nothing; `bb ona status` shows the CLI error, or `ona:unknown` for an empty listing                     |                                                                                                                                                                                              |
 
-The idle rule from [How it works](../README.md#how-it-works) sits alongside these: after
-`idleDisconnect` with no thread activity, an active box is marked suspended
-without being stopped. A box isn't let go while bb is setting up or tearing
-down one of its thread workspaces: closing the tunnel mid-hook leaves bb unable
-to tell how the hook ended, and it then refuses to suspend the machine until
-the workspace is recovered. A thread with a turn in flight also holds the box,
-hidden ones (workflow steps, side chats) included, but an archived thread
-counts for neither busyness nor activity, whatever status bb still shows for
-it.
-`bb ona status` names each unarchived thread that has been busy with no
-update for more than 6 hours, since such a thread holds the box until it ends
-or is archived.
+The idle rule in [How it works](../README.md#how-it-works) has these exceptions: a box
+isn't let go while bb is setting up or tearing down one of its thread workspaces, or
+while bb waits to retry a failed teardown, or while one needs recovery, or while bb's
+workspace or thread list can't be read, or while the Ona listing fails or comes back
+empty. Idle boxes then keep running until those reads work again, since the open tunnel
+counts as activity to Ona. A retry needs the machine active in bb
+([ona-notes](ona-notes.md) has the bb fact, checked 2026-11-04). Closing the tunnel
+mid-hook leaves bb unable to tell how the hook ended (checked 2026-11-04). A thread with
+a turn in flight also holds the box, hidden ones (workflow steps, side chats) included,
+but an archived thread counts for neither busyness nor activity, whatever status bb
+still shows for it.
 
 `bb ona keep-alive <name> <duration>` is the one way to hold a box past Ona's
 inactivity timeout, and only on your request; the plugin never starts one by
@@ -132,17 +132,26 @@ you asked for, so safety rule 1 does not gate it.
    nothing, and "missing" needs two listings in a row. A lookup by id
    (`ona environment get`) that fails is unknown too; only Ona saying the id
    doesn't exist counts as gone.
-5. **One action per machine at a time.** After an action, the machine waits 5
-   minutes before the next one. Failures back off (5, 10, 20 min, …). After 3
-   failures in a row the plugin stops trying and says so in `bb ona status`.
-   Daemon checks and restarts run at most 2 at a time.
+5. **One action per machine at a time.** A daemon check or restart, and a bb reconcile,
+   make the machine wait 5 minutes after a success before its next one; suspends, tunnel
+   reopens and idle releases do not wait after a success. A failure backs off for every
+   action (5, then 10 min; the third failure in a row stops automatic tries until
+   `bb ona sync`), and `bb ona status` says so. Daemon checks, restarts and bb
+   reconciles run at most 2 at a time.
 
 **When the plugin checks.**
 
 - **When the plugin starts** (load, reload, bb restart). This check is what reopens the tunnels.
-- **Right away** when a thread is waiting for an Ona machine, or bb is setting
-  up or tearing down a workspace on it (a running box only; this never starts one).
-- **45s after** an Ona machine disconnects, so a brief drop (Wi-Fi, Mac sleep) can recover on its own.
+- **Right away** when a thread is waiting for an Ona machine. A running box only, except
+  a box Ona shows stopped that a waiting thread needs: bb resumes it (the stopped row
+  above; [decision 0002](decisions/0002-repairs-never-start-or-stop.md)).
+- **Workspace work** (bb sets up, tears down or retries a workspace) is read by the
+  check of its own machine (the check 46 s after a disconnect, or the realtime
+  reconnect's pass 2 s later), and by the 2-minute pass at the latest. A failed teardown
+  counts as retrying until bb has given up on it, releases it
+  ([ona-notes](ona-notes.md), the release bullet: `sweepProviderEnvironmentInSlot`,
+  checked 2026-11-04), or it is more than 60 s overdue.
+- **46 s after** an Ona machine disconnects, so a brief drop (Wi-Fi, Mac sleep) can recover on its own.
 - **30s after** a tunnel comes back up.
 - **Right away** when a tunnel finds its box stopped in Ona.
 - **After** bb's realtime connection reconnects.
@@ -179,9 +188,10 @@ ona:brisk-heron  bb:suspended  tunnel:off  ona:running
 `last action` resets when the plugin restarts or reloads.
 
 If the automatic repairs get in your way, turn them off with
-`bb plugin config ona set autoRepair false`. Stopped and deleted boxes are then
-still marked suspended, tunnels still reopen, and `bb ona status` shows what
-would have been done.
+`bb plugin config ona set autoRepair false`. With them off, stopped or deleted boxes are
+still marked suspended, tunnels still reopen, idle boxes are still let go after
+`idleDisconnect`, and a waiting thread still resumes a stopped box; `bb ona status`
+shows what would have been done.
 
 **For contributors.** The logic lives in `src/reconcile.ts`:
 
@@ -192,7 +202,7 @@ would have been done.
 
 A pass (which machines, carrying out each decision, idle release, the status
 rows) is `createSync()` in `src/sync.ts`; `test/sync.test.ts` drives it against
-a fake of the bb calls it makes. The events are `watchRealtime()` in
+a fake of the bb calls it makes (in `test/sync-fakes.ts`). The events are `watchRealtime()` in
 `src/sync.ts`; `server.ts` wires them and the backstop to the `lifecycle-sync`
 service. The `bb ona` commands are in `src/commands.ts`.
 The shared listing is `OnaSnapshot` in `src/ona.ts`. Removing an Ona machine

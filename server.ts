@@ -62,14 +62,14 @@ export default async function plugin(bb: BbPluginApi) {
       type: "string",
       label: "Let idle devboxes sleep after",
       description:
-        "With no thread activity for this long (e.g. 30m, 1h), bb closes its tunnel to the box and marks the machine suspended, so Ona's own inactivity timeout can stop it. The next message wakes it. Empty or 0 keeps every box connected.",
+        "With no thread activity for this long (e.g. 30m, 1h), bb closes its tunnel to the box and marks the machine suspended, so Ona's own inactivity timeout can stop it (exceptions in the README's How it works). The next message wakes it. Empty or 0 keeps every box connected.",
       default: "1h",
     },
     autoRepair: {
       type: "boolean",
       label: "Repair devboxes changed outside bb",
       description:
-        "When a box is started, stopped, restarted or deleted outside bb (Ona UI, ona CLI), bring bb back in step: restart bb's daemon on a box that came back, and get unstuck machines moving. Off: only stopped or deleted boxes are marked suspended; `bb ona status` still reports the rest.",
+        "When a box is started, stopped, restarted or deleted outside bb (Ona UI, ona CLI), bring bb back in step: restart bb's daemon on a box that came back, and get unstuck machines moving. Off: stopped or deleted boxes are still marked suspended, tunnels still reopen, idle boxes are still let go after `idleDisconnect`, and a waiting thread still resumes a stopped box; everything else is only reported by `bb ona status`.",
       default: true,
     },
     codexSqliteHome: {

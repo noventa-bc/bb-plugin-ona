@@ -31,7 +31,7 @@ export interface MachineView {
   /** A thread is waiting for this machine right now. */
   threadWaiting: boolean;
   /**
-   * bb is setting up or tearing down a workspace and needs the daemon. Skips
+   * bb is setting up, tearing down or retrying a workspace and needs the daemon. Skips
    * the grace period like a waiting thread, but never resumes a stopped box.
    */
   workspaceWaiting?: boolean;
@@ -115,7 +115,7 @@ export function decide(machine: MachineView, ona: OnaView, now: number): Decisio
       reason: machine.threadWaiting
         ? "a thread is waiting and the daemon isn't connected"
         : machine.workspaceWaiting
-          ? "bb is setting up or tearing down a workspace and the daemon isn't connected"
+          ? "bb is setting up, tearing down or retrying a workspace and the daemon isn't connected"
           : "running in Ona but the daemon isn't connected",
     };
   }

@@ -1,203 +1,20 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { boxFacts, OnaSnapshot, type OnaEnvironment } from "../src/ona.ts";
+import { boxFacts } from "../src/ona.ts";
 import type { WorkspaceView } from "../src/lifecycle.ts";
-import { ALL, GIVE_UP_AFTER, GRACE_MS, HostGuard } from "../src/reconcile.ts";
+import { ALL, GIVE_UP_AFTER, GRACE_MS } from "../src/reconcile.ts";
 import {
   connectedAtKey,
-  createSync,
   forgetBox,
   matchesRef,
-  type BbHost,
   type Row,
   watchRealtime,
   type RealtimeBb,
   type ThreadRecord,
 } from "../src/sync.ts";
-
-// A fake of the bb calls a sync pass makes (SyncBb), one Ona box per machine.
-const HOUR = 3_600_000;
-const NOW = Date.now();
-
-interface Box {
-  hostId: string;
-  envId: string;
-  phase?: string;
-  status?: string;
-  lastSeenAt?: number;
-  threads?: ThreadRecord[] | "fail";
-  /** Threads bb lists only when asked for hidden ones (workflow workers, side chats). */
-  hiddenThreads?: ThreadRecord[];
-  /** The name Ona lists, when it differs from the stored one. */
-  name?: string;
-  workspaces?: WorkspaceView[];
-  ona?: string | null;
-  tunnel?: "up" | "off";
-  /** Ona's listing fields beyond the phase: start time, timeout, activity signal, git (read by `boxFacts`). */
-  listed?: Partial<OnaEnvironment>;
-}
-
-function world(
-  boxes: Box[],
-  options: {
-    refuse?: string;
-    daemonAlive?: boolean | null;
-    /** The daemon restart (the provider's reconnect) rejects with this message. */
-    reconnectFails?: string;
-    /** Ona lists every box STOPPED once the daemon check has run. */
-    stopDuringProbe?: boolean;
-    /** Keep a listing 15s fresh on a still clock, so only `refresh()` sees a change. */
-    cached?: boolean;
-    archived?: boolean | "not-found" | "fail";
-    listing?: "fail" | "empty";
-    /** The message a failing listing throws; "" counts as a failure too. */
-    listingError?: string;
-    /** bb's host lookup fails: with a plain error, or with only the SDK's `not_found` code (no status). */
-    hostGet?: "fail" | "not_found";
-    autoRepair?: boolean;
-  } = {},
-) {
-  const calls: string[] = [];
-  /** Host reads bb served: "list", or "get <hostId>". */
-  const hostReads: string[] = [];
-  const kv = new Map<string, unknown>();
-  const releasing = new Set<string>();
-  const hosts = new Map<string, BbHost>(
-    boxes.map((box) => [
-      box.hostId,
-      {
-        id: box.hostId,
-        name: `ona:${box.envId}`,
-        machineProviderId: "ona",
-        status: box.status ?? "connected",
-        lastSeenAt: box.lastSeenAt ?? NOW,
-        updatedAt: NOW - HOUR,
-        lifecycle: { phase: box.phase ?? "active", message: null, suspendedAt: null },
-      },
-    ]),
-  );
-  const byHost = new Map(boxes.map((box) => [box.hostId, box]));
-  const lifecycleCall =
-    (name: string, phase: string) =>
-    async ({ hostId }: { hostId: string }) => {
-      calls.push(`${name} ${hostId}`);
-      const host = hosts.get(hostId)!;
-      host.lifecycle = options.refuse
-        ? { ...host.lifecycle, message: options.refuse }
-        : { ...host.lifecycle, phase, message: null };
-      if (!options.refuse) host.updatedAt = Date.now();
-      // Like the provider's suspend: a box without the no-stop flag gets stopped.
-      const envId = byHost.get(hostId)!.envId;
-      if (name === "suspend" && !options.refuse && !releasing.delete(envId)) calls.push(`stop ${envId}`);
-      return host;
-    };
-  const envs = (): OnaEnvironment[] =>
-    options.listing === "empty"
-      ? []
-      : boxes
-          .filter((box) => box.ona !== null)
-          .map((box) => ({
-            id: box.envId,
-            metadata: { ...(box.name ? { name: box.name } : {}), ...box.listed?.metadata },
-            spec: box.listed?.spec,
-            status: { phase: `ENVIRONMENT_PHASE_${box.ona ?? "RUNNING"}`, ...box.listed?.status },
-          }));
-  const guard = new HostGuard();
-  let tick = 0;
-  const sync = createSync({
-    bb: {
-      sdk: {
-        hosts: {
-          list: async () => {
-            hostReads.push("list");
-            return [...hosts.values()];
-          },
-          get: async ({ hostId }) => {
-            hostReads.push(`get ${hostId}`);
-            if (options.hostGet === "fail") throw new Error("bb is down");
-            if (options.hostGet === "not_found")
-              throw Object.assign(new Error("Host not found"), { code: "not_found" });
-            const host = hosts.get(hostId);
-            // bb answers 404 for a host it doesn't know, and for one it has destroyed.
-            if (!host) throw Object.assign(new Error("Host not found"), { status: 404 });
-            return host;
-          },
-          experimental_suspend: lifecycleCall("suspend", "suspending"),
-          experimental_resume: lifecycleCall("resume", "resuming"),
-          experimental_reconcile: lifecycleCall("reconcile", "active"),
-        },
-        threads: {
-          // Like bb: hidden threads only when asked, archived ones dropped when asked.
-          list: async ({ hostId, includeHidden, archived }) => {
-            const threads = byHost.get(hostId)?.threads ?? [];
-            if (threads === "fail") throw new Error("bb is down");
-            return [...threads, ...(includeHidden ? (byHost.get(hostId)?.hiddenThreads ?? []) : [])].filter(
-              (thread) => archived !== false || thread.archivedAt == null,
-            );
-          },
-        },
-        environments: { list: async ({ hostId }) => byHost.get(hostId)?.workspaces ?? [] },
-      },
-      experimental_machines: {
-        getResource: async (hostId) => ({ envId: byHost.get(hostId)!.envId, envName: "box", adopted: true, key: "k" }),
-      },
-      storage: {
-        kv: {
-          get: async <T>(key: string) => kv.get(key) as T | undefined,
-          set: async (key: string, value: unknown) => void kv.set(key, value),
-        },
-      },
-      log: { info: () => {}, warn: () => {} },
-    },
-    // No cache and a ticking clock (unless `cached`): every pass gets its own listing.
-    snapshot: new OnaSnapshot(
-      async () => {
-        if (options.listing === "fail") throw new Error(options.listingError ?? "not logged in");
-        return envs();
-      },
-      options.cached ? 15_000 : 0,
-      options.cached ? () => tick : () => (tick += 60_000),
-    ),
-    ona: {
-      getEnvironmentIfExists: async (envId) => {
-        calls.push(`ona get ${envId}`);
-        if (options.archived === "fail") throw new Error("timed out");
-        if (options.archived === undefined || options.archived === "not-found") return null;
-        return {
-          id: envId,
-          metadata: options.archived ? { archivedAt: "2026-10-01T00:00:00Z" } : {},
-          status: { phase: "ENVIRONMENT_PHASE_RUNNING" },
-        };
-      },
-    },
-    guard,
-    tunnels: {
-      status: (envId) => boxes.find((box) => box.envId === envId)?.tunnel ?? "up",
-      ensure: (envId) => void calls.push(`tunnel ${envId}`),
-    },
-    provider: {
-      releasing,
-      daemonAlive: async () => {
-        calls.push("probe");
-        if (options.stopDuringProbe) for (const box of boxes) box.ona = "STOPPED";
-        return options.daemonAlive ?? true;
-      },
-      reconnect: async () => {
-        calls.push("restart daemon");
-        if (options.reconnectFails) throw new Error(options.reconnectFails);
-      },
-    },
-    keepAliveUntil: () => null,
-    hostByEnv: new Map(),
-    autoRepair: options.autoRepair ?? true,
-    idleDisconnect: "1h",
-    pluginStartedAt: NOW - 2 * HOUR,
-  });
-  return { sync, calls, guard, kv, hosts, releasing, hostReads };
-}
-
-const idle = (hostId: string, extra: Partial<Box> = {}): Box => ({ hostId, envId: `env-${hostId}`, ...extra });
+import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
+import { HOUR, NOW, idle, world } from "./sync-fakes.ts";
 
 test("an idle box is released: bb suspends it without stopping the box, and the flag is used once", async () => {
   const { sync, calls, releasing } = world([idle("h1")]);
@@ -245,15 +62,120 @@ test("bb accepting a suspend without acting on it is a failure, not a release", 
   assert.ok(GIVE_UP_AFTER > 1);
 });
 
-test("an idle box isn't released while bb tears down a workspace, or one needs recovery", async () => {
-  const teardown = (status: string | null): WorkspaceView => ({
+test("an idle box isn't released while bb tears down or retries a workspace, or one needs recovery", async () => {
+  const teardown = (status: string | null, retireAt: number | null = null): WorkspaceView => ({
     status: "ready",
-    lifecycle: { phase: "teardown", teardown: status ? { status } : null },
+    lifecycle: { phase: "teardown", retireAt, teardown: status ? { status } : null },
   });
-  for (const workspace of [teardown("running"), teardown(null), teardown("failed")]) {
+  const workspaces = [teardown("running"), teardown(null), teardown("failed"), teardown("failed", Date.now() + 60_000)];
+  for (const workspace of workspaces) {
     const { sync, calls } = world([idle("h1", { workspaces: [workspace] })]);
     await sync.reconcile(new Set([ALL]), { wait: true });
     assert.deepEqual(calls, [], JSON.stringify(workspace));
+  }
+});
+
+test("a failed workspace lookup holds an idle box, and status shows its list as unreadable", async () => {
+  const { sync, calls } = world([idle("h1")], { workspacesFail: "h1" });
+  await sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(calls, []);
+  const [row] = await sync.statusRows();
+  assert.equal(row!.needsRecovery, null);
+});
+
+test("one box's failed workspace lookup holds only that box", async () => {
+  const { sync, calls } = world([idle("h1"), idle("h2")], { workspacesFail: "h1" });
+  await sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(calls, ["suspend h2"]);
+  const rows = await sync.statusRows();
+  assert.equal(rows.find((row) => row.hostId === "h1")!.needsRecovery, null);
+  assert.equal(rows.find((row) => row.hostId === "h2")!.needsRecovery, 0);
+});
+
+test("status reads the clock after a slow listing, so a retry that came due during it reads as overdue", async () => {
+  enableFakeClock();
+  try {
+    const start = Date.now();
+    const retrying: WorkspaceView = {
+      status: "error",
+      lifecycle: { phase: "teardown", retireAt: start - 40_000, teardown: { status: "failed" } },
+    };
+    const { sync } = world([idle("h1", { workspaces: [retrying] })], { listingMs: 30_000 });
+    const [row] = await sync.statusRows();
+    assert.equal(row!.needsRecovery, 1);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+test("one box's failed thread list holds only that box", async () => {
+  const { sync, calls } = world([idle("h1", { threads: "fail" }), idle("h2")]);
+  await sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(calls, ["suspend h2"]);
+  const rows = await sync.statusRows();
+  assert.equal(rows.find((row) => row.hostId === "h1")!.stuckThreads, null, "bb's thread list failed");
+  assert.equal(rows.find((row) => row.hostId === "h1")!.needsRecovery, 0, "bb's workspace list still answers");
+  assert.equal(rows.find((row) => row.hostId === "h2")!.needsRecovery, 0);
+});
+
+test("a disconnected box whose workspace lookup fails gets no daemon check at once", async () => {
+  const { sync, calls } = world([idle("h1", { status: "disconnected" })], { workspacesFail: "h1" });
+  await sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(calls, []);
+});
+
+// Bug: a teardown bb was still retrying counted as needing recovery, so a disconnected box waited out the grace instead of reconnecting for bb's retry.
+test("a disconnected box reconnects at once for a teardown bb is still retrying", async () => {
+  const retrying: WorkspaceView = {
+    status: "error",
+    lifecycle: { phase: "teardown", retireAt: Date.now() + 60_000, teardown: { status: "failed" } },
+  };
+  const { sync, calls } = world(
+    [idle("h1", { status: "disconnected", lastSeenAt: Date.now() - 5_000, workspaces: [retrying] })],
+    { daemonAlive: false },
+  );
+  await sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(calls, ["probe", "restart daemon"]);
+  const [row] = await sync.statusRows();
+  assert.equal(row!.needsRecovery, 0, "bb is still retrying it, so status doesn't call it needing recovery");
+});
+
+test("a disconnected box waits out the grace for a teardown whose retry is over a minute overdue", async () => {
+  const overdue: WorkspaceView = {
+    status: "error",
+    lifecycle: { phase: "teardown", retireAt: Date.now() - 2 * 60_000, teardown: { status: "failed" } },
+  };
+  const { sync, calls } = world(
+    [idle("h1", { status: "disconnected", lastSeenAt: Date.now() - 5_000, workspaces: [overdue] })],
+    { daemonAlive: false },
+  );
+  await sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(calls, []);
+  const [row] = await sync.statusRows();
+  assert.equal(row!.needsRecovery, 1);
+});
+
+// Box a's slow thread list (listed first) moves the clock; b's cutoff must still use the pass clock.
+test("a retry the pass judged busy stays busy after a sibling's wait moves the clock past its cutoff", async () => {
+  enableFakeClock();
+  try {
+    const start = Date.now();
+    const retrying: WorkspaceView = {
+      status: "error",
+      lifecycle: { phase: "teardown", retireAt: start - 40_000, teardown: { status: "failed" } },
+    };
+    // The fake clock starts at 0, so the default pluginStartedAt would sit in the future and disable the idle check.
+    const { sync, calls } = world(
+      [
+        idle("a", { status: "disconnected", lastSeenAt: start - 5_000, threadsMs: 30_000 }),
+        idle("b", { status: "disconnected", lastSeenAt: start - 5_000, workspaces: [retrying] }),
+      ],
+      { daemonAlive: false, pluginStartedAt: start },
+    );
+    await sync.reconcile(new Set([ALL]), { wait: true });
+    assert.deepEqual(calls, ["probe", "restart daemon"]);
+  } finally {
+    await resetFakeClock();
   }
 });
 
@@ -298,7 +220,10 @@ test("machineOfHost throws when the lookup fails for another reason", async () =
 });
 
 test("status reports workspaces that need recovery", async () => {
-  const failed: WorkspaceView = { status: "error", lifecycle: { phase: "teardown", teardown: { status: "failed" } } };
+  const failed: WorkspaceView = {
+    status: "error",
+    lifecycle: { phase: "teardown", retireAt: null, teardown: { status: "failed" } },
+  };
   const { sync } = world([idle("h1", { workspaces: [failed, failed] })]);
   const [row] = await sync.statusRows();
   assert.equal(row!.needsRecovery, 2);
@@ -320,13 +245,13 @@ test("status lists a busy thread with no update for over 6h", async () => {
 test("status still lists a machine whose thread listing fails", async () => {
   const { sync } = world([idle("h1", { threads: "fail" })]);
   const [row] = await sync.statusRows();
-  assert.deepEqual(row!.stuckThreads, []);
+  assert.equal(row!.stuckThreads, null);
 });
 
 // Facts show only while the listing is good, so the text and --json agree. A box Ona doesn't list has none.
-test("status shows a box's facts only while the listing is good, and none for a box Ona doesn't list", async () => {
+test("status shows facts only while the listing is good, reads the Ona column unknown for an empty listing, and none for a box Ona doesn't list", async () => {
   const listed = JSON.parse(readFileSync(new URL("./fixtures/ona/facts-environment.json", import.meta.url), "utf8"));
-  const opts: { listing?: "fail"; listingError?: string } = {};
+  const opts: { listing?: "fail" | "empty"; listingError?: string } = {};
   const { sync } = world([idle("h1", { listed }), idle("h2", { ona: null })], opts);
   const [row, unlisted] = await sync.statusRows();
   assert.deepEqual(row!.facts, boxFacts(listed), "a good listing fills the facts");
@@ -337,6 +262,9 @@ test("status shows a box's facts only while the listing is good, and none for a 
   opts.listingError = "";
   const [empty] = await sync.statusRows();
   assert.equal(empty!.facts, null, "an empty error is an error too");
+  opts.listing = "empty";
+  const [none] = await sync.statusRows();
+  assert.equal(none!.ona, "unknown", "an empty listing reads as unknown too");
 });
 
 test("a box missing from two listings is looked up once: archived or gone", async () => {
@@ -419,11 +347,82 @@ test("the first pass after a reload reopens the tunnel of a running box bb still
   }
 });
 
+test("autoRepair off still suspends a stopped or idle box, resumes a stopped box for a waiting thread, and only reports a disconnected or stuck one", async () => {
+  const waiting: ThreadRecord = {
+    id: "t1",
+    status: "idle",
+    updatedAt: NOW,
+    runtime: { displayStatus: "waiting-for-host" },
+  };
+  const stopped = world([idle("h1", { ona: "STOPPED", status: "disconnected" })], { autoRepair: false });
+  await stopped.sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.deepEqual(stopped.calls, ["suspend h1"]);
+  const resumed = world([idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waiting] })], {
+    autoRepair: false,
+  });
+  await resumed.sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.deepEqual(resumed.calls, ["suspend h1", "resume h1"]);
+  const down = world([idle("h1", { status: "disconnected", threads: [waiting] })], { autoRepair: false });
+  await down.sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.deepEqual(down.calls, []);
+  const [row] = await down.sync.statusRows();
+  assert.match(row!.now!.reason, /autoRepair is off/);
+  const idleBox = world([idle("h1")], { autoRepair: false });
+  await idleBox.sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(idleBox.calls, ["suspend h1"]);
+  const stuck = world([idle("h1", { phase: "resuming" })], { autoRepair: false });
+  await stuck.sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(stuck.calls, []);
+  const [stuckRow] = await stuck.sync.statusRows();
+  assert.match(stuckRow!.now!.reason, /autoRepair is off/);
+});
+
 test("a failed or empty Ona listing changes nothing", async () => {
   for (const listing of ["fail", "empty"] as const) {
     const box = idle("h1", { status: "disconnected", lastSeenAt: NOW - HOUR, threads: [] });
     const { sync, calls } = world([box], { listing });
     await sync.reconcile(new Set(["h1"]), { wait: true });
+    assert.deepEqual(calls, [], listing);
+  }
+});
+
+// The list fails after a good one. The cache still serves that good listing for 15 s; the release must not use it.
+test("a failed Ona list holds the all-machines release while the last good listing is still cached", async () => {
+  enableFakeClock();
+  try {
+    const { sync, calls } = world([idle("h1")], { cached: true, listingFailsAfter: 1, pluginStartedAt: -2 * HOUR });
+    await sync.reconcile(new Set(["h1"]), { wait: true }); // T0: a good listing
+    await tick(6_000);
+    await sync.reconcile(new Set(["h1"]), { wait: true }); // T0+6 s: the list fails
+    await tick(2_000);
+    await sync.reconcile(new Set([ALL]), { wait: true }); // T0+8 s: the cache still answers, and the box is idle
+    assert.deepEqual(calls, []);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+test("a good Ona list after a failed one reopens the all-machines release", async () => {
+  enableFakeClock();
+  try {
+    const options = { cached: true, listingFailsAfter: 1 as number | undefined, pluginStartedAt: -2 * HOUR };
+    const { sync, calls } = world([idle("h1")], options);
+    await sync.reconcile(new Set(["h1"]), { wait: true }); // T0: a good listing
+    await tick(6_000);
+    await sync.reconcile(new Set(["h1"]), { wait: true }); // T0+6 s: the list fails
+    options.listingFailsAfter = undefined; // Ona answers again
+    await tick(15_000); // past the TTL, so the all-machines pass fetches a new listing
+    await sync.reconcile(new Set([ALL]), { wait: true }); // the good list reopens the release
+    assert.deepEqual(calls, ["suspend h1"]);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+test("a failed or empty Ona listing holds the idle release for every box", async () => {
+  for (const listing of ["fail", "empty"] as const) {
+    const { sync, calls } = world([idle("h1")], { listing });
+    await sync.reconcile(new Set([ALL]), { wait: true });
     assert.deepEqual(calls, [], listing);
   }
 });

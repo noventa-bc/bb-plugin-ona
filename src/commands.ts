@@ -183,6 +183,8 @@ export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()
   if (rows.length === 0) return `${header}\nNo Ona machines yet.`;
   const lines = rows.map((row) => {
     const rowLines = [`${row.machine}  bb:${row.bb}  tunnel:${row.tunnel}  ona:${row.ona}`];
+    if (row.ona === "unknown" && ona.lastError === null)
+      rowLines.push("  Ona lists no environments; idle boxes are not released until it does");
     const box = row.facts ? boxLine(row.facts) : null;
     if (box) rowLines.push(box);
     if (row.now) rowLines.push(`  now: ${row.now.reason} (since ${ago(row.now.since)})`);
@@ -193,12 +195,15 @@ export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()
     }
     if (row.retry) rowLines.push(`  ${row.retry}`);
     if (row.keepAliveUntil) rowLines.push(`  keep-alive until ${clockTime(row.keepAliveUntil)}`);
-    if (row.needsRecovery > 0) {
+    if (row.needsRecovery === null || row.stuckThreads === null) {
+      rowLines.push("  bb's workspace or thread list couldn't be read; an active box stays awake until it can");
+    }
+    if ((row.needsRecovery ?? 0) > 0) {
       rowLines.push(
-        `  ${row.needsRecovery} workspace(s) need recovery; bb won't suspend this machine, so the box stays awake. See \`bb environment list --host ${row.hostId}\``,
+        `  ${row.needsRecovery} workspace(s) may need recovery; an active box stays awake until they clear. See \`bb environment list --host ${row.hostId}\``,
       );
     }
-    for (const thread of row.stuckThreads) {
+    for (const thread of row.stuckThreads ?? []) {
       rowLines.push(
         `  thread ${thread.id} is ${thread.status}, last updated ${ago(thread.updatedAt)}; it holds this box until it ends or is archived`,
       );
