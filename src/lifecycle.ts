@@ -11,7 +11,7 @@ export interface MachineActivity {
   threadStatuses: readonly string[];
   /** Latest thread activity or (re)connect, epoch ms. */
   lastActivityAt: number;
-  /** bb is setting up or tearing down a workspace on it, or one needs recovery. */
+  /** bb is setting up or tearing down a workspace on it, retrying a failed teardown, or one needs recovery. */
   workspacesBlock?: boolean;
 }
 
@@ -24,11 +24,7 @@ export interface WorkspaceView {
   lifecycle: { phase: string; retireAt: number | null; teardown: { status: string } | null };
 }
 
-/**
- * bb's owner-mismatch failure writer can leave `retireAt` in the past, with no retry while
- * the mismatch lasts (checked 2026-11-04). Without a cutoff, such a teardown never shows as needing recovery.
- * The sweep facts behind this are in docs/ona-notes.md.
- */
+/** A retry this long past retireAt counts as never coming; docs/ona-notes.md has the bb case. */
 const OVERDUE_MS = 60_000;
 
 /**

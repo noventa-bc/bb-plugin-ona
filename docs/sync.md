@@ -29,9 +29,10 @@ never start or stop a box; bb does that only on your action in bb (decisions 000
 The idle rule from [How it works](../README.md#how-it-works) sits alongside these: after
 `idleDisconnect` with no thread activity, an active box is marked suspended
 without being stopped. A box isn't let go while bb is setting up or tearing
-down one of its thread workspaces, or while bb waits to retry a failed teardown.
-Closing the tunnel mid-hook leaves bb unable to tell how the hook ended, and it
-then refuses to suspend the machine until the workspace is recovered. A thread
+down one of its thread workspaces, or while bb waits to retry a failed teardown,
+and a retry needs the box up. Closing the tunnel mid-hook leaves bb unable to
+tell how the hook ended, and it then refuses to suspend the machine until the
+workspace is recovered. A thread
 with a turn in flight also holds the box,
 hidden ones (workflow steps, side chats) included, but an archived thread
 counts for neither busyness nor activity, whatever status bb still shows for
