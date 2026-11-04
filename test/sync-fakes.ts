@@ -4,11 +4,10 @@ import { HostGuard } from "../src/reconcile.ts";
 import { createSync, type BbHost, type ThreadRecord } from "../src/sync.ts";
 import { tick as tickClock } from "./fake-clock.ts";
 
-// A fake of the bb calls a sync pass makes (SyncBb), one Ona box per machine.
 export const HOUR = 3_600_000;
 export const NOW = Date.now();
 
-export interface Box {
+interface Box {
   hostId: string;
   envId: string;
   phase?: string;
@@ -26,6 +25,7 @@ export interface Box {
   listingMs?: number;
 }
 
+// A fake of the bb calls a sync pass makes (SyncBb), one Ona box per machine.
 export function world(
   boxes: Box[],
   options: {

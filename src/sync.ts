@@ -141,10 +141,7 @@ export interface StatusRow {
   retry: string | null;
   /** When a `bb ona keep-alive` ends, epoch ms. */
   keepAliveUntil: number | null;
-  /**
-   * Workspaces whose teardown needs recovery (see workspaceWork); the plugin won't let an
-   * active machine go idle until they clear.
-   */
+  /** Workspaces bb gave up on, or whose retry is over a minute late (see workspaceWork). */
   needsRecovery: number;
   /** Busy threads with no update for `STUCK_THREAD_MS`; they hold the box. */
   stuckThreads: { id: string; status: string; updatedAt: number }[];
@@ -318,8 +315,8 @@ export function createSync(deps: SyncDeps) {
   }
 
   /**
-   * bb's workspace work on a machine; a failed lookup counts as none (the behaviour before this check).
-   * reconcile passes its pass clock, so every row of a pass is judged at one time.
+   * bb's workspace work on a machine; a failed lookup counts as none.
+   * reconcile's workspaceWaiting check passes its pass clock.
    */
   async function workspaces(hostId: string, now = Date.now()): Promise<{ busy: boolean; needsRecovery: number }> {
     try {

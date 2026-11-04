@@ -104,7 +104,7 @@ test("a disconnected box waits out the grace for a teardown whose retry is over 
   assert.equal(row!.needsRecovery, 1);
 });
 
-// A pass reads its clock once. A sibling's wait must not let a later row judge the same retry against a later clock.
+// reconcile's workspaceWaiting check passes its pass clock, so a sibling's wait cannot move the cutoff.
 test("a retry the pass judged busy stays busy after a sibling's wait moves the clock past its cutoff", async () => {
   enableFakeClock();
   try {
@@ -113,10 +113,9 @@ test("a retry the pass judged busy stays busy after a sibling's wait moves the c
       status: "error",
       lifecycle: { phase: "teardown", retireAt: start - 40_000, teardown: { status: "failed" } },
     };
-    const busy: ThreadRecord = { id: "t1", status: "active", updatedAt: start, runtime: { displayStatus: "active" } };
     const { sync, calls } = world(
       [
-        idle("a", { status: "disconnected", lastSeenAt: start - 5_000, threads: [busy], listingMs: 30_000 }),
+        idle("a", { status: "disconnected", lastSeenAt: start - 5_000, listingMs: 30_000 }),
         idle("b", { status: "disconnected", lastSeenAt: start - 5_000, workspaces: [retrying] }),
       ],
       { daemonAlive: false },
