@@ -42,7 +42,7 @@ condition.
 
 Merging on green is only as safe as CI. Every PR adds a test for the behaviour
 it changes; a gap CI cannot see (untested module, missing lint, unchecked
-script) becomes a roadmap item and is named in the PR.
+script) becomes a roadmap item and is named in the PR by its label only.
 
 ## Ponytail
 
@@ -114,18 +114,22 @@ those and the "skipped or not checked" lines ponytail ends with.
    opens after a round with no blocking finding, and only once all three have run
    on code that has not changed since. Check the ten Code Review Rules in
    `AGENTS.md`.
+
    **Converge.** The item's code is the PR's scope, and reviewer briefs name
    it and ask for anything outside it under a separate "Pre-existing" heading.
    A finding blocks only when the branch introduced the defect or makes one
-   reachable or worse, breaks a safety rule or a coupled change, or leaves a
-   doc in the diff contradicting the code. A finding that was already on
-   `main` and that the branch does not make reachable or worse becomes a
-   roadmap item, with its guard, and the PR names it by its label only,
-   whatever severity the reviewer gave it. After the first round no new
-   behaviour enters the branch beyond a fix for a blocking finding: a fix
-   that needs more is its own item. Code converges in three rounds; from
-   round 4 on, the orchestrator opens the PR once nothing blocks and the
-   passes above have run on the code as it stands.
+   reachable or worse, breaks a safety rule or a coupled change, leaves its
+   own behaviour untested, or leaves a doc in the diff contradicting the
+   code. A finding that was already on `main` and that the branch does not
+   make reachable or worse becomes a roadmap item, with its guard, and the PR
+   names it by its label only, whatever severity the reviewer gave it; a
+   credential or a data-loss risk goes to the owner at once instead. After
+   the first round no new behaviour enters the branch beyond a fix for a
+   blocking finding: a fix that needs behaviour beyond that is its own item.
+   Code converges in three rounds; from round 4 on, the orchestrator opens
+   the PR once nothing blocks and the passes above have run on the code as
+   it stands.
+
 7. **Open the PR.** The title is a Conventional Commit (`type(scope):
 subject`, see `AGENTS.md`): the squash merge makes it the commit on
    `main`, and it decides the release. First run
