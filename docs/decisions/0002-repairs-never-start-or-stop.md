@@ -4,7 +4,7 @@ Status: accepted
 
 ## Rule
 
-Automatic repairs never start or stop a box. Only a user action, `bb machine resume`, starts a box. Automatic suspends mark the machine suspended without calling the provider's stop. SSH to a box is used only when a fresh Ona listing says the box is `RUNNING`.
+Automatic repairs never start or stop a box. Only a user action starts a box: creating or resuming a machine (`bb machine resume`). Automatic suspends mark the machine suspended without calling the provider's stop. SSH to a box is used only when a fresh Ona listing says the box is `RUNNING`.
 
 ## Why
 
@@ -19,3 +19,4 @@ Automatic repairs never start or stop a box. Only a user action, `bb machine res
 - The daemon is restarted only when the probe finds no daemon process. If SSH fails or times out, nothing is restarted.
 - A box counts as gone only after two good listings in a row without it.
 - Repairs that find a stopped box only change bb's state, so the box stays in whatever state Ona gave it.
+- Create and resume start the box you asked for when Ona shows it neither running nor starting, then connect (rule 1 in `docs/sync.md`).
