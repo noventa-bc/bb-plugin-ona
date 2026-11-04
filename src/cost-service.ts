@@ -72,9 +72,14 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
    * A Codex $0.00 there may come from the usage lag (docs/ona-notes.md), so it is not used.
    */
   async function legacyCost(threadId: string): Promise<StoredCost | null> {
-    const old = await bb.storage.kv.get<{ cost: ThreadCost | null; checkedAt: number }>(oldCostKey(threadId));
-    const usable = old?.cost && (old.cost.provider === "claude-code" || old.cost.usd > 0);
-    return usable ? { cost: old.cost, seq: "", checkedAt: old.checkedAt } : null;
+    const old = await bb.storage.kv.get<{ cost: ThreadCost | null; seq?: number | string; checkedAt: number }>(
+      oldCostKey(threadId),
+    );
+    if (!old?.cost) return null;
+    // A Claude figure settled its turn on main, so it stays settled; a Codex one gets fresh rounds.
+    if (old.cost.provider === "claude-code")
+      return { cost: old.cost, seq: String(old.seq ?? ""), checkedAt: old.checkedAt, runs: 2 };
+    return old.cost.usd > 0 ? { cost: old.cost, seq: "", checkedAt: old.checkedAt } : null;
   }
 
   /**
@@ -178,7 +183,7 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
           cost && (!codex || !stored?.cost || !cost.partial || cost.usd >= stored.cost.usd)
             ? cost
             : (stored?.cost ?? null);
-        // A Claude round that priced something settles the turn, as only an empty round is read again.
+        // A Claude round that returns a figure settles the turn, as only an empty round is read again.
         const pricedClaude = !codex && cost;
         const runs = pricedClaude ? rounds : stored?.seq === seq ? (stored.runs ?? 0) + 1 : 1;
         await bb.storage.kv.set(key, { cost: best, seq, checkedAt: Date.now(), runs });

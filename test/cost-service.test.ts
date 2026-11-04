@@ -148,6 +148,23 @@ test("a paused Codex thread keeps an old cost: figure above $0.00 and drops a $0
   assert.deepEqual([...kept.collectorRuns, ...dropped.collectorRuns], []);
 });
 
+test("a Claude turn with a priced figure runs the collector once, not again after the floor (fails if a priced figure is checked again)", async () => {
+  // Guard: a Claude turn is read again only when its first read finds nothing.
+  const w = world({ turnSeq: 8, stored: { cost: FIGURE, seq: "7", checkedAt: OLD, runs: 1 } });
+  assert.equal((await w.costs.threadCost("t1"))?.usd, 1);
+  await pastFloor();
+  assert.equal((await w.costs.threadCost("t1"))?.usd, 1);
+  assert.deepEqual(w.collectorRuns, ["env-1"]);
+});
+
+test("a Claude figure settled on main stays settled after the upgrade (fails if the old record is read again)", async () => {
+  // Guard: the upgrade must not cost an extra collector run per Claude thread.
+  const w = world({ turnSeq: 7 });
+  w.kv.set(OLD_KEY, { cost: FIGURE, seq: 7, checkedAt: OLD });
+  assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
+  assert.deepEqual(w.collectorRuns, []);
+});
+
 test("a lower partial Claude figure replaces the stored one, as on main (fails if the Codex-only rule applies to Claude)", async () => {
   // Guard: only a partial Codex figure waits for usage not recorded yet; a Claude figure is always the latest read.
   const w = world({
@@ -400,7 +417,7 @@ test("a collector error does not count as one of a turn's rounds (fails if an er
   assert.equal(w.collectorRuns.length, 14);
 });
 
-test("a Claude round that priced something settles the turn, as on main (fails if a priced Claude round is read again)", async () => {
+test("a Claude round that returns a figure settles the turn, as on main (fails if a priced Claude round is read again)", async () => {
   // Guard: only an empty Claude round is read again; a partial Claude figure settles like a complete one.
   const w = world({
     turnSeq: 8,
