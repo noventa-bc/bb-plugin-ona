@@ -296,6 +296,9 @@ export function readiness(env: OnaEnvironment, started = false): Readiness {
   return { state: "waiting", reason: phase };
 }
 
+/** Ona did not say the box is ready: the connect ends, no SSH runs, and no SSH check counts it as a failed try. */
+export class NotReadyError extends Error {}
+
 /**
  * Safety rule 1 for every connect: no SSH until `ona environment get`, asked
  * right before, says the box and its dev container run. A failed `get` is
@@ -329,56 +332,20 @@ export async function waitForReady(
         const message = error instanceof Error ? error.message : String(error);
         return wait(firstLine(message) ?? message);
       }
-      if (!env) throw new Error(`Ona environment ${name} disappeared.`);
+      if (!env) throw new NotReadyError(`Ona environment ${name} disappeared.`);
       const state = readiness(env, started);
-      if (state.state === "failed") throw new Error(`Ona environment ${name} failed to start: ${state.message}`);
+      if (state.state === "failed") throw new NotReadyError(`Ona environment ${name} is not ready: ${state.message}`);
       return state.state === "ready" || wait(state.reason);
     },
     { deadlineMs: 15 * 60_000, intervalMs: 5_000, signal },
   ).catch((error: unknown) => {
     // A caller's own timeout ends the wait first: keep the reason the deadline error would give.
     if (signal.aborted && waiting)
-      throw new Error(`Ona did not report ${name} ready before the wait ended: ${waiting}`);
+      throw new NotReadyError(`Ona did not report ${name} ready before the wait ended: ${waiting}`);
     throw error;
   });
   if (ready) return;
-  throw new Error(`Ona did not report ${name} ready within 15 minutes: ${waiting}`);
-}
-
-/**
- * Safety rule 1 between SSH retries: asks Ona again. True when the box is
- * ready; when Ona can't be asked (unknown: skip this probe), why; throws when
- * the box is no longer ready.
- */
-export async function stillReady(
-  ona: OnaCli,
-  envId: string,
-  name: string,
-  signal: AbortSignal,
-): Promise<true | string> {
-  let env: OnaEnvironment | null;
-  try {
-    env = await ona.getEnvironmentIfExists(envId, signal);
-  } catch (error) {
-    if (signal.aborted) throw error;
-    const message = error instanceof Error ? error.message : String(error);
-    return `Ona could not be asked: ${firstLine(message) ?? message}`;
-  }
-  const state: Readiness = env ? readiness(env) : { state: "failed", message: "gone" };
-  if (state.state === "ready") return true;
-  throw new Error(
-    `Ona environment ${name} is no longer ready: ${state.state === "failed" ? state.message : state.reason}`,
-  );
-}
-
-/**
- * Safety rule 1 for a retried SSH check: resolves true when this try may run,
- * or why it is skipped (Ona can't be asked). The first try runs on the answer
- * `waitForReady` just got; each later one asks Ona again (`stillReady`).
- */
-export function retryGate(ona: OnaCli, envId: string, name: string, signal: AbortSignal) {
-  let tries = 0;
-  return async (): Promise<true | string> => (tries++ === 0 ? true : stillReady(ona, envId, name, signal));
+  throw new NotReadyError(`Ona did not report ${name} ready within 15 minutes: ${waiting}`);
 }
 
 /** Native SSH host alias written by `ona environment ssh-config`. */

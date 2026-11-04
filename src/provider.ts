@@ -8,7 +8,6 @@ import {
   isRunning,
   isStarting,
   isStopped,
-  retryGate,
   unpushedWork,
   waitForReady,
   type OnaCli,
@@ -16,7 +15,7 @@ import {
 } from "./ona.ts";
 import { DAEMON_PROBE } from "./reconcile.ts";
 import type { PluginMachineProviderAvailability } from "./setup.ts";
-import { daemonEnv, shellQuote, sshCapture, sshCheck, sshExecutor, type TunnelManager } from "./ssh.ts";
+import { daemonEnv, pollSsh, shellQuote, sshCapture, sshCheck, sshExecutor, type TunnelManager } from "./ssh.ts";
 import { pollUntil } from "./time.ts";
 
 type PluginMachineProviderProgress = MachineBootstrapRequest["report"];
@@ -200,22 +199,9 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     await ona.start(env.id, signal);
   }
 
-  /** An SSH check whose retries ask Ona first (rule 1). */
-  const sshCheckOn = (resource: OnaResource, executor: MachineExecutor, script: string, signal: AbortSignal) =>
-    sshCheck(executor, script, signal, CHECK_TIMEOUT_MS, retryGate(ona, resource.envId, resource.envName, signal));
-
-  async function waitForSsh(resource: OnaResource, executor: MachineExecutor, signal: AbortSignal) {
-    const check = sshCheckOn(resource, executor, "true", signal);
-    const reached = await pollUntil(check, { deadlineMs: 10 * 60_000, intervalMs: 5_000, signal }).catch(
-      (error: unknown) => {
-        // A caller's own timeout ends the wait first: keep the reason the deadline error would give.
-        if (signal.aborted && check.last)
-          throw new Error(`Could not SSH into the devbox before the wait ended: ${check.last}`);
-        throw error;
-      },
-    );
-    if (reached) return;
-    throw new Error(`Could not SSH into the devbox within 10 minutes: ${check.last}`);
+  async function waitForSsh(executor: MachineExecutor, signal: AbortSignal) {
+    const check = sshCheck(executor, "true", signal, CHECK_TIMEOUT_MS);
+    await pollSsh(check, "Could not SSH into the devbox", { minutes: 10, intervalMs: 5_000, signal });
   }
 
   /**
@@ -225,27 +211,23 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
    * rollout and can't resume it. Wait for $HOME to become a mount point.
    */
   async function waitForSharedHome(
-    resource: OnaResource,
     executor: MachineExecutor,
     report: PluginMachineProviderProgress,
     signal: AbortSignal,
   ) {
-    const probe = sshCheckOn(resource, executor, 'mountpoint -q "$HOME"', signal);
+    const probe = sshCheck(executor, 'mountpoint -q "$HOME"', signal, CHECK_TIMEOUT_MS);
     if (await probe()) return;
     report.step("Waiting for the shared home folder to be mounted");
-    if (await pollUntil(probe, { deadlineMs: 5 * 60_000, intervalMs: 5_000, signal })) return;
-    throw new Error(
-      "The devbox's home folder was not mounted within 5 minutes. If your Ona environments don't share a home folder, turn off the plugin's waitForSharedHome setting.",
-    );
+    const hint =
+      ". If your Ona environments don't share a home folder, turn off the plugin's waitForSharedHome setting.";
+    await pollSsh(probe, "The devbox's home folder was not mounted", { minutes: 5, intervalMs: 5_000, signal, hint });
   }
 
-  async function waitForTunnel(resource: OnaResource, executor: MachineExecutor, signal: AbortSignal) {
+  async function waitForTunnel(executor: MachineExecutor, signal: AbortSignal) {
     const url = `http://127.0.0.1:${deps.port()}/health`;
-    const probe = sshCheckOn(resource, executor, `curl -sf -o /dev/null --max-time 5 ${shellQuote(url)}`, signal);
-    if (await pollUntil(probe, { deadlineMs: 10 * 60_000, intervalMs: 3_000, signal })) return;
-    throw new Error(
-      "The devbox could not reach the bb server through the SSH tunnel within 10 minutes. Check `bb plugin logs ona`.",
-    );
+    const probe = sshCheck(executor, `curl -sf -o /dev/null --max-time 5 ${shellQuote(url)}`, signal, CHECK_TIMEOUT_MS);
+    const what = "The devbox could not reach the bb server through the SSH tunnel";
+    await pollSsh(probe, what, { minutes: 10, intervalMs: 3_000, signal, hint: ". Check `bb plugin logs ona`." });
   }
 
   async function preflight(executor: MachineExecutor, report: PluginMachineProviderProgress, signal: AbortSignal) {
@@ -275,18 +257,25 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     started = false,
   ) {
     await waitForReady(ona, resource.envId, resource.envName, report, signal, started);
-    const executor = executorFor(deps.sshBinary, resource.envId, daemonEnv(deps.codexSqliteHome));
+    // Safety rule 1 for every SSH command below: Ona is asked first, and the command runs only on a ready answer.
+    const ssh = executorFor(deps.sshBinary, resource.envId, daemonEnv(deps.codexSqliteHome));
+    const executor: MachineExecutor = {
+      exec: async (request) => {
+        await waitForReady(ona, resource.envId, resource.envName, report, request.signal);
+        return ssh.exec(request);
+      },
+    };
     report.step("Waiting for the dev container to accept SSH");
-    await waitForSsh(resource, executor, signal);
-    if (deps.waitForSharedHome) await waitForSharedHome(resource, executor, report, signal);
+    await waitForSsh(executor, signal);
+    if (deps.waitForSharedHome) await waitForSharedHome(executor, report, signal);
     if (deps.codexSqliteHome) {
       await sshCapture(executor, `mkdir -p ${shellQuote(deps.codexSqliteHome)}`, signal, CHECK_TIMEOUT_MS);
     }
-    if (deps.machineDataDir) await ensureLocalMachineRoot(resource, executor, deps.machineDataDir, report, signal);
+    if (deps.machineDataDir) await ensureLocalMachineRoot(executor, deps.machineDataDir, report, signal);
     tunnels.ensure(resource.envId);
     await deps.markConnected(resource.envId);
     report.step("Opening SSH reverse tunnel to bb server");
-    await waitForTunnel(resource, executor, signal);
+    await waitForTunnel(executor, signal);
     await preflight(executor, report, signal);
     report.step("Installing and enrolling the bb daemon");
     return bb.experimental_machines.bootstrap({ key, executor, report, signal });
@@ -298,13 +287,12 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
    */
   async function connectOrClose(
     resource: OnaResource,
-    key: string,
     report: PluginMachineProviderProgress,
     signal: AbortSignal,
     started: boolean,
   ) {
     try {
-      return await connect(resource, key, report, signal, started);
+      return await connect(resource, resource.key, report, signal, started);
     } catch (error) {
       await disconnect(resource.envId);
       throw error;
@@ -312,7 +300,6 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
   }
 
   async function ensureLocalMachineRoot(
-    resource: OnaResource,
     executor: MachineExecutor,
     target: string,
     report: PluginMachineProviderProgress,
@@ -339,10 +326,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     // container's own ~/.bb-machines shows through. Re-check for a while
     // before treating a real folder (exit 6) as the user's to move.
     let last = { exitCode: 6, output: "" };
-    const mayProbe = retryGate(ona, resource.envId, resource.envName, signal);
     await pollUntil(
       async () => {
-        if ((await mayProbe()) !== true) return false;
         let output = "";
         const { exitCode } = await executor.exec({
           command: ["bash", "-c", script, "bb-ona-root", target],
@@ -421,7 +406,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       await checkpoint(resource);
       await ensureRunning(env, report, signal);
       // Not running when this began: Ona can lag behind a start before it reports STARTING.
-      await connectOrClose(resource, key, report, signal, !isRunning(env));
+      await connectOrClose(resource, report, signal, !isRunning(env));
       return { status: "created", name: `ona:${resource.envName}`, resource };
     },
     async reconcileCleanup({ key, report, signal }) {
@@ -460,7 +445,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       const current = { ...owned, envName: nameOf(env, owned) };
       await checkpoint(current);
       // bootstrap with the creation key restarts the already-enrolled daemon.
-      await connectOrClose(current, current.key, report, signal, !isRunning(env));
+      await connectOrClose(current, report, signal, !isRunning(env));
       return { resource: current };
     },
     async remove({ resource, hostId, report, signal }) {

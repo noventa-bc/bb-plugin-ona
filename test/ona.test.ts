@@ -300,7 +300,7 @@ test("readiness: a running box with a running dev container is ready despite a s
 });
 
 // Ona can still show STOPPED right after `ona environment start`; older Ona sends no desired phase.
-test("readiness: a stopped or stopping box is starting unless its desired phase is stopped; deleted or deleting always fails", () => {
+test("readiness: right after the plugin's start, a stopped or stopping box is starting unless its desired phase is stopped; deleted or deleting always fails", () => {
   const env = (phase: string, desiredPhase?: string): OnaEnvironment => ({
     id: "env-0001",
     metadata: {},

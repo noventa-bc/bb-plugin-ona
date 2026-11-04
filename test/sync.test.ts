@@ -371,12 +371,12 @@ test("a running box whose daemon dropped is probed, and restarted only if the da
 test("a daemon restart that Ona fails is a failure: no restart reported, and it backs off", async () => {
   const { sync, calls, guard } = world([idle("h1", { status: "disconnected", lastSeenAt: NOW - HOUR })], {
     daemonAlive: false,
-    reconnectFails: "Ona environment box failed to start: no capacity",
+    reconnectFails: "Ona environment box is not ready: no capacity",
   });
   await sync.reconcile(new Set(["h1"]), { wait: true });
   const record = guard.records.get("h1")!;
   assert.equal(record.failures, 1);
-  assert.match(record.error ?? "", /failed to start: no capacity/);
+  assert.match(record.error ?? "", /is not ready: no capacity/);
   assert.doesNotMatch(record.reason, /restarted/);
   await sync.reconcile(new Set(["h1"]), { wait: true });
   assert.deepEqual(calls, ["probe", "restart daemon"], "no second probe (SSH) while backing off");
