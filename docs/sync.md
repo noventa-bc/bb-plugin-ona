@@ -73,8 +73,7 @@ you asked for, so safety rule 1 does not gate it.
    the plugin stops; a check that sees the box stopped asks bb to suspend it
    once bb no longer shows the machine connected. Create and resume start the
    box you asked for (`ona environment create` for a new box, else
-   `ona environment start` when Ona shows it neither running nor starting), then
-   connect.
+   `ona environment start` unless Ona shows it running), then connect.
    These commands you run yourself are not gated and may wake a box:
    `ona environment open` and `bb ona ssh --thread`.
    *Why: an accidental start costs money and keeps the box up.*

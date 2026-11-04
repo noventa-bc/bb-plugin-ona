@@ -20,6 +20,13 @@ import { runOnce, type ShellBackend, type ShellTarget, type ThreadTerminalPlan }
 import type { TunnelManager } from "./ssh.ts";
 import type { Row, StatusRow, Sync } from "./sync.ts";
 
+/** The first non-blank line of Ona's error, trimmed, or "no listing". */
+const reasonOf = (error: string | null) =>
+  error
+    ?.split("\n")
+    .find((line) => line.trim())
+    ?.trim() ?? "no listing";
+
 export interface CliResult {
   exitCode: number;
   stdout?: string;
@@ -150,12 +157,7 @@ export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()
   };
   const header =
     ona.lastError !== null
-      ? `Ona CLI: ERROR ${
-          ona.lastError
-            .split("\n")
-            .find((line) => line.trim())
-            ?.trim() ?? "no listing"
-        } (run \`ona login\`?)`
+      ? `Ona CLI: ERROR ${reasonOf(ona.lastError)} (run \`ona login\`?)`
       : `Ona CLI: ok${ona.listedAt !== null ? `, listed ${ago(ona.listedAt)}` : ""}${ona.autoRepair ? "" : "  (autoRepair is off)"}`;
   if (rows.length === 0) return `${header}\nNo Ona machines yet.`;
   const lines = rows.map((row) => {
@@ -412,11 +414,7 @@ export function onaCommands(deps: OnaCommandDeps) {
           // Safety rule 1 (docs/sync.md): SSH starts a stopped box, so Ona is asked right before the connect.
           const listing = await snapshot.refresh().catch(() => null);
           if (!listing) {
-            const reason =
-              snapshot.lastError
-                ?.split("\n")
-                .find((line) => line.trim())
-                ?.trim() ?? "no listing";
+            const reason = reasonOf(snapshot.lastError);
             return {
               exitCode: 1,
               stderr: `Can't ask Ona whether ${row.machine} is running (${reason}); not reconnected. Check \`ona login\` and try again.`,

@@ -146,6 +146,7 @@ test("status header names the first non-blank line of the CLI error, or no listi
   for (const [lastError, reason] of [
     ["", "no listing"],
     ["\nnot logged in", "not logged in"],
+    ["  not logged in", "not logged in"],
   ] as const) {
     assert.equal(
       formatStatus([], { lastError, listedAt: null, autoRepair: true }, NOW).split("\n")[0],
@@ -210,7 +211,7 @@ function fakeRun(
   extra: {
     listingFails?: boolean;
     listingError?: string;
-    duringListing?: (guard: HostGuard, machine: { phase: string; hostId: string }) => void;
+    duringListing?: (guard: HostGuard, machine: { phase: string; hostId: string; machine: string }) => void;
   } = {},
 ) {
   const calls: string[] = [];
@@ -399,11 +400,12 @@ test("reconnect refuses when the machine is replaced while Ona is listed, and ne
   const { run, calls } = fakeRun("active", "RUNNING", {
     duringListing: (_guard, machine) => {
       machine.hostId = "host_2";
+      machine.machine = "ona:box-2";
     },
   });
   assert.deepEqual(await run("reconnect", "box"), {
     exitCode: 1,
-    stderr: "ona:box changed while Ona was asked; run `bb ona reconnect ona:box` again.",
+    stderr: "ona:box changed while Ona was asked; run `bb ona reconnect ona:box-2` again.",
   });
   assert.deepEqual(calls, []);
 });
@@ -426,6 +428,7 @@ test("reconnect names the first non-blank line of Ona's error, or no listing whe
   for (const [listingError, reason] of [
     ["", "no listing"],
     ["\ncould not reach Ona", "could not reach Ona"],
+    ["  could not reach Ona", "could not reach Ona"],
   ] as const) {
     const { run, calls } = fakeRun("active", "RUNNING", { listingFails: true, listingError });
     assert.deepEqual(
