@@ -55,6 +55,24 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
     followed by a "Possible resolutions" hint
     `OnaCli.getEnvironmentIfExists` in `src/ona.ts` treats only these as "not
     found"; every other failure means "unknown".
+- `ona environment get <id> -o json` on a box that is starting and then running
+  (checked 2026-11-04):
+  - `status.phase` is `ENVIRONMENT_PHASE_STARTING`, then `ENVIRONMENT_PHASE_RUNNING`.
+  - `status.devcontainer` is null while the box starts, then an object with
+    `phase: "PHASE_RUNNING"`, the container's id and name, the remote user and
+    workspace folder. Its phase values while the container builds, and on
+    failure, are not known.
+  - `status.content.phase` was `CONTENT_PHASE_READY` and `status.machine.phase`
+    was `PHASE_RUNNING` in both states.
+  - `status.failureMessage` was null. Ona's public API documents
+    `failureMessage` and `warningMessage` as lists of strings, a non-empty
+    `failureMessage` meaning the environment failed.
+  - `status.machine.warningMessage` appeared as a single string (a slow-disk
+    warning) on the running box.
+- `spec.desiredPhase` is the phase Ona is driving the box to. Ona's API docs
+  give it the same values as `status.phase` (`ENVIRONMENT_PHASE_RUNNING`, …).
+  `readiness()` in `src/ona.ts` reads a stopped or stopping box whose desired
+  phase is RUNNING as starting, since `status.phase` can lag a start.
 - `ona environment ssh --proxy-connect` (the ProxyCommand form) has a `--start`
   flag that defaults to true. A plugin-owned SSH config that passes
   `--start=false` means SSH can never wake a stopped box.

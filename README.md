@@ -189,7 +189,9 @@ bb machine create --provider ona --inputs '{"mode":"create","project":"my-app"}'
 # optional: "classId": "<id from ona environment list-classes>"
 ```
 
-If Ona is slow to start an environment, setup keeps waiting for up to 10 minutes.
+Before its first SSH, setup waits up to 15 minutes for Ona to report the box and
+its dev container running, and shows Ona's progress. A box that Ona reports
+failed or stopped fails at once with Ona's message.
 
 ### Run threads on it
 

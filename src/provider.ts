@@ -3,7 +3,16 @@
 import type { BbPluginApi, MachineBootstrapRequest, MachineExecutor } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { friendlyName } from "./names.ts";
-import { isDeleted, isRunning, isStarting, isStopped, unpushedWork, type OnaCli, type OnaEnvironment } from "./ona.ts";
+import {
+  isDeleted,
+  isRunning,
+  isStarting,
+  isStopped,
+  unpushedWork,
+  waitForReady,
+  type OnaCli,
+  type OnaEnvironment,
+} from "./ona.ts";
 import { DAEMON_PROBE } from "./reconcile.ts";
 import type { PluginMachineProviderAvailability } from "./setup.ts";
 import { daemonEnv, shellQuote, sshCapture, sshExecutor, type TunnelManager } from "./ssh.ts";
@@ -205,10 +214,10 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         }
         return false;
       },
-      { deadlineMs: 10 * 60_000, intervalMs: 5_000, signal },
+      { deadlineMs: 2 * 60_000, intervalMs: 5_000, signal },
     );
     if (reached) return;
-    throw new Error(`Could not SSH into the devbox within 10 minutes: ${last}`);
+    throw new Error(`Could not SSH into the devbox within 2 minutes: ${last}`);
   }
 
   /**
@@ -280,6 +289,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     report: PluginMachineProviderProgress,
     signal: AbortSignal,
   ) {
+    await waitForReady(ona, resource.envId, resource.envName, report, signal);
     const executor = executorFor(deps.sshBinary, resource.envId, daemonEnv(deps.codexSqliteHome));
     await waitForSsh(executor, report, signal);
     if (deps.waitForSharedHome) await waitForSharedHome(executor, report, signal);

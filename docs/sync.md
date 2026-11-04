@@ -74,7 +74,14 @@ you asked for, so safety rule 1 does not gate it.
    once bb no longer shows the machine connected. Create and resume start the
    box you asked for (`ona environment create` for a new box, else
    `ona environment start` when Ona shows it neither running nor starting), then
-   connect.
+   connect. Every connect (create, resume, `bb ona reconnect`, a daemon restart)
+   first asks `ona environment get` every 5s, for up to 15 minutes, until it says
+   the box is running and so is its dev container, if it has one
+   (`waitForReady()` in `src/ona.ts`, [0005](decisions/0005-lookup-by-id-counts-as-listing.md)).
+   No SSH runs before that answer. Ona's failure message, a deleted box, or a
+   box stopping or stopped that Ona isn't asked to run (`spec.desiredPhase`)
+   ends the connect with no SSH; a failed `get` is unknown, so
+   it asks again.
    These commands you run yourself are not gated and may wake a box:
    `ona environment open` and `bb ona ssh --thread`.
    _Why: an accidental start costs money and keeps the box up._

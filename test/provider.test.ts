@@ -21,7 +21,8 @@ const box = (phase: string): OnaEnvironment => ({
 const adoptedResource = { envId: "env-1", envName: "box", adopted: true, key: "key-1" };
 
 /**
- * `phases`: what each Ona lookup returns in turn (null is a box Ona no longer has).
+ * `phases`: what each Ona lookup returns in turn: a phase, a box, null (a box Ona no longer has) or an Error
+ * (the lookup throws). Without phases, every lookup returns `found`.
  * `lookupFails`: every Ona lookup throws.
  * `unpushed`: the box has unpushed commits, so a remove is refused.
  * `reopenDuringMove`: a tunnel opens while an adopted remove's move-aside script runs.
@@ -31,7 +32,7 @@ const adoptedResource = { envId: "env-1", envName: "box", adopted: true, key: "k
  */
 type Setup = {
   found: OnaEnvironment;
-  phases?: (string | null)[];
+  phases?: (string | OnaEnvironment | Error | null)[];
   lookupFails?: boolean;
   unpushed?: boolean;
   reopenDuringMove?: boolean;
@@ -44,7 +45,7 @@ type Setup = {
 /** The next entry in turn, the last one repeated. */
 const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
 
-/** The provider in a fake host. `calls` logs Ona lookups and the root script; `tunnels`, tunnel opens and closes. */
+/** The provider in a fake host. `calls` logs Ona lookups, starts, SSH probes and the root script; `tunnels`, tunnel opens and closes. */
 function register({
   found,
   phases = [],
@@ -75,14 +76,20 @@ function register({
         const git = { totalUnpushedCommits: 2, branch: "feat" };
         return { ...box("RUNNING"), status: { phase: "ENVIRONMENT_PHASE_RUNNING", content: { git } } };
       }
-      const phase = next(phases);
-      calls.push(`get ${phase}`);
-      return phase === null || phase === undefined ? null : box(phase);
+      const answer = phases.length ? next(phases)! : found;
+      if (answer instanceof Error) {
+        calls.push("get failed");
+        throw answer;
+      }
+      const env = typeof answer === "string" ? box(answer) : answer;
+      calls.push(`get ${env?.status?.phase?.replace("ENVIRONMENT_PHASE_", "") ?? null}`);
+      return env;
     },
     start: async () => void calls.push("start"),
   } as unknown as OnaCli;
   const executor: MachineExecutor = {
     async exec({ command, onOutput }) {
+      if (command[2] === "true") calls.push("ssh");
       if (command[2]?.startsWith("missing=")) {
         onOutput("missing: node");
         return { exitCode: preflightExit };
@@ -99,7 +106,7 @@ function register({
     pluginId: "ona",
     machineBootstrap: { bootstrap: async () => ({ hostId: "host-1" }) },
   });
-  registerOnaProvider(host.bb, {
+  const { reconnect } = registerOnaProvider(host.bb, {
     availability: async () => ({ status: "available" }),
     ona,
     sshBinary: "ssh",
@@ -123,10 +130,15 @@ function register({
     forgetBox: async (envId: string) => void forgotten.push(envId),
     executorFor: () => executor,
   });
-  return { provider: host.harness.registrations.machineProviders.get("ona")!, calls, tunnels, open, forgotten };
+  const provider = host.harness.registrations.machineProviders.get("ona")!;
+  return { provider, reconnect, calls, tunnels, open, forgotten };
 }
 
-const lifecycle = () => ({ report: { step() {}, log() {} }, checkpoint: async () => {} });
+/** `steps` collects the progress lines the user sees. */
+const lifecycle = (steps: string[] = []) => ({
+  report: { step: (text: string) => void steps.push(text), log() {} },
+  checkpoint: async () => {},
+});
 
 /** `create` in adopt mode, started. */
 function start(setup: Setup) {
@@ -147,43 +159,54 @@ function start(setup: Setup) {
 /** `resume` of the adopted machine, started. */
 function resume(setup: Setup) {
   const { provider, ...rest } = register(setup);
+  const steps: string[] = [];
   const resumed = provider.resume!({
-    ...lifecycle(),
+    ...lifecycle(steps),
     hostId: "host-1",
     resource: adoptedResource,
     signal: new AbortController().signal,
   });
-  return { resumed, ...rest };
+  // Settled either way; the test awaits `resumed` itself.
+  resumed.catch(() => {});
+  return { resumed, steps, ...rest };
 }
 
 test("~/.bb-machines retries on exit 6 (fails if a real folder on a not-yet-mounted home is final)", async () => {
   const { created, calls } = start({ found: box("RUNNING"), rootExits: [6, 6, 0] });
   await tick(10_000, 2);
   assert.equal((await created).status, "created");
-  assert.deepEqual(calls, ["root", "root", "root"]);
+  assert.deepEqual(calls, ["get RUNNING", "ssh", "root", "root", "root"]);
 });
 
 test("~/.bb-machines throws at once on any other failure (fails if exit 5 is retried)", async () => {
   const { created, calls } = start({ found: box("RUNNING"), rootExits: [5], rootOutput: "points elsewhere" });
   await assert.rejects(created, /Could not set up ~\/\.bb-machines: points elsewhere/);
-  assert.deepEqual(calls, ["root"]);
+  assert.deepEqual(calls, ["get RUNNING", "ssh", "root"]);
 });
 
 test("~/.bb-machines exit 6 past the deadline throws with the script output (fails if it reports success)", async () => {
   const { created, calls } = start({ found: box("RUNNING"), rootExits: [6], rootOutput: "a real folder\n" });
   await tick(10_000, 12);
   await assert.rejects(created, /Could not set up ~\/\.bb-machines: a real folder$/);
-  assert.equal(calls.length, 12, "one try every 10s for 2 minutes");
+  assert.equal(calls.filter((call) => call === "root").length, 12, "one try every 10s for 2 minutes");
 });
 
 test("a STARTING box that settles to STOPPING waits for the stop, then starts (fails if it starts a stopping box)", async () => {
   const { created, calls, tunnels } = start({
     found: box("STARTING"),
-    phases: ["STARTING", "STOPPING", "STOPPING", "STOPPED"],
+    phases: ["STARTING", "STOPPING", "STOPPING", "STOPPED", "RUNNING"],
   });
   await tick(5_000, 3);
   assert.equal((await created).status, "created");
-  assert.deepEqual(calls, ["get STARTING", "get STOPPING", "get STOPPING", "get STOPPED", "start"]);
+  assert.deepEqual(calls, [
+    "get STARTING",
+    "get STOPPING",
+    "get STOPPING",
+    "get STOPPED",
+    "start",
+    "get RUNNING",
+    "ssh",
+  ]);
   assert.deepEqual(tunnels, ["ensure env-1"]);
 });
 
@@ -237,6 +260,89 @@ test("a resume that fails with the box's tunnel already open, connecting or up, 
     await assert.rejects(resumed, /^Error: Devbox is missing bb prerequisites: missing: node$/);
     assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"], tunnel);
   }
+});
+
+/** A RUNNING box whose dev container is in `phase`; null is a box without a dev container. */
+const running = (phase: string | null): OnaEnvironment => ({
+  ...box("RUNNING"),
+  status: { phase: "ENVIRONMENT_PHASE_RUNNING", devcontainer: phase === null ? null : { phase } },
+});
+
+// Bug: connect probed SSH every 5s as soon as Ona accepted the start, before Ona said the box and its
+// dev container were up, and the user saw only "Waiting for the dev container to accept SSH".
+test("a resume waits for Ona to report the box and its dev container running before any SSH", async () => {
+  const { resumed, calls, steps } = resume({
+    found: box("STOPPED"),
+    phases: ["STOPPED", "STARTING", running("PHASE_CREATING"), running("PHASE_RUNNING")],
+  });
+  await tick(5_000, 2);
+  await resumed;
+  assert.deepEqual(calls, ["get STOPPED", "start", "get STARTING", "get RUNNING", "get RUNNING", "ssh"]);
+  assert.deepEqual(steps.slice(1, 3), ["Waiting for Ona: starting", "Waiting for Ona: dev container starting"]);
+});
+
+// Bug: a box Ona reported failed was probed over SSH for 10 minutes, then failed without Ona's reason.
+test("a resume fails at once with Ona's failure message, no SSH, and closes the tunnel", async () => {
+  const failing = {
+    ...box("STARTING"),
+    status: { phase: "ENVIRONMENT_PHASE_STARTING", failureMessage: ["no capacity"] },
+  };
+  const { resumed, calls, tunnels } = resume({ found: box("STOPPED"), phases: ["STOPPED", failing] });
+  // Past every deadline, so a wait that ignores the failure rejects with the wrong message instead of hanging.
+  await tick(5_000, 180);
+  await assert.rejects(resumed, /^Error: Ona environment box failed to start: no capacity$/);
+  assert.deepEqual(calls, ["get STOPPED", "start", "get STARTING"]);
+  assert.deepEqual(tunnels, ["stop env-1"]);
+});
+
+// Bug: a box stopped in Ona during the wait was probed over SSH, and Ona's SSH starts a stopped box (rule 1).
+test("a resume fails without SSH when Ona reports the box stopped during the wait", async () => {
+  const { resumed, calls } = resume({ found: box("STOPPED"), phases: ["STOPPED", "STARTING", "STOPPED"] });
+  await tick(5_000, 180);
+  await assert.rejects(resumed, /^Error: Ona environment box failed to start: stopped$/);
+  assert.deepEqual(calls, ["get STOPPED", "start", "get STARTING", "get STOPPED"]);
+});
+
+// Bug: Ona can still show a box STOPPED right after `ona environment start` returns; that failed the resume.
+test("a resume waits on a box Ona shows stopped but is asked to run, then connects", async () => {
+  const waking = { ...box("STOPPED"), spec: { desiredPhase: "ENVIRONMENT_PHASE_RUNNING" } };
+  const { resumed, calls } = resume({ found: box("STOPPED"), phases: ["STOPPED", waking, "RUNNING"] });
+  await tick(5_000, 1);
+  await resumed;
+  assert.deepEqual(calls, ["get STOPPED", "start", "get STOPPED", "get RUNNING", "ssh"]);
+});
+
+// Bug: a failed Ona lookup must mean unknown (decision 0005): no SSH until Ona answers RUNNING.
+test("a resume makes no SSH while Ona can't be asked, then connects once it says RUNNING", async () => {
+  const unreachable = new Error("Ona is unreachable");
+  const { resumed, calls } = resume({
+    found: box("STOPPED"),
+    phases: ["STOPPED", unreachable, unreachable, "RUNNING"],
+  });
+  await tick(5_000, 2);
+  await resumed;
+  assert.deepEqual(calls, ["get STOPPED", "start", "get failed", "get failed", "get RUNNING", "ssh"]);
+});
+
+test("a resume while Ona can't be asked fails after 15 minutes without SSH", async () => {
+  const { resumed, calls } = resume({ found: box("STOPPED"), phases: ["STOPPED", new Error("Ona is unreachable")] });
+  await tick(5_000, 180);
+  await assert.rejects(resumed, /^Error: Ona did not report box ready within 15 minutes: Ona is unreachable$/);
+  assert.equal(calls.includes("ssh"), false);
+});
+
+// Guards the rule against over-reach: a box without a dev container is ready once RUNNING.
+test("a box without a dev container connects once Ona says RUNNING", async () => {
+  const { resumed, calls } = resume({ found: running(null), phases: [running(null)] });
+  await resumed;
+  assert.deepEqual(calls, ["get RUNNING", "get RUNNING", "ssh"]);
+});
+
+// Bug: reconnect (daemon heal, `bb ona reconnect`) went to SSH without asking Ona right before (rule 1).
+test("a reconnect on a running box asks Ona exactly once before SSH", async () => {
+  const { reconnect, calls } = register({ found: box("RUNNING") });
+  await reconnect(adoptedResource, lifecycle().report, new AbortController().signal);
+  assert.deepEqual(calls, ["get RUNNING", "ssh"]);
 });
 
 // The lookup-throws test below guards the order: the tunnel closes after the move-aside, and on a failed lookup.

@@ -11,6 +11,7 @@ import {
   isStarting,
   isStopped,
   OnaCli,
+  readiness,
   unpushedWork,
   type OnaEnvironment,
 } from "../src/ona.ts";
@@ -233,6 +234,71 @@ test("isDeleted is true for a box Ona deleted or is deleting, so remove doesn't 
   assert.equal(isDeleted(env("ENVIRONMENT_PHASE_DELETING")), true);
   assert.equal(isDeleted(env("ENVIRONMENT_PHASE_STOPPED")), false);
   assert.equal(isDeleted(env("ENVIRONMENT_PHASE_RUNNING")), false);
+});
+
+// Bug: connect probed SSH as soon as Ona started a box, before Ona said it or its dev container was up.
+test("readiness: ready only when RUNNING with the dev container running or absent", () => {
+  const env = (status: OnaEnvironment["status"]): OnaEnvironment => ({ id: "env-0001", metadata: {}, status });
+  const RUNNING = "ENVIRONMENT_PHASE_RUNNING";
+  const STARTING = "ENVIRONMENT_PHASE_STARTING";
+  const ready = { state: "ready" };
+  assert.deepEqual(readiness(env({ phase: RUNNING, devcontainer: { phase: "PHASE_RUNNING" } })), ready);
+  assert.deepEqual(readiness(env({ phase: RUNNING, devcontainer: null })), ready, "a box without a dev container");
+  assert.deepEqual(readiness(env({ phase: RUNNING })), ready);
+  const waiting = (reason: string) => ({ state: "waiting", reason });
+  assert.deepEqual(readiness(env({ phase: STARTING, devcontainer: null })), waiting("starting"));
+  assert.deepEqual(readiness(env({ phase: "ENVIRONMENT_PHASE_CREATING" })), waiting("creating"));
+  assert.deepEqual(readiness(env(undefined)), waiting("unknown"));
+  assert.deepEqual(
+    readiness(env({ phase: RUNNING, devcontainer: { phase: "PHASE_CREATING" } })),
+    waiting("dev container starting"),
+  );
+  assert.deepEqual(readiness(env({ phase: RUNNING, devcontainer: {} })), waiting("dev container starting"));
+});
+
+test("readiness: failed on Ona's failure message, a string or a list, with its first line", () => {
+  const env = (failureMessage: string | string[] | null): OnaEnvironment => ({
+    id: "env-0001",
+    metadata: {},
+    status: { phase: "ENVIRONMENT_PHASE_STARTING", failureMessage },
+  });
+  const failed = (message: string) => ({ state: "failed", message });
+  assert.deepEqual(readiness(env(["image pull failed\ndetail", "second"])), failed("image pull failed"));
+  assert.deepEqual(readiness(env("disk full")), failed("disk full"));
+  assert.deepEqual(readiness(env([])), { state: "waiting", reason: "starting" });
+  assert.deepEqual(readiness(env([""])), { state: "waiting", reason: "starting" });
+  assert.deepEqual(readiness(env(null)), { state: "waiting", reason: "starting" });
+});
+
+// Bug: a box Ona was asked to start but still showed STOPPED right after `ona environment start` failed the resume.
+test("readiness: a stopped or stopping box Ona is asked to run is starting; otherwise it failed", () => {
+  const env = (phase: string, desiredPhase?: string): OnaEnvironment => ({
+    id: "env-0001",
+    metadata: {},
+    status: { phase: `ENVIRONMENT_PHASE_${phase}` },
+    ...(desiredPhase && { spec: { desiredPhase: `ENVIRONMENT_PHASE_${desiredPhase}` } }),
+  });
+  const starting = { state: "waiting", reason: "starting" };
+  assert.deepEqual(readiness(env("STOPPED", "RUNNING")), starting);
+  assert.deepEqual(readiness(env("STOPPING", "RUNNING")), starting);
+  assert.deepEqual(readiness(env("STOPPED", "STOPPED")), { state: "failed", message: "stopped" });
+  assert.deepEqual(readiness(env("STOPPED")), { state: "failed", message: "stopped" });
+  assert.deepEqual(readiness(env("DELETED", "RUNNING")), { state: "failed", message: "deleted" });
+  assert.deepEqual(readiness(env("DELETING", "RUNNING")), { state: "failed", message: "deleting" });
+});
+
+test("readiness: failed for a box stopping, stopped or deleted", () => {
+  for (const phase of ["STOPPING", "STOPPED", "DELETING", "DELETED"]) {
+    const env: OnaEnvironment = { id: "env-0001", metadata: {}, status: { phase: `ENVIRONMENT_PHASE_${phase}` } };
+    assert.deepEqual(readiness(env), { state: "failed", message: phase.toLowerCase() });
+  }
+});
+
+test("getEnvironment parses the readiness fields of a live get: one box in an array, nulls, a warning string", async () => {
+  setFake({ FAKE_ONA_GET: fixture("ready-environment.json") });
+  const env = await cli.getEnvironment("env-6bbb");
+  assert.equal(env.status?.devcontainer?.phase, "PHASE_RUNNING");
+  assert.deepEqual(readiness(env), { state: "ready" });
 });
 
 test("unpushedWork reports unpushed commits so remove keeps the box", async () => {

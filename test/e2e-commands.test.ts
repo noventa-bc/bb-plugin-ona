@@ -240,8 +240,8 @@ test("bb ona reconnect bootstraps the daemon again (fails if it skips the bootst
   );
   assert.ok(listings() > asked, "reconnect asks Ona first");
   assert.deepEqual(bootstraps, ["key-1"]);
-  // A listing is not an action, and onaCalls() leaves listings out: only Ona actions would show here.
-  assert.deepEqual(onaCalls(), []);
+  // onaCalls() leaves listings out; the one `get` is the readiness check before SSH (rule 1), not an action.
+  assert.deepEqual(onaCalls(), [`environment get ${resource.envId}`]);
 });
 
 test("bb ona rename renames the box in Ona and its bb machine (fails if bb keeps the old name)", local, async () => {

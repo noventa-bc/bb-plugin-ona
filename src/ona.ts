@@ -3,6 +3,7 @@
 import { execFile, spawn } from "node:child_process";
 import { z } from "zod";
 import { keepAliveArgs, type KeepAliveChild } from "./keepalive.ts";
+import { pollUntil } from "./time.ts";
 
 const environmentSchema = z.object({
   id: z.string(),
@@ -13,6 +14,8 @@ const environmentSchema = z.object({
       archivedAt: z.string().optional(),
     })
     .loose(),
+  /** The phase Ona is driving the box to: RUNNING right after a start, before `status.phase` catches up. */
+  spec: z.object({ desiredPhase: z.string().optional() }).loose().optional(),
   status: z
     .object({
       phase: z.string().optional(),
@@ -29,6 +32,10 @@ const environmentSchema = z.object({
         })
         .loose()
         .optional(),
+      /** null while the box starts, and on a box without a dev container. */
+      devcontainer: z.object({ phase: z.string().optional() }).loose().nullish(),
+      /** Ona's API documents a list; the CLI has shown null. */
+      failureMessage: z.union([z.string(), z.array(z.string())]).nullish(),
     })
     .loose()
     .optional(),
@@ -249,6 +256,69 @@ export function unpushedWork(env: OnaEnvironment): { branch?: string; count: num
 export function isStopped(env: OnaEnvironment): boolean {
   const phase = env.status?.phase;
   return phase === "ENVIRONMENT_PHASE_STOPPED" || phase === "ENVIRONMENT_PHASE_DELETED";
+}
+
+export type Readiness =
+  { state: "ready" } | { state: "waiting"; reason: string } | { state: "failed"; message: string };
+
+/**
+ * Whether Ona says a box can take SSH: RUNNING, with its dev container running
+ * or none at all. Ona's failure message, a box deleted, or one stopping or
+ * stopped that Ona isn't asked to run, is final. Any other value, known or not, is still on its way.
+ */
+export function readiness(env: OnaEnvironment): Readiness {
+  const failure = [env.status?.failureMessage ?? []].flat().find(Boolean);
+  if (failure) return { state: "failed", message: failure.split("\n")[0]! };
+  const phase = (env.status?.phase ?? "unknown").replace("ENVIRONMENT_PHASE_", "").toLowerCase();
+  if (isDeleted(env)) return { state: "failed", message: phase };
+  if (isStopped(env) || phase === "stopping") {
+    if (env.spec?.desiredPhase === "ENVIRONMENT_PHASE_RUNNING") return { state: "waiting", reason: "starting" };
+    return { state: "failed", message: phase };
+  }
+  if (!isRunning(env)) return { state: "waiting", reason: phase };
+  const devcontainer = env.status?.devcontainer;
+  if (devcontainer && devcontainer.phase !== "PHASE_RUNNING")
+    return { state: "waiting", reason: "dev container starting" };
+  return { state: "ready" };
+}
+
+/**
+ * Safety rule 1 for every connect: no SSH until `ona environment get`, asked
+ * right before, says the box and its dev container run. A failed `get` is
+ * unknown (decision 0005): keep asking, never SSH on it. Each new reason to
+ * wait goes to `report` as the user's progress line.
+ */
+export async function waitForReady(
+  ona: OnaCli,
+  envId: string,
+  name: string,
+  report: { step(text: string): void },
+  signal: AbortSignal,
+): Promise<void> {
+  let waiting = "";
+  const wait = (reason: string) => {
+    if (reason !== waiting) report.step(`Waiting for Ona: ${reason}`);
+    waiting = reason;
+    return false;
+  };
+  const ready = await pollUntil(
+    async () => {
+      let env: OnaEnvironment | null;
+      try {
+        env = await ona.getEnvironmentIfExists(envId, signal);
+      } catch (error) {
+        if (signal.aborted) throw error;
+        return wait(error instanceof Error ? error.message : String(error));
+      }
+      if (!env) throw new Error(`Ona environment ${name} disappeared.`);
+      const state = readiness(env);
+      if (state.state === "failed") throw new Error(`Ona environment ${name} failed to start: ${state.message}`);
+      return state.state === "ready" || wait(state.reason);
+    },
+    { deadlineMs: 15 * 60_000, intervalMs: 5_000, signal },
+  );
+  if (ready) return;
+  throw new Error(`Ona did not report ${name} ready within 15 minutes: ${waiting}`);
 }
 
 /** Native SSH host alias written by `ona environment ssh-config`. */
