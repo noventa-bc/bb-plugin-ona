@@ -67,8 +67,9 @@ before(async () => {
         }),
         installProviderCli: async () => [{ type: "completed", exitCode: 0 }],
       },
-      threads: { list: async () => threads },
-      environments: { list: async () => [] },
+      threads: { list: async () => threads, get: async () => ({ environmentId: "ws-1" }) },
+      environments: { list: async () => [], get: async () => ({ hostId: "host-1" }) },
+      terminals: { create: async () => ({ id: "term-1", status: "running", exitCode: null }) },
     },
   }));
 });
@@ -276,6 +277,15 @@ test("bb ona sync finds a box by the name it was given in Ona, not through bb", 
   const result = await host.harness.behavior.runCli(["sync", "ona-named"]);
   assert.equal(result.exitCode, 0, result.stderr);
   assert.match(result.stdout ?? "", /^ona:new-name /m);
+});
+
+// Bug: `bb ona ssh --thread` listed the machines twice: once to find the box, once for the other devboxes.
+test("bb ona ssh <box> --thread lists the machines once", local, async () => {
+  const lists = host.harness.inspection.sdk.callsTo("hosts.list").length;
+  const result = await host.harness.behavior.runCli(["ssh", resource.envId, "--thread", "thread-1"]);
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.match(result.stdout ?? "", /^Opened term-1 \(local\) in thread thread-1\./);
+  assert.equal(host.harness.inspection.sdk.callsTo("hosts.list").length - lists, 1);
 });
 
 test("thread.deleted drops the thread's stored cost", local, async () => {
