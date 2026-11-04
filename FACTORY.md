@@ -94,7 +94,9 @@ those and the "skipped or not checked" lines ponytail ends with.
    handoff, the bug it fails on; a test that still passes with the rule
    deleted is not done), keeps `npm run check` green, writes
    `.agent/HANDOFF.md`, and leaves the work staged for the orchestrator.
-6. **Review.** The orchestrator reads the handoff and the diff, runs the
+6. **Review.** The orchestrator commits the builder's staged work on its
+   branch (after the check passes on its own), reads the handoff and the diff,
+   runs the
    adversarial reviewer (brief: the diff, the files it touches, the specific
    ways it could fail, never the orchestrator's own verdict), `code-review`
    and `/ponytail-review branch`, each in its own agent, and sends findings
@@ -107,13 +109,12 @@ those and the "skipped or not checked" lines ponytail ends with.
    opens after a round with no open findings, and only once all three have run
    on code that has not changed since. Check the ten Code Review Rules in
    `AGENTS.md`.
-7. **Open the PR.** Commit the builder's staged work, push the branch and open
-   a pull request against `main`.
+7. **Open the PR.** Push the branch and open a pull request against `main`.
    The title is a Conventional Commit (`type(scope): subject`, see
    `AGENTS.md`): the squash merge makes it the commit on `main`, and it
-   decides the release. Run `scripts/bump.sh "<title>"` first: it bumps
-   `package.json` as the title requires (or does nothing), and CI checks the
-   same rule. The description carries: the roadmap labels, what changed and why, how it
+   decides the release. Before pushing, run `scripts/bump.sh "<title>"` and
+   commit what it changes: it bumps `package.json` as the title requires (or
+   does nothing), and CI checks the same rule. The description carries: the roadmap labels, what changed and why, how it
    was tested, the three review passes and what each found, the owner
    live-test steps from the handoff, and anything left out. Nothing from the
    "Weaknesses for the roadmap" handoff section goes in the PR; the
