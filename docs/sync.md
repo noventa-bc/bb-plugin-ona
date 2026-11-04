@@ -69,9 +69,11 @@ you asked for, so safety rule 1 does not gate it.
    listing (so does each reconnect after `ssh` exits), plus a check when Ona shows the box
    stopped. A refused tunnel tries again every 10s for a minute,
    then every minute (every minute while Ona can't be asked). A tunnel closes
-   when bb suspends or removes the machine, or the plugin stops; a check that
-   sees the box stopped asks bb to suspend it once bb no longer shows the
-   machine connected.
+   when bb suspends or removes the machine, when a create or resume fails, or
+   the plugin stops; a check that sees the box stopped asks bb to suspend it
+   once bb no longer shows the machine connected. Create and resume start the
+   box you asked for (`ona environment create`, or `ona environment start` when
+   it is stopped), then connect.
    These commands you run yourself are not gated and may wake a box:
    `ona environment open` and `bb ona ssh --thread`.
    *Why: an accidental start costs money and keeps the box up.*
@@ -150,11 +152,7 @@ The shared listing is `OnaSnapshot` in `src/ona.ts`. Removing an Ona machine
 drops the box's stored keys (`forgetBox()` in `src/sync.ts`, called from the provider's `remove()`).
 `remove()` refuses to delete a created box that Ona reports unpushed commits
 on (`unpushedWork()` in `src/ona.ts`), before it deletes or forgets anything.
-Every `remove()` path closes the box's tunnel. A thrown Ona lookup closes it
-before the error goes on. A refused remove closes it before it returns. A
-removal closes it just before the keys are dropped: for an adopted box after the
-move-aside, for a created box after the refusal check. The keys stay on a
-refusal or a thrown lookup, so bb's retry can finish.
+Every `remove()` path closes the box's tunnel (`remove` in `src/provider.ts`).
 For an adopted box, `remove()` runs `MOVE_MACHINE_ASIDE` (`src/provider.ts`)
 over SSH, only when `ona environment get`, made just before, says the box is
 running (safety rule 1). It stops bb's daemon and moves bb's data folder aside;

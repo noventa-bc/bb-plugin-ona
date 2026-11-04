@@ -84,6 +84,10 @@ test("keep-alive refuses, and starts nothing, for a stopped, unknown or unlistab
     [keepAlive(null), /Ona lists no devbox matching/],
     [keepAlive("RUNNING", { listing: "fail" }), /Can't ask Ona.*not logged in.*nothing changed/],
     [keepAlive("RUNNING", { listing: "fail", listingError: "" }), /Can't ask Ona.*\(no listing\); nothing changed/],
+    [
+      keepAlive("RUNNING", { listing: "fail", listingError: "unauthenticated\nRun 'ona login' first" }),
+      /Can't ask Ona.*\(unauthenticated\nRun 'ona login' first\); nothing changed/,
+    ],
   ];
   for (const [{ deps, started }, message] of cases) {
     const result = await keepAliveCommand(deps, "brave-otter", "1h");
@@ -137,11 +141,14 @@ test("status text: header for a healthy, failing or unrepaired CLI", () => {
 });
 
 // Bug: an empty CLI error showed the CLI as ok, and one that starts with a newline printed no reason.
-test("status header names no listing when the CLI error is empty or starts with a newline", () => {
-  for (const lastError of ["", "\nnot logged in"]) {
+test("status header names the first non-blank line of the CLI error, or no listing", () => {
+  for (const [lastError, reason] of [
+    ["", "no listing"],
+    ["\nnot logged in", "not logged in"],
+  ] as const) {
     assert.equal(
       formatStatus([], { lastError, listedAt: null, autoRepair: true }, NOW).split("\n")[0],
-      "Ona CLI: ERROR no listing (run `ona login`?)",
+      `Ona CLI: ERROR ${reason} (run \`ona login\`?)`,
       JSON.stringify(lastError),
     );
   }
@@ -395,7 +402,7 @@ test("reconnect refuses when the machine is replaced while Ona is listed, and ne
   });
   assert.deepEqual(await run("reconnect", "box"), {
     exitCode: 1,
-    stderr: 'No Ona-backed bb machine matches "box".',
+    stderr: "ona:box changed while Ona was asked; run `bb ona reconnect ona:box` again.",
   });
   assert.deepEqual(calls, []);
 });
@@ -414,15 +421,17 @@ test("reconnect names only the first line of Ona's error when the listing fails"
 });
 
 // Bug: an empty listing error, or one whose first line is empty, printed "()" in the refusal.
-test("reconnect names no listing when Ona's error is empty or starts with a newline", async () => {
-  for (const listingError of ["", "\ncould not reach Ona"]) {
+test("reconnect names the first non-blank line of Ona's error, or no listing when there is none", async () => {
+  for (const [listingError, reason] of [
+    ["", "no listing"],
+    ["\ncould not reach Ona", "could not reach Ona"],
+  ] as const) {
     const { run, calls } = fakeRun("active", "RUNNING", { listingFails: true, listingError });
     assert.deepEqual(
       await run("reconnect", "box"),
       {
         exitCode: 1,
-        stderr:
-          "Can't ask Ona whether ona:box is running (no listing); not reconnected. Check `ona login` and try again.",
+        stderr: `Can't ask Ona whether ona:box is running (${reason}); not reconnected. Check \`ona login\` and try again.`,
       },
       JSON.stringify(listingError),
     );
