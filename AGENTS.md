@@ -25,7 +25,7 @@ Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
 - Ona devboxes cost money while they run.
 - Ona's SSH starts stopped devboxes. Any SSH to a devbox can wake it.
 - Never run `ona` actions, `ssh` to devboxes, or `bb machine` or `bb plugin` changes.
-- Never commit to `main` or push, except as `FACTORY.md` allows: for a roadmap item the owner named in the session, the orchestrator commits on `agent/*` branches, pushes them, opens PRs and merges them once the review is clean and CI is green.
+- Never commit to `main` or push, except as `FACTORY.md` allows: for a roadmap item the owner named in the session (as its Permissions section defines it), the orchestrator commits on `agent/*` branches, pushes them, opens PRs and merges them once the review is clean and CI is green.
 - Commit messages and PR titles are Conventional Commits, `type(scope): subject` (`scripts/conventional.sh` has the rule; `.githooks/commit-msg` and `.githooks/pre-commit` run the checks, and those files say which; `check.yml` checks the PR). `feat` bumps the minor version, `fix` and `perf` the patch, `!` the major: that PR bumps `package.json` (`scripts/bump.sh "<title>"` does it). Other types, and any Markdown-only change, need no bump. A push to `main` tags and releases the version with notes generated from the merged PR titles.
 - Read-only `bb ona status` is fine, but only when the owner is present.
 
@@ -105,7 +105,7 @@ Write `.agent/HANDOFF.md` when a task ends. The file is git-ignored. Use these s
 - Weaknesses for the roadmap (private)
 - Process feedback
 
-Leave changes uncommitted for the owner to review, unless the orchestrator runs a roadmap item the owner named in the session (`FACTORY.md`), where it commits them and opens a PR.
+Leave changes uncommitted for the owner to review, unless the orchestrator runs a roadmap item the owner named in the session (as `FACTORY.md` Permissions defines it), where it commits them and opens a PR.
 List unfixed weaknesses only under Weaknesses for the roadmap; the orchestrator adds each to the private roadmap. Never describe one in a committed file, a code comment, a commit message or PR text.
 Process feedback holds proposed edits to this file, with evidence.
 
