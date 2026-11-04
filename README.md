@@ -194,12 +194,14 @@ its dev container running, and shows Ona's progress. Setup fails at once,
 without SSH, when Ona reports one of these:
 
 - the box deleted
-- the box stopped and not meant to run (with Ona's failure message, if any)
+- the box stopped, with a desired phase in Ona other than running (and Ona's
+  failure message, if any)
 - the box being stopped
 - its dev container failed
 
-While Ona is bringing a stopped box up after a failed start, the progress line
-shows that failure.
+Right after setup starts a stopped box, Ona can still report it stopped for a
+while. Setup keeps waiting then, and the progress line shows any failure message
+Ona kept from an earlier start.
 
 ### Run threads on it
 

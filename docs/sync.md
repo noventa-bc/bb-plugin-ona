@@ -87,8 +87,10 @@ you asked for, so safety rule 1 does not gate it.
      carries Ona's failure message (shown) or any desired phase.
 
    The connect keeps asking in these cases:
-   - a stopping or stopped box Ona is bringing up (desired phase running). An
-     earlier failure message becomes the progress line and the timeout's reason.
+   - a stopping or stopped box whose desired phase is running. A connect to a
+     stopped box comes right after the plugin's own `ona environment start`, and
+     Ona can lag before it reports starting. An earlier failure message becomes
+     the progress line and the timeout's reason.
    - a stopping or stopped box with neither a failure message nor a desired
      phase (older Ona), which the start may have just woken
    - any other phase. A failure message there may be left from an earlier start.

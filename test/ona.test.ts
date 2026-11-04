@@ -320,9 +320,9 @@ test("readiness: a stopped or stopping box is starting unless Ona's desired phas
   assert.deepEqual(readiness(env("DELETING", "RUNNING")), { state: "failed", message: "deleting" });
 });
 
-// Bug: a resume after a failed start failed at once on the earlier start's message while Ona brought the box up.
+// Bug: a resume right after the plugin's start failed at once on an earlier start's message.
 // Bug: the wait's reason was "starting", so a 15-minute timeout lost Ona's failure.
-test("readiness: a stopped box Ona is asked to run waits, with its failure message as the reason", () => {
+test("readiness: a stopped box whose desired phase is RUNNING waits, with its failure message as the reason", () => {
   const env: OnaEnvironment = {
     id: "env-0001",
     metadata: {},

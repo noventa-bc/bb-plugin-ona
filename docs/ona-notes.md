@@ -71,8 +71,11 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   - `status.machine.warningMessage` appeared as a single string (a slow-disk
     warning) on the running box.
 - `spec.desiredPhase` is in the live field list above. Its meaning and values
-  come from the same API page, not a live box: the phase Ona is driving the box
-  to, with the same values as `status.phase` (`ENVIRONMENT_PHASE_RUNNING`, …).
+  come from the same API page: the phase Ona is driving the box to, with the
+  same values as `status.phase` (`ENVIRONMENT_PHASE_RUNNING`, …). A box stopped
+  by Ona's inactivity timeout keeps `spec.desiredPhase`
+  `ENVIRONMENT_PHASE_RUNNING` (checked 2026-11-04), so RUNNING there does not
+  mean Ona is starting the box.
   A non-empty `failureMessage` meaning a failed environment is also from the
   API docs; on a live box (checked 2026-11-04) it was null while starting and
   running. `readiness()` in `src/ona.ts` holds what the plugin makes of them.

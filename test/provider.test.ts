@@ -307,7 +307,7 @@ test("a resume fails without SSH when Ona reports the box stopped during the wai
 });
 
 // Bug: Ona can still show a box STOPPED right after `ona environment start` returns; that failed the resume.
-test("a resume waits on a box Ona shows stopped but is asked to run, then connects", async () => {
+test("a resume waits on a box Ona shows stopped with desired phase RUNNING, then connects", async () => {
   const waking = { ...box("STOPPED"), spec: { desiredPhase: "ENVIRONMENT_PHASE_RUNNING" } };
   const { resumed, calls } = resume({ found: box("STOPPED"), phases: ["STOPPED", waking, "RUNNING"] });
   await tick(5_000, 1);
@@ -323,8 +323,8 @@ test("a resume waits on a box Ona shows stopped with no desired phase, then conn
   assert.deepEqual(calls, ["get STOPPED", "start", "get STOPPED", "get RUNNING", "ssh"]);
 });
 
-// Bug: a resume right after a failed start failed on that start's message while Ona brought the box up.
-test("a resume waits on a box Ona shows stopped with an old failure but is asked to run, then connects", async () => {
+// Bug: a resume right after the plugin's start failed on an earlier start's message.
+test("a resume waits on a box Ona shows stopped with an old failure and desired phase RUNNING, then connects", async () => {
   const waking = {
     ...box("STOPPED"),
     spec: { desiredPhase: "ENVIRONMENT_PHASE_RUNNING" },

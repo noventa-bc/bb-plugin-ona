@@ -14,7 +14,7 @@ const environmentSchema = z.object({
       archivedAt: z.string().optional(),
     })
     .loose(),
-  /** The phase Ona is driving the box to: RUNNING right after a start, before `status.phase` catches up. */
+  /** The phase Ona's spec asks for; a box Ona's inactivity timeout stopped keeps RUNNING (docs/ona-notes.md). */
   spec: z.object({ desiredPhase: z.string().nullish() }).loose().nullish(),
   status: z
     .object({
@@ -272,10 +272,12 @@ function firstLine(text: string): string | undefined {
  * Whether Ona says a box can take SSH. RUNNING is ready with its dev container
  * running or none at all, failed when Ona means to stop it (a desired phase
  * other than RUNNING) or the dev container failed, and waiting otherwise.
- * Deleted or deleting is failed. Stopped or stopping is waiting while Ona is
- * bringing it up (desired phase RUNNING), with an earlier start's failure as
- * the reason; otherwise it is failed with Ona's failure message or a desired
- * phase set to anything else, and waiting when Ona sends neither (older Ona).
+ * Deleted or deleting is failed. Stopped or stopping with a desired phase of
+ * RUNNING is waiting, with an earlier start's failure as the reason: a connect
+ * to a stopped box comes right after the plugin's own `ona environment start`,
+ * and Ona can lag before it reports STARTING. Otherwise it is failed with Ona's
+ * failure message or a desired phase set to anything else, and waiting when
+ * Ona sends neither (older Ona).
  * Any other phase is waiting: a failure message there may be left from an
  * earlier start.
  */
