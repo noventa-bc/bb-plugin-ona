@@ -155,7 +155,7 @@ test("a verbose commit message's diff below the scissors line is checked, and a 
   assert.match(r.output, /^6:/m);
 });
 
-test("a verbose commit message adding a file under a home folder passes when the content is clean", () => {
+test("a verbose commit message naming a file under a home folder is refused, as git's diff headers are checked like any line", () => {
   const homeDoc = ["docs", "home", "x.md"].join("/");
   const r = commitMsg(
     messageFile(
@@ -175,7 +175,7 @@ test("a verbose commit message adding a file under a home folder passes when the
       ].join("\n"),
     ),
   );
-  assert.equal(r.status, 0, r.output);
+  assert.equal(r.status, 1, r.output);
 });
 
 test("a personal path in an added diff line below the scissors line is refused", () => {
