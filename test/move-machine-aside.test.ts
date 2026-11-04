@@ -316,7 +316,7 @@ test("a legacy folder is kept and its daemon left running when HOME is unset", s
 });
 
 // Bug: without HOME, a machine with no data folder exited 5 and lost the "found no bb data folder" hint.
-test("a machine with no data folder exits 3 even when HOME is unset", sandboxed, async () => {
+test("a machine with no data folder exits 3 even when HOME is unset", async () => {
   const env = { ...process.env };
   delete env.HOME;
   assert.equal(await runScript(env, ""), 3);
@@ -338,6 +338,21 @@ test("a legacy folder is kept and its daemon left running when HOME can't be ent
   assert.equal(await runScript({ ...process.env, HOME: home }, folder), 5);
   assert.equal(existsSync(join(folder, "host-id")), true, "the folder stays");
   assert.equal(daemon.exitCode === null && daemon.signalCode === null, true, "the daemon keeps running");
+});
+
+// Bug: a HOME that can't be entered, with no folder found, was reported as "no bb data folder".
+test("a machine with no folder found exits 5 when HOME can't be entered", async (t) => {
+  const home = mkdtempSync(join(tmpdir(), "bb-ona-home-"));
+  t.after(() => {
+    chmodSync(home, 0o755);
+    rmSync(home, { recursive: true, force: true });
+  });
+  chmodSync(home, 0o000);
+  if (canEnter(home)) {
+    t.skip("chmod has no effect for this user");
+    return;
+  }
+  assert.equal(await runScript({ ...process.env, HOME: home }, ""), 5);
 });
 
 // Bug: a remove that moved nothing said nothing, as if the folder had moved.

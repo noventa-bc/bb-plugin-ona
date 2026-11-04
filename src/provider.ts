@@ -136,6 +136,8 @@ export const MOVE_MACHINE_ASIDE = [
   '  mv "$data" "$data.old-$(date -u +%Y%m%dT%H%M%SZ)"; exit',
   "done",
   '[ -n "$moved" ] && exit 0',
+  // A HOME that is set but can't be entered hides ~/.bb-machines, so "no folder" would be a guess.
+  '[ -z "${HOME:-}" ] || cd "$HOME" || exit 5',
   "exit 3",
 ].join("\n");
 
