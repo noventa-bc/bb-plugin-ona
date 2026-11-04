@@ -62,10 +62,10 @@ export interface Decision {
 }
 
 const RUNNING = "ENVIRONMENT_PHASE_RUNNING";
-const STOPPED = new Set(["ENVIRONMENT_PHASE_STOPPED", "ENVIRONMENT_PHASE_STOPPING"]);
+export const STOPPED = new Set(["ENVIRONMENT_PHASE_STOPPED", "ENVIRONMENT_PHASE_STOPPING"]);
 const GONE = new Set(["ENVIRONMENT_PHASE_DELETED", "ENVIRONMENT_PHASE_DELETING"]);
 
-const short = (phase: string) => phase.replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase();
+export const short = (phase: string) => phase.replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase();
 
 /** The one repair (if any) for a machine, given bb's and Ona's views. */
 export function decide(machine: MachineView, ona: OnaView, now: number): Decision {

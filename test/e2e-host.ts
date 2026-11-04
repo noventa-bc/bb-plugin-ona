@@ -23,7 +23,7 @@ export const ctx = {
   checkpoint: async (_resource: unknown) => {},
 };
 const here = (name: string) => fileURLToPath(new URL(name, import.meta.url));
-const FAKE_ENV = ["FAKE_ONA_ENVIRONMENTS", "FAKE_ONA_LOG", "FAKE_ONA_PROJECTS", "FAKE_SSH_HOME"];
+const FAKE_ENV = ["FAKE_ONA_ENVIRONMENTS", "FAKE_ONA_LOG", "FAKE_ONA_PROJECTS", "FAKE_SSH_HOME", "FAKE_SSH_LOG"];
 
 export async function startHost(
   options: Pick<CreateFakePluginHostOptions, "sdk" | "machineBootstrap" | "machineResource">,
@@ -36,6 +36,9 @@ export async function startHost(
   process.env.FAKE_ONA_ENVIRONMENTS = state;
   process.env.FAKE_ONA_LOG = log;
   process.env.FAKE_ONA_PROJECTS = here("./fixtures/ona/projects.json");
+  const sshLog = join(dir, "ssh.log");
+  writeFileSync(sshLog, "");
+  process.env.FAKE_SSH_LOG = sshLog;
   process.env.FAKE_SSH_HOME = dir;
   const health = http.createServer((req, res) => res.writeHead(req.url === "/health" ? 200 : 404).end());
   await new Promise<void>((resolve) => health.listen(0, "127.0.0.1", resolve));
@@ -71,11 +74,20 @@ export async function startHost(
       .map((line) => line.replace(/ -o json| --timeout \d+s/g, ""))
       .filter((line) => line !== "environment list" && line !== "");
   };
+  /**
+   * `ssh` calls since the last read. A tunnel's `ssh -N` is left out: the tunnel
+   * loop opens one whenever a box is connected, at its own pace.
+   */
+  const sshCalls = () => {
+    const lines = readFileSync(sshLog, "utf8").split("\n");
+    writeFileSync(sshLog, "");
+    return lines.filter((line) => line !== "" && !line.split(" ").includes("-N"));
+  };
   const close = async () => {
     await host.harness.lifecycle.dispose();
     health.close();
     rmSync(dir, { recursive: true, force: true });
     for (const key of FAKE_ENV) delete process.env[key];
   };
-  return { host, provider, dir, state, log, envs, patchBox, onaCalls, close };
+  return { host, provider, dir, state, log, envs, patchBox, onaCalls, sshCalls, close };
 }

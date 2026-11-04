@@ -126,7 +126,7 @@ test("resume after an Ona auto-stop starts the box once and bootstraps bb again"
   assert.deepEqual(bootstraps, [KEY, KEY]);
 });
 
-test("remove refuses a created box with unpushed commits and keeps it connected", local, async () => {
+test("remove refuses a created box with unpushed commits and closes its tunnel", local, async () => {
   patchBox(resource.envId, { content: { git: { branch: "feature-x", totalUnpushedCommits: 2 } } });
   const result = await provider.remove({ ...ctx, resource, hostId: "host-1" });
   assert.equal(result.status, "failed");
@@ -134,14 +134,20 @@ test("remove refuses a created box with unpushed commits and keeps it connected"
   assert.match(result.message, /2 unpushed commit\(s\) on branch feature-x/);
   assert.match(result.message, new RegExp(`ona environment delete ${resource.envId}`));
   assert.deepEqual(onaCalls(), [`environment get ${resource.envId}`]);
-  assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:(up|connecting)/);
+  // A refused remove closes the tunnel too: nothing in it needs one (decision 0003).
+  assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:off/);
   patchBox(resource.envId, { content: undefined });
 });
 
 test("remove deletes a clean created box", local, async () => {
+  // The refused remove above closed the tunnel: bring it up, so the remove below has one to close.
+  await provider.resume!({ ...ctx, resource, hostId: "host-1" });
+  onaCalls();
+  assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:(up|connecting)/);
   const result = await provider.remove({ ...ctx, resource, hostId: "host-1" });
   assert.deepEqual(result, { status: "removed" });
   assert.deepEqual(onaCalls(), [`environment get ${resource.envId}`, `environment delete ${resource.envId}`]);
+  assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:off/);
   assert.deepEqual(envs(), []);
   hosts.length = 0;
 });

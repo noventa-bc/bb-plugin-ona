@@ -295,6 +295,19 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     return bb.experimental_machines.bootstrap({ key, executor, report, signal });
   }
 
+  /**
+   * connect() for a machine bb doesn't show active yet (create, resume). An open
+   * tunnel keeps the box awake (decision 0003), so a failure closes the box's tunnel.
+   */
+  async function connectOrClose(resource: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal) {
+    try {
+      return await connect(resource, resource.key, report, signal);
+    } catch (error) {
+      await disconnect(resource.envId);
+      throw error;
+    }
+  }
+
   async function ensureLocalMachineRoot(
     executor: MachineExecutor,
     target: string,
@@ -401,7 +414,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       };
       await checkpoint(resource);
       await ensureRunning(env, report, signal);
-      await connect(resource, key, report, signal);
+      await connectOrClose(resource, report, signal);
       return { status: "created", name: `ona:${resource.envName}`, resource };
     },
     async reconcileCleanup({ key, report, signal }) {
@@ -440,13 +453,17 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       const current = { ...owned, envName: nameOf(env, owned) };
       await checkpoint(current);
       // bootstrap with the creation key restarts the already-enrolled daemon.
-      await connect(owned, owned.key, report, signal);
+      await connectOrClose(owned, report, signal);
       return { resource: current };
     },
     async remove({ resource, hostId, report, signal }) {
       const owned = resourceSchema.parse(resource);
       if (owned.adopted) {
-        const env = await ona.getEnvironmentIfExists(owned.envId, signal);
+        // A thrown lookup closes the tunnel before the error goes on; the keys stay for bb's retry.
+        const env = await ona.getEnvironmentIfExists(owned.envId, signal).catch(async (error: unknown) => {
+          await disconnect(owned.envId);
+          throw error;
+        });
         // The machine is still removed either way; a folder left behind only blocks adopting the box again.
         // Told through the plugin log: bb 0.48.1 writes `report.log` only to its server log.
         const byHand =
@@ -497,16 +514,22 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
               `Before adopting it again, start it and ${byHand}.`,
           );
         }
+        // Closed after the move-aside and before the keys go.
         await disconnect(owned.envId);
         await deps.forgetBox(owned.envId);
         return { status: "removed" };
       }
       // `get` also returns boxes Ona already deleted or is deleting, which `list` hid.
-      // It runs first so a refused remove leaves the machine connected and its state kept.
-      const env = await ona.getEnvironmentIfExists(owned.envId, signal);
+      // The lookup runs first, so a refused remove keeps bb's state (the keys) for the retry.
+      // Every path closes the tunnel: a refused remove, a thrown lookup, and the removal.
+      const env = await ona.getEnvironmentIfExists(owned.envId, signal).catch(async (error: unknown) => {
+        await disconnect(owned.envId);
+        throw error;
+      });
       const live = env && !isDeleted(env) ? env : null;
       const unpushed = live && unpushedWork(live);
       if (unpushed) {
+        await disconnect(owned.envId);
         const where = unpushed.branch ? `on branch ${unpushed.branch}` : "on its current branch";
         return {
           status: "failed",
