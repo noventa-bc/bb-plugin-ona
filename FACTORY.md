@@ -41,7 +41,7 @@ a Haiku subagent's output and briefs it with exact commands and a stop
 condition.
 
 Merging on green is only as safe as CI. Every PR adds a test for the behaviour
-it changes, where a test is possible; a gap CI cannot see (untested module, missing lint, unchecked
+it changes, where a test is possible; a gap CI cannot see and the PR did not open (untested module, missing lint, unchecked
 script) becomes a roadmap item and is named in the PR by its label only.
 
 ## Ponytail
