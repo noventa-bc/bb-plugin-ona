@@ -192,7 +192,9 @@ This file is the memory of the flow. Keep it current:
 - When a rule here conflicts with `AGENTS.md`, fix `AGENTS.md` in the same PR
   so the two agree, and say so in the PR.
 - Keep this file under 300 lines (`docs.yml` checks). An addition names what it removes.
-- A change to this file goes through a PR like any other change.
+- A change to this file goes through a PR like any other change, for a
+  roadmap item the owner named in the session (Permissions); otherwise it
+  stays uncommitted for the owner.
 
 ## Owner instructions on record
 
