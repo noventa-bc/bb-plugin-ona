@@ -93,16 +93,19 @@ export interface ProviderDeps {
  * that names another machine, so a folder left in place blocks adopting the box
  * again. "$2" is the legacy `dataDir`, which bb's installer used as the data
  * folder itself. Exits 2 for an empty machine id, 3 when no folder names the
- * machine, 4 when the processes couldn't be listed, didn't stop, the folder path
- * has a newline, or the folder is or holds the home folder (the folder stays), and 1 when
- * the folder can't be entered or moved.
+ * machine, 4 when the processes couldn't be listed, didn't stop, or the folder
+ * path has a newline (the folder stays), 5 when the folder is or holds the home
+ * folder or the home folder can't be resolved (nothing is stopped or moved), and
+ * 1 when the folder can't be entered or moved.
  */
 export const MOVE_MACHINE_ASIDE = [
   'host="$1"; legacy="$2"',
-  // A relative legacy dataDir is relative to the SSH shell's folder, $HOME.
+  // A relative legacy dataDir is resolved against $HOME.
   `case $legacy in /*|'') ;; *) legacy="$HOME/$legacy" ;; esac`,
   // An empty id would match a folder whose host-id file is empty.
   '[ -n "$host" ] || exit 2',
+  // Resolved once, before any folder: an unresolvable HOME must not skip the guard below.
+  'home=$(cd "${HOME:?}" && pwd -P) || exit 5',
   'for id in "$HOME"/.bb-machines/*/host-id ${legacy:+"$legacy/host-id"}; do',
   '  [ -f "$id" ] && [ "$(cat "$id")" = "$host" ] || continue',
   '  data="${id%/host-id}"',
@@ -112,7 +115,7 @@ export const MOVE_MACHINE_ASIDE = [
   '  for other in "$data"/*/host-id; do [ -f "$other" ] && continue 2; done',
   '  real=$(cd "$data" && pwd -P) || exit 1; export real given="$data"; n=0',
   // The home folder, or a folder above it, is never a machine's data folder: it stays.
-  '  case "$(cd "$HOME" && pwd -P)/" in "${real%/}"/*) exit 4 ;; esac',
+  '  case "$home/" in "${real%/}"/*) exit 5 ;; esac',
   // A newline in the path can't be matched within one listing line: the folder stays.
   '  case "$data$real" in *"',
   '"*) exit 4 ;; esac',
@@ -471,13 +474,16 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
             bb.log.warn(
               `Found no bb data folder for machine ${hostId} on ${name}; nothing moved. If adopting it again fails, ${byHand}.`,
             );
+          } else if (exitCode === 5) {
+            bb.log.warn(
+              `Did not move bb's data folder for machine ${hostId} on ${name}: it is or holds the home folder, or the home folder couldn't be resolved; nothing was stopped or moved.`,
+            );
           } else if (exitCode !== 0) {
             // -1: timed out or SSH failed, so the script may still have finished.
             const what = exitCode === -1 ? "May not have moved" : "Could not move";
-            // Exit 4: the listing couldn't be trusted, a path has a newline, the folder is or holds the home folder, or a daemon was still listed after the stop rounds.
             const cause =
               exitCode === 4
-                ? " The process listing couldn't be trusted, the folder path has a newline, the folder is or holds the home folder, or the daemon was still running after 12 rounds; it may be stopped or still running."
+                ? " The process listing couldn't be trusted, the folder path has a newline, or the daemon was still running after 12 rounds; it may be stopped or still running."
                 : "";
             bb.log.warn(
               `${what} bb's data folder on ${name} aside (exit ${exitCode}: ${output.trim().slice(-300)}).${cause} ` +

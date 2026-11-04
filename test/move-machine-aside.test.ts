@@ -3,6 +3,9 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import {
+  accessSync,
+  chmodSync,
+  constants,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -241,22 +244,13 @@ test("a relative legacy folder under HOME is moved aside and its daemon stopped"
   assert.equal(stopped(), true, "the daemon run from HOME must be stopped");
 });
 
-// The home folder is never a machine's data folder: a legacy dataDir of "." names it, so it stays.
-test('a legacy dataDir of "." leaves the home folder and its daemon in place', sandboxed, async (t) => {
+// The home folder is never a machine's data folder: a legacy dataDir of "." or of $HOME names it, so it stays.
+test('a legacy dataDir of "." or $HOME leaves the home folder and its daemon in place', sandboxed, async (t) => {
   const { home, remove } = devbox(t);
   writeFileSync(join(home, "host-id"), "host-home\n");
   const daemon = await standIn(t, `${realpathSync(home)}/npm/bin/bb-app`);
-  assert.equal(await remove("host-home", "."), 4);
-  assert.equal(existsSync(join(home, "host-id")), true, "the home folder stays");
-  assert.equal(daemon.exitCode === null && daemon.signalCode === null, true, "the daemon keeps running");
-});
-
-// The same folder, spelled as $HOME.
-test("a legacy dataDir of $HOME leaves the home folder and its daemon in place", sandboxed, async (t) => {
-  const { home, remove } = devbox(t);
-  writeFileSync(join(home, "host-id"), "host-home\n");
-  const daemon = await standIn(t, `${realpathSync(home)}/npm/bin/bb-app`);
-  assert.equal(await remove("host-home", home), 4);
+  assert.equal(await remove("host-home", "."), 5);
+  assert.equal(await remove("host-home", home), 5);
   assert.equal(existsSync(join(home, "host-id")), true, "the home folder stays");
   assert.equal(daemon.exitCode === null && daemon.signalCode === null, true, "the daemon keeps running");
 });
@@ -274,12 +268,69 @@ test("a legacy dataDir above the home folder leaves it in place", sandboxed, asy
     () => 0,
     (error: unknown) => (error as { code: number | null }).code,
   );
-  assert.equal(code, 4);
+  assert.equal(code, 5);
   assert.equal(
     existsSync(join(above, "host-id")) && existsSync(home),
     true,
     "the folder above and the home folder stay",
   );
+});
+
+/** A folder outside any test home, holding host-id "host-h", and a stand-in daemon run from it. */
+async function legacyFolder(t: TestContext) {
+  const parent = mkdtempSync(join(tmpdir(), "bb-ona-outside-"));
+  t.after(() => rmSync(parent, { recursive: true, force: true }));
+  const folder = join(parent, "legacy");
+  mkdirSync(folder);
+  writeFileSync(join(folder, "host-id"), "host-h\n");
+  const daemon = await standIn(t, `${realpathSync(folder)}/npm/bin/bb-app`);
+  return { folder, daemon };
+}
+
+/** Runs the script for machine host-h on `legacy` under `env`; resolves to its exit code. */
+function runScript(env: NodeJS.ProcessEnv, legacy: string): Promise<number | null> {
+  return promisify(execFile)("/bin/bash", ["-c", MOVE_MACHINE_ASIDE, "bb-ona-remove", "host-h", legacy], { env }).then(
+    () => 0,
+    (error: unknown) => (error as { code: number | null }).code,
+  );
+}
+
+/** Whether this user can enter `dir`. Root enters any folder whatever its mode. */
+function canEnter(dir: string): boolean {
+  try {
+    accessSync(dir, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Without HOME the home folder can't be resolved, so the script exits before it stops or moves anything.
+test("a legacy folder is kept and its daemon left running when HOME is unset", sandboxed, async (t) => {
+  const { folder, daemon } = await legacyFolder(t);
+  const env = { ...process.env };
+  delete env.HOME;
+  assert.equal(await runScript(env, folder), 5);
+  assert.equal(existsSync(join(folder, "host-id")), true, "the folder stays");
+  assert.equal(daemon.exitCode === null && daemon.signalCode === null, true, "the daemon keeps running");
+});
+
+// A HOME that can't be entered can't be resolved either: `cd` fails, and the guard must not read that as no home.
+test("a legacy folder is kept and its daemon left running when HOME can't be entered", sandboxed, async (t) => {
+  const home = mkdtempSync(join(tmpdir(), "bb-ona-home-"));
+  t.after(() => {
+    chmodSync(home, 0o755);
+    rmSync(home, { recursive: true, force: true });
+  });
+  chmodSync(home, 0o000);
+  if (canEnter(home)) {
+    t.skip("chmod has no effect for this user");
+    return;
+  }
+  const { folder, daemon } = await legacyFolder(t);
+  assert.equal(await runScript({ ...process.env, HOME: home }, folder), 5);
+  assert.equal(existsSync(join(folder, "host-id")), true, "the folder stays");
+  assert.equal(daemon.exitCode === null && daemon.signalCode === null, true, "the daemon keeps running");
 });
 
 // Bug: a remove that moved nothing said nothing, as if the folder had moved.

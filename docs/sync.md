@@ -80,10 +80,10 @@ you asked for, so safety rule 1 does not gate it.
 3. **Restart a daemon only when the check finds none.** The check looks for a
    process whose command line names a folder under `~/.bb-machines`, the machine
    data folder (`machineDataDir`) or the box's legacy data folder (a relative one
-   resolved against `$HOME`), each as given and resolved through symlinks. A
-   process listing that can't be trusted, a folder path with a newline in it, a
-   failed SSH connection or a timeout counts as unknown, and nothing is restarted.
-   *Why: a restart kills running agent turns.*
+   is matched as given and resolved against `$HOME`), each as given and resolved
+   through symlinks. A process listing that can't be trusted, a folder path with
+   a newline in it, a failed SSH connection or a timeout counts as unknown, and
+   nothing is restarted. *Why: a restart kills running agent turns.*
 4. **Unknown is not gone.** A failed or empty `ona environment list` changes
    nothing, and "missing" needs two listings in a row. A lookup by id
    (`ona environment get`) that fails is unknown too; only Ona saying the id

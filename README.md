@@ -301,8 +301,10 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
   file holds the host id the log line names (in a shell from
   `ssh "$(bb ona host <box>)"`, `grep -l <host-id> ~/.bb-machines/*/host-id`
   finds it). Otherwise bb's installer refuses it with "… on this computer
-  belongs to machine …". After the re-adopt, the old machine's threads can't
-  take new messages, and its project sources must be added again.
+  belongs to machine …". A folder that is or holds the home folder stays too
+  (the remove exits 5), and its log line names no step. After the re-adopt, the
+  old machine's threads can't take new messages, and its project sources must
+  be added again.
 - **bb and Ona disagree about a box** (bb says down but it's running, or the
   other way round): run `bb ona status <name>`. It shows both views and what
   the plugin last did about it. `bb ona sync <name>` re-checks now, and

@@ -336,21 +336,21 @@ export class HostGuard {
 /**
  * Remote script for rule 3: exit 0 if a process's command line names a path
  * under ~/.bb-machines (as given and resolved through symlinks), under $1 (as
- * given and resolved), or under $2 (a relative $2 resolved against $HOME, then as
- * given and resolved); 1 if none does; and 2 if the process listing fails or
- * can't be trusted, or a folder path has a newline. The caller treats any other
- * exit, an SSH failure and a timeout as unknown, and restarts nothing.
+ * given and resolved), or under $2 (as given and resolved through symlinks; a
+ * relative $2 is resolved against $HOME first); 1 if none does; and 2 if the
+ * process listing fails or can't be trusted, or a folder path has a newline. The
+ * caller treats any other exit, an SSH failure and a timeout as unknown, and
+ * restarts nothing.
  */
 export const DAEMON_PROBE = [
   "me=$$; pp=$PPID",
   // A ps that exits non-zero, even after printing part of its list, is unknown.
   "out=$(ps -e -o pid= -o ppid= -o args=) || exit 2",
   'root="$HOME/.bb-machines"',
-  // A relative legacy dataDir is relative to the SSH shell's folder, $HOME.
+  // A relative $2 is matched as given and resolved against $HOME, an absolute one as given.
   "case $2 in /*|'') l=$2 ;; *) l=$HOME/$2 ;; esac",
-  // $2 enters the list only resolved against $HOME: as given, a relative path would match any command line containing its text.
   // Each folder is matched as given and resolved: a daemon's command line carries the resolved path.
-  'for dir in "$root" "$(readlink -f "$root" 2>/dev/null)" "$1" "$(readlink -f "$1" 2>/dev/null)" "$l" "$(readlink -f "$l" 2>/dev/null)"; do',
+  'for dir in "$root" "$(readlink -f "$root" 2>/dev/null)" "$1" "$(readlink -f "$1" 2>/dev/null)" "$2" "$l" "$(readlink -f "$l" 2>/dev/null)"; do',
   '  [ -n "$dir" ] || continue',
   // A newline in a folder path can't be matched within one listing line: the answer is unknown.
   '  case $dir in *"',
