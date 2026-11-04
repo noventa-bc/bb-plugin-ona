@@ -99,7 +99,8 @@ those and the "skipped or not checked" lines ponytail ends with.
    runs the
    adversarial reviewer (brief: the diff, the files it touches, the specific
    ways it could fail, never the orchestrator's own verdict), `code-review`
-   and `/ponytail-review branch`, each in its own agent, and sends findings
+   and `/ponytail-review`, each on the branch against `origin/main` and in its
+   own agent, and sends findings
    back to the builder. All three passes run on the first round of every PR
    this flow opens, with no exception for a small or docs-only change. After
    that, `code-review` runs every round; the adversarial pass and
@@ -112,9 +113,11 @@ those and the "skipped or not checked" lines ponytail ends with.
 7. **Open the PR.** Push the branch and open a pull request against `main`.
    The title is a Conventional Commit (`type(scope): subject`, see
    `AGENTS.md`): the squash merge makes it the commit on `main`, and it
-   decides the release. Before pushing, run `scripts/bump.sh "<title>"` and
-   commit what it changes: it bumps `package.json` as the title requires (or
-   does nothing), and CI checks the same rule. The description carries: the roadmap labels, what changed and why, how it
+   decides the release. Before pushing, run `scripts/bump.sh "<title>"` in the
+   branch's worktree (the `sh -c` form below), run the check, and commit what
+   it changes: it bumps `package.json` as the title requires (or does
+   nothing), and CI checks the same rule. A version bump is not a code change
+   for the review passes. The description carries: the roadmap labels, what changed and why, how it
    was tested, the three review passes and what each found, the owner
    live-test steps from the handoff, and anything left out. Nothing from the
    "Weaknesses for the roadmap" handoff section goes in the PR; the
