@@ -31,9 +31,9 @@ The idle rule from [How it works](../README.md#how-it-works) sits alongside thes
 without being stopped. A box isn't let go while bb is setting up or tearing
 down one of its thread workspaces, or while bb waits to retry a failed teardown,
 or while one needs recovery. A retry needs the box up ([ona-notes](ona-notes.md) has
-the bb fact). Closing the tunnel mid-hook leaves bb unable to tell how the hook ended,
-and it then refuses to suspend the machine until the
-workspace is recovered. A thread
+the bb fact). Closing the tunnel mid-hook leaves bb unable to tell how the hook ended.
+While a workspace may need recovery, an active box stays awake until they
+clear; the plugin does not let its machine go idle. A thread
 with a turn in flight also holds the box,
 hidden ones (workflow steps, side chats) included, but an archived thread
 counts for neither busyness nor activity, whatever status bb still shows for
@@ -104,10 +104,10 @@ you asked for, so safety rule 1 does not gate it.
 
 - **When the plugin starts** (load, reload, bb restart). This check is what reopens the tunnels.
 - **Right away** when a thread is waiting for an Ona machine. A workspace bb is setting
-  up or tearing down, or a failed teardown it is retrying, is seen on the next check: the
-  one 46 s after a disconnect, or the 2-minute timer. A failed teardown counts as retrying
-  until bb has given up on it or it is more than a minute overdue. A running box only; this
-  never starts one.
+  up or tearing down, or a failed teardown it is retrying, is seen on the next check of any
+  kind. The 2-minute timer is the latest of those; a realtime reconnect's pass comes 2 s
+  after the reconnect. A failed teardown counts as retrying until bb has given up on it or
+  it is more than a minute overdue. A running box only; this never starts one.
 - **46 s after** an Ona machine disconnects, so a brief drop (Wi-Fi, Mac sleep) can recover on its own.
 - **30s after** a tunnel comes back up.
 - **Right away** when a tunnel finds its box stopped in Ona.
