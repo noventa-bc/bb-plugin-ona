@@ -341,7 +341,8 @@ export function createSync(deps: SyncDeps) {
               // Rule 3: restarting a live daemon would kill running turns.
               const alive = await provider.daemonAlive(resource, AbortSignal.timeout(30_000));
               if (alive === true) return "daemon is running; not restarting";
-              if (alive === null) return "couldn't check the daemon over SSH; not restarting";
+              if (alive === null)
+                return "couldn't tell whether the daemon runs (SSH or the process check on the box failed); not restarting";
               // The check can take 30 s, long enough for the box to be stopped in Ona.
               if (!(await runningNow())) return gone;
               const report = { step: (text: string) => bb.log.info(`${machine}: ${text}`), log: () => {} };
