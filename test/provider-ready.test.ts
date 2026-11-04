@@ -50,7 +50,7 @@ test("a resume fails at once with Ona's failure message, no SSH, and closes the 
 test("a resume fails without SSH when Ona no longer has the box during the wait", async () => {
   const { resumed, calls } = resume({ found: box("STOPPED"), phases: ["STOPPED", "STARTING", null] });
   await tick(5_000, 1);
-  await assert.rejects(resumed, /disappeared/);
+  await assert.rejects(resumed, /^Error: Ona environment box disappeared\.$/);
   assert.deepEqual(calls, ["get STOPPED", "start", "get STARTING", "get null"]);
 });
 
