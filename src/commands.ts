@@ -5,6 +5,8 @@ import type { BbPluginApi, PluginCliCommandInfo, PluginCliContext } from "@get-b
 import { clockTime, parseKeepAlive, type KeepAlives } from "./keepalive.ts";
 import { randomFriendlyName } from "./names.ts";
 import {
+  errorText,
+  firstLine,
   isRunning,
   isStarting,
   matchEnvironment,
@@ -21,11 +23,7 @@ import type { TunnelManager } from "./ssh.ts";
 import type { Row, StatusRow, Sync } from "./sync.ts";
 
 /** The first non-blank line of Ona's error, trimmed, or "no listing". */
-const reasonOf = (error: string | null) =>
-  error
-    ?.split("\n")
-    .find((line) => line.trim())
-    ?.trim() ?? "no listing";
+const reasonOf = (error: string | null) => firstLine(error ?? "") ?? "no listing";
 
 export interface CliResult {
   exitCode: number;
@@ -501,7 +499,7 @@ export function onaCommands(deps: OnaCommandDeps) {
         }
       }
     } catch (error) {
-      return { exitCode: 1, stderr: error instanceof Error ? error.message : String(error) };
+      return { exitCode: 1, stderr: errorText(error) };
     }
     return { exitCode: 1, stderr: usage };
   };

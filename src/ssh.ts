@@ -3,8 +3,8 @@
 // own loopback address.
 import { spawn } from "node:child_process";
 import type { MachineExecutor, PluginLogger } from "@get-bb/plugin-sdk";
-import { sshHost } from "./ona.ts";
-import { sleep } from "./time.ts";
+import { errorText, NotReadyError, sshHost } from "./ona.ts";
+import { pollUntil, sleep } from "./time.ts";
 
 const SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3"];
 
@@ -63,6 +63,46 @@ export function sshExecutor(sshBinary: string, envId: string, env: string[] = da
       });
     },
   };
+}
+
+/** One SSH check for `pollUntil`: true once `script` exits 0. `last` says why the latest try failed. */
+export function sshCheck(executor: MachineExecutor, script: string, signal: AbortSignal, timeoutMs: number) {
+  const check = Object.assign(
+    async () => {
+      try {
+        const { exitCode, output } = await sshCapture(executor, script, signal, timeoutMs);
+        if (exitCode === 0) return true;
+        check.last = output.trim().split("\n").slice(-1)[0] ?? "";
+      } catch (error) {
+        // Ona saying the box isn't ready ends the wait: it is not a failed try.
+        if (signal.aborted || error instanceof NotReadyError) throw error;
+        check.last = errorText(error);
+      }
+      return false;
+    },
+    { last: "" },
+  );
+  return check;
+}
+
+/**
+ * Polls `check` until it passes. Past the deadline, or when the caller's own
+ * signal ends the wait first, throws "`what` <when>: <last reason>`hint`".
+ */
+export async function pollSsh(
+  check: ReturnType<typeof sshCheck>,
+  what: string,
+  options: { minutes: number; intervalMs: number; signal: AbortSignal; hint?: string },
+) {
+  const { minutes, intervalMs, signal, hint = "" } = options;
+  const fail = (when: string) => new Error(`${what} ${when}${check.last ? `: ${check.last}` : ""}${hint}`);
+  const reached = await pollUntil(check, { deadlineMs: minutes * 60_000, intervalMs, signal }).catch(
+    (error: unknown) => {
+      // Ona's own reason (the gate was waiting when the abort came) stays as it is.
+      throw error instanceof NotReadyError || !(signal.aborted && check.last) ? error : fail("before the wait ended");
+    },
+  );
+  if (!reached) throw fail(`within ${minutes} minutes`);
 }
 
 /** Run a short command and capture its output (for preflight and cleanup). */

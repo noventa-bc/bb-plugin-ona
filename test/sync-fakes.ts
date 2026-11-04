@@ -31,6 +31,8 @@ export function world(
   options: {
     refuse?: string;
     daemonAlive?: boolean | null;
+    /** The daemon restart (the provider's reconnect) rejects with this message. */
+    reconnectFails?: string;
     /** Ona lists every box STOPPED once the daemon check has run. */
     stopDuringProbe?: boolean;
     /** Keep a listing 15s fresh on a still clock, so only `refresh()` sees a change. */
@@ -168,7 +170,10 @@ export function world(
         if (options.stopDuringProbe) for (const box of boxes) box.ona = "STOPPED";
         return options.daemonAlive ?? true;
       },
-      reconnect: async () => void calls.push("restart daemon"),
+      reconnect: async () => {
+        calls.push("restart daemon");
+        if (options.reconnectFails) throw new Error(options.reconnectFails);
+      },
     },
     keepAliveUntil: () => null,
     hostByEnv: new Map(),
