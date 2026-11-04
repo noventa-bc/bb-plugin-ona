@@ -1,0 +1,3 @@
+#!/bin/sh
+# git runs this hook instead of pre-commit for a merge commit, so it runs the same checks.
+exec .githooks/pre-commit
