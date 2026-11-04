@@ -66,6 +66,40 @@ export function sshExecutor(sshBinary: string, envId: string, env: string[] = da
 }
 
 /** Run a short command and capture its output (for preflight and cleanup). */
+/**
+ * One SSH check for `pollUntil`: true once `script` exits 0. Each try first
+ * asks `mayProbe` (rule 1, `retryGate` in src/ona.ts), which can skip it with a
+ * reason or throw. `last` says why the latest try failed.
+ */
+export function sshCheck(
+  executor: MachineExecutor,
+  script: string,
+  signal: AbortSignal,
+  timeoutMs: number,
+  mayProbe: () => Promise<true | string>,
+) {
+  const check = Object.assign(
+    async () => {
+      const may = await mayProbe();
+      if (may !== true) {
+        check.last = may;
+        return false;
+      }
+      try {
+        const { exitCode, output } = await sshCapture(executor, script, signal, timeoutMs);
+        if (exitCode === 0) return true;
+        check.last = output.trim().split("\n").slice(-1)[0] ?? "";
+      } catch (error) {
+        if (signal.aborted) throw error;
+        check.last = error instanceof Error ? error.message : String(error);
+      }
+      return false;
+    },
+    { last: "" },
+  );
+  return check;
+}
+
 export async function sshCapture(
   executor: MachineExecutor,
   script: string,

@@ -102,9 +102,11 @@ you asked for, so safety rule 1 does not gate it.
    - a `get` that fails (unknown).
 
    When the wait ends early (a caller's own timeout), its error still names the
-   last reason. After Ona answers ready, SSH gets up to 10 minutes to answer, and each SSH retry while sshd comes up asks
-   `ona environment get` again, and a box that is no longer ready ends the
-   connect with no further SSH; a failed `get` skips that probe.
+   last reason. After Ona answers ready, SSH gets up to 10 minutes to answer.
+   Every SSH retry in a connect (sshd coming up, the shared home mount,
+   `~/.bb-machines`, the tunnel check) asks `ona environment get` again first. A box that is no longer
+   ready ends the connect with no further SSH, and a failed `get` skips that
+   probe, naming Ona's error as the reason if the wait runs out.
 
    One line of Ona's text is shown: the first non-blank line.
    These commands you run yourself are not gated and may wake a box:

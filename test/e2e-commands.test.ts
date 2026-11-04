@@ -240,7 +240,7 @@ test("bb ona reconnect bootstraps the daemon again (fails if it skips the bootst
   );
   assert.ok(listings() > asked, "reconnect asks Ona first");
   assert.deepEqual(bootstraps, ["key-1"]);
-  // onaCalls() leaves listings out; the one `get` is the readiness check before SSH (rule 1), not an action.
+  // onaCalls() drops `environment list` only; the one `get` is the readiness check before SSH (rule 1).
   assert.deepEqual(onaCalls(), [`environment get ${resource.envId}`]);
 });
 

@@ -201,8 +201,8 @@ without SSH, when Ona reports one of these:
 
 Right after setup starts a stopped box, Ona can still report it stopped for a
 while. Setup keeps waiting then, and the progress line shows any failure message
-Ona kept from an earlier start. SSH then gets up to 10 minutes to answer, and
-each retry asks Ona again, so a box stopped meanwhile is not woken.
+Ona kept from an earlier start. SSH then gets up to 10 minutes to answer. Every
+SSH retry during setup asks Ona again, so a box stopped meanwhile is not woken.
 
 ### Run threads on it
 
