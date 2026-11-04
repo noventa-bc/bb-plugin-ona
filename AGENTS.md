@@ -105,7 +105,7 @@ Write `.agent/HANDOFF.md` when a task ends. The file is git-ignored. Use these s
 - Weaknesses for the roadmap (private)
 - Process feedback
 
-Leave changes uncommitted for the owner to review, unless the orchestrator runs a roadmap item the owner named in the session (as `FACTORY.md` Permissions defines it), where it commits them and opens a PR.
+Leave changes uncommitted for the owner to review, unless the orchestrator runs a roadmap item the owner named in the session (as `FACTORY.md` Permissions defines it), where it commits them on an `agent/*` branch and opens a PR.
 List unfixed weaknesses only under Weaknesses for the roadmap; the orchestrator adds each to the private roadmap. Never describe one in a committed file, a code comment, a commit message or PR text.
 Process feedback holds proposed edits to this file, with evidence.
 
