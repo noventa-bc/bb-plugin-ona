@@ -479,7 +479,7 @@ test("listEnvironments parses a box whose activity signal, start time and timeou
   });
 });
 
-test("boxFacts: a fact Ona leaves out or sends oddly is null, and a count that is not a safe whole number reads as 0", () => {
+test("boxFacts: an odd start, timeout or activity reads as null, and a count that is not a safe whole number reads as 0", () => {
   const nothing = { startedAt: null, idleTimeoutMs: null, activity: null, branch: null, unpushed: 0 };
   const env = (extra: Partial<OnaEnvironment>): OnaEnvironment => ({ id: "env-0001", metadata: {}, ...extra });
   assert.deepEqual(boxFacts(env({})), nothing, "nothing given");
