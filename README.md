@@ -39,9 +39,10 @@ and nothing goes through getbb.app or any other third-party relay. Tunnels only
 work while your Mac is awake and bb is running. An open tunnel counts as
 activity to Ona, so the plugin only keeps it open while you use the box. After
 `idleDisconnect` (1h by default) without thread activity, unless bb is setting up,
-tearing down or retrying one of the machine's workspaces, or one needs recovery
-(see [How bb and Ona stay in sync](docs/sync.md)), it closes the tunnel and marks the
-bb machine suspended, but it doesn't stop the environment. Ona's
+tearing down or retrying one of the machine's workspaces, or one needs recovery, or
+bb's workspace or thread list can't be read (see [How bb and Ona stay in sync](docs/sync.md)),
+it closes the tunnel and marks the bb machine suspended, but it doesn't stop the
+environment. Ona's
 own inactivity timeout stops it later, unless you still have an Ona editor open
 on it. The tunnel never reconnects to an environment that Ona has stopped or is
 stopping. When Ona stops a devbox, the plugin marks its bb machine suspended.
@@ -298,12 +299,13 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
   left in the workspace (`bb environment list --host <machine>`, then the workspace
   path on the box). For an adopted box, start over only once
   `bb environment list --host <machine>` shows `Needs recovery:` for the workspace (see
-  [docs/ona-notes.md](docs/ona-notes.md)); until then bb has not given up; a workspace
-  whose message says it belongs to a different plugin (or has no recorded owner) gets
-  no marker while the mismatch lasts ([docs/ona-notes.md](docs/ona-notes.md)). Keep the
-  box running and run `bb machine remove <machine>`. If it succeeds, run
-  `bb ona adopt <box>` (see the next bullet). When its cleanup fails, keep the box
-  running, stop every bb daemon on it, and anything running from a checkout in it, with
+  [docs/ona-notes.md](docs/ona-notes.md)). bb writes no `Needs recovery:` text for a
+  workspace whose message says it belongs to a different plugin or has no recorded
+  owner; the plugin's line still shows after 60 s and an active box stays awake
+  ([docs/ona-notes.md](docs/ona-notes.md)). Keep the box running and run
+  `bb machine remove <machine>`. If it succeeds, run `bb ona adopt <box>` (see the next
+  bullet). When its cleanup fails, keep the box running, stop every bb daemon on it,
+  and anything running from a checkout in it, with
   `ssh "$(bb ona host <box>)" 'pkill -f "$(readlink -f ~/.bb-machines)/"'`, and run
   `bb machine remove <machine> --force` (bb accepts `--force` only after a normal
   remove failed, and only while the daemon is disconnected;

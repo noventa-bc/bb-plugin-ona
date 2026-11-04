@@ -153,7 +153,9 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   (`withEnvironmentCleanupSlot`) (checked 2026-11-04).
 - bb 0.48.1's owner-mismatch failure (`PROVIDER_OWNER_MISMATCH_MESSAGE` in
   `server/dist/start-server.js`) sets `lifecycle.teardown.status` to failed and leaves
-  `retireAt` as it was; no retry runs while the mismatch lasts (checked 2026-11-04).
+  `retireAt` as it was; no retry runs while the mismatch lasts (checked 2026-11-04). The
+  message says the workspace belongs to a different plugin or has no recorded owner, and
+  bb writes no `Needs recovery:` text for it (checked 2026-11-04).
 - A retry's teardown hook needs its host active: an inactive host fails the attempt with
   `host_unavailable` (`assertHostActiveForRead`), except while the machine is being
   removed (`isCleanupRpc`). A teardown never wakes the host (`hostCommandMayWake`)

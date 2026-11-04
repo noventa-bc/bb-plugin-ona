@@ -29,12 +29,13 @@ never start or stop a box; bb does that only on your action in bb (decisions 000
 
 The idle rule in [How it works](../README.md#how-it-works) has these exceptions: a box
 isn't let go while bb is setting up or tearing down one of its thread workspaces, or
-while bb waits to retry a failed teardown, or while one needs recovery. A retry needs
-the machine active in bb ([ona-notes](ona-notes.md) has the bb fact, checked
-2026-11-04). Closing the tunnel mid-hook leaves bb unable to tell how the hook ended
-(checked 2026-11-04). A thread with a turn in flight also holds the box, hidden ones
-(workflow steps, side chats) included, but an archived thread counts for neither
-busyness nor activity, whatever status bb still shows for it.
+while bb waits to retry a failed teardown, or while one needs recovery, or while bb's
+workspace or thread list can't be read. A retry needs the machine active in bb
+([ona-notes](ona-notes.md) has the bb fact, checked 2026-11-04). Closing the tunnel
+mid-hook leaves bb unable to tell how the hook ended (checked 2026-11-04). A thread with
+a turn in flight also holds the box, hidden ones (workflow steps, side chats) included,
+but an archived thread counts for neither busyness nor activity, whatever status bb
+still shows for it.
 
 `bb ona keep-alive <name> <duration>` is the one way to hold a box past Ona's
 inactivity timeout, and only on your request; the plugin never starts one by

@@ -127,6 +127,10 @@ test("a provisioning workspace stays busy beside a ready one", () => {
   });
 });
 
+test("a failed teardown outside the teardown phase counts as nothing: bb derives the phase from the teardown status", () => {
+  assert.deepEqual(workspaceWork([workspace("ready", "active", "failed")], NOW), { busy: false, needsRecovery: 0 });
+});
+
 test("an idle machine whose workspaces bb is working on, or that need recovery, is not let go", () => {
   const idle = [machine("a"), machine("b", { workspacesBlock: true }), machine("c", { workspacesBlock: false })];
   assert.deepEqual(machinesToRelease(idle, NOW, 30 * MIN), ["a", "c"]);

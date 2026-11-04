@@ -45,7 +45,8 @@ export function world(
     /** The message a failing listing throws; "" counts as a failure too. */
     listingError?: string;
     /** bb's workspace list throws. */
-    workspacesFail?: boolean;
+    /** The host whose workspace list throws. */
+    workspacesFail?: string;
     /** bb's host lookup fails: with a plain error, or with only the SDK's `not_found` code (no status). */
     hostGet?: "fail" | "not_found";
     autoRepair?: boolean;
@@ -134,7 +135,7 @@ export function world(
         },
         environments: {
           list: async ({ hostId }) => {
-            if (options.workspacesFail) throw new Error("bb is down");
+            if (options.workspacesFail === hostId) throw new Error("bb is down");
             return byHost.get(hostId)?.workspaces ?? [];
           },
         },

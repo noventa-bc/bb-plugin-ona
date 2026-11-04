@@ -75,16 +75,31 @@ test("an idle box isn't released while bb tears down or retries a workspace, or 
   }
 });
 
-test("a failed workspace lookup holds an idle box, and status reports no recovery for it", async () => {
-  const retrying: WorkspaceView = {
-    status: "error",
-    lifecycle: { phase: "teardown", retireAt: NOW + 60_000, teardown: { status: "failed" } },
-  };
-  const { sync, calls } = world([idle("h1", { workspaces: [retrying] })], { workspacesFail: true });
+test("a failed workspace lookup holds an idle box, and status says why and reports no recovery", async () => {
+  const { sync, calls } = world([idle("h1")], { workspacesFail: "h1" });
   await sync.reconcile(new Set([ALL]), { wait: true });
   assert.deepEqual(calls, []);
   const [row] = await sync.statusRows();
   assert.equal(row!.needsRecovery, 0);
+  assert.equal(row!.now!.reason, "bb's workspace or thread list couldn't be read, so an idle box is kept");
+});
+
+test("one box's failed workspace lookup holds only that box", async () => {
+  const { sync, calls } = world([idle("h1"), idle("h2")], { workspacesFail: "h1" });
+  await sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(calls, ["suspend h2"]);
+});
+
+test("one box's failed thread list holds only that box", async () => {
+  const { sync, calls } = world([idle("h1", { threads: "fail" }), idle("h2")]);
+  await sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(calls, ["suspend h2"]);
+});
+
+test("a disconnected box whose workspace lookup fails gets no daemon check at once", async () => {
+  const { sync, calls } = world([idle("h1", { status: "disconnected" })], { workspacesFail: "h1" });
+  await sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(calls, []);
 });
 
 // Bug: a teardown bb was still retrying counted as needing recovery, so a disconnected box waited out the grace instead of reconnecting for bb's retry.
@@ -342,6 +357,14 @@ test("a failed or empty Ona listing changes nothing", async () => {
     const box = idle("h1", { status: "disconnected", lastSeenAt: NOW - HOUR, threads: [] });
     const { sync, calls } = world([box], { listing });
     await sync.reconcile(new Set(["h1"]), { wait: true });
+    assert.deepEqual(calls, [], listing);
+  }
+});
+
+test("a failed or empty Ona listing holds the idle release for every box", async () => {
+  for (const listing of ["fail", "empty"] as const) {
+    const { sync, calls } = world([idle("h1")], { listing });
+    await sync.reconcile(new Set([ALL]), { wait: true });
     assert.deepEqual(calls, [], listing);
   }
 });
