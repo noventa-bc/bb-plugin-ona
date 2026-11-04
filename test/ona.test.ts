@@ -270,8 +270,23 @@ test("readiness: failed on Ona's failure message, a string or a list, with its f
   assert.deepEqual(readiness(env(null)), { state: "waiting", reason: "starting" });
 });
 
-// Bug: a box Ona was asked to start but still showed STOPPED right after `ona environment start` failed the resume.
-test("readiness: a stopped or stopping box Ona is asked to run is starting; otherwise it failed", () => {
+// Bug: a failure message left from an earlier start failed every reconnect and heal of a healthy box.
+test("readiness: a running box with a running dev container is ready despite a stale failure message", () => {
+  const env: OnaEnvironment = {
+    id: "env-0001",
+    metadata: {},
+    status: {
+      phase: "ENVIRONMENT_PHASE_RUNNING",
+      devcontainer: { phase: "PHASE_RUNNING" },
+      failureMessage: ["old start error"],
+    },
+  };
+  assert.deepEqual(readiness(env), { state: "ready" });
+});
+
+// Bug: a box still shown STOPPED right after `ona environment start` failed the resume, with or without a
+// desired phase (older Ona has none).
+test("readiness: a stopped or stopping box is starting unless Ona's desired phase is something other than RUNNING", () => {
   const env = (phase: string, desiredPhase?: string): OnaEnvironment => ({
     id: "env-0001",
     metadata: {},
@@ -282,14 +297,22 @@ test("readiness: a stopped or stopping box Ona is asked to run is starting; othe
   assert.deepEqual(readiness(env("STOPPED", "RUNNING")), starting);
   assert.deepEqual(readiness(env("STOPPING", "RUNNING")), starting);
   assert.deepEqual(readiness(env("STOPPED", "STOPPED")), { state: "failed", message: "stopped" });
-  assert.deepEqual(readiness(env("STOPPED")), { state: "failed", message: "stopped" });
+  assert.deepEqual(readiness(env("STOPPING", "STOPPED")), { state: "failed", message: "stopping" });
+  assert.deepEqual(readiness(env("STOPPED")), starting, "older Ona: no desired phase");
+  assert.deepEqual(readiness(env("STOPPING")), starting, "older Ona: no desired phase");
+  assert.deepEqual(readiness(env("DELETED")), { state: "failed", message: "deleted" });
   assert.deepEqual(readiness(env("DELETED", "RUNNING")), { state: "failed", message: "deleted" });
   assert.deepEqual(readiness(env("DELETING", "RUNNING")), { state: "failed", message: "deleting" });
 });
 
-test("readiness: failed for a box stopping, stopped or deleted", () => {
+test("readiness: failed for a box stopping, stopped or deleted that Ona means to stop", () => {
   for (const phase of ["STOPPING", "STOPPED", "DELETING", "DELETED"]) {
-    const env: OnaEnvironment = { id: "env-0001", metadata: {}, status: { phase: `ENVIRONMENT_PHASE_${phase}` } };
+    const env: OnaEnvironment = {
+      id: "env-0001",
+      metadata: {},
+      spec: { desiredPhase: "ENVIRONMENT_PHASE_STOPPED" },
+      status: { phase: `ENVIRONMENT_PHASE_${phase}` },
+    };
     assert.deepEqual(readiness(env), { state: "failed", message: phase.toLowerCase() });
   }
 });

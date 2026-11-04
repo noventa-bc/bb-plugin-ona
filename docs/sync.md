@@ -78,10 +78,11 @@ you asked for, so safety rule 1 does not gate it.
    first asks `ona environment get` every 5s, for up to 15 minutes, until it says
    the box is running and so is its dev container, if it has one
    (`waitForReady()` in `src/ona.ts`, [0005](decisions/0005-lookup-by-id-counts-as-listing.md)).
-   No SSH runs before that answer. Ona's failure message, a deleted box, or a
-   box stopping or stopped that Ona isn't asked to run (`spec.desiredPhase`)
-   ends the connect with no SSH; a failed `get` is unknown, so
-   it asks again.
+   No SSH runs before that answer. Short of it, Ona's failure message, a deleted
+   box, or a box stopping or stopped whose `spec.desiredPhase` is set to anything
+   but running ends the connect with no SSH. A stopped box with no desired phase
+   may be one the start just woke, so the connect keeps asking, as it does when
+   `get` fails (unknown).
    These commands you run yourself are not gated and may wake a box:
    `ona environment open` and `bb ona ssh --thread`.
    _Why: an accidental start costs money and keeps the box up._

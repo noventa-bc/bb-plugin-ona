@@ -71,8 +71,9 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
     warning) on the running box.
 - `spec.desiredPhase` is the phase Ona is driving the box to. Ona's API docs
   give it the same values as `status.phase` (`ENVIRONMENT_PHASE_RUNNING`, …).
-  `readiness()` in `src/ona.ts` reads a stopped or stopping box whose desired
-  phase is RUNNING as starting, since `status.phase` can lag a start.
+  `readiness()` in `src/ona.ts` reads a stopped or stopping box as failed only
+  when its desired phase is set to something other than RUNNING. `status.phase`
+  can lag a start, and older Ona may not send the field.
 - `ona environment ssh --proxy-connect` (the ProxyCommand form) has a `--start`
   flag that defaults to true. A plugin-owned SSH config that passes
   `--start=false` means SSH can never wake a stopped box.

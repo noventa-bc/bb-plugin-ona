@@ -297,7 +297,8 @@ test("a resume fails at once with Ona's failure message, no SSH, and closes the 
 
 // Bug: a box stopped in Ona during the wait was probed over SSH, and Ona's SSH starts a stopped box (rule 1).
 test("a resume fails without SSH when Ona reports the box stopped during the wait", async () => {
-  const { resumed, calls } = resume({ found: box("STOPPED"), phases: ["STOPPED", "STARTING", "STOPPED"] });
+  const stopped = { ...box("STOPPED"), spec: { desiredPhase: "ENVIRONMENT_PHASE_STOPPED" } };
+  const { resumed, calls } = resume({ found: box("STOPPED"), phases: ["STOPPED", "STARTING", stopped] });
   await tick(5_000, 180);
   await assert.rejects(resumed, /^Error: Ona environment box failed to start: stopped$/);
   assert.deepEqual(calls, ["get STOPPED", "start", "get STARTING", "get STOPPED"]);
@@ -307,6 +308,14 @@ test("a resume fails without SSH when Ona reports the box stopped during the wai
 test("a resume waits on a box Ona shows stopped but is asked to run, then connects", async () => {
   const waking = { ...box("STOPPED"), spec: { desiredPhase: "ENVIRONMENT_PHASE_RUNNING" } };
   const { resumed, calls } = resume({ found: box("STOPPED"), phases: ["STOPPED", waking, "RUNNING"] });
+  await tick(5_000, 1);
+  await resumed;
+  assert.deepEqual(calls, ["get STOPPED", "start", "get STOPPED", "get RUNNING", "ssh"]);
+});
+
+// Bug: older Ona has no desired phase, and can still show STOPPED right after a start; that failed the resume.
+test("a resume waits on a box Ona shows stopped with no desired phase, then connects", async () => {
+  const { resumed, calls } = resume({ found: box("STOPPED"), phases: ["STOPPED", "STOPPED", "RUNNING"] });
   await tick(5_000, 1);
   await resumed;
   assert.deepEqual(calls, ["get STOPPED", "start", "get STOPPED", "get RUNNING", "ssh"]);

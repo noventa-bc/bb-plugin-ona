@@ -263,23 +263,27 @@ export type Readiness =
 
 /**
  * Whether Ona says a box can take SSH: RUNNING, with its dev container running
- * or none at all. Ona's failure message, a box deleted, or one stopping or
- * stopped that Ona isn't asked to run, is final. Any other value, known or not, is still on its way.
+ * or none at all; a failure message left from an earlier start doesn't undo
+ * that. Otherwise final: Ona's failure message, a box deleted or deleting, or
+ * one stopping or stopped whose desired phase is set to anything but RUNNING.
+ * A stopped box with no desired phase (older Ona) may be one `start` just
+ * woke, so it and any other value, known or not, is still on its way.
  */
 export function readiness(env: OnaEnvironment): Readiness {
+  const devcontainer = env.status?.devcontainer;
+  const containerUp = !devcontainer || devcontainer.phase === "PHASE_RUNNING";
+  if (isRunning(env) && containerUp) return { state: "ready" };
   const failure = [env.status?.failureMessage ?? []].flat().find(Boolean);
   if (failure) return { state: "failed", message: failure.split("\n")[0]! };
   const phase = (env.status?.phase ?? "unknown").replace("ENVIRONMENT_PHASE_", "").toLowerCase();
   if (isDeleted(env)) return { state: "failed", message: phase };
   if (isStopped(env) || phase === "stopping") {
-    if (env.spec?.desiredPhase === "ENVIRONMENT_PHASE_RUNNING") return { state: "waiting", reason: "starting" };
-    return { state: "failed", message: phase };
+    const desired = env.spec?.desiredPhase;
+    if (desired && desired !== "ENVIRONMENT_PHASE_RUNNING") return { state: "failed", message: phase };
+    return { state: "waiting", reason: "starting" };
   }
   if (!isRunning(env)) return { state: "waiting", reason: phase };
-  const devcontainer = env.status?.devcontainer;
-  if (devcontainer && devcontainer.phase !== "PHASE_RUNNING")
-    return { state: "waiting", reason: "dev container starting" };
-  return { state: "ready" };
+  return { state: "waiting", reason: "dev container starting" };
 }
 
 /**
