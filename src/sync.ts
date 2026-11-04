@@ -66,6 +66,7 @@ export interface SyncBb {
   sdk: {
     hosts: {
       list(): Promise<readonly BbHost[]>;
+      get(args: { hostId: string }): Promise<BbHost>;
       experimental_suspend(args: { hostId: string }): Promise<BbHost>;
       experimental_resume(args: { hostId: string }): Promise<BbHost>;
       experimental_reconcile(args: { hostId: string }): Promise<BbHost>;
@@ -152,33 +153,56 @@ export function createSync(deps: SyncDeps) {
   const { bb, snapshot, ona, guard, tunnels, provider, hostByEnv, autoRepair, idleDisconnect } = deps;
   const pluginStartedAt = deps.pluginStartedAt;
 
+  /** The row for one bb host: null unless it is an Ona machine whose stored resource parses. */
+  async function rowOf(host: BbHost, listing: OnaListing | null): Promise<Row | null> {
+    if (host.machineProviderId !== PROVIDER_ID) return null;
+    const parsed = resourceSchema.safeParse(await bb.experimental_machines.getResource(host.id));
+    if (!parsed.success) return null;
+    // A suspended machine reports "disconnected"; surface the suspension itself.
+    const status = host.lifecycle.suspendedAt ? "suspended" : String(host.status);
+    return {
+      hostId: host.id,
+      machine: host.name,
+      status,
+      phase: host.lifecycle.phase,
+      lastSeenAt: host.lastSeenAt ?? null,
+      updatedAt: host.updatedAt,
+      resource: {
+        ...parsed.data,
+        envName: listing?.envs.find((env) => env.id === parsed.data.envId)?.metadata.name ?? parsed.data.envName,
+      },
+    };
+  }
+
   async function machines(): Promise<Row[]> {
     const hosts = await bb.sdk.hosts.list();
     // The stored resource keeps the name the box was created or adopted with; the last listing has the current one.
     const listing = snapshot.latest;
     const rows: Row[] = [];
     for (const host of hosts) {
-      if (host.machineProviderId !== PROVIDER_ID) continue;
-      const parsed = resourceSchema.safeParse(await bb.experimental_machines.getResource(host.id));
-      if (!parsed.success) continue;
-      // A suspended machine reports "disconnected"; surface the suspension itself.
-      const status = host.lifecycle.suspendedAt ? "suspended" : String(host.status);
-      rows.push({
-        hostId: host.id,
-        machine: host.name,
-        status,
-        phase: host.lifecycle.phase,
-        lastSeenAt: host.lastSeenAt ?? null,
-        updatedAt: host.updatedAt,
-        resource: {
-          ...parsed.data,
-          envName: listing?.envs.find((env) => env.id === parsed.data.envId)?.metadata.name ?? parsed.data.envName,
-        },
-      });
+      const row = await rowOf(host, listing);
+      if (row) rows.push(row);
     }
     hostByEnv.clear();
     for (const row of rows) hostByEnv.set(row.resource.envId, row.hostId);
     return rows;
+  }
+
+  /**
+   * The Ona machine for one bb host, by one lookup instead of a listing. Null where `machines()`
+   * leaves the host out: unknown or destroyed (bb answers 404), still being created, or not an
+   * Ona machine. It leaves `hostByEnv` to the listing, which every sync pass refreshes.
+   */
+  async function machineOfHost(hostId: string): Promise<Row | null> {
+    let host: BbHost;
+    try {
+      host = await bb.sdk.hosts.get({ hostId });
+    } catch (error) {
+      if ((error as { status?: unknown } | null)?.status === 404) return null;
+      throw error;
+    }
+    if (host.lifecycle.phase === "creating") return null;
+    return rowOf(host, snapshot.latest);
   }
 
   /**
@@ -470,7 +494,7 @@ export function createSync(deps: SyncDeps) {
     );
   }
 
-  return { machines, reconcile, statusRows, missing, workspaces, suspendWithoutStop };
+  return { machines, machineOfHost, reconcile, statusRows, missing, workspaces, suspendWithoutStop };
 }
 
 /** The parts of bb's plugin API the realtime events use; the real `bb` satisfies it. */
