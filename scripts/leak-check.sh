@@ -15,8 +15,14 @@ refuse() {
 
 if [ "${1:-}" = --message ]; then
   [ -f "${2:-}" ] || { echo "leak-check: no commit message file ${2:-}" >&2; exit 1; }
-  # Comment lines are blanked in place, not deleted, so a line number printed is the message file's own line.
-  text=$(sed 's/^#.*//' "$2") || { echo "leak-check: cannot read $2" >&2; exit 1; }
+  # Comment lines, and header lines of a diff git appends (from "diff --git" to its first "@@"), are blanked,
+  # so a printed line number is the message file's own line.
+  text=$(awk '
+    /^#/ { print ""; next }
+    /^diff --git / { header = 1 }
+    /^@@/ { header = 0 }
+    header && /^(diff --git |index |--- |\+\+\+ |new file mode |deleted file mode |old mode |new mode |similarity index |dissimilarity index |rename (from|to) |copy (from|to) |Binary files )/ { print ""; next }
+    { print }' "$2") || { echo "leak-check: cannot read $2" >&2; exit 1; }
   hits=$(printf '%s\n' "$text" | grep -n -o -E "$pattern")
 else
   root=$(cd "${1:-$here/..}" && pwd) || exit 1

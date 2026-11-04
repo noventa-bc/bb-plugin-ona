@@ -80,7 +80,7 @@ test("a linked worktree keeps another core.hooksPath on the shared config", () =
   assert.match(String(run.stdout), /hooks will not run/);
 });
 
-test("a developer's global core.hooksPath does not change the result", () => {
+test("a developer's global core.hooksPath is kept, and one line says this repo's hooks will not run", () => {
   const globalConfig = join(tempDir("prepare-home-"), ".gitconfig");
   writeFileSync(globalConfig, "[core]\n\thooksPath = /some/other/hooks\n");
   const dir = tempDir("prepare-global-");
@@ -88,19 +88,21 @@ test("a developer's global core.hooksPath does not change the result", () => {
   // git must read the global value through this file, or the result below would pass for the wrong reason.
   const withGlobal = { ...env, GIT_CONFIG_GLOBAL: globalConfig };
   assert.equal(git(dir, withGlobal, "config", "--get", "core.hooksPath"), "/some/other/hooks");
-  assert.equal(runPrepare(dir, { GIT_CONFIG_GLOBAL: globalConfig }).status, 0);
-  assert.equal(localHooksPath(dir), ".githooks");
+  const run = runPrepare(dir, { GIT_CONFIG_GLOBAL: globalConfig });
+  assert.equal(run.status, 0, String(run.stderr));
+  assert.equal(localHooksPath(dir), undefined);
+  assert.match(String(run.stdout), /^core\.hooksPath is \/some\/other\/hooks; this repo's hooks will not run$/m);
 });
 
 for (const value of ["./.githooks", ".githooks/"]) {
-  test(`a repository root whose core.hooksPath is ${value} is set to .githooks, with no message`, () => {
+  test(`a repository root whose core.hooksPath is ${value} keeps it, with no message`, () => {
     const dir = tempDir("prepare-same-");
     git(dir, env, "init", "-q");
     git(dir, env, "config", "core.hooksPath", value);
     const run = runPrepare(dir);
     assert.equal(run.status, 0, String(run.stderr));
     assert.equal(String(run.stdout), "");
-    assert.equal(localHooksPath(dir), ".githooks");
+    assert.equal(localHooksPath(dir), value);
   });
 }
 
@@ -115,6 +117,23 @@ test("a .git that cannot be written warns and the install still exits 0", (t) =>
     const run = runPrepare(dir);
     assert.equal(run.status, 0, String(run.stderr));
     assert.match(String(run.stdout), /core\.hooksPath could not be set; this repo's hooks will not run/);
+  } finally {
+    chmodSync(gitDir, 0o755);
+  }
+});
+
+test("a .git that cannot be written keeps an existing .githooks path with no message", (t) => {
+  const dir = tempDir("prepare-readonly-same-");
+  git(dir, env, "init", "-q");
+  git(dir, env, "config", "core.hooksPath", ".githooks");
+  const gitDir = join(dir, ".git");
+  chmodSync(gitDir, 0o555);
+  try {
+    if (accessible(gitDir, constants.W_OK))
+      return t.skip("chmod does not stop writes here: root, or a filesystem that ignores it");
+    const run = runPrepare(dir);
+    assert.equal(run.status, 0, String(run.stderr));
+    assert.equal(String(run.stdout), "");
   } finally {
     chmodSync(gitDir, 0o755);
   }

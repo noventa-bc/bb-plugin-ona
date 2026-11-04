@@ -155,7 +155,58 @@ test("a verbose commit message's diff below the scissors line is checked, and a 
   assert.match(r.output, /^6:/m);
 });
 
-test("text after a scissors-looking line that is not a comment is refused", () => {
+test("a verbose commit message adding a file under a home folder passes when the content is clean", () => {
+  const homeDoc = ["docs", "home", "x.md"].join("/");
+  const r = commitMsg(
+    messageFile(
+      [
+        "docs(notes): add a note",
+        "",
+        "# ------------------------ >8 ------------------------",
+        "# Do not modify or remove the line above.",
+        `diff --git a/${homeDoc} b/${homeDoc}`,
+        "new file mode 100644",
+        "index 0000000..e69de29",
+        "--- /dev/null",
+        `+++ b/${homeDoc}`,
+        "@@ -0,0 +1 @@",
+        "+A clean note.",
+        "",
+      ].join("\n"),
+    ),
+  );
+  assert.equal(r.status, 0, r.output);
+});
+
+test("a personal path in an added diff line below the scissors line is refused", () => {
+  const file = messageFile(
+    [
+      "fix(notes): add the personal path",
+      "",
+      "# ------------------------ >8 ------------------------",
+      "# Do not modify or remove the line above.",
+      "diff --git a/notes.txt b/notes.txt",
+      `+see ${usersBare}/notes`,
+      "",
+    ].join("\n"),
+  );
+  const r = commitMsg(file);
+  assert.equal(r.status, 1, r.output);
+  assert.match(r.output, /^6:/m);
+});
+
+test("a personal path on a line shaped like a diff header is refused outside a diff header (fails if every such line is skipped)", () => {
+  const header = ["diff --git a/n.txt b/n.txt", "--- a/n.txt", "+++ b/n.txt", "@@ -1 +1 @@"];
+  for (const lines of [
+    ["docs: body", "", `--- ${usersBare}/notes`],
+    ["docs: removed", "", "# ---- >8 ----", ...header, `--- ${usersBare}/notes`, "+plain"],
+    ["docs: added", "", "# ---- >8 ----", ...header, "-plain", `+++ ${usersBare}/notes`],
+  ]) {
+    assert.equal(commitMsg(messageFile([...lines, ""].join("\n"))).status, 1, lines.join(" | "));
+  }
+});
+
+test("text after a scissors-looking comment line is refused", () => {
   const file = messageFile(
     [
       "chore(hooks): plain message",
