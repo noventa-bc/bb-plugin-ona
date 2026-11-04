@@ -190,7 +190,8 @@ export function createSync(deps: SyncDeps) {
 
   /**
    * The Ona machine for one bb host, by one lookup instead of a listing. Null where `machines()`
-   * leaves the host out: unknown or destroyed (bb answers 404), still being created, or not an
+   * leaves the host out: unknown or destroyed (a 404, or an SDK error with the `not_found` code),
+   * still being created (the list leaves those out unless `includeCreating` is set), or not an
    * Ona machine. It leaves `hostByEnv` to the listing, which every sync pass refreshes.
    */
   async function machineOfHost(hostId: string): Promise<Row | null> {
@@ -198,7 +199,8 @@ export function createSync(deps: SyncDeps) {
     try {
       host = await bb.sdk.hosts.get({ hostId });
     } catch (error) {
-      if ((error as { status?: unknown } | null)?.status === 404) return null;
+      const failure = error as { status?: unknown; code?: unknown } | null;
+      if (failure?.status === 404 || failure?.code === "not_found") return null;
       throw error;
     }
     if (host.lifecycle.phase === "creating") return null;

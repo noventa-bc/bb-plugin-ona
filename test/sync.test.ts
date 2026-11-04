@@ -46,8 +46,8 @@ function world(
     cached?: boolean;
     archived?: boolean | "not-found" | "fail";
     listing?: "fail" | "empty";
-    /** bb's host lookup fails for a reason other than a 404. */
-    hostGet?: "fail";
+    /** bb's host lookup fails: with a plain error, or with only the SDK's `not_found` code (no status). */
+    hostGet?: "fail" | "not_found";
     autoRepair?: boolean;
   } = {},
 ) {
@@ -108,6 +108,8 @@ function world(
           get: async ({ hostId }) => {
             hostReads.push(`get ${hostId}`);
             if (options.hostGet === "fail") throw new Error("bb is down");
+            if (options.hostGet === "not_found")
+              throw Object.assign(new Error("Host not found"), { code: "not_found" });
             const host = hosts.get(hostId);
             // bb answers 404 for a host it doesn't know, and for one it has destroyed.
             if (!host) throw Object.assign(new Error("Host not found"), { status: 404 });
@@ -271,6 +273,12 @@ test("machineOfHost is null for a host the list would leave out", async () => {
   hosts.get("h1")!.machineProviderId = "ona";
   hosts.get("h1")!.lifecycle.phase = "creating";
   assert.equal(await sync.machineOfHost("h1"), null, "still being created");
+});
+
+// An SDK error can carry the `not_found` code and no status (experimental_PluginRpcCallError); that host is gone too.
+test("machineOfHost is null when the lookup error carries only the not_found code", async () => {
+  const { sync } = world([idle("h1")], { hostGet: "not_found" });
+  assert.equal(await sync.machineOfHost("h1"), null);
 });
 
 test("machineOfHost throws when the lookup fails for another reason", async () => {
