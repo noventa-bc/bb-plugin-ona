@@ -557,6 +557,7 @@ test("a Codex figure above $0.00 under the old cost: key gets fresh rounds on a 
   w.kv.set(OLD_KEY, { cost: CODEX_FIGURE, seq: 7, checkedAt: OLD });
   assert.equal((await w.costs.threadCost("t1"))?.usd, 2);
   assert.deepEqual(w.collectorRuns, ["env-1"]);
+  assert.equal((w.kv.get("cost2:t1") as { runs: number }).runs, 1);
 });
 
 test("an old record with no figure settled at this turn is not read again on a box Ona says is stopped (fails if each poll lists Ona)", async () => {
