@@ -81,6 +81,7 @@ export async function keepAliveCommand(
   if (!listing) {
     return {
       exitCode: 1,
+      // The whole error, not reasonOf(): keep-alive is the one place a login hint on a later line shows.
       stderr: `Can't ask Ona whether ${ref} is running (${snapshot.lastError?.trim() || "no listing"}); nothing changed.`,
     };
   }

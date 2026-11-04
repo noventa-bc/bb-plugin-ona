@@ -400,6 +400,20 @@ test("reconnect refuses when the machine is replaced while Ona is listed, and ne
   const { run, calls } = fakeRun("active", "RUNNING", {
     duringListing: (_guard, machine) => {
       machine.hostId = "host_2";
+    },
+  });
+  assert.deepEqual(await run("reconnect", "box"), {
+    exitCode: 1,
+    stderr: "ona:box changed while Ona was asked; run `bb ona reconnect ona:box` again.",
+  });
+  assert.deepEqual(calls, []);
+});
+
+// A replacement under a new name: the hint names the machine the re-check found.
+test("a machine replaced under a new name while Ona is listed is named in the refusal", async () => {
+  const { run, calls } = fakeRun("active", "RUNNING", {
+    duringListing: (_guard, machine) => {
+      machine.hostId = "host_2";
       machine.machine = "ona:box-2";
     },
   });
