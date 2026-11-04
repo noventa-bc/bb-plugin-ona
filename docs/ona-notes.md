@@ -70,7 +70,8 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 - SDK 0.6.109 has `experimental_threadAction` on `app.slots` with
   `placement: "header"` (checked 2026-11-03). A header action is a labelled
   button with an icon and a `run`, not a component, so it can't show the cost
-  chip. bb places it after the workspace's Open button, which stays visible.
+  chip. bb places it after the workspace's Open button, and it cannot hide
+  that button, so it cannot replace the hide in `app.tsx`.
 - SDK 0.6.109 has no `machine_busy` suspend error code (checked 2026-11-03: the
   name occurs nowhere in its typings or `dist`).
 - bb 0.48.1's `startMachineResume` accepts a machine that is `active`,
