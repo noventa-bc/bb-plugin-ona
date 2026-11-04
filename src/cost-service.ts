@@ -49,6 +49,8 @@ interface StoredCost {
 
 // Codex records usage minutes after a turn (docs/ona-notes.md); 12 rounds at the 5-minute floor is about an hour.
 const CODEX_ROUNDS = 12;
+// Claude usage lands as its turn runs, so an empty first read gets one more.
+const CLAUDE_ROUNDS = 2;
 
 // Records under `cost:` predate the Codex usage lag (docs/ona-notes.md); their figures are shown
 // (except a Codex $0.00) until a new round runs.
@@ -76,9 +78,9 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
       oldCostKey(threadId),
     );
     if (old?.cost?.provider !== provider) return null;
-    // A Claude figure settled its turn on main, so it stays settled; a Codex one gets fresh rounds.
+    // A Claude figure an older version settled stays settled; a Codex one gets fresh rounds.
     if (old.cost.provider === "claude-code")
-      return { cost: old.cost, seq: String(old.seq ?? ""), checkedAt: old.checkedAt, runs: 2 };
+      return { cost: old.cost, seq: String(old.seq ?? ""), checkedAt: old.checkedAt, runs: CLAUDE_ROUNDS };
     return old.cost.usd > 0 ? { cost: old.cost, seq: "", checkedAt: old.checkedAt } : null;
   }
 
@@ -113,7 +115,7 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
     const seq = String(latest?.seq ?? 0);
     // Claude gets a second round only when its first priced nothing. Codex gets CODEX_ROUNDS
     // for its usage lag once a turn has finished, and one round before that.
-    const rounds = agentProvider === "codex" ? (latest ? CODEX_ROUNDS : 1) : 2;
+    const rounds = agentProvider === "codex" ? (latest ? CODEX_ROUNDS : 1) : CLAUDE_ROUNDS;
     const settled = stored?.seq === seq && (stored.runs ?? 0) >= rounds;
     if (stored && (settled || Date.now() - stored.checkedAt < 5 * 60_000)) return stored.cost;
 
