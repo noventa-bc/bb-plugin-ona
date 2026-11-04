@@ -114,7 +114,10 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   (`REMOVE_RETRY_MS` doubled per failure); after the fifth (`MAX_REMOVE_ATTEMPTS`
   is 5) it is null and the message starts "Needs recovery:" (checked 2026-11-04).
 - bb's periodic sweep runs every 10 s (`setInterval` with `1e4` in
-  `server/dist/start-server.js`), and a teardown retry starts through its host's
+  `server/dist/start-server.js`). A tick is skipped while the previous run of the
+  job is still going (`runPeriodicSweepJob`). A run waits for each workspace it
+  sweeps, including that workspace's teardown hook, which can take up to 15 min
+  (`ENVIRONMENT_HOOK_TIMEOUT_MS`). A teardown retry starts through its host's
   cleanup slot: one active cleanup per host, four in all
   (`withEnvironmentCleanupSlot`) (checked 2026-11-04).
 - bb 0.48.1's owner-mismatch failure (`PROVIDER_OWNER_MISMATCH_MESSAGE` in

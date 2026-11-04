@@ -179,7 +179,7 @@ test("status text: one block per machine with what the plugin saw, did and is wa
   assert.equal(lines[2], "  now: connected (since 2m ago)");
   assert.equal(lines[3], "  last action: release-idle: idle for 1h (3h ago) ERROR bb kept the machine active");
   assert.equal(lines[4], "  retrying after 10:00:00");
-  assert.match(lines[5]!, /^  2 workspace\(s\) need recovery; .*bb environment list --host host_1/);
+  assert.match(lines[5]!, /^  2 workspace\(s\) may need recovery; .*bb environment list --host host_1/);
 });
 
 // Bug: a box held awake by a thread bb left "active" gave the owner no reason in status.

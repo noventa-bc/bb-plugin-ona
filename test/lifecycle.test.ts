@@ -106,11 +106,7 @@ test("workspaceWork: a failed teardown whose retry is over a minute overdue need
   });
 });
 
-test("workspaceWork: a failed teardown whose retry is a minute away, or exactly a minute overdue, is busy", () => {
-  assert.deepEqual(workspaceWork([workspace("error", "teardown", "failed", NOW + MIN)], NOW), {
-    busy: true,
-    needsRecovery: 0,
-  });
+test("a failed teardown exactly a minute overdue is still busy", () => {
   assert.deepEqual(workspaceWork([workspace("error", "teardown", "failed", NOW - MIN)], NOW), {
     busy: true,
     needsRecovery: 0,

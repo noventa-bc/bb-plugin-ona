@@ -25,8 +25,9 @@ export interface WorkspaceView {
 }
 
 /**
- * bb sweeps every 10 s (checked 2026-11-04); a minute past `retireAt` is slack for
- * that sweep, so a retry further overdue counts as given up.
+ * bb's owner-mismatch failure writer can leave `retireAt` in the past, with no retry while
+ * the mismatch lasts (checked 2026-11-04). Without a cutoff, such a teardown never shows as needing recovery.
+ * The sweep facts behind this are in docs/ona-notes.md.
  */
 const OVERDUE_MS = 60_000;
 
