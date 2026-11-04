@@ -46,10 +46,14 @@ function world(
     cached?: boolean;
     archived?: boolean | "not-found" | "fail";
     listing?: "fail" | "empty";
+    /** bb's host lookup fails: with a plain error, or with only the SDK's `not_found` code (no status). */
+    hostGet?: "fail" | "not_found";
     autoRepair?: boolean;
   } = {},
 ) {
   const calls: string[] = [];
+  /** Host reads bb served: "list", or "get <hostId>". */
+  const hostReads: string[] = [];
   const kv = new Map<string, unknown>();
   const releasing = new Set<string>();
   const hosts = new Map<string, BbHost>(
@@ -97,7 +101,20 @@ function world(
     bb: {
       sdk: {
         hosts: {
-          list: async () => [...hosts.values()],
+          list: async () => {
+            hostReads.push("list");
+            return [...hosts.values()];
+          },
+          get: async ({ hostId }) => {
+            hostReads.push(`get ${hostId}`);
+            if (options.hostGet === "fail") throw new Error("bb is down");
+            if (options.hostGet === "not_found")
+              throw Object.assign(new Error("Host not found"), { code: "not_found" });
+            const host = hosts.get(hostId);
+            // bb answers 404 for a host it doesn't know, and for one it has destroyed.
+            if (!host) throw Object.assign(new Error("Host not found"), { status: 404 });
+            return host;
+          },
           experimental_suspend: lifecycleCall("suspend", "suspending"),
           experimental_resume: lifecycleCall("resume", "resuming"),
           experimental_reconcile: lifecycleCall("reconcile", "active"),
@@ -166,7 +183,7 @@ function world(
     idleDisconnect: "1h",
     pluginStartedAt: NOW - 2 * HOUR,
   });
-  return { sync, calls, guard, kv, hosts, releasing };
+  return { sync, calls, guard, kv, hosts, releasing, hostReads };
 }
 
 const idle = (hostId: string, extra: Partial<Box> = {}): Box => ({ hostId, envId: `env-${hostId}`, ...extra });
@@ -237,6 +254,36 @@ test("rows carry the name Ona lists, not the one stored at creation", async () =
     (await sync.machines()).map((row) => row.resource.envName),
     ["renamed", "box"],
   );
+});
+
+// Bug: an open thread header listed every bb host to find the one its thread runs on.
+test("machineOfHost reads the one host it is asked for, not the list", async () => {
+  const { sync, hostReads } = world([idle("h1"), idle("h2")]);
+  const row = await sync.machineOfHost("h2");
+  assert.equal(row?.hostId, "h2");
+  assert.equal(row?.resource.envId, "env-h2");
+  assert.deepEqual(hostReads, ["get h2"]);
+});
+
+test("machineOfHost is null for a host the list would leave out", async () => {
+  const { sync, hosts } = world([idle("h1")]);
+  assert.equal(await sync.machineOfHost("unknown"), null, "bb answers 404");
+  hosts.get("h1")!.machineProviderId = null;
+  assert.equal(await sync.machineOfHost("h1"), null, "not an Ona machine");
+  hosts.get("h1")!.machineProviderId = "ona";
+  hosts.get("h1")!.lifecycle.phase = "creating";
+  assert.equal(await sync.machineOfHost("h1"), null, "still being created");
+});
+
+// An SDK error can carry the `not_found` code and no status (experimental_PluginRpcCallError); that host is gone too.
+test("machineOfHost is null when the lookup error carries only the not_found code", async () => {
+  const { sync } = world([idle("h1")], { hostGet: "not_found" });
+  assert.equal(await sync.machineOfHost("h1"), null);
+});
+
+test("machineOfHost throws when the lookup fails for another reason", async () => {
+  const { sync } = world([idle("h1")], { hostGet: "fail" });
+  await assert.rejects(sync.machineOfHost("h1"), /bb is down/);
 });
 
 test("status reports workspaces that need recovery", async () => {
