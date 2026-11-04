@@ -101,8 +101,8 @@ you asked for, so safety rule 1 does not gate it.
    - any other phase. A failure message there may be left from an earlier start.
    - a `get` that fails (unknown).
 
-   When the wait ends early (a caller's own timeout), its error still names the
-   last reason. After Ona answers ready, SSH tries stop at 10 minutes, checked
+   One line of Ona's text is shown: the first non-blank line. When the wait
+   ends early (a caller's own timeout), its error still names the last reason. After Ona answers ready, SSH tries stop at 10 minutes, checked
    between tries; a try held for Ona can run past it.
    Every SSH command in a connect (each try of the waits, the Codex `mkdir`,
    the `~/.bb-machines` step, the preflight and bb's bootstrap) asks
@@ -112,7 +112,6 @@ you asked for, so safety rule 1 does not gate it.
    reverse tunnel's `ssh` is not gated by these waits; its own `shouldConnect`
    in `server.ts` asks a fresh listing.
 
-   One line of Ona's text is shown: the first non-blank line.
    These commands you run yourself are not gated and may wake a box:
    `ona environment open` and `bb ona ssh --thread`.
    _Why: an accidental start costs money and keeps the box up._

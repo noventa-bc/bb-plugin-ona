@@ -133,6 +133,15 @@ test("a failed lookup shows only the first line of Ona's error as progress", asy
   assert.equal(steps[1], "Waiting for Ona: ona environment get failed: dial tcp: timeout");
 });
 
+test("a failed lookup with no text shows a plain reason", async () => {
+  const steps: string[] = [];
+  const { reconnect } = register({ found: box("RUNNING"), phases: [new Error("\n"), "RUNNING"] });
+  const reconnected = reconnect(adoptedResource, lifecycle(steps).report, new AbortController().signal);
+  await tick(5_000, 1);
+  await reconnected;
+  assert.equal(steps[0], "Waiting for Ona: no reason given");
+});
+
 // A ZodError's first line is "[".
 test("an answer from Ona that can't be read shows a plain progress line", async () => {
   const unreadable = z.object({ id: z.string() }).safeParse({}).error!;

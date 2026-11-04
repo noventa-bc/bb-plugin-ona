@@ -314,13 +314,18 @@ test("readiness: a stopped or stopping box waits only when the plugin started it
   const failed = (message: string) => ({ state: "failed", message });
   const cases: [string, OnaEnvironment, boolean, object][] = [
     ["stopped, desired RUNNING, just started", phased("STOPPED", "RUNNING"), true, starting],
-    ["stopping, desired RUNNING, just started", phased("STOPPING", "RUNNING"), true, starting],
+    [
+      "stopping, desired RUNNING, just started",
+      phased("STOPPING", "RUNNING"),
+      true,
+      { state: "waiting", reason: "stopping" },
+    ],
     ["stopped, desired RUNNING, not started (idle stop)", phased("STOPPED", "RUNNING"), false, failed("stopped")],
     ["stopping, desired RUNNING, not started", phased("STOPPING", "RUNNING"), false, failed("stopping")],
     ["stopped, desired STOPPED", phased("STOPPED", "STOPPED"), true, failed("stopped")],
     ["stopping, desired STOPPED", phased("STOPPING", "STOPPED"), true, failed("stopping")],
     ["stopped, older Ona, just started", phased("STOPPED"), true, starting],
-    ["stopping, older Ona, just started", phased("STOPPING"), true, starting],
+    ["stopping, older Ona, just started", phased("STOPPING"), true, { state: "waiting", reason: "stopping" }],
     ["stopped, desired UNSPECIFIED, just started", phased("STOPPED", "UNSPECIFIED"), true, starting],
     ["deleted", phased("DELETED"), true, failed("deleted")],
     ["deleted, desired RUNNING", phased("DELETED", "RUNNING"), true, failed("deleted")],

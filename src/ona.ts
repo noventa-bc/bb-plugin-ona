@@ -303,7 +303,7 @@ export function readiness(env: OnaEnvironment, started = false): Readiness {
     const failure = [env.status?.failureMessage ?? []].flat().map(firstLine).find(Boolean);
     if (!started || isStopIntent(desired) || (!desired && failure))
       return { state: "failed", message: failure ?? phase };
-    return { state: "waiting", reason: failure ?? "starting" };
+    return { state: "waiting", reason: failure ?? (phase === "stopping" ? "stopping" : "starting") };
   }
   return { state: "waiting", reason: phase };
 }
@@ -343,7 +343,7 @@ export async function waitForReady(
         if (signal.aborted) throw error;
         // One line only: the rest is Ona's stderr, more than the progress line needs (rule 7).
         if (error instanceof z.ZodError) return wait("Ona's answer could not be read");
-        return wait(firstLine(errorText(error)) ?? errorText(error));
+        return wait(firstLine(errorText(error)) ?? "no reason given");
       }
       if (!env) throw new NotReadyError(`Ona environment ${current} disappeared.`);
       current = env.metadata.name ?? current;

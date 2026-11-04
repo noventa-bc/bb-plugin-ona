@@ -49,7 +49,7 @@ export const gated = (...commands: string[]) => commands.flatMap((command) => ["
 export const connectCalls = gated("ssh", "curl", "preflight", "bootstrap");
 
 /** The next entry in turn, the last one repeated. */
-export const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
+const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
 
 /** The provider in a fake host. `calls` logs Ona lookups, starts and every SSH command connect runs; `tunnels`, tunnel opens and closes. */
 export function register({
