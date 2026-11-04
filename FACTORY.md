@@ -122,8 +122,6 @@ those and the "skipped or not checked" lines ponytail ends with.
    the first round no new behaviour enters the branch: a fix that needs new
    behaviour is its own item. Code converges in three rounds; from round 4 on
    only findings that would make the PR wrong block it, and nits never do.
-   (R11, 2026-11-04: 22 rounds, the code stable from round 6, the rest
-   pre-existing issues pulled in one by one.)
 7. **Open the PR.** The title is a Conventional Commit (`type(scope):
 subject`, see `AGENTS.md`): the squash merge makes it the commit on
    `main`, and it decides the release. First run
