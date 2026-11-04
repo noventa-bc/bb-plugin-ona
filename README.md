@@ -303,8 +303,9 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
   [docs/ona-notes.md](docs/ona-notes.md)). bb writes no `Needs recovery:` text for a
   workspace whose message says it belongs to a different plugin or has no recorded
   owner (checked 2026-11-04); the plugin's line still shows after 60 s and an active
-  box stays awake ([docs/ona-notes.md](docs/ona-notes.md)). To start over, keep the box
-  running and run `bb machine remove <machine>`. If it succeeds, run `bb ona adopt <box>` (see the bullet
+  box stays awake ([docs/ona-notes.md](docs/ona-notes.md)). To start over on an adopted
+  box (never a created one: there `bb machine remove` deletes the environment), keep the
+  box running and run `bb machine remove <machine>`. If it succeeds, run `bb ona adopt <box>` (see the bullet
   on adopting). When its cleanup fails, keep the box running, stop every bb daemon on it,
   and anything running from a checkout in it, with
   `ssh "$(bb ona host <box>)" 'pkill -f "$(readlink -f ~/.bb-machines)/"'`, and run
