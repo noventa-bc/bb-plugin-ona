@@ -181,7 +181,7 @@ test("status text: one block per machine with what the plugin saw, did and is wa
   assert.equal(lines[4], "  retrying after 10:00:00");
   assert.match(
     lines[5]!,
-    /^  2 workspace\(s\) may need recovery; this plugin keeps the machine awake until they clear\. See .*bb environment list --host host_1/,
+    /^  2 workspace\(s\) may need recovery; an active box stays awake until they clear\. See .*bb environment list --host host_1/,
   );
 });
 

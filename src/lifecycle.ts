@@ -16,23 +16,23 @@ export interface MachineActivity {
 }
 
 /**
- * The parts of a bb environment (a thread's workspace) this file reads. `retireAt`
- * is when bb next retries a failed teardown, null once it has given up.
+ * The parts of a bb environment (a thread's workspace) this file reads. `retireAt` is
+ * bb's retry time for a failed teardown; docs/ona-notes.md has bb's retry timing.
  */
 export interface WorkspaceView {
   status: string;
   lifecycle: { phase: string; retireAt: number | null; teardown: { status: string } | null };
 }
 
-/** A retry this long past retireAt counts as never coming; docs/ona-notes.md has the bb case. */
+/** A failed teardown this far past retireAt reads as needing recovery; docs/ona-notes.md has bb's retry timing. */
 const OVERDUE_MS = 60_000;
 
 /**
  * What bb is doing with a machine's workspaces. `busy`: a setup or teardown is
  * under way, or bb is still retrying a failed teardown; letting the box go now
  * would interrupt it. `needsRecovery`: failed teardowns bb has given up on, or
- * whose retry is more than OVERDUE_MS overdue; bb won't suspend the machine until
- * someone recovers them.
+ * whose retry is more than OVERDUE_MS overdue; the plugin won't let an active machine go
+ * idle until they clear.
  */
 export function workspaceWork(
   workspaces: readonly WorkspaceView[],

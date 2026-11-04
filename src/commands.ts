@@ -173,7 +173,7 @@ export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()
     if (row.keepAliveUntil) rowLines.push(`  keep-alive until ${clockTime(row.keepAliveUntil)}`);
     if (row.needsRecovery > 0) {
       rowLines.push(
-        `  ${row.needsRecovery} workspace(s) may need recovery; this plugin keeps the machine awake until they clear. See \`bb environment list --host ${row.hostId}\``,
+        `  ${row.needsRecovery} workspace(s) may need recovery; an active box stays awake until they clear. See \`bb environment list --host ${row.hostId}\``,
       );
     }
     for (const thread of row.stuckThreads) {
