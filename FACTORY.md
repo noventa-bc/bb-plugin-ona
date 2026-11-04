@@ -49,7 +49,7 @@ The ponytail plugin (`docs/owner.md` has the install) is the "least code"
 ruleset for every agent in the flow. At session start the orchestrator checks
 its skills are listed (`/reload-plugins` after an install) and sets `/ponytail full`. Its hooks inject the ruleset into
 subagents, so briefs state the scope and need not repeat it. Reviews run
-`/ponytail-review` on a named target (`staged`, `branch`, or the PR link). A
+`/ponytail-review` on a named target (`branch`, or the PR link). A
 builder marks a known limit with a `shortcut:` comment (never an unfixed
 weakness: that goes to the private roadmap); its handoff carries
 those and the "skipped or not checked" lines ponytail ends with.
@@ -85,7 +85,8 @@ those and the "skipped or not checked" lines ponytail ends with.
 3. **Check confidence.** If a task needs a decision only the owner can make (a
    version to pin, a safety rule to bend, a behaviour change users will see),
    ask before building. Batch the questions into one message.
-4. **Brief** each builder with the template in `docs/owner.md`, plus: the
+4. **Brief** each builder with the template in `docs/owner.md` (a reviewer
+   gets its `Role:` line and the step-6 brief), plus: the
    branch name `agent/<slug>`, the files and line areas involved, the tests to
    write first, the coupled changes from `AGENTS.md`, and what to report back.
 5. **Build** in a worktree (slow commands in the background). The builder runs
@@ -94,10 +95,15 @@ those and the "skipped or not checked" lines ponytail ends with.
    handoff, the bug it fails on; a test that still passes with the rule
    deleted is not done), keeps `npm run check` green, writes
    `.agent/HANDOFF.md`, and leaves the work staged for the orchestrator.
-6. **Review.** The orchestrator reads the handoff and the diff, runs the
+6. **Review.** The orchestrator commits the builder's staged work on its
+   branch (after the check passes on its own), reads the handoff and the diff,
+   runs the
    adversarial reviewer (brief: the diff, the files it touches, the specific
    ways it could fail, never the orchestrator's own verdict), `code-review`
-   and `/ponytail-review branch`, each in its own agent, and sends findings
+   (its recipe followed by hand: the Skill itself starts many agents) and
+   `/ponytail-review branch`, each on the branch against `origin/main`, in
+   its own agent, briefed with the builder's worktree path (a fresh agent
+   starts in the main checkout), and sends findings
    back to the builder. All three passes run on the first round of every PR
    this flow opens, with no exception for a small or docs-only change. After
    that, `code-review` runs every round; the adversarial pass and
@@ -107,12 +113,15 @@ those and the "skipped or not checked" lines ponytail ends with.
    opens after a round with no open findings, and only once all three have run
    on code that has not changed since. Check the ten Code Review Rules in
    `AGENTS.md`.
-7. **Open the PR.** Push the branch and open a pull request against `main`.
-   The title is a Conventional Commit (`type(scope): subject`, see
-   `AGENTS.md`): the squash merge makes it the commit on `main`, and it
-   decides the release. Run `scripts/bump.sh "<title>"` first: it bumps
-   `package.json` as the title requires (or does nothing), and CI checks the
-   same rule. The description carries: the roadmap labels, what changed and why, how it
+7. **Open the PR.** The title is a Conventional Commit (`type(scope):
+subject`, see `AGENTS.md`): the squash merge makes it the commit on
+   `main`, and it decides the release. First run
+   `sh -c "cd <worktree> && scripts/bump.sh \"<title>\""` (a bare call from
+   the main checkout bumps that checkout), run the check, and commit what it
+   changes: it bumps `package.json` as the title requires (or does
+   nothing), and CI checks the same rule. A version bump is not a code change
+   for the review passes. Then push the branch and open a pull request
+   against `main`. The description carries: the roadmap labels, what changed and why, how it
    was tested, the three review passes and what each found, the owner
    live-test steps from the handoff, and anything left out. Nothing from the
    "Weaknesses for the roadmap" handoff section goes in the PR; the
@@ -140,7 +149,7 @@ those and the "skipped or not checked" lines ponytail ends with.
    merging `main` is never skipped. Never merge a red PR. A PR that changes
    `package.json` and is behind `main` is refused: merge `main`, set the version
    in `package.json` and `package-lock.json` back to `main`'s (a clean merge
-   keeps the PR's), then run `scripts/bump.sh "<title>"` again.
+   keeps the PR's), then run the `scripts/bump.sh` command from step 7 again.
 10. **Sync the roadmap.** Status lives only in the table at the top of the
     roadmap, one linked row per item, with the landing commit in the Item cell.
     When a PR opens, set the item to In review; when it merges, set it to Done,
@@ -158,8 +167,12 @@ those and the "skipped or not checked" lines ponytail ends with.
 
 ## Permissions the owner granted
 
-- Builders may commit on `agent/*` branches. The orchestrator may push those
-  branches and open PRs. Nobody commits to `main` directly.
+- For a roadmap item the owner named in the session (an instruction to change
+  this file or `AGENTS.md` counts), the orchestrator may commit on `agent/*`
+  branches (builders leave work staged), push them, open
+  PRs, and merge a PR with `scripts/pr-merge.sh` once its review has no open
+  findings and CI is green. Nobody commits to `main`
+  directly.
 - Installing or bumping a dependency inside an owner-approved task is allowed;
   say in the PR which packages changed. Anything else needs a new approval.
 
@@ -179,7 +192,9 @@ This file is the memory of the flow. Keep it current:
 - When a rule here conflicts with `AGENTS.md`, fix `AGENTS.md` in the same PR
   so the two agree, and say so in the PR.
 - Keep this file under 300 lines (`docs.yml` checks). An addition names what it removes.
-- A change to this file goes through a PR like any other change.
+- A change to this file goes through a PR like any other change, for a
+  roadmap item the owner named in the session (Permissions); otherwise it
+  stays uncommitted for the owner.
 
 ## Owner instructions on record
 
@@ -197,7 +212,7 @@ Rules the owner gave that no section above states. Checked 2026-11-02.
   grep (the exit code is grep's). `.githooks/pre-commit` (set by `npm install`)
   runs the checks on every commit; a checkout without the hook reads the exit
   code by hand (checked 2026-11-03).
-- A subagent cannot see the owner's approvals and refuses to install, commit or
+- A subagent cannot see the owner's approvals and refuses to install packages (the step-5 `npm ci` is its own), commit or
   push. Builders leave work staged; the orchestrator commits, pushes and runs
   approved installs in the builder's worktree, then tells it to continue.
 - A builder that was stopped (the owner's credits ran out, the session ended)
