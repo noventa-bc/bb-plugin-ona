@@ -89,3 +89,13 @@ test("a commit that keeps an earlier file with a personal path is refused, as gi
   const run = spawnSync(script, [dir], { env, stdio: "pipe", timeout: 30_000 });
   assert.equal(run.status, 1, String(run.stdout) + String(run.stderr));
 });
+
+// Bug: under a UTF-8 locale, git grep missed a user folder on a line holding a byte that is not UTF-8.
+test("a staged file with a user folder after a Latin-1 byte fails the check under a UTF-8 locale", () => {
+  const dir = tempDir("leak-check-");
+  writeFileSync(join(dir, "notes.txt"), Buffer.from(`caf\u00e9 ${usersFolder}notes\n`, "latin1"));
+  git(dir, env, "init", "-q");
+  git(dir, env, "add", "--all");
+  const run = spawnSync(script, [dir], { env: { ...env, LC_ALL: "C.UTF-8" }, stdio: "pipe", timeout: 30_000 });
+  assert.equal(run.status, 1, String(run.stdout) + String(run.stderr));
+});

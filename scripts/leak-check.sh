@@ -17,12 +17,13 @@ if [ "${1:-}" = --message ]; then
   [ -f "${2:-}" ] || { echo "leak-check: no commit message file ${2:-}" >&2; exit 1; }
   # Comment lines are blanked, so a printed line number is the message file's own line. Every other line,
   # a diff git appends included, is checked: its file names reach the public history too.
-  # LC_ALL=C: a byte that is not valid in the user's locale (an old Latin-1 letter) must not stop sed or grep.
+  # LC_ALL=C: under a UTF-8 locale a byte that is not UTF-8 (an old Latin-1 letter) stops sed and makes grep miss
+  # the line; byte mode reads every line.
   text=$(LC_ALL=C sed 's/^#.*//' "$2") || { echo "leak-check: cannot read $2" >&2; exit 1; }
   hits=$(printf '%s\n' "$text" | LC_ALL=C grep -n -o -E "$pattern")
 else
   root=$(cd "${1:-$here/..}" && pwd) || exit 1
-  hits=$(git -C "$root" grep --cached -n -o -E "$pattern" -- . ':!.agent')
+  hits=$(LC_ALL=C git -C "$root" grep --cached -n -o -E "$pattern" -- . ':!.agent')
 fi
 status=$?
 [ "$status" -eq 1 ] && exit 0

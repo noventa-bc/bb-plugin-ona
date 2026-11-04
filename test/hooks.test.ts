@@ -207,17 +207,24 @@ test("a personal path on a line shaped like a diff header is refused outside a d
   }
 });
 
-// Bug: a Latin-1 byte in a message stopped sed under a UTF-8 locale, so the commit was refused.
-test("a message with a byte that is not UTF-8 passes under a UTF-8 locale", () => {
-  const file = join(tempDir("commit-msg-"), "MSG");
-  writeFileSync(file, Buffer.from("chore(hooks): plain subject\n\ncaf\u00e9 body\n", "latin1"));
-  const run = spawnSync("sh", [".githooks/commit-msg", file], {
-    cwd: repo,
-    env: { ...env, LC_ALL: "en_US.UTF-8" },
-    stdio: "pipe",
-    timeout: 30_000,
-  });
-  assert.equal(run.status, 0, String(run.stdout) + String(run.stderr));
+// Bug: a Latin-1 byte in a message stopped sed, or made grep miss its line, under a UTF-8 locale.
+test("a message with a byte that is not UTF-8 is checked under a UTF-8 locale: clean passes, a path after it is refused", () => {
+  for (const [body, status] of [
+    ["caf\u00e9 body", 0],
+    [`caf\u00e9 ${usersBare}/notes`, 1],
+  ] as const) {
+    const file = join(tempDir("commit-msg-"), "MSG");
+    writeFileSync(file, Buffer.from(`chore(hooks): plain subject\n\n${body}\n`, "latin1"));
+    const run = spawnSync("sh", [".githooks/commit-msg", file], {
+      cwd: repo,
+      env: { ...env, LC_ALL: "C.UTF-8" },
+      stdio: "pipe",
+      timeout: 30_000,
+    });
+    const output = String(run.stdout) + String(run.stderr);
+    assert.equal(run.status, status, output);
+    if (status === 1) assert.match(output, /^3:/m);
+  }
 });
 
 test("text after a scissors-looking comment line is refused", () => {
