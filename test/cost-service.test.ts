@@ -372,8 +372,9 @@ test("a two-session Codex thread with one session unrecorded is retried until bo
   assert.deepEqual(w.collectorRuns, ["env-1", "env-1"]);
 });
 
-test("a thread with no finished turn collects once, not on every poll past the floor, for either provider (fails if each poll past the floor collects)", async () => {
+test("a thread with no finished turn collects once for Codex and twice for Claude, not on every poll past the floor (fails if each poll past the floor collects)", async () => {
   // Bug: with no finished turn, every poll past the floor collected again, and a Codex turn still running was checked mid-turn.
+  // Claude's usage lands while its turn runs, so an empty first read gets one more, as on main.
   for (const provider of ["claude-code", "codex"] as const) {
     // Each provider's round reads only its own field.
     const w = world({
@@ -384,8 +385,20 @@ test("a thread with no finished turn collects once, not on every poll past the f
     assert.equal(await w.costs.threadCost("t1"), null);
     await pastFloor();
     assert.equal(await w.costs.threadCost("t1"), null);
-    assert.deepEqual(w.collectorRuns, ["env-1"]);
+    await pastFloor();
+    assert.equal(await w.costs.threadCost("t1"), null);
+    assert.deepEqual(w.collectorRuns, provider === "codex" ? ["env-1"] : ["env-1", "env-1"]);
   }
+});
+
+test("a Claude thread with only an old cost: record is read once on a running box and saved under the new key (fails if the old key is written or treated as final)", async () => {
+  // Guard: the upgrade path for every Claude thread.
+  const w = world({ turnSeq: 8 });
+  w.kv.set(OLD_KEY, { cost: FIGURE, seq: 7, checkedAt: OLD });
+  assert.equal((await w.costs.threadCost("t1"))?.usd, 1);
+  assert.deepEqual(w.collectorRuns, ["env-1"]);
+  assert.deepEqual(w.kv.get(OLD_KEY), { cost: FIGURE, seq: 7, checkedAt: OLD });
+  assert.equal((w.kv.get("cost2:t1") as { seq: string }).seq, "8");
 });
 
 test("a collector error does not count as one of a turn's rounds (fails if an error uses one up)", async () => {

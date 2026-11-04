@@ -71,11 +71,11 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
    * A figure kept under the old `cost:` key, as a record with no round run for the current turn.
    * A Codex $0.00 there may come from the usage lag (docs/ona-notes.md), so it is not used.
    */
-  async function legacyCost(threadId: string): Promise<StoredCost | null> {
+  async function legacyCost(threadId: string, provider: string): Promise<StoredCost | null> {
     const old = await bb.storage.kv.get<{ cost: ThreadCost | null; seq?: number | string; checkedAt: number }>(
       oldCostKey(threadId),
     );
-    if (!old?.cost) return null;
+    if (old?.cost?.provider !== provider) return null;
     // A Claude figure settled its turn on main, so it stays settled; a Codex one gets fresh rounds.
     if (old.cost.provider === "claude-code")
       return { cost: old.cost, seq: String(old.seq ?? ""), checkedAt: old.checkedAt, runs: 2 };
@@ -96,7 +96,7 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
     const agentProvider = thread.providerId;
     if (agentProvider !== "codex" && agentProvider !== "claude-code") return null;
     const key = costKey(threadId);
-    const stored = (await bb.storage.kv.get<StoredCost>(key)) ?? (await legacyCost(threadId));
+    const stored = (await bb.storage.kv.get<StoredCost>(key)) ?? (await legacyCost(threadId, agentProvider));
     if (devbox.status !== "connected") return stored?.cost ?? null;
     // Recompute at most every 5 minutes, while the newest finished turn has rounds left. Rounds for a
     // finished turn keep running while a later turn is still working; once that later turn finishes,
@@ -112,8 +112,8 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
     // It is "0" until a turn has finished.
     const seq = String(latest?.seq ?? 0);
     // Claude gets a second round only when its first priced nothing. Codex gets CODEX_ROUNDS
-    // for its usage lag. A thread with no finished turn has nothing to wait for, so it gets one.
-    const rounds = latest ? (agentProvider === "codex" ? CODEX_ROUNDS : 2) : 1;
+    // for its usage lag once a turn has finished, and one round before that.
+    const rounds = agentProvider === "codex" ? (latest ? CODEX_ROUNDS : 1) : 2;
     const settled = stored?.seq === seq && (stored.runs ?? 0) >= rounds;
     if (stored && (settled || Date.now() - stored.checkedAt < 5 * 60_000)) return stored.cost;
 
