@@ -4,7 +4,7 @@ Status: accepted
 
 ## Rule
 
-Automatic repairs never start or stop a box. Only a user action, `bb machine resume`, starts a box. Automatic suspends mark the machine suspended without calling the provider's stop. SSH to a box is used only when a fresh Ona listing says the box is `RUNNING`.
+Automatic repairs never start or stop a box. bb starts a box only on your action in bb: creating a machine (adopting a box included), resuming it (Resume, `bb machine resume`, or a message or thread waiting on it), or a command you run that rule 1 in `docs/sync.md` lists as not gated. Automatic suspends mark the machine suspended without calling the provider's stop. SSH to a box is used only when a fresh Ona listing says the box is `RUNNING`.
 
 ## Why
 
