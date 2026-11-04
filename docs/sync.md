@@ -102,7 +102,8 @@ you asked for, so safety rule 1 does not gate it.
    - a `get` that fails (unknown).
 
    When the wait ends early (a caller's own timeout), its error still names the
-   last reason. After Ona answers ready, SSH gets up to 10 minutes to answer.
+   last reason. After Ona answers ready, SSH tries stop at 10 minutes, checked
+   between tries; a try held for Ona can run past it.
    Every SSH command in a connect (each try of the waits, the Codex `mkdir`,
    the `~/.bb-machines` step, the preflight and bb's bootstrap) asks
    `ona environment get` first and runs only on a ready answer, read as above:

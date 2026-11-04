@@ -372,7 +372,7 @@ test("a resume that times out on a failing start names Ona's failure", async () 
 });
 
 // The stored name goes stale after `bb ona rename`; the heal and `bb ona reconnect` pass the stored resource.
-test("a reconnect's wait names the box as Ona's latest answer does", async () => {
+test("a reconnect to a stopped box fails at once, naming the box as Ona's latest answer does", async () => {
   const renamed = { ...box("STOPPED"), metadata: { name: "renamed" } };
   const { reconnect } = register({ found: renamed, phases: [renamed] });
   const reconnected = reconnect(adoptedResource, lifecycle().report, new AbortController().signal);

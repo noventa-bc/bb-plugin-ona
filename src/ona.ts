@@ -36,7 +36,7 @@ const environmentSchema = z.object({
         .loose()
         .optional(),
       /** null while the box starts, and on a box without a dev container. */
-      // An odd type in one of these reads as absent, so one box can't fail the whole listing.
+      // An odd phase reads as absent, so one box can't fail the whole listing.
       devcontainer: z
         .object({ phase: z.string().nullish().catch(undefined) })
         .loose()

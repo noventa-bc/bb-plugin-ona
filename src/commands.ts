@@ -5,6 +5,7 @@ import type { BbPluginApi, PluginCliCommandInfo, PluginCliContext } from "@get-b
 import { clockTime, parseKeepAlive, type KeepAlives } from "./keepalive.ts";
 import { randomFriendlyName } from "./names.ts";
 import {
+  errorText,
   firstLine,
   isRunning,
   isStarting,
@@ -498,7 +499,7 @@ export function onaCommands(deps: OnaCommandDeps) {
         }
       }
     } catch (error) {
-      return { exitCode: 1, stderr: error instanceof Error ? error.message : String(error) };
+      return { exitCode: 1, stderr: errorText(error) };
     }
     return { exitCode: 1, stderr: usage };
   };
