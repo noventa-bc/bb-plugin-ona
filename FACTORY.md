@@ -118,14 +118,15 @@ those and the "skipped or not checked" lines ponytail ends with.
    **Converge.** The item's code is the PR's scope, and reviewer briefs name
    it and ask for anything outside it under a separate "Pre-existing" heading.
    A finding blocks only when the branch introduced the defect or makes one
-   reachable or worse, breaks a safety rule or a coupled change, leaves its
-   own behaviour untested, or leaves a doc in the diff contradicting the
-   code. A finding that was already on `main` and that the branch does not
-   make reachable or worse becomes a roadmap item, with its guard, and the PR
-   names it by its label only, whatever severity the reviewer gave it; a
-   credential or a data-loss risk goes to the owner at once instead. After
-   the first round no new behaviour enters the branch beyond a fix for a
-   blocking finding: a fix that needs behaviour beyond that is its own item.
+   reachable or worse, when the branch breaks a safety rule or a coupled
+   change, leaves its own behaviour untested where a test is possible, or
+   leaves a doc in the diff contradicting the code. A finding that was
+   already on `main` and that the branch does not make reachable or worse
+   becomes a roadmap item, with its guard, and the PR names it by its label
+   only, whatever severity the reviewer gave it; a credential or a data-loss
+   risk goes to the owner at once as well. After the first round the builder
+   adds no behaviour beyond a fix for a blocking finding: a fix that needs
+   behaviour beyond that is its own item.
    Code converges in three rounds; from round 4 on, the orchestrator opens
    the PR once nothing blocks and the passes above have run on the code as
    it stands.
@@ -203,8 +204,8 @@ This file is the memory of the flow. Keep it current:
 - When a step failed or wasted time, record what to do instead, next to the step.
 - When a bug, a source of noise or a repo hazard shows up (in the code, in CI,
   in a review or in the flow itself), add the guardrail that stops it recurring
-  before the PR opens (a finding already on `main` takes its guard in its
-  roadmap item, step 6): a test with the failing case, a lint rule, a CI step, a
+  before the PR opens (a finding already on `main` that the branch does not
+  make worse takes its guard in its roadmap item, step 6): a test with the failing case, a lint rule, a CI step, a
   `.gitignore` line, or a rule here or in `AGENTS.md`. A finding that is only
   fixed, with no guard, is not closed.
 - When a rule here conflicts with `AGENTS.md`, fix `AGENTS.md` in the same PR
