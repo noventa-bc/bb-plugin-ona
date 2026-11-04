@@ -15,8 +15,8 @@ refuse() {
 
 if [ "${1:-}" = --message ]; then
   [ -f "${2:-}" ] || { echo "leak-check: no commit message file ${2:-}" >&2; exit 1; }
-  # Git strips the comment lines and the diff under the scissors line of an edited message, so they are not checked.
-  text=$(sed '/^# -* >8 -*$/,$d; /^#/d' "$2") || { echo "leak-check: cannot read $2" >&2; exit 1; }
+  # Comment lines are blanked in place, not deleted, so a line number printed is the message file's own line.
+  text=$(sed 's/^#.*//' "$2") || { echo "leak-check: cannot read $2" >&2; exit 1; }
   hits=$(printf '%s\n' "$text" | grep -n -o -E "$pattern")
 else
   root=$(cd "${1:-$here/..}" && pwd) || exit 1

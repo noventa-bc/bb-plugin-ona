@@ -137,7 +137,7 @@ function commitMsg(file: string) {
   return { status: run.status, output: String(run.stdout) + String(run.stderr) };
 }
 
-test("a verbose commit message's diff below the scissors line is not checked", () => {
+test("a verbose commit message's diff below the scissors line is checked, and a personal path in it is refused", () => {
   const file = messageFile(
     [
       "fix(notes): remove the personal path",
@@ -151,7 +151,29 @@ test("a verbose commit message's diff below the scissors line is not checked", (
     ].join("\n"),
   );
   const r = commitMsg(file);
-  assert.equal(r.status, 0, r.output);
+  assert.equal(r.status, 1, r.output);
+  assert.match(r.output, /^6:/m);
+});
+
+test("text after a scissors-looking line that is not a comment is refused", () => {
+  const file = messageFile(
+    [
+      "chore(hooks): plain message",
+      "",
+      "# ------------------------ >8 ------------------------",
+      `See ${usersBare}/notes.`,
+      "",
+    ].join("\n"),
+  );
+  const r = commitMsg(file);
+  assert.equal(r.status, 1, r.output);
+  assert.match(r.output, /^4:/m);
+});
+
+test("a refusal names the line of the path in the message file, comment lines included", () => {
+  const r = commitMsg(messageFile(`chore(hooks): plain message\n\n# a comment\n\nSee ${usersBare}/notes.\n`));
+  assert.equal(r.status, 1, r.output);
+  assert.match(r.output, /^5:/m);
 });
 
 test("an editor-template comment naming a file under a home folder is not checked", () => {

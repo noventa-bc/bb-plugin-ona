@@ -17,9 +17,9 @@ checks() (
   "$@"
 )
 
-# The checks read the working tree, so unstaged and untracked files count as they are on disk. leak-check
-# reads the index instead. A file staged and edited again is refused: the checks would read the edited copy,
-# and the commit would hold the staged one.
+# shortcut: npm run check's prettier and tests read unstaged and untracked files as they are on disk, so a file staged
+# and edited again is refused (leak-check reads the index); upgrade when a commit passes here and fails CI, by checking
+# a copy of the index.
 partial=$(git -c core.quotePath=false diff --name-only | while IFS= read -r f; do
   git -c core.quotePath=false diff --cached --name-only -- ":(literal)$f" | grep -Fqx -- "$f" && printf '%s\n' "$f"
 done)

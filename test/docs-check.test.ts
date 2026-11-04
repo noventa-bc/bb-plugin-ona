@@ -112,15 +112,13 @@ test("a tracked Markdown file deleted without git rm is not checked", () => {
   assert.equal(r.status, 0, r.output);
 });
 
-test("a link target with parentheses or angle brackets is not checked, and a dead link still fails", () => {
-  const ok = docsCheck({
-    ...clean,
-    "a(b).md": "# A\n",
-    "my notes.md": "# Notes\n",
-    "README.md": "# Readme\n\nSee [x](<a(b).md>) and [y](<my notes.md>).\n",
-  });
+test("an angle-bracket link target with spaces or parentheses is checked: a missing file fails, a present one passes", () => {
+  const readme =
+    '# Readme\n\nSee [gone](<my gone.md>) and [gone](<gone(1).md>), [a](AGENTS.md#sec), [t](AGENTS.md "t") and [u](<https://example.com/a(1)>).\n';
+  const dead = docsCheck({ ...clean, "README.md": readme });
+  assert.equal(dead.status, 1, dead.output);
+  assert.match(dead.output, /README\.md: dead link my gone\.md/);
+  assert.match(dead.output, /README\.md: dead link gone\(1\)\.md/);
+  const ok = docsCheck({ ...clean, "my gone.md": "# Gone\n", "gone(1).md": "# Gone\n", "README.md": readme });
   assert.equal(ok.status, 0, ok.output);
-  const dead = docsCheck({ ...clean, "README.md": "# Readme\n\nSee [gone](gone.md).\n" });
-  assert.equal(dead.status, 1);
-  assert.match(dead.output, /README\.md: dead link gone\.md/);
 });

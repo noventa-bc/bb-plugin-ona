@@ -81,11 +81,14 @@ test("a linked worktree keeps another core.hooksPath on the shared config", () =
 });
 
 test("a developer's global core.hooksPath does not change the result", () => {
-  const home = tempDir("prepare-home-");
-  writeFileSync(join(home, ".gitconfig"), "[core]\n\thooksPath = /some/other/hooks\n");
+  const globalConfig = join(tempDir("prepare-home-"), ".gitconfig");
+  writeFileSync(globalConfig, "[core]\n\thooksPath = /some/other/hooks\n");
   const dir = tempDir("prepare-global-");
   git(dir, env, "init", "-q");
-  assert.equal(runPrepare(dir, { HOME: home }).status, 0);
+  // git must read the global value through this file, or the result below would pass for the wrong reason.
+  const withGlobal = { ...env, GIT_CONFIG_GLOBAL: globalConfig };
+  assert.equal(git(dir, withGlobal, "config", "--get", "core.hooksPath"), "/some/other/hooks");
+  assert.equal(runPrepare(dir, { GIT_CONFIG_GLOBAL: globalConfig }).status, 0);
   assert.equal(localHooksPath(dir), ".githooks");
 });
 
@@ -101,7 +104,7 @@ for (const value of ["./.githooks", ".githooks/"]) {
   });
 }
 
-test("a .git that cannot be written fails the install", (t) => {
+test("a .git that cannot be written warns and the install still exits 0", (t) => {
   const dir = tempDir("prepare-readonly-");
   git(dir, env, "init", "-q");
   const gitDir = join(dir, ".git");
@@ -109,8 +112,18 @@ test("a .git that cannot be written fails the install", (t) => {
   try {
     if (accessible(gitDir, constants.W_OK))
       return t.skip("chmod does not stop writes here: root, or a filesystem that ignores it");
-    assert.notEqual(runPrepare(dir).status, 0);
+    const run = runPrepare(dir);
+    assert.equal(run.status, 0, String(run.stderr));
+    assert.match(String(run.stdout), /core\.hooksPath could not be set; this repo's hooks will not run/);
   } finally {
     chmodSync(gitDir, 0o755);
   }
+});
+
+test("a .git file pointing at a missing folder warns and the install still exits 0", () => {
+  const dir = tempDir("prepare-broken-");
+  writeFileSync(join(dir, ".git"), `gitdir: ${join(dir, "missing")}\n`);
+  const run = runPrepare(dir);
+  assert.equal(run.status, 0, String(run.stderr));
+  assert.match(String(run.stdout), /core\.hooksPath could not be set/);
 });
