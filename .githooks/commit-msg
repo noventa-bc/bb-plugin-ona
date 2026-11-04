@@ -1,4 +1,5 @@
 #!/bin/sh
-# Reject a commit message that is not a Conventional Commit.
-# Enable once per clone: git config core.hooksPath .githooks
+# Rejects a commit message that holds a personal path, or that is not a Conventional Commit.
+# npm install points core.hooksPath at .githooks (the prepare script in package.json).
+scripts/leak-check.sh --message "$1" || exit 1
 exec scripts/conventional.sh <"$1"

@@ -53,8 +53,8 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   - a well-formed unknown uuid: `Error: not_found: environment not found`
   - a ref that isn't an id: `Error: no environment found matching "<ref>"`,
     followed by a "Possible resolutions" hint
-  `OnaCli.getEnvironmentIfExists` in `src/ona.ts` treats only these as "not
-  found"; every other failure means "unknown".
+    `OnaCli.getEnvironmentIfExists` in `src/ona.ts` treats only these as "not
+    found"; every other failure means "unknown".
 - `ona environment ssh --proxy-connect` (the ProxyCommand form) has a `--start`
   flag that defaults to true. A plugin-owned SSH config that passes
   `--start=false` means SSH can never wake a stopped box.

@@ -15,9 +15,9 @@ export const enableFakeClock = () => mock.timers.enable({ apis: ["setTimeout", "
  * Enable the clock only through this file: one enabled through a test's context is reset by
  * Node itself, with no settle.
  * shortcut: Node 24.22.1's mock_timers.js removes an aborted sleep's fake timer in an async
- * finally, after a reset emptied the queue, so the next test's timers never fire (`check.yml`
- * names the versions), drop the settle once a bare reset right after an aborted sleep passes
- * on the Node CI uses.
+ * finally, after a reset emptied the queue, so the next test's timers never fire (checked
+ * 2026-11-03; 24.3.0 does not). Drop the settle once a bare reset right after an aborted sleep
+ * passes on the Node CI uses.
  */
 export async function resetFakeClock() {
   await settle();
