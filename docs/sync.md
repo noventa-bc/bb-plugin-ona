@@ -163,7 +163,7 @@ the cache (rule 1); callers that ask while a list is running share the next one.
 **Seeing and fixing it yourself.**
 
 ```sh
-bb ona status [name] [--json]  # bb's view, tunnel, Ona's view, and what the plugin last did and why
+bb ona status [name] [--json]  # bb's view, tunnel, Ona's view, the box's facts, and what the plugin last did and why
 bb ona sync [name]             # re-check Ona now and repair (skips cooldowns, never the safety rules)
 ```
 
@@ -175,6 +175,7 @@ again.
 ```
 Ona CLI: ok, listed 12s ago
 ona:amber-otter  bb:connected  tunnel:up  ona:running
+  box: last started 4h ago, idle timeout 3h, last activity SSH connections 2m ago, branch main
   now: connected (since 2m ago)
   last action: heal-daemon: running in Ona but the daemon isn't connected; daemon was down; restarted it (3m ago)
 ona:brisk-heron  bb:suspended  tunnel:off  ona:running

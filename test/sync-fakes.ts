@@ -23,6 +23,8 @@ interface Box {
   tunnel?: "up" | "off";
   /** Moves the mocked clock this far when the box's threads are listed, as a slow sibling would. */
   listingMs?: number;
+  /** Ona's listing fields beyond the phase: start time, timeout, activity signal, git (read by `boxFacts`). */
+  listed?: Partial<OnaEnvironment>;
 }
 
 // A fake of the bb calls a sync pass makes (SyncBb), one Ona box per machine.
@@ -40,6 +42,8 @@ export function world(
     cached?: boolean;
     archived?: boolean | "not-found" | "fail";
     listing?: "fail" | "empty";
+    /** The message a failing listing throws; "" counts as a failure too. */
+    listingError?: string;
     /** bb's host lookup fails: with a plain error, or with only the SDK's `not_found` code (no status). */
     hostGet?: "fail" | "not_found";
     autoRepair?: boolean;
@@ -86,8 +90,9 @@ export function world(
           .filter((box) => box.ona !== null)
           .map((box) => ({
             id: box.envId,
-            metadata: box.name ? { name: box.name } : {},
-            status: { phase: `ENVIRONMENT_PHASE_${box.ona ?? "RUNNING"}` },
+            metadata: { ...(box.name ? { name: box.name } : {}), ...box.listed?.metadata },
+            spec: box.listed?.spec,
+            status: { phase: `ENVIRONMENT_PHASE_${box.ona ?? "RUNNING"}`, ...box.listed?.status },
           }));
   const guard = new HostGuard();
   let tick = 0;
@@ -141,7 +146,7 @@ export function world(
     // No cache and a ticking clock (unless `cached`): every pass gets its own listing.
     snapshot: new OnaSnapshot(
       async () => {
-        if (options.listing === "fail") throw new Error("not logged in");
+        if (options.listing === "fail") throw new Error(options.listingError ?? "not logged in");
         return envs();
       },
       options.cached ? 15_000 : 0,

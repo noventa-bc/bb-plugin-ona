@@ -4,7 +4,7 @@
 // schedule a pass (watchRealtime). server.ts wires them to bb's commands and
 // the lifecycle-sync service; tests drive them with a fake of the bb calls below.
 import type { BbPluginApi, PluginLogger } from "@get-bb/plugin-sdk";
-import { errorText, isArchived, isRunning, type OnaListing } from "./ona.ts";
+import { boxFacts, errorText, isArchived, isRunning, type BoxFacts, type OnaListing } from "./ona.ts";
 import { PROVIDER_ID, resourceSchema, type OnaResource } from "./provider.ts";
 import {
   lifecycleRefusal,
@@ -85,6 +85,8 @@ export interface SyncDeps {
     get(maxAgeMs?: number): Promise<OnaListing>;
     refresh(): Promise<OnaListing>;
     readonly latest: OnaListing | null;
+    /** The last failed listing's message; null once a listing succeeds. An empty message is still a failure. */
+    readonly lastError: string | null;
   };
   ona: {
     getEnvironmentIfExists(envId: string, signal?: AbortSignal): Promise<Parameters<typeof isArchived>[0] | null>;
@@ -132,6 +134,8 @@ export interface StatusRow {
   bb: string;
   tunnel: string;
   ona: string;
+  /** What Ona's listing says about the box (`boxFacts`); null when the latest listing failed or doesn't list the box. */
+  facts: BoxFacts | null;
   /** What the latest check concluded, and since when. */
   now: { reason: string; since: number } | null;
   /** The last action the plugin took (or the one in flight). */
@@ -446,6 +450,8 @@ export function createSync(deps: SyncDeps) {
 
   async function statusRows(ref?: string): Promise<StatusRow[]> {
     const listing = await snapshot.get().catch(() => snapshot.latest);
+    // Once a listing fails, rows keep the last good phase but not its facts: the facts would look current.
+    const listingOk = snapshot.lastError === null;
     const rows = (await machines()).filter((r) => !ref || matchesRef(r, ref));
     return Promise.all(
       rows.map(async (row) => {
@@ -466,6 +472,7 @@ export function createSync(deps: SyncDeps) {
               : seen?.archived
                 ? "archived"
                 : "missing",
+          facts: env && listingOk ? boxFacts(env) : null,
           now: guard.seen.get(row.hostId) ?? null,
           last: busy
             ? { action: busy, reason: "in progress", at: Date.now() }

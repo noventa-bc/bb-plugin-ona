@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { boxFacts } from "../src/ona.ts";
 import type { WorkspaceView } from "../src/lifecycle.ts";
 import { ALL, GIVE_UP_AFTER, GRACE_MS } from "../src/reconcile.ts";
 import {
@@ -196,6 +198,22 @@ test("status still lists a machine whose thread listing fails", async () => {
   const { sync } = world([idle("h1", { threads: "fail" })]);
   const [row] = await sync.statusRows();
   assert.deepEqual(row!.stuckThreads, []);
+});
+
+// Facts show only while the listing is good, so the text and --json agree. A box Ona doesn't list has none.
+test("status shows a box's facts only while the listing is good, and none for a box Ona doesn't list", async () => {
+  const listed = JSON.parse(readFileSync(new URL("./fixtures/ona/facts-environment.json", import.meta.url), "utf8"));
+  const opts: { listing?: "fail"; listingError?: string } = {};
+  const { sync } = world([idle("h1", { listed }), idle("h2", { ona: null })], opts);
+  const [row, unlisted] = await sync.statusRows();
+  assert.deepEqual(row!.facts, boxFacts(listed), "a good listing fills the facts");
+  assert.equal(unlisted!.facts, null, "Ona doesn't list the box");
+  opts.listing = "fail";
+  const [stale] = await sync.statusRows();
+  assert.equal(stale!.facts, null, "a failed listing has no facts");
+  opts.listingError = "";
+  const [empty] = await sync.statusRows();
+  assert.equal(empty!.facts, null, "an empty error is an error too");
 });
 
 test("a box missing from two listings is looked up once: archived or gone", async () => {

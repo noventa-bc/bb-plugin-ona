@@ -12,16 +12,28 @@ const environmentSchema = z.object({
       name: z.string().optional(),
       projectId: z.string().optional(),
       archivedAt: z.string().optional(),
+      /** Ona's start time for the box (RFC 3339, microseconds); an odd value reads as absent. */
+      lastStartedAt: z.string().optional().catch(undefined),
     })
     .loose(),
   /** The phase Ona's spec asks for; a box Ona's inactivity timeout stopped keeps RUNNING (docs/ona-notes.md). */
   spec: z
-    .object({ desiredPhase: z.string().nullish().catch(undefined) })
+    .object({
+      desiredPhase: z.string().nullish().catch(undefined),
+      /** Ona's inactivity timeout as seconds, e.g. `10800s`; an odd value reads as absent. */
+      timeout: z.object({ disconnected: z.string().nullish() }).loose().nullish().catch(undefined),
+    })
     .loose()
     .nullish(),
   status: z
     .object({
       phase: z.string().optional(),
+      /** Ona's last activity signal; an odd value reads as absent. */
+      activitySignal: z
+        .object({ source: z.string().nullish(), timestamp: z.string().nullish() })
+        .loose()
+        .nullish()
+        .catch(undefined),
       content: z
         .object({
           contentLocationInMachine: z.string().optional(),
@@ -261,6 +273,51 @@ export function unpushedWork(env: OnaEnvironment): { branch?: string; count: num
   const count = Number(git?.totalUnpushedCommits ?? 0);
   if (!(count > 0)) return null;
   return git?.branch ? { branch: git.branch, count } : { count };
+}
+
+/**
+ * What `bb ona status` shows about a box from Ona's listing. A fact Ona leaves out is null, as is an odd start,
+ * timeout or activity; `unpushed` is 0 instead.
+ */
+export interface BoxFacts {
+  /** Epoch ms of the box's last start. */
+  startedAt: number | null;
+  /** Ona's inactivity timeout in ms; 0 when Ona's auto-stop is off. */
+  idleTimeoutMs: number | null;
+  /** Ona's last activity signal: its source, and when, in epoch ms. */
+  activity: { source: string; at: number } | null;
+  branch: string | null;
+  /** Commits on the box that were never pushed; 0 when there are none or Ona doesn't say. */
+  unpushed: number;
+}
+
+// Date.parse alone reads "42" as the year 2042 and a zone-less time as local time, so the shape is checked first.
+const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * Epoch ms of an RFC 3339 time with a zone (Ona's microseconds included). Null when the text has the wrong
+ * shape, Date.parse gives NaN, or the time is at or before the epoch (Go's zero time, 0001-01-01, is "unset").
+ */
+const epochMs = (text?: string | null): number | null => {
+  if (!text || !RFC3339.test(text)) return null;
+  const ms = Date.parse(text);
+  return Number.isNaN(ms) || ms <= 0 ? null : ms;
+};
+
+export function boxFacts(env: OnaEnvironment): BoxFacts {
+  // At most 12 digits: a 13-digit number of seconds can pass 2^53 ms.
+  const seconds = /^(\d{1,12})s$/.exec(env.spec?.timeout?.disconnected ?? "");
+  const signal = env.status?.activitySignal;
+  const source = signal?.source;
+  const at = epochMs(signal?.timestamp);
+  const count = unpushedWork(env)?.count ?? 0;
+  return {
+    startedAt: epochMs(env.metadata.lastStartedAt),
+    idleTimeoutMs: seconds ? Number(seconds[1]) * 1000 : null,
+    activity: source && at !== null ? { source, at } : null,
+    branch: env.status?.content?.git?.branch || null,
+    unpushed: Number.isSafeInteger(count) ? count : 0,
+  };
 }
 
 export function isStopped(env: OnaEnvironment): boolean {
