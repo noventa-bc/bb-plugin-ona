@@ -77,12 +77,13 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
     const old = await bb.storage.kv.get<{ cost: ThreadCost | null; seq?: number | string; checkedAt: number }>(
       oldCostKey(threadId),
     );
-    if (!old || (old.cost && old.cost.provider !== provider)) return null;
-    const shown = old.cost?.provider === provider && (provider === "claude-code" || old.cost.usd > 0);
+    if (!old) return null;
+    const own = !old.cost || old.cost.provider === provider;
+    const shown = own && old.cost && (provider === "claude-code" || old.cost.usd > 0);
     const cost = shown ? old.cost : null;
-    // A Claude record an older version settled at its seq stays settled, even with no figure. Any other
-    // record is still stored, so the 5-minute floor applies while Ona says the box is stopped.
-    if (provider === "claude-code")
+    // A Claude record under `cost:` stays settled at its seq, even with no figure. Any other record is
+    // still stored, so the 5-minute floor applies while Ona says the box is stopped.
+    if (provider === "claude-code" && own)
       return { cost, seq: String(old.seq ?? ""), checkedAt: old.checkedAt, runs: CLAUDE_ROUNDS };
     return { cost, seq: "", checkedAt: old.checkedAt };
   }
