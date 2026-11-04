@@ -158,20 +158,20 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   `host_unavailable` (`assertHostActiveForRead`), except while the machine is being
   removed (`isCleanupRpc`). A teardown never wakes the host (`hostCommandMayWake`)
   (checked 2026-11-04).
-- bb holds a retry while a live thread is on the environment, except while the machine
-  is being removed (`sweepProviderEnvironmentInSlot` and `requestEnvironmentRemoval`
-  skip the live-thread check then); the next bullet says when it releases the workspace
-  instead. `environmentHasLiveThreads` counts a thread on the environment that is not
-  archived or deleted, plus any thread whose status is `active` or `stopping`, whatever
-  its archive or delete state. `sweepProviderEnvironmentInSlot` returns before the retry
-  while that holds. `requestEnvironmentRemoval` returns false, before any write, when a
-  live thread is on the environment and the machine is not being removed (checked
-  2026-11-04).
+- bb pauses a retry while a live thread is on the environment, except while the machine
+  is being removed; the next bullet says when it releases the workspace.
+  `environmentHasLiveThreads` counts a thread on the environment that is not archived or
+  deleted, plus any thread whose status is `active` or `stopping`, whatever its archive
+  or delete state. `sweepProviderEnvironmentInSlot` returns before the retry while that
+  holds. `requestEnvironmentRemoval` returns false, before any write, when a live thread
+  is on the environment and the machine is not being removed (checked 2026-11-04).
 - `sweepProviderEnvironmentInSlot` releases a workspace that has an owner and a teardown
   status when a live thread is on the environment, or when it is `ready` with a path,
   and never while the machine is being removed. The release clears `ownerThreadId`,
   `claimPath`, `retireAt` and `teardownStatus`; with a live thread the function then
-  returns (checked 2026-11-04).
+  returns. A released workspace has no teardown status and no `retireAt`, so bb reports
+  its phase as `active` (`toEnvironmentResponseWithHostLifecycle` derives the phase from
+  the teardown status), and the plugin reads it as active (checked 2026-11-04).
 - bb blocks automatic cleanup of a workspace whose hook outcome is unknown after an
   interruption. `cancelPendingEnvironmentHook` throws "Environment hook outcome is
   unknown after interruption. Automatic cleanup is blocked; inspect the workspace before

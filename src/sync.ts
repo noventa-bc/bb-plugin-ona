@@ -250,7 +250,7 @@ export function createSync(deps: SyncDeps) {
           connectedAt,
           ...threads.map((thread) => Math.max(thread.updatedAt, thread.lastReadAt ?? 0)),
         ),
-        // Letting the box go mid-hook leaves bb unable to recover the workspace, and a retry needs the box up.
+        // Letting the box go mid-hook leaves bb unable to recover the workspace; a retry needs the machine active in bb (docs/ona-notes.md).
         workspacesBlock: await workspaces(row.hostId).then((work) => work.busy || work.needsRecovery > 0),
       });
     }
@@ -317,7 +317,6 @@ export function createSync(deps: SyncDeps) {
 
   /**
    * bb's workspace work on a machine; a failed lookup counts as none.
-   * reconcile's workspaceWaiting check passes its pass clock.
    */
   async function workspaces(hostId: string, now = Date.now()): Promise<{ busy: boolean; needsRecovery: number }> {
     try {

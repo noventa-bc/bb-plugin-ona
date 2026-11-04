@@ -106,8 +106,7 @@ test("a disconnected box waits out the grace for a teardown whose retry is over 
   assert.equal(row!.needsRecovery, 1);
 });
 
-// reconcile's workspaceWaiting check passes its pass clock, so a sibling's wait cannot move the cutoff.
-// Box a is listed first, so its slow listing moves the clock before b's cutoff check.
+// Box a's slow listing (listed first) moves the clock; b's cutoff must still use the pass clock.
 test("a retry the pass judged busy stays busy after a sibling's wait moves the clock past its cutoff", async () => {
   enableFakeClock();
   try {
@@ -294,6 +293,28 @@ test("the first pass after a reload reopens the tunnel of a running box bb still
     await sync.reconcile(new Set([ALL]), { wait: true });
     assert.deepEqual(calls, ["tunnel env-h1"], `autoRepair=${autoRepair}`);
   }
+});
+
+test("autoRepair off still suspends a stopped box, resumes it for a waiting thread, and only reports a disconnected one", async () => {
+  const waiting: ThreadRecord = {
+    id: "t1",
+    status: "idle",
+    updatedAt: NOW,
+    runtime: { displayStatus: "waiting-for-host" },
+  };
+  const stopped = world([idle("h1", { ona: "STOPPED", status: "disconnected" })], { autoRepair: false });
+  await stopped.sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.deepEqual(stopped.calls, ["suspend h1"]);
+  const resumed = world([idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waiting] })], {
+    autoRepair: false,
+  });
+  await resumed.sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.deepEqual(resumed.calls, ["suspend h1", "resume h1"]);
+  const down = world([idle("h1", { status: "disconnected", threads: [waiting] })], { autoRepair: false });
+  await down.sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.deepEqual(down.calls, []);
+  const [row] = await down.sync.statusRows();
+  assert.match(row!.now!.reason, /autoRepair is off/);
 });
 
 test("a failed or empty Ona listing changes nothing", async () => {
