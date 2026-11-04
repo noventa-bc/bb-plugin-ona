@@ -9,8 +9,13 @@ root=$(cd "${1:-$here/..}" && pwd) || exit 1
 cd "$root" || exit 1
 fail=0
 
+# The tracked Markdown files that are on disk, one per line: a file deleted without `git rm` is skipped.
+tracked_markdown() {
+  git -C "$root" ls-files -z -- '*.md' | tr '\0' '\n' | while IFS= read -r f; do [ -e "$f" ] && printf '%s\n' "$f"; done
+}
+
 # The repo's own prettier: npx would fetch one into a folder that has no node_modules.
-git -C "$root" ls-files -z -- '*.md' | xargs -0 "$here/../node_modules/.bin/prettier" --check || fail=1
+tracked_markdown | tr '\n' '\0' | xargs -0 "$here/../node_modules/.bin/prettier" --check || fail=1
 
 # The limits AGENTS.md and FACTORY.md set for themselves.
 for f in AGENTS.md FACTORY.md; do
@@ -19,13 +24,13 @@ for f in AGENTS.md FACTORY.md; do
   [ "$n" -le 300 ] || { echo "$f has $n lines; the limit is 300"; fail=1; }
 done
 
-# shortcut: reference-style links, HTML links, anchors and paths with parentheses are not checked, upgrade when a dead link gets past this
+# shortcut: reference-style links, HTML links, anchors and paths with parentheses or angle brackets are not checked, upgrade when a dead link gets past this
 # Relative Markdown links point at files that exist. Fenced blocks (``` or ~~~, indented or not) and
 # inline code are skipped so link examples do not count. A link's title and anchor are not checked.
-dead=$(git -C "$root" ls-files -z -- '*.md' | tr '\0' '\n' | while IFS= read -r f; do
+dead=$(tracked_markdown | while IFS= read -r f; do
   # The backticks and tildes are part of the sed script, not command substitutions.
   # shellcheck disable=SC2016
-  sed -E '/^[[:space:]]*(```|~~~)/,/^[[:space:]]*(```|~~~)/d; s/`[^`]*`//g' "$f" | grep -oE '\]\([^)#]+' | sed 's/^](//; s/[[:space:]].*//' | grep -vE '^(https?:|mailto:)' |
+  sed -E '/^[[:space:]]*(```|~~~)/,/^[[:space:]]*(```|~~~)/d; s/`[^`]*`//g' "$f" | grep -oE '\]\([^)#]+' | sed 's/^](//; s/[[:space:]].*//' | grep -vE '^(https?:|mailto:)|[()<]' |
     while IFS= read -r t; do
       [ -e "$(dirname "$f")/$t" ] || echo "$f: dead link $t"
     done

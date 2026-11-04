@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { accessSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after } from "node:test";
@@ -23,6 +23,16 @@ export function tempDir(prefix: string) {
   const dir = mkdtempSync(join(tmpdir(), prefix));
   dirs.push(dir);
   return dir;
+}
+
+/** Whether this process may use `path` in `mode` (fs.constants.R_OK or W_OK). Root and some filesystems ignore chmod. */
+export function accessible(path: string, mode: number) {
+  try {
+    accessSync(path, mode);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Runs git in `dir` with `env`, which must succeed; returns its stdout, trimmed. */

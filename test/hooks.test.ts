@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, constants, copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { git, scrubbed, tempDir } from "./sandbox.ts";
+import { accessible, git, scrubbed, tempDir } from "./sandbox.ts";
 
 const repo = join(import.meta.dirname, "..");
 const env = scrubbed(process.env);
@@ -122,6 +122,60 @@ test("a commit message holding a bare user folder is refused, and only the path 
   assert.match(output, /leak-check: refused, a personal path/);
   assert.ok(output.includes(usersBare), output);
   assert.doesNotMatch(output, /token-x/);
+});
+
+/** A new message file holding `text`. */
+function messageFile(text: string) {
+  const file = join(tempDir("commit-msg-"), "MSG");
+  writeFileSync(file, text);
+  return file;
+}
+
+/** Runs the commit-msg hook on the message `file`; returns its status and output. */
+function commitMsg(file: string) {
+  const run = spawnSync("sh", [".githooks/commit-msg", file], { cwd: repo, env, stdio: "pipe", timeout: 30_000 });
+  return { status: run.status, output: String(run.stdout) + String(run.stderr) };
+}
+
+test("a verbose commit message's diff below the scissors line is not checked", () => {
+  const file = messageFile(
+    [
+      "fix(notes): remove the personal path",
+      "",
+      "# ------------------------ >8 ------------------------",
+      "# Do not modify or remove the line above.",
+      "diff --git a/notes.txt b/notes.txt",
+      `-see ${usersBare}/notes`,
+      "+see notes",
+      "",
+    ].join("\n"),
+  );
+  const r = commitMsg(file);
+  assert.equal(r.status, 0, r.output);
+});
+
+test("an editor-template comment naming a file under a home folder is not checked", () => {
+  const homeDoc = ["docs", "home", "x.md"].join("/");
+  const r = commitMsg(messageFile(`chore(hooks): plain message\n\n# \tmodified:   ${homeDoc}\n`));
+  assert.equal(r.status, 0, r.output);
+});
+
+test("a personal path in the body is still refused, with a comment line after it", () => {
+  const r = commitMsg(
+    messageFile(`chore(hooks): plain message\n\nSee ${usersBare}/notes.\n\n# Please enter the message\n`),
+  );
+  assert.equal(r.status, 1, r.output);
+  assert.ok(r.output.includes(usersBare), r.output);
+});
+
+test("a commit message that cannot be read is refused", (t) => {
+  const file = messageFile("chore(hooks): plain message\n");
+  chmodSync(file, 0o000);
+  if (accessible(file, constants.R_OK))
+    return t.skip("chmod does not stop reads here: root, or a filesystem that ignores it");
+  const r = commitMsg(file);
+  assert.equal(r.status, 1, r.output);
+  assert.match(r.output, /leak-check/);
 });
 
 test("a conventional commit message without a personal path passes the commit-msg hook", () => {

@@ -17,7 +17,9 @@ checks() (
   "$@"
 )
 
-# shortcut: the checks read the working tree, so a file staged and edited again is refused, upgrade when they can read the index
+# The checks read the working tree, so unstaged and untracked files count as they are on disk. leak-check
+# reads the index instead. A file staged and edited again is refused: the checks would read the edited copy,
+# and the commit would hold the staged one.
 partial=$(git -c core.quotePath=false diff --name-only | while IFS= read -r f; do
   git -c core.quotePath=false diff --cached --name-only -- ":(literal)$f" | grep -Fqx -- "$f" && printf '%s\n' "$f"
 done)

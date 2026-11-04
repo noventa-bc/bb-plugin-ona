@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { chmodSync, constants, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { git, scrubbed, tempDir } from "./sandbox.ts";
+import { accessible, git, scrubbed, tempDir } from "./sandbox.ts";
 
 const repo = join(import.meta.dirname, "..");
 const prepare: string = JSON.parse(readFileSync(join(repo, "package.json"), "utf8")).scripts.prepare;
-const env = scrubbed(process.env);
+// The developer's global and system git config must not change the results (a core.hooksPath there would).
+const env = { ...scrubbed(process.env), GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
 
 /** Runs the package.json prepare script in `dir` the way npm does: through sh, from the package folder. */
-function runPrepare(dir: string) {
-  return spawnSync("sh", ["-c", prepare], { cwd: dir, env, stdio: "pipe" });
+function runPrepare(dir: string, extra: NodeJS.ProcessEnv = {}) {
+  return spawnSync("sh", ["-c", prepare], { cwd: dir, env: { ...env, ...extra }, stdio: "pipe" });
 }
 
 /** The core.hooksPath set in the repository `dir` itself (not inherited from a global config), if any. */
@@ -77,4 +78,39 @@ test("a linked worktree keeps another core.hooksPath on the shared config", () =
   assert.equal(run.status, 0, String(run.stderr));
   assert.equal(localHooksPath(main), "/some/other/hooks");
   assert.match(String(run.stdout), /hooks will not run/);
+});
+
+test("a developer's global core.hooksPath does not change the result", () => {
+  const home = tempDir("prepare-home-");
+  writeFileSync(join(home, ".gitconfig"), "[core]\n\thooksPath = /some/other/hooks\n");
+  const dir = tempDir("prepare-global-");
+  git(dir, env, "init", "-q");
+  assert.equal(runPrepare(dir, { HOME: home }).status, 0);
+  assert.equal(localHooksPath(dir), ".githooks");
+});
+
+for (const value of ["./.githooks", ".githooks/"]) {
+  test(`a repository root whose core.hooksPath is ${value} is set to .githooks, with no message`, () => {
+    const dir = tempDir("prepare-same-");
+    git(dir, env, "init", "-q");
+    git(dir, env, "config", "core.hooksPath", value);
+    const run = runPrepare(dir);
+    assert.equal(run.status, 0, String(run.stderr));
+    assert.equal(String(run.stdout), "");
+    assert.equal(localHooksPath(dir), ".githooks");
+  });
+}
+
+test("a .git that cannot be written fails the install", (t) => {
+  const dir = tempDir("prepare-readonly-");
+  git(dir, env, "init", "-q");
+  const gitDir = join(dir, ".git");
+  chmodSync(gitDir, 0o555);
+  try {
+    if (accessible(gitDir, constants.W_OK))
+      return t.skip("chmod does not stop writes here: root, or a filesystem that ignores it");
+    assert.notEqual(runPrepare(dir).status, 0);
+  } finally {
+    chmodSync(gitDir, 0o755);
+  }
 });

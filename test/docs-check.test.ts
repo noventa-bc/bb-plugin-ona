@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { git, scrubbed, tempDir } from "./sandbox.ts";
@@ -16,8 +16,8 @@ const repoConfig: Record<string, string> = {
 
 const env = scrubbed(process.env);
 
-/** Write the files into a new git repository, stage them (git add skips ignored files), run docs-check.sh on it. */
-function docsCheck(files: Record<string, string>) {
+/** Write the files into a new git repository, stage them (git add skips ignored files), delete `removed` from disk, run docs-check.sh on it. */
+function docsCheck(files: Record<string, string>, removed: string[] = []) {
   const dir = tempDir("docs-check-");
   for (const [name, text] of Object.entries({ ...repoConfig, ...files })) {
     mkdirSync(dirname(join(dir, name)), { recursive: true });
@@ -25,6 +25,7 @@ function docsCheck(files: Record<string, string>) {
   }
   git(dir, env, "init", "-q");
   git(dir, env, "add", "--all");
+  for (const name of removed) rmSync(join(dir, name));
   const run = spawnSync(script, [dir], { env, stdio: "pipe", timeout: 60_000 });
   return { status: run.status, output: String(run.stdout) + String(run.stderr) };
 }
@@ -104,4 +105,22 @@ test("examples in indented or tilde fences are not link-checked", () => {
       "# Agents\n\n- item:\n\n  ```text\n  [example](nowhere.md)\n  ```\n\n~~~text\n[example](nowhere2.md)\n~~~\n",
   });
   assert.doesNotMatch(r.output, /dead link nowhere/);
+});
+
+test("a tracked Markdown file deleted without git rm is not checked", () => {
+  const r = docsCheck({ ...clean, "GONE.md": "# Gone\n" }, ["GONE.md"]);
+  assert.equal(r.status, 0, r.output);
+});
+
+test("a link target with parentheses or angle brackets is not checked, and a dead link still fails", () => {
+  const ok = docsCheck({
+    ...clean,
+    "a(b).md": "# A\n",
+    "my notes.md": "# Notes\n",
+    "README.md": "# Readme\n\nSee [x](<a(b).md>) and [y](<my notes.md>).\n",
+  });
+  assert.equal(ok.status, 0, ok.output);
+  const dead = docsCheck({ ...clean, "README.md": "# Readme\n\nSee [gone](gone.md).\n" });
+  assert.equal(dead.status, 1);
+  assert.match(dead.output, /README\.md: dead link gone\.md/);
 });
