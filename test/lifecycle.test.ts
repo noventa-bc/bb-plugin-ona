@@ -113,6 +113,10 @@ test("a failed teardown exactly a minute overdue is still busy", () => {
   });
 });
 
+test("a failed teardown outside the teardown phase counts as nothing", () => {
+  assert.deepEqual(workspaceWork([workspace("ready", "active", "failed")], NOW), { busy: false, needsRecovery: 0 });
+});
+
 test("an idle machine whose workspaces bb is working on, or that need recovery, is not let go", () => {
   const idle = [machine("a"), machine("b", { workspacesBlock: true }), machine("c", { workspacesBlock: false })];
   assert.deepEqual(machinesToRelease(idle, NOW, 30 * MIN), ["a", "c"]);
