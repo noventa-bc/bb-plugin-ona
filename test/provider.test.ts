@@ -306,7 +306,7 @@ test("a resume fails without SSH when Ona reports the box stopped during the wai
   assert.deepEqual(calls, ["get STOPPED", "start", "get STARTING", "get STOPPED"]);
 });
 
-// Bug: Ona can still show a box STOPPED right after `ona environment start` returns; that failed the resume.
+// Ona can still show a box STOPPED right after `ona environment start` returns.
 test("a resume waits on a box Ona shows stopped with desired phase RUNNING, then connects", async () => {
   const waking = { ...box("STOPPED"), spec: { desiredPhase: "ENVIRONMENT_PHASE_RUNNING" } };
   const { resumed, calls } = resume({ found: box("STOPPED"), phases: ["STOPPED", waking, "RUNNING"] });
@@ -315,7 +315,7 @@ test("a resume waits on a box Ona shows stopped with desired phase RUNNING, then
   assert.deepEqual(calls, ["get STOPPED", "start", "get STOPPED", "get RUNNING", "ssh"]);
 });
 
-// Bug: older Ona has no desired phase, and can still show STOPPED right after a start; that failed the resume.
+// Older Ona sends no desired phase, and can still show STOPPED right after a start.
 test("a resume waits on a box Ona shows stopped with no desired phase, then connects", async () => {
   const { resumed, calls } = resume({ found: box("STOPPED"), phases: ["STOPPED", "STOPPED", "RUNNING"] });
   await tick(5_000, 1);
@@ -323,7 +323,7 @@ test("a resume waits on a box Ona shows stopped with no desired phase, then conn
   assert.deepEqual(calls, ["get STOPPED", "start", "get STOPPED", "get RUNNING", "ssh"]);
 });
 
-// Bug: a resume right after the plugin's start failed on an earlier start's message.
+// The failure is left from an earlier start; this connect follows the plugin's own start.
 test("a resume waits on a box Ona shows stopped with an old failure and desired phase RUNNING, then connects", async () => {
   const waking = {
     ...box("STOPPED"),
@@ -336,7 +336,6 @@ test("a resume waits on a box Ona shows stopped with an old failure and desired 
   assert.deepEqual(calls, ["get STOPPED", "start", "get STOPPED", "get RUNNING", "ssh"]);
 });
 
-// Bug: the 15-minute timeout on a box Ona kept failing to bring up said only "starting", losing Ona's reason.
 test("a resume that times out on a failing start names Ona's failure", async () => {
   const failing = {
     ...box("STOPPED"),
@@ -371,8 +370,7 @@ test("a resume makes no SSH while Ona can't be asked, then connects once it says
   assert.deepEqual(calls, ["get STOPPED", "start", "get failed", "get failed", "get RUNNING", "ssh"]);
 });
 
-// Bug: a progress line from a failed `get` carried every stderr line Ona printed (rule 7), and was empty when
-// the error's first line was blank.
+// The rest of Ona's stderr is more than the progress line needs (rule 7).
 test("a failed lookup shows only the first line of Ona's error as progress", async () => {
   const unreachable = new Error("\n ona environment get failed: dial tcp: timeout \nsecond line\nthird line");
   const { resumed, steps } = resume({ found: box("STOPPED"), phases: ["STOPPED", unreachable, "RUNNING"] });
@@ -381,7 +379,7 @@ test("a failed lookup shows only the first line of Ona's error as progress", asy
   assert.equal(steps[1], "Waiting for Ona: ona environment get failed: dial tcp: timeout");
 });
 
-// Bug: an answer from Ona that didn't parse showed "[" (the first line of a ZodError) as progress.
+// A ZodError's first line is "[".
 test("an answer from Ona that can't be read shows a plain progress line", async () => {
   const unreadable = z.object({ id: z.string() }).safeParse({}).error!;
   const { resumed, steps } = resume({ found: box("STOPPED"), phases: ["STOPPED", unreadable, "RUNNING"] });
@@ -390,7 +388,6 @@ test("an answer from Ona that can't be read shows a plain progress line", async 
   assert.equal(steps[1], "Waiting for Ona: Ona's answer could not be read");
 });
 
-// Bug: with Ona unreachable the wait must end, never fall through to SSH.
 test("a resume while Ona can't be asked fails after 15 minutes without SSH", async () => {
   const { resumed, calls } = resume({ found: box("STOPPED"), phases: ["STOPPED", new Error("Ona is unreachable")] });
   await tick(5_000, 180);
@@ -398,7 +395,6 @@ test("a resume while Ona can't be asked fails after 15 minutes without SSH", asy
   assert.equal(calls.includes("ssh"), false);
 });
 
-// Bug: requiring a dev container would leave a box without one waiting until the deadline.
 test("a box without a dev container connects once Ona says RUNNING", async () => {
   const { resumed, calls } = resume({ found: running(null), phases: [running(null)] });
   await resumed;
@@ -410,6 +406,21 @@ test("a reconnect on a running box asks Ona exactly once before SSH", async () =
   const { reconnect, calls } = register({ found: box("RUNNING") });
   await reconnect(adoptedResource, lifecycle().report, new AbortController().signal);
   assert.deepEqual(calls, ["get RUNNING", "ssh"]);
+});
+
+// The daemon heal in src/sync.ts calls this reconnect: test/sync.test.ts covers what the pass does when it rejects.
+test("a reconnect waits for the dev container before SSH, and fails without SSH on a failed one", async () => {
+  const waits = register({ found: box("RUNNING"), phases: [running("PHASE_CREATING"), running("PHASE_RUNNING")] });
+  const reconnected = waits.reconnect(adoptedResource, lifecycle().report, new AbortController().signal);
+  await tick(5_000, 1);
+  await reconnected;
+  assert.deepEqual(waits.calls, ["get RUNNING", "get RUNNING", "ssh"]);
+  const fails = register({ found: box("RUNNING"), phases: [running("PHASE_FAILED")] });
+  await assert.rejects(
+    fails.reconnect(adoptedResource, lifecycle().report, new AbortController().signal),
+    /^Error: Ona environment box failed to start: dev container failed$/,
+  );
+  assert.deepEqual(fails.calls, ["get RUNNING"]);
 });
 
 // The lookup-throws test below guards the order: the tunnel closes after the move-aside, and on a failed lookup.

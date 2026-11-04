@@ -81,7 +81,9 @@ you asked for, so safety rule 1 does not gate it.
    (`waitForReady()` in `src/ona.ts`, [0005](decisions/0005-lookup-by-id-counts-as-listing.md)).
    No SSH runs before that answer. These end the connect at once, with no SSH:
    - a running box whose `spec.desiredPhase` is set to anything but running
-     (Ona is stopping it), or whose dev container is `PHASE_FAILED`
+     (Ona is stopping it)
+   - a box in any phase but stopping or stopped whose dev container is
+     `PHASE_FAILED`
    - a deleted or deleting box
    - a stopping or stopped box whose desired phase isn't running, when it
      carries Ona's failure message (shown) or any desired phase.

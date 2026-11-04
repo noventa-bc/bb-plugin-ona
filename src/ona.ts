@@ -269,9 +269,10 @@ function firstLine(text: string): string | undefined {
 }
 
 /**
- * Whether Ona says a box can take SSH. RUNNING is ready with its dev container
+ * Whether Ona says a box can take SSH. A failed dev container fails a box in
+ * any phase but stopping or stopped. RUNNING is ready with its dev container
  * running or none at all, failed when Ona means to stop it (a desired phase
- * other than RUNNING) or the dev container failed, and waiting otherwise.
+ * other than RUNNING), and waiting otherwise.
  * Deleted or deleting is failed. Stopped or stopping with a desired phase of
  * RUNNING is waiting, with an earlier start's failure as the reason: a connect
  * to a stopped box comes right after the plugin's own `ona environment start`,
@@ -284,16 +285,19 @@ function firstLine(text: string): string | undefined {
 export function readiness(env: OnaEnvironment): Readiness {
   const desired = env.spec?.desiredPhase;
   const phase = (env.status?.phase ?? "unknown").replace("ENVIRONMENT_PHASE_", "").toLowerCase();
+  const stopped = isStopped(env) || phase === "stopping";
+  // A dev container can't recover from failed on its own; a stopped box's may predate the plugin's start.
+  if (!stopped && env.status?.devcontainer?.phase === "PHASE_FAILED")
+    return { state: "failed", message: "dev container failed" };
   if (isRunning(env)) {
     if (desired && desired !== "ENVIRONMENT_PHASE_RUNNING")
       return { state: "failed", message: "Ona is stopping the box" };
-    const container = env.status?.devcontainer?.phase;
-    if (container === "PHASE_FAILED") return { state: "failed", message: "dev container failed" };
-    if (!env.status?.devcontainer || container === "PHASE_RUNNING") return { state: "ready" };
+    const container = env.status?.devcontainer;
+    if (!container || container.phase === "PHASE_RUNNING") return { state: "ready" };
     return { state: "waiting", reason: "dev container starting" };
   }
   if (isDeleted(env)) return { state: "failed", message: phase };
-  if (isStopped(env) || phase === "stopping") {
+  if (stopped) {
     const failure = [env.status?.failureMessage ?? []].flat().map(firstLine).find(Boolean);
     if (desired === "ENVIRONMENT_PHASE_RUNNING") return { state: "waiting", reason: failure ?? "starting" };
     if (failure) return { state: "failed", message: failure };

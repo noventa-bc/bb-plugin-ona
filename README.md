@@ -197,7 +197,7 @@ without SSH, when Ona reports one of these:
 - the box stopped, with a desired phase in Ona other than running (and Ona's
   failure message, if any)
 - the box being stopped
-- its dev container failed
+- its dev container failed, while the box is starting or running
 
 Right after setup starts a stopped box, Ona can still report it stopped for a
 while. Setup keeps waiting then, and the progress line shows any failure message
