@@ -129,6 +129,22 @@ test("a box that is not connected returns the stored figure and is never collect
   assert.deepEqual(w.collectorRuns, []);
 });
 
+test("a paused Claude thread with only a record under the old cost: key keeps that figure (fails if the upgrade drops it)", async () => {
+  // Bug: after the cost2: upgrade a paused Claude thread showed nothing until its box ran again.
+  const w = world({ status: "suspended", turnSeq: 8 });
+  w.kv.set(OLD_KEY, { cost: FIGURE, seq: 7, checkedAt: OLD });
+  assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
+  assert.deepEqual(w.collectorRuns, []);
+});
+
+test("a paused Codex thread with only a record under the old cost: key shows no figure (fails if an old Codex figure is kept)", async () => {
+  // Guard: a Codex record under the old key may be $0 from the bug (docs/ona-notes.md), so it is not used.
+  const w = world({ status: "suspended", provider: "codex", turnSeq: 8 });
+  w.kv.set(OLD_KEY, { cost: CODEX_FIGURE, seq: 7, checkedAt: OLD });
+  assert.equal(await w.costs.threadCost("t1"), null);
+  assert.deepEqual(w.collectorRuns, []);
+});
+
 test("bb says connected but a fresh Ona listing says stopped: the stored figure comes back, no collector runs, and the floor applies", async () => {
   // Bug: the collector trusted bb's "connected", which lags a stop made in Ona's UI, and Ona's SSH starts a stopped box.
   const w = world({
@@ -171,7 +187,7 @@ test("a thread with no agent session asks Ona nothing and runs no collector", as
 });
 
 test("the same finished turn returns the stored figure without collecting", async () => {
-  const w = world({ turnSeq: 7, stored: { cost: FIGURE, seq: "7", checkedAt: OLD, runs: 1 } });
+  const w = world({ turnSeq: 7, stored: { cost: FIGURE, seq: "7", checkedAt: OLD, runs: 2 } });
   assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
   assert.deepEqual(w.collectorRuns, []);
 });
@@ -208,7 +224,7 @@ test("a collector error warns, returns the stored figure, and retries only after
   assert.deepEqual(w.collectorRuns, ["env-1", "env-1"]);
 });
 
-test("a Claude round with nothing to price keeps the last good figure and is not collected again (fails if the empty round is retried)", async () => {
+test("a Claude round with nothing to price keeps the last good figure and is read again after the floor (fails if the empty round is not read again)", async () => {
   const w = world({
     turnSeq: 8,
     stored: { cost: FIGURE, seq: "7", checkedAt: OLD, runs: 1 },
@@ -217,17 +233,30 @@ test("a Claude round with nothing to price keeps the last good figure and is not
   assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
   await pastFloor();
   assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
-  assert.deepEqual(w.collectorRuns, ["env-1"]);
+  assert.deepEqual(w.collectorRuns, ["env-1", "env-1"]);
 });
 
-test("a first Claude round with nothing to price settles the turn with no figure (fails if the empty round is retried)", async () => {
+test("a first round with nothing to price collects again after the floor (fails if the empty first round is not retried)", async () => {
+  // Bug: the empty chip stayed empty for a whole turn although a retry would price it.
   let buckets: ClaudeUsageBucket[] = [];
   const w = world({ turnSeq: 8, collect: async () => ({ buckets }) });
   assert.equal(await w.costs.threadCost("t1"), null);
   buckets = [ONE_DOLLAR_BUCKET];
   await pastFloor();
+  assert.equal((await w.costs.threadCost("t1"))?.usd, 1);
+  assert.deepEqual(w.collectorRuns, ["env-1", "env-1"]);
+});
+
+test("two Claude rounds that price nothing settle the turn with no figure (fails if a third round runs)", async () => {
+  let buckets: ClaudeUsageBucket[] = [];
+  const w = world({ turnSeq: 8, collect: async () => ({ buckets }) });
   assert.equal(await w.costs.threadCost("t1"), null);
-  assert.deepEqual(w.collectorRuns, ["env-1"]);
+  await pastFloor();
+  assert.equal(await w.costs.threadCost("t1"), null);
+  buckets = [ONE_DOLLAR_BUCKET];
+  await pastFloor();
+  assert.equal(await w.costs.threadCost("t1"), null);
+  assert.deepEqual(w.collectorRuns, ["env-1", "env-1"]);
 });
 
 test("a Codex round where every session is missing is retried on every poll past the floor (fails if the second empty round settles it)", async () => {
@@ -356,8 +385,8 @@ test("a collector error does not count as one of a turn's rounds (fails if an er
   assert.equal(w.collectorRuns.length, 14);
 });
 
-test("a Claude partial figure settles at once and is not retried (fails if a partial Claude figure is retried)", async () => {
-  // Guard: a partial Claude figure settles like any other; only a partial Codex figure waits for more usage.
+test("a Claude round that priced something settles the turn, as on main (fails if a priced Claude round is read again)", async () => {
+  // Guard: only an empty Claude round is read again; a partial Claude figure settles like a complete one.
   const w = world({
     turnSeq: 8,
     collect: async () => ({ buckets: [{ ...ONE_DOLLAR_BUCKET, model: "claude-unknown-9" }] }),
@@ -370,15 +399,19 @@ test("a Claude partial figure settles at once and is not retried (fails if a par
 
 test("a string seq equal to the stored one returns the stored figure without collecting", async () => {
   // Guard: bb's seq may be a non-numeric string, and the stored seq must match it as given.
-  const w = world({ turnSeq: "abc", stored: { cost: FIGURE, seq: "abc", checkedAt: OLD, runs: 1 } });
+  const w = world({ turnSeq: "abc", stored: { cost: FIGURE, seq: "abc", checkedAt: OLD, runs: 2 } });
   assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
   assert.deepEqual(w.collectorRuns, []);
 });
 
-test("a record under the old cost: key is ignored, so the thread is priced again (fails if an old settled $0.00 is kept)", async () => {
+test("a Codex record under the old cost: key is ignored, so the thread is priced again (fails if an old settled $0.00 is kept)", async () => {
   // Bug: records written before the Codex fix settled $0.00 and were kept until the next turn (docs/ona-notes.md).
-  const w = world({ turnSeq: 7 });
-  w.kv.set(OLD_KEY, { cost: { ...FIGURE, usd: 0 }, seq: 7, checkedAt: OLD });
+  const w = world({
+    turnSeq: 7,
+    provider: "codex",
+    collect: async () => ({ results: { "session-1": recorded(1) } }),
+  });
+  w.kv.set(OLD_KEY, { cost: { ...CODEX_FIGURE, usd: 0 }, seq: 7, checkedAt: OLD });
   assert.equal((await w.costs.threadCost("t1"))?.usd, 1);
   assert.deepEqual(w.collectorRuns, ["env-1"]);
 });
@@ -439,16 +472,6 @@ test("checks skipped while the box is stopped do not use up a turn's rounds (fai
     150: () => (usage = recorded(1)),
   });
   assert.equal(figure?.usd, 1);
-});
-
-test("a Claude turn with no new tokens runs the collector once, not again after the floor (fails if a flat figure is checked again)", async () => {
-  // Bug: a figure that had not grown was checked for an hour, though Claude's usage does not lag its turn.
-  const w = world({ turnSeq: 8, stored: { cost: FIGURE, seq: "7", checkedAt: OLD, runs: 1 } });
-  // The round re-reads the flat $1, so the figure is a new object: compare its usd.
-  assert.equal((await w.costs.threadCost("t1"))?.usd, 1);
-  await pastFloor();
-  assert.equal((await w.costs.threadCost("t1"))?.usd, 1);
-  assert.deepEqual(w.collectorRuns, ["env-1"]);
 });
 
 test("a complete figure lower than the stored one replaces it (fails if the stored figure is kept)", async () => {

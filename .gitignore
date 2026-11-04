@@ -1,4 +1,5 @@
 dist/
+# No trailing slash: a worktree's node_modules can be a symlink.
 node_modules
 .agent/
 *.swp
