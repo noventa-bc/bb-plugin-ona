@@ -24,8 +24,8 @@ orchestrator opens PRs.
   `security add-generic-password -U -s nono -a claude_code_oauth_token -w`.
   The scripts have nono pass it in as `CLAUDE_CODE_OAUTH_TOKEN`; an exported
   `CLAUDE_CODE_OAUTH_TOKEN` takes precedence. Don't write it into a file.
-- `git config core.hooksPath .githooks` in each clone: the `commit-msg` hook
-  rejects a message that is not a Conventional Commit (`AGENTS.md`).
+- `npm install` sets up the git hooks in `.githooks` (`npm ci --ignore-scripts`
+  does not); what they run is in `.githooks/pre-commit` and `.githooks/commit-msg`.
 - GitHub repository settings: turn on secret scanning, push protection and
   Dependabot alerts. Add a ruleset on the default branch that blocks
   deletion and force pushes and requires a pull request with squash merge

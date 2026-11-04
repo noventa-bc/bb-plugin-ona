@@ -19,8 +19,8 @@ person, so the rules below exist to keep it maintainable, not to slow you down.
 git clone <this repository>
 cd bb-plugin-ona
 npm ci --ignore-scripts
-git config core.hooksPath .githooks   # rejects commit messages that are not Conventional Commits
-npm run check        # typecheck, lint, format check, tests
+npm run prepare      # sets up the git hooks; npm install does this too
+npm run check        # Node pin, typecheck, lint, format check, tests
 ```
 
 ## Read before changing anything
@@ -94,14 +94,14 @@ npm run check        # typecheck, lint, format check, tests
 
 ## Where things are written down
 
-| File | Owns |
-|---|---|
-| `README.md` | Using the plugin |
-| `skills/ona-devboxes/SKILL.md` | Agents that use the plugin inside bb |
-| `AGENTS.md` | Rules for changing the plugin |
-| `FACTORY.md` | The maintainer's orchestrated agent flow |
-| `docs/owner.md` | How the maintainer runs agents, verifies a build and releases |
-| `docs/sync.md`, `docs/security.md` | Safety rules and the security model |
-| `docs/ona-notes.md` | Facts about Ona and bb, each with a checked date |
-| `docs/decisions/` | Why the rules are what they are |
-| `SECURITY.md` | How to report a vulnerability |
+| File                               | Owns                                                          |
+| ---------------------------------- | ------------------------------------------------------------- |
+| `README.md`                        | Using the plugin                                              |
+| `skills/ona-devboxes/SKILL.md`     | Agents that use the plugin inside bb                          |
+| `AGENTS.md`                        | Rules for changing the plugin                                 |
+| `FACTORY.md`                       | The maintainer's orchestrated agent flow                      |
+| `docs/owner.md`                    | How the maintainer runs agents, verifies a build and releases |
+| `docs/sync.md`, `docs/security.md` | Safety rules and the security model                           |
+| `docs/ona-notes.md`                | Facts about Ona and bb, each with a checked date              |
+| `docs/decisions/`                  | Why the rules are what they are                               |
+| `SECURITY.md`                      | How to report a vulnerability                                 |

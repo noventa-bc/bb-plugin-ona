@@ -89,7 +89,7 @@ those and the "skipped or not checked" lines ponytail ends with.
    branch name `agent/<slug>`, the files and line areas involved, the tests to
    write first, the coupled changes from `AGENTS.md`, and what to report back.
 5. **Build** in a worktree (slow commands in the background). The builder runs
-   `npm ci --ignore-scripts`, writes
+   `npm ci --ignore-scripts`, then `npm run prepare`, writes
    a failing test first where possible (each test names, in its title or the
    handoff, the bug it fails on; a test that still passes with the rule
    deleted is not done), keeps `npm run check` green, writes
