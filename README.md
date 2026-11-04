@@ -283,11 +283,12 @@ bb machine remove ona:<name>   # created: deletes the env; adopted: stops bb's d
   archives it too.
 - **"workspace(s) may need recovery" in `bb ona status`:** bb makes five attempts
   on a thread workspace's failed teardown, waiting at least 1, 2, 4 and 8 minutes
-  between them (checked 2026-11-04). Until bb gives up, it keeps retrying; it waits while a live thread is on the workspace,
-  and an owner mismatch stops it. Once it has given up, bb won't suspend the machine until the workspace is recovered, and
-  an active box stays awake until then. A retry more than a minute overdue also shows here. Check
-  what's left in it (`bb environment list --host <machine>`, then the workspace
-  path on the box).
+  between them (checked 2026-11-04). Until bb gives up, it keeps retrying; it waits
+  while a live thread is on the workspace, and an owner mismatch stops it. Once it
+  has given up, bb won't suspend the machine until the workspace is recovered, and
+  an active box stays awake until then. A retry more than a minute overdue also
+  shows here. Check what's left in it (`bb environment list --host <machine>`,
+  then the workspace path on the box).
   bb's `bb environment cleanup <id> --recover` refuses on Ona boxes while
   they're connected, because it can't inspect Ona's SSH processes. For an
   adopted box, start over: run `bb machine remove <machine>`. When its cleanup

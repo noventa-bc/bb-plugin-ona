@@ -24,7 +24,7 @@ export interface WorkspaceView {
   lifecycle: { phase: string; retireAt: number | null; teardown: { status: string } | null };
 }
 
-/** A failed teardown this far past retireAt reads as needing recovery; docs/ona-notes.md has bb's retry timing. */
+/** A failed teardown more than this far past retireAt reads as needing recovery; docs/ona-notes.md has bb's retry timing. */
 const OVERDUE_MS = 60_000;
 
 /**

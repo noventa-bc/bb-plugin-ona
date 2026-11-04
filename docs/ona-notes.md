@@ -131,9 +131,10 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   (`server/dist/start-server.js` lines 43977-43978) counts a thread on the environment that
   is not archived or deleted, plus any thread whose status is `active` or `stopping`,
   whatever its archive or delete state. The periodic sweep returns before the retry while
-  that holds, except while the machine is being removed (lines 108650-108669), and
-  `requestEnvironmentRemoval` returns false before any write (lines 108494-108495)
-  (checked 2026-11-04).
+  that holds, except while the machine is being removed (lines 108650-108669).
+  `requestEnvironmentRemoval` returns false, before any write, when a live thread is on
+  the environment and the machine is not being removed (lines 108494-108495) (checked
+  2026-11-04).
 - In SDK 0.6.109 a provider resource is written by the provider's own lifecycle
   hooks (`create`, `suspend`, `resume`, through `checkpoint` or the returned
   `resource`) and read with `bb.experimental_machines.getResource` (checked 2026-11-03).
