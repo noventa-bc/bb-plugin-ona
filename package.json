@@ -37,6 +37,9 @@
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.72.1"
   },
+  "overrides": {
+    "minimatch": "^11.0.1"
+  },
   "description": "Run bb threads inside Ona environments (devboxes) over SSH.",
   "scripts": {
     "check": "scripts/node-check.sh && npm run typecheck && npm run lint && prettier --check . && npm test",
