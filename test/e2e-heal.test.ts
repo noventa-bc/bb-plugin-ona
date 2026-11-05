@@ -51,7 +51,11 @@ before(async () => {
       threads: {
         list: async () => [],
         get: async ({ threadId }) =>
-          threadId === "thread-1" ? { environmentId: "ws-1", providerId: "claude-code" } : {},
+          threadId === "thread-1"
+            ? { environmentId: "ws-1", providerId: "claude-code" }
+            : threadId === "thread-2"
+              ? { environmentId: null }
+              : {},
         events: {
           list: async ({ types }) =>
             types?.includes("turn/completed") ? [{ seq: 7 }] : [{ seq: 1, data: { providerThreadId: "s1" } }],
@@ -139,6 +143,13 @@ test("thread_devbox looks up only the thread's host: no hosts.list, one hosts.ge
   assert.equal(reply.devbox?.hostId, "host-1");
   assert.equal(sdk.callsTo("hosts.list").length - lists, 0);
   assert.equal(sdk.callsTo("hosts.get").length - gets, 1);
+});
+
+test("thread_devbox answers pending for a thread bb has not given a workspace yet", local, async () => {
+  assert.deepEqual(await host.harness.behavior.callRpc("thread_devbox", { threadId: "thread-2" }), {
+    devbox: null,
+    pending: true,
+  });
 });
 
 test("thread_cost prices a Claude thread from the box's session files and caches it per turn", local, async () => {

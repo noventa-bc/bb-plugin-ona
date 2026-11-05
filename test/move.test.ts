@@ -208,21 +208,22 @@ test("a second move while the first spawn is pending is refused, and spawn runs 
   });
   const first = move({ threadId: "t1", hostId: "h-dst" });
   await spawnStarted;
-  await assert.rejects(move({ threadId: "t1", hostId: "h-dst" }), /a move of this thread is still in progress/i);
+  await assert.rejects(move({ threadId: "t1", hostId: "h-dst" }), /a move of this thread is in progress/i);
   release();
   assert.deepEqual(await first, { threadId: "t2" });
   assert.equal(spawnCalls(), 1);
 });
 
-test("a second move whose reads finish after the first spawn returned is still refused", async () => {
+test("a second move is refused before it reads, even when its reads would finish after the first spawn returned", async () => {
   let releaseSecond = () => {};
   const secondHeld = new Promise<void>((resolve) => (releaseSecond = resolve));
+  // Holding the second move's reads makes a guard check placed after the reads fail.
   const { move, spawnCalls } = world({ onLaterEnvRead: () => secondHeld });
   const first = move({ threadId: "t1", hostId: "h-dst" });
   const second = move({ threadId: "t1", hostId: "h-dst" });
   assert.deepEqual(await first, { threadId: "t2" });
   releaseSecond();
-  await assert.rejects(second, /a move of this thread is still in progress/i);
+  await assert.rejects(second, /a move of this thread is in progress/i);
   assert.equal(spawnCalls(), 1);
 });
 
@@ -253,6 +254,17 @@ test("the hand-over message keeps the first outline item and the last 99, and sa
     "item 0, the note, then items 2 to 100",
   );
   assert.doesNotMatch(text, /message 1\n/);
+});
+
+test("the hand-over message counts two left-out outline items in the plural", () => {
+  const outline = Array.from({ length: 102 }, (_, i): OutlineItem => ({
+    id: `m${i}`,
+    role: "user",
+    preview: `message ${i}`,
+    attachmentSummary: null,
+  }));
+  const text = handOverMessage({ title: "Login fix", source: "src-box", path: "/workspaces/app", outline });
+  assert.match(text, /- user: message 0\n\(2 earlier messages left out\.\)\n- user: message 3\n/);
 });
 
 test("the hand-over message names the source, says uncommitted changes stayed, and lists the outline", () => {

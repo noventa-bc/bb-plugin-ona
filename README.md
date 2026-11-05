@@ -239,8 +239,8 @@ is. From your Mac's terminal: `bb ona move <thread-id> <ref>`.
   bb-managed worktree or bb's personal workspace is refused, and so is one in bb's personal project;
   the message says so.
 - A stopped target box is started by bb. The new thread should appear once the box is up, which can
-  take minutes; the menu may first report that bb is still starting the box. Wait for the new thread
-  to appear before you move this one again.
+  take minutes. If bb is still starting the box when you move, the menu says so and asks you not to
+  move the thread again.
 - Uncommitted changes stay on the old box: commit and push a branch first. The new thread starts a
   fresh agent session; it learns the rest from the hand-over message.
 

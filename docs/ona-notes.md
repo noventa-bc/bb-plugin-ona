@@ -204,7 +204,10 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 - bb 0.48.1 returns `threads.conversationOutline` items oldest first: event rows sorted ascending,
   items pushed in timeline order (checked 2026-11-05).
 - bb 0.48.1 refuses a fork onto another host in `assertForkSourceHost`, called from
-  `createThreadFromRequest` (checked 2026-11-05 in `server/dist/start-server.js`).
+  `createThreadFromRequest`, only for a create with `originKind` `fork`: a plain spawn meets no host
+  check. Before the work, `ensureHostSessionReadyForWork` resumes a suspended host for the thread
+  waiting on it, so a move's stopped target is started by bb (checked 2026-11-05 in
+  `server/dist/start-server.js`).
 - bb 0.48.1 caps each `threads.conversationOutline` item's `preview` at 200
   characters (`CONVERSATION_OUTLINE_PREVIEW_MAX_LENGTH`) and returns one item
   per user or assistant message, with no limit on their number (checked 2026-11-05).

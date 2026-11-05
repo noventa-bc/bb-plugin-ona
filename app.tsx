@@ -208,12 +208,16 @@ function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
       (reply) => setDevboxes(reply.devboxes),
       () => undefined,
     );
-    for (const threadId of threadIds.filter((id) => !(id in threads))) {
+    const ask = (threadId: string) =>
       void rpc.call("thread_devbox", { threadId }).then(
-        (reply) => setThreads((known) => remember(known, threadId, reply)),
+        (reply) => {
+          setThreads((known) => remember(known, threadId, reply));
+          // shortcut: the timer is not cleared on unmount, upgrade if the app ever unmounts this hook.
+          if (reply.devbox === null && reply.pending) setTimeout(() => ask(threadId), 15_000);
+        },
         () => undefined,
       );
-    }
+    for (const threadId of threadIds.filter((id) => !(id in threads))) ask(threadId);
     // `threads` is left out on purpose: a reply must not trigger another round of calls.
   }, [rpc, threadIds]);
   const place = (threadId: string, devbox: Devbox | undefined) =>

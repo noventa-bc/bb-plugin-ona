@@ -44,11 +44,12 @@ export function handOverMessage(args: { title: string; source: string; path: str
   return lines.join("\n");
 }
 
-const IN_PROGRESS = "A move of this thread is still in progress; wait for the new thread to appear.";
+const IN_PROGRESS = "A move of this thread is in progress.";
 
 /**
  * The app's map of thread id -> devbox after a `thread_devbox` reply: an entry already stored is kept
- * (a late reply must not undo `place`), and a pending null (no workspace yet) is not stored, so it is asked again.
+ * (a late reply must not undo `place`), and a pending null (no workspace yet) is not stored, so it is asked again
+ * with the next set of visible threads, or in 15 s.
  */
 export function remember(
   known: Record<string, Devbox | null>,

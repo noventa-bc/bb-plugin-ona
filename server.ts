@@ -394,10 +394,10 @@ export default async function plugin(bb: BbPluginApi) {
   bb.rpc.register(rpcContract, {
     devboxes_list: async () => ({ devboxes: await devboxes() }),
     thread_devbox: async ({ threadId }) => {
-      const devbox = await threadDevbox(threadId);
-      if (devbox) return { devbox };
-      // bb creates a thread before its workspace; the app asks again once it has one.
-      return { devbox, pending: (await bb.sdk.threads.get({ threadId })).environmentId === null };
+      // bb creates a thread before its workspace; the app asks again with the next set of visible threads, or in 15 s.
+      const { environmentId } = await bb.sdk.threads.get({ threadId });
+      if (!environmentId) return { devbox: null, pending: true };
+      return { devbox: await threadDevbox(threadId) };
     },
     thread_cost: async ({ threadId }) => ({ cost: await costs.threadCost(threadId) }),
     // A refusal carries the message to the menu; a plain throw would reach it as a crash.
