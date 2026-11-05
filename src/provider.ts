@@ -303,10 +303,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
   }
 
   /**
-   * connect() for a machine bb doesn't show active yet (create, resume); a wake that starts its box comes here too, with
-   * bb showing the machine active. An open
-   * tunnel keeps the box awake (decision 0003), so a failure closes the box's tunnel. A wake of a running box calls
-   * connect() instead, so its tunnel stays open.
+   * connect() for a machine bb doesn't show active yet (create, resume). A wake that starts its box is the one exception:
+   * bb shows the machine active, and a failed connect still closes the tunnel it opened.
    */
   async function connectOrClose(
     resource: OnaResource,

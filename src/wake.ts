@@ -40,7 +40,7 @@ export function notRunningInOna(machine: string, env: OnaEnvironment | undefined
   const phase = env.status?.phase;
   const state = short(phase ?? "unknown");
   if (phase !== undefined && STOPPED.has(phase)) {
-    return `${machine} is ${state} in Ona, so it was not reconnected. Once bb no longer shows it connected, \`bb ona sync ${machine}\` marks it suspended; then run \`bb machine resume ${machine}\`.`;
+    return `${machine} is ${state} in Ona, so it was not reconnected. Run \`bb ona resume ${machine}\` to start it and reconnect.`;
   }
   if (isStarting(env))
     return `${machine} is ${state} in Ona, so it was not reconnected. Try again once Ona shows it running.`;
