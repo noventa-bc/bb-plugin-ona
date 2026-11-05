@@ -62,12 +62,13 @@ test("bb accepting a suspend without acting on it is a failure, not a release", 
   assert.ok(GIVE_UP_AFTER > 1);
 });
 
-test("an idle box isn't released while bb tears down or retries a workspace, or one needs recovery", async () => {
+test("an idle box is kept while bb tears down, retries or retires a workspace, or one needs recovery", async () => {
   const teardown = (status: string | null, retireAt: number | null = null): WorkspaceView => ({
     status: "ready",
     lifecycle: { phase: "teardown", retireAt, teardown: status ? { status } : null },
   });
   const workspaces = [teardown("running"), teardown(null), teardown("failed"), teardown("failed", Date.now() + 60_000)];
+  workspaces.push({ status: "ready", lifecycle: { phase: "retiring", retireAt: NOW, teardown: null } });
   for (const workspace of workspaces) {
     const { sync, calls } = world([idle("h1", { workspaces: [workspace] })]);
     await sync.reconcile(new Set([ALL]), { wait: true });

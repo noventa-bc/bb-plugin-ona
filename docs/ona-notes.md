@@ -144,6 +144,20 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   message starts "Needs recovery:" (checked 2026-11-04). bb sets `retireAt` from
   `Date.now()` in `requestEnvironmentRemoval` and `writeEnvironmentTeardownFailure`, so
   its unit is epoch ms; the SDK types it `number | null` (checked 2026-11-04).
+- bb's `lifecycle.phase` for a workspace is `destroyed` when it is destroyed, else
+  `teardown` once a teardown status is set, else `retiring` while `retireAt` is set,
+  else `active` (`toEnvironmentResponseWithHostLifecycle`, checked 2026-11-04).
+- bb's retire grace: `refreshProviderRetirement` runs after bb deletes a thread whose
+  storage is gone and after an unarchive. It sets `retireAt` to now plus the provider's
+  `retireGraceMs` while no thread on the workspace is live (`environmentHasLiveThreads`),
+  keeps an existing `retireAt`, and clears `retireAt` while a thread is live or when
+  `retireGraceMs` is null. It does nothing once a teardown status is set (checked 2026-11-04).
+- `sweepProviderEnvironmentInSlot` sets the same `retireAt` on a
+  workspace with no owner thread and no live thread, clears it while a live thread is
+  on the workspace and no teardown status is set, and returns while the workspace has an
+  owner thread id and no teardown status. Once `retireAt` has passed it asks for the
+  removal (`requestEnvironmentRemoval`). `retireGraceMs` defaults to 300000 (5 min) in
+  `environmentProviderPolicySchema`, and the plugin sets no policy (checked 2026-11-04).
 - bb's periodic sweep runs every 10 s (`setInterval` with `1e4` in
   `server/dist/start-server.js`). A tick is skipped while the previous run of the
   job is still going (`runPeriodicSweepJob`). A run waits for each workspace it
@@ -156,7 +170,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   `retireAt` as it was; no retry runs while the mismatch lasts (checked 2026-11-04). The
   message says the workspace belongs to a different plugin or has no recorded owner, and
   bb writes no `Needs recovery:` text for it (checked 2026-11-04).
-- A retry's teardown hook needs its host active: an inactive host fails the attempt with
+- A teardown's hook, a retry's included, needs its host active: an inactive host fails the attempt with
   `host_unavailable` (`assertHostActiveForRead`), except while the machine is being
   removed (`isCleanupRpc`). A teardown never wakes the host (`hostCommandMayWake`)
   (checked 2026-11-04).

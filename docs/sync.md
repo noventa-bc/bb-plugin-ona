@@ -29,7 +29,7 @@ never start or stop a box; bb does that only on your action in bb (decisions 000
 
 The idle rule in [How it works](../README.md#how-it-works) has these exceptions: a box
 isn't let go while bb is setting up or tearing down one of its thread workspaces, or
-while bb waits to retry a failed teardown, or while one needs recovery, or while bb's
+while one is in its retire grace, or while bb waits to retry a failed teardown, or while one needs recovery, or while bb's
 workspace or thread list can't be read, or while the Ona listing fails or comes back
 empty. Idle boxes then keep running until those reads work again, since the open tunnel
 counts as activity to Ona. A retry needs the machine active in bb
@@ -145,12 +145,13 @@ you asked for, so safety rule 1 does not gate it.
 - **Right away** when a thread is waiting for an Ona machine. A running box only, except
   a box Ona shows stopped that a waiting thread needs: bb resumes it (the stopped row
   above; [decision 0002](decisions/0002-repairs-never-start-or-stop.md)).
-- **Workspace work** (bb sets up, tears down or retries a workspace) is read by the
+- **Workspace work** (bb sets up, tears down, retries or retires a workspace) is read by the
   check of its own machine (the check 46 s after a disconnect, or the realtime
   reconnect's pass 2 s later), and by the 2-minute pass at the latest. A failed teardown
   counts as retrying until bb has given up on it, releases it
   ([ona-notes](ona-notes.md), the release bullet: `sweepProviderEnvironmentInSlot`,
-  checked 2026-11-04), or it is more than 60 s overdue.
+  checked 2026-11-04), or it is more than 60 s overdue. A workspace in its retire grace
+  counts as busy until bb starts its teardown, so a disconnected box is healed at once for it.
 - **46 s after** an Ona machine disconnects, so a brief drop (Wi-Fi, Mac sleep) can recover on its own.
 - **30s after** a tunnel comes back up.
 - **Right away** when a tunnel finds its box stopped in Ona.
