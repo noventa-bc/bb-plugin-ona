@@ -6,6 +6,7 @@ import {
   parseDuration,
   workspaceWork,
   RESUMED,
+  settledLifecycle,
   SUSPENDED,
   type MachineActivity,
 } from "../src/lifecycle.ts";
@@ -149,4 +150,89 @@ test("workspaceWork: a retiring workspace past its retireAt is still busy, bb ha
 test("an idle machine whose workspaces bb is working on, or that need recovery, is not let go", () => {
   const idle = [machine("a"), machine("b", { workspacesBlock: true }), machine("c", { workspacesBlock: false })];
   assert.deepEqual(machinesToRelease(idle, NOW, 30 * MIN), ["a", "c"]);
+});
+
+test("a suspend bb still runs is read again until bb settles it (fails if the first answer is trusted)", async () => {
+  const answers = ["suspending", "active", "suspended"];
+  let reads = 0;
+  const lifecycle = await settledLifecycle(async () => ({ lifecycle: { phase: answers[reads++]!, message: null } }), {
+    intervalMs: 1,
+  });
+  assert.equal(lifecycle.phase, "active");
+  assert.equal(reads, 2);
+});
+
+test("a suspend bb is still running at its deadline is an error, not a settled phase (fails if the poll never ends)", async () => {
+  await assert.rejects(
+    settledLifecycle(async () => ({ lifecycle: { phase: "suspending", message: null } }), {
+      intervalMs: 1,
+      deadlineMs: 5,
+    }),
+    /bb is still suspending the machine/,
+  );
+});
+
+test("a read that rejects is asked again, and the next settled phase counts (fails if the first rejection ends the wait)", async () => {
+  let reads = 0;
+  const lifecycle = await settledLifecycle(
+    async () => {
+      reads++;
+      if (reads === 1) throw new Error("bb is down");
+      return { lifecycle: { phase: "active", message: "Machine suspension failed: Host is not connected" } };
+    },
+    { intervalMs: 1 },
+  );
+  assert.equal(lifecycle.phase, "active");
+  assert.equal(reads, 2);
+});
+
+test("a settle whose every read fails names the read error at its deadline (fails if the error is the bare still-suspending message)", async () => {
+  await assert.rejects(
+    settledLifecycle(
+      async () => {
+        throw new Error("bb is down");
+      },
+      { intervalMs: 1, deadlineMs: 5 },
+    ),
+    /bb is still suspending the machine, or could not be read: bb is down/,
+  );
+});
+
+test("a read that throws when called surfaces at once, not after the deadline (fails if the throw is retried until the deadline)", async () => {
+  await assert.rejects(
+    settledLifecycle(
+      () => {
+        throw new TypeError("hosts.get is not a function");
+      },
+      { intervalMs: 1, deadlineMs: 50 },
+    ),
+    { name: "TypeError", message: "hosts.get is not a function" },
+  );
+});
+
+test("a later read that answers clears the remembered read error, so the deadline names no stale error (fails if the old error is kept)", async () => {
+  let reads = 0;
+  await assert.rejects(
+    settledLifecycle(
+      async () => {
+        reads++;
+        if (reads === 1) throw new Error("bb is down");
+        return { lifecycle: { phase: "suspending", message: null } };
+      },
+      { intervalMs: 1, deadlineMs: 200 },
+    ),
+    { name: "Error", message: "bb is still suspending the machine" },
+  );
+});
+
+test("a settle whose reads fail with no message says so after the colon (fails if the message is left empty)", async () => {
+  await assert.rejects(
+    settledLifecycle(
+      async () => {
+        throw new Error("");
+      },
+      { intervalMs: 1, deadlineMs: 5 },
+    ),
+    /could not be read: no detail$/,
+  );
 });

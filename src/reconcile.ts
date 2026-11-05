@@ -5,11 +5,11 @@
 // rule: change both together.
 //
 // Safety rules every action here keeps:
-// 1. never wake compute: no start, no SSH unless Ona says RUNNING;
+// 1. never wake compute: no start, no SSH unless Ona says RUNNING, except the two starts docs/sync.md rule 1 names;
 // 2. never stop compute: observed suspends skip the provider's stop;
 // 3. never restart a live daemon: probe first (a restart kills running turns);
 // 4. unknown is not gone: a failed or empty listing changes nothing;
-// 5. one action per machine at a time, with cooldown and backoff.
+// 5. one action per machine at a time, with cooldown, backoff and give-up.
 
 export const GRACE_MS = 45_000;
 export const STUCK_MS = 10 * 60_000;
@@ -62,6 +62,8 @@ export interface Decision {
 }
 
 const RUNNING = "ENVIRONMENT_PHASE_RUNNING";
+/** Ona shows the environment running; a failed listing is unknown (rule 4). */
+export const shownRunning = (ona: { kind: string; phase?: string }) => ona.kind === "env" && ona.phase === RUNNING;
 export const STOPPED = new Set(["ENVIRONMENT_PHASE_STOPPED", "ENVIRONMENT_PHASE_STOPPING"]);
 const GONE = new Set(["ENVIRONMENT_PHASE_DELETED", "ENVIRONMENT_PHASE_DELETING"]);
 
@@ -79,7 +81,7 @@ export function decide(machine: MachineView, ona: OnaView, now: number): Decisio
   if (phase === "suspended") {
     return {
       action: "none",
-      reason: ona.kind === "env" && ona.phase === RUNNING ? "suspended in bb, running in Ona" : "suspended",
+      reason: shownRunning(ona) ? "suspended in bb, running in Ona" : "suspended",
     };
   }
   if (phase !== "active") return { action: "none", reason: `bb is ${phase}` };
@@ -213,18 +215,18 @@ export interface HostRecord {
   reason: string;
   at: number;
   error?: string;
-  /** Consecutive failures; GIVE_UP_AFTER of them stop automatic retries. */
+  /** Failures in a row, or across a hold (docs/sync.md rule 3); GIVE_UP_AFTER of them stop automatic retries. */
   failures: number;
   /** No automatic action before this time. */
   quietUntil: number;
+  /**
+   * A thread's pass failed on this box, forced or not, and the hold has not ended since (`run` and `connected()`
+   * below; the events are in docs/sync.md rule 3).
+   */
+  threadWaiting?: boolean;
 }
 
-/**
- * Rule 5: one action per machine at a time, a cooldown after each one,
- * exponential backoff after failures, and no more automatic retries after
- * GIVE_UP_AFTER failures in a row (`bb ona sync` forces one). Heavy actions
- * (SSH probes, daemon restarts) run at most `limit` at a time.
- */
+/** Safety rule 5: one action per machine at a time, with a cooldown, backoff and give-up (docs/sync.md rules 3 and 5). */
 export class HostGuard {
   private readonly busy = new Map<string, string>();
   /** The last action actually taken per machine; routine checks never overwrite it. */
@@ -257,20 +259,32 @@ export class HostGuard {
   }
 
   /**
+   * A machine bb shows connected with its tunnel up, on a box Ona shows running: a held box's hold ends,
+   * and its count and quiet period are cleared (docs/sync.md rule 3).
+   */
+  connected(hostId: string): void {
+    const record = this.records.get(hostId);
+    if (record?.threadWaiting) {
+      this.records.set(hostId, { ...record, failures: 0, quietUntil: this.clock.now(), threadWaiting: undefined });
+    }
+  }
+
+  /**
    * Run `fn` as the machine's one action; a string it returns is appended to
-   * the recorded reason. Returns false (without running it)
-   * when the machine is busy, cooling down or given up, unless forced.
+   * the recorded reason. Returns false (without running it) when the machine is busy,
+   * or cooling down or given up unless forced (docs/sync.md rule 3).
    */
   async run(
     hostId: string,
     action: string,
     reason: string,
     fn: () => Promise<string | void>,
-    options: { force?: boolean; heavy?: boolean; cooldown?: boolean } = {},
+    options: { force?: boolean; heavy?: boolean; cooldown?: boolean; threadWaiting?: boolean } = {},
   ): Promise<boolean> {
-    if (!this.mayAct(hostId, options.force)) return false;
+    const flagged = this.records.get(hostId)?.threadWaiting === true;
+    const force = options.force || (options.threadWaiting === true && !flagged);
+    if (!this.mayAct(hostId, force)) return false;
     this.busy.set(hostId, action);
-    const previous = this.records.get(hostId);
     try {
       if (options.heavy) await this.acquire();
       let outcome: string | void;
@@ -280,15 +294,19 @@ export class HostGuard {
         if (options.heavy) this.release();
       }
       const now = this.clock.now();
+      const current = this.records.get(hostId);
+      const held = !force && !options.threadWaiting && current?.threadWaiting === true;
       this.records.set(hostId, {
         action,
         reason: outcome ? `${reason}; ${outcome}` : reason,
         at: now,
-        failures: 0,
+        failures: held ? current.failures : 0,
         quietUntil: options.cooldown === false ? now : now + COOLDOWN_MS,
+        threadWaiting: held ? true : undefined,
       });
     } catch (error) {
-      const failures = (options.force ? 0 : (previous?.failures ?? 0)) + 1;
+      const current = this.records.get(hostId);
+      const failures = (force ? 0 : (current?.failures ?? 0)) + 1;
       const now = this.clock.now();
       this.records.set(hostId, {
         action,
@@ -297,6 +315,7 @@ export class HostGuard {
         error: error instanceof Error ? error.message : String(error),
         failures,
         quietUntil: now + Math.min(COOLDOWN_MS * 2 ** (failures - 1), MAX_BACKOFF_MS),
+        threadWaiting: options.threadWaiting || (!force && current?.threadWaiting === true) ? true : undefined,
       });
       throw error;
     } finally {

@@ -2,6 +2,10 @@
 // box nobody uses is let go and Ona's own inactivity timeout stops it. Syncing
 // changes made outside bb lives in reconcile.ts.
 import { hostIsBusy } from "./updates.ts";
+import { pollUntil } from "./time.ts";
+
+/** bb's suspend drain gives up after 5 minutes (docs/ona-notes.md), so a suspend is settled well within this. */
+const SETTLE_MS = 6 * 60_000;
 
 export interface MachineActivity {
   hostId: string;
@@ -84,6 +88,57 @@ export function lifecycleRefusal(
 ): string | null {
   if (!lifecycle || expected.includes(lifecycle.phase)) return null;
   return `bb kept the machine ${lifecycle.phase}${lifecycle.message ? `: ${lifecycle.message}` : ""}`;
+}
+
+/**
+ * What a failed suspend says to the user. bb's "Host is not connected" means its suspend could not drain the daemon,
+ * which Ona's stop took away: a turn is still open on the box, so bb needs the box back to settle it.
+ */
+export function suspendFailure(refusal: string): string {
+  return refusal.includes("Host is not connected")
+    ? "bb can't suspend it while a turn is still active on the box; it needs the box back to settle the turn"
+    : refusal;
+}
+
+/**
+ * bb answers a suspend before it runs (202, phase `suspending`), and a failed drain leaves the machine active: `read` is
+ * polled until bb settles the suspend, and the lifecycle it settles on is returned. A read that rejects is asked again;
+ * only a deadline with no settled phase fails the poll.
+ */
+export async function settledLifecycle(
+  read: () => Promise<{ lifecycle: { phase: string; message: string | null } }>,
+  options: { intervalMs?: number; deadlineMs?: number } = {},
+): Promise<{ phase: string; message: string | null }> {
+  // The message of the last read, when that read failed: a read that answers clears it.
+  const failure: { message?: string } = {};
+  const settled = await pollUntil(
+    async () => {
+      // A read that throws when called is a bug, not bb being down, so it surfaces here; a read that rejects is asked again.
+      const pending = read();
+      try {
+        const host = await pending;
+        failure.message = undefined;
+        return host.lifecycle.phase !== "suspending" ? host : undefined;
+      } catch (error: unknown) {
+        failure.message = (error instanceof Error ? error.message : String(error)) || "no detail";
+        return undefined;
+      }
+    },
+    {
+      deadlineMs: options.deadlineMs ?? SETTLE_MS,
+      intervalMs: options.intervalMs ?? 1_000,
+      // Never aborts: the deadline ends the poll, and the caller reads that as a suspend still running.
+      signal: new AbortController().signal,
+    },
+  );
+  if (!settled) {
+    throw new Error(
+      failure.message === undefined
+        ? "bb is still suspending the machine"
+        : `bb is still suspending the machine, or could not be read: ${failure.message}`,
+    );
+  }
+  return settled.lifecycle;
 }
 
 export const SUSPENDED = ["suspending", "suspended"] as const;

@@ -161,7 +161,7 @@ export function register({
       },
     },
   });
-  const { reconnect } = registerOnaProvider(host.bb, {
+  const { reconnect, wake } = registerOnaProvider(host.bb, {
     availability: async () => ({ status: "available" }),
     ona,
     sshBinary: "ssh",
@@ -186,7 +186,7 @@ export function register({
     executorFor: () => executor,
   });
   const provider = host.harness.registrations.machineProviders.get("ona")!;
-  return { provider, reconnect, calls, tunnels, open, forgotten, releasing };
+  return { provider, reconnect, wake, calls, tunnels, open, forgotten, releasing };
 }
 
 /** `steps` collects the progress lines the user sees. */

@@ -449,12 +449,11 @@ test("reconnect refuses a STARTING box, without a provider call", async () => {
 
 test("reconnect says what to do for each other state Ona can show, and never calls the provider", async () => {
   const check = "Check the box in Ona and `bb ona status ona:box`.";
-  const sync =
-    "Once bb no longer shows it connected, `bb ona sync ona:box` marks it suspended; then run `bb machine resume ona:box`.";
+  const resume = "Run `bb ona resume ona:box` to start it and reconnect.";
   const wait = "Try again once Ona shows it running.";
   for (const [ona, state, hint] of [
-    ["STOPPED", "stopped", sync],
-    ["STOPPING", "stopping", sync],
+    ["STOPPED", "stopped", resume],
+    ["STOPPING", "stopping", resume],
     ["PENDING", "pending", wait],
     ["CREATING", "creating", wait],
     ["DELETING", "deleting", check],

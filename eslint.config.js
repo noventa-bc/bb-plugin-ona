@@ -25,14 +25,25 @@ export default tseslint.config(
       "@typescript-eslint/prefer-promise-reject-errors": "error",
       "@typescript-eslint/only-throw-error": "error",
       "@typescript-eslint/switch-exhaustiveness-check": "error",
+      // A `return promise` inside try skips its catch, so the rule wants `return await` there and nowhere else.
+      "@typescript-eslint/return-await": ["error", "in-try-catch"],
       "max-lines": ["error", { max: 500, skipBlankLines: true, skipComments: true }],
       "no-restricted-syntax": [
         "error",
-        // bb can accept a lifecycle request without acting on it; use the host it returns.
+        // bb can accept a lifecycle request without acting on it; use the host it returns. A lifecycle call is discarded
+        // when its statement is bare, awaited or void, possibly followed by a chain of calls such as `.catch(...)` or
+        // `.catch(...).finally(...)`.
+        // shortcut: chains up to two calls deep, add a parent form when a deeper chain appears
         ...[
           "ExpressionStatement > AwaitExpression",
           "ExpressionStatement > UnaryExpression[operator='void']",
           "ExpressionStatement",
+          "ExpressionStatement > AwaitExpression > CallExpression > MemberExpression",
+          "ExpressionStatement > UnaryExpression[operator='void'] > CallExpression > MemberExpression",
+          "ExpressionStatement > CallExpression > MemberExpression",
+          "ExpressionStatement > AwaitExpression > CallExpression > MemberExpression > CallExpression > MemberExpression",
+          "ExpressionStatement > UnaryExpression[operator='void'] > CallExpression > MemberExpression > CallExpression > MemberExpression",
+          "ExpressionStatement > CallExpression > MemberExpression > CallExpression > MemberExpression",
         ].map((parent) => ({
           selector: `${parent} > CallExpression[callee.property.name=/^experimental_(suspend|resume|reconcile)$/]`,
           message: "bb can accept this without acting on it: check the returned host's lifecycle (lifecycleRefusal).",

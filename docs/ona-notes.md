@@ -111,6 +111,36 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   `suspended`, `suspending` or `resuming`, and answers 409 for `creating`,
   `removing` and `destroyed` (checked 2026-11-03 in `server/dist/start-server.js`
   under the bb app's bundled `bb-app` package, function `startMachineResume`).
+- bb 0.48.1's suspend (`maintainMachine` in `server/dist/start-server.js`, checked
+  2026-11-05) cancels unfinished environment hooks and stops active threads through
+  the daemon before the provider's suspend runs. With the daemon gone, that stop
+  fails at once with "Host is not connected" (502 `host_unavailable`). bb then sets
+  the phase back to `active`, sets the host's `lifecycle.message` to "Machine
+  suspension failed: <message>", and sets `suspendRetryAt` to now plus `RETRY_MS`
+  (10 s). A drain that runs past its 5-minute deadline fails with "Machine drain
+  exceeded its deadline; old compute is retained" instead. `suspendRetryAt` is a
+  lock, not a retry: while it holds, bb's suspend fails inside the background
+  operation (the next bullet).
+- bb answers the suspend and resume routes with 202 before the operation runs
+  (`startMachineSuspension`, `startMachineResume`; checked 2026-11-05). The host reads
+  `suspending` or `resuming` until bb settles it. Inside the lock the 202 carries the
+  host as it is, `active` with the old message: the lock's 409 `machine_maintenance`
+  is raised inside the background operation and only logged. What reaches the client at
+  once are the synchronous checks' answers: 404 `host_not_found`, 409
+  `machine_provider_unavailable` and `machine_suspend_unsupported` (from
+  `requireSuspendableMachine`), and 409 `machine_not_active` and `machine_busy` (from
+  `requireActiveSuspendableMachine`). The resume route answers its own synchronous 409
+  `machine_not_suspended`, for a machine that is neither active, suspended, suspending nor
+  resuming. A suspend that bb later fails looks accepted when
+  it is answered.
+- For an enrolled machine, bb's `createMachineBootstrapApi` runs `install-machine.sh --start`, whose start branch returns at once when `daemon_matches` holds (the daemon on the host's port reports this host id and server URL). `prepare` returns `enrolled` for a host bb has seen (`lastSeenAt` set) or that is connected, so a plugin wake reaches that branch once SSH and the tunnel are up; the start branch never kills a daemon (bb 0.48.1 server source, checked 2026-11-05).
+- `resumeMachine` waits for an in-flight suspend, then `resumeMachineWithIntent`
+  returns at once unless the phase is suspended, suspending or resuming. A resume of
+  an active machine does nothing (checked 2026-11-05).
+- bb's `removeMachine` awaits the host's in-flight suspend and resume operations before it removes the host (bb 0.48.1 server source, checked 2026-11-05); `remove` in src/provider.ts relies on it.
+- The host's status is only `connected` or `disconnected` (`toHostWithStatus`). The
+  new-thread composer labels a selected host whose status is not connected "Host is
+  offline" (`NewThreadComposer` in bb's app bundle, checked 2026-11-05).
 - bb 0.48.1's `threads.list` leaves out hidden threads (workflow steps, side
   chats) unless asked with `includeHidden: true`, drops archived ones on the
   server with `archived: false`, and applies no limit when none is passed.

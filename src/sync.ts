@@ -11,7 +11,9 @@ import {
   machinesToRelease,
   parseDuration,
   RESUMED,
+  settledLifecycle,
   SUSPENDED,
+  suspendFailure,
   workspaceWork,
   type MachineActivity,
   type WorkspaceView,
@@ -26,6 +28,7 @@ import {
   type MachineView,
   type OnaView,
   type PassScheduler,
+  shownRunning,
 } from "./reconcile.ts";
 import { liveThreads, stuckThreads, threadStatuses, type LiveThreadsArgs, type ThreadState } from "./updates.ts";
 
@@ -102,6 +105,12 @@ export interface SyncDeps {
       report: { step(text: string): void; log(text: string): void },
       signal: AbortSignal,
     ): Promise<unknown>;
+    /** Starts a stopped box and connects bb's daemon (`provider.wake`); a waiting thread on an active machine asks for it. */
+    wake(
+      resource: OnaResource,
+      report: { step(text: string): void; log(text: string): void },
+      signal: AbortSignal,
+    ): Promise<boolean>;
   };
   keepAliveUntil(envId: string): number | null;
   /** Ona env id -> bb host id, refreshed on every pass; shared with the tunnels and events. */
@@ -212,19 +221,25 @@ export function createSync(deps: SyncDeps) {
   /**
    * Mark a machine suspended in bb without stopping its box (the provider's
    * suspend sees the flag in `releasing`). Used when Ona already stopped or
-   * lost the box, and when an idle box is let go for Ona's own timeout.
+   * lost the box, and when an idle box is let go for Ona's own timeout. Resolves
+   * with bb's lifecycle once bb has settled the suspend.
    */
-  async function suspendWithoutStop(row: Row): Promise<void> {
+  async function suspendWithoutStop(row: Row): Promise<HostLifecycle> {
     provider.releasing.add(row.resource.envId);
-    try {
-      const host = await bb.sdk.hosts.experimental_suspend({ hostId: row.hostId });
-      const refusal = lifecycleRefusal(host.lifecycle, SUSPENDED);
-      if (refusal) throw new Error(refusal);
-    } catch (error) {
+    const posted = await bb.sdk.hosts.experimental_suspend({ hostId: row.hostId }).catch((error: unknown) => {
       // Don't leave the flag behind for a later user suspend, which should stop the box.
       provider.releasing.delete(row.resource.envId);
       throw error;
-    }
+    });
+    const lifecycle =
+      posted.lifecycle.phase === "suspending"
+        ? await settledLifecycle(() => bb.sdk.hosts.get({ hostId: row.hostId }))
+        : posted.lifecycle;
+    // The provider's suspend consumes the flag when bb reaches it, and a suspended machine has been through it. A failed
+    // suspend (active) never reaches it, so the flag goes back here. The flag stays for every other outcome: a settle that
+    // timed out or failed (it throws above), and any other phase, since bb may still run the provider's suspend (removing).
+    if (lifecycle.phase === "active") provider.releasing.delete(row.resource.envId);
+    return lifecycle;
   }
 
   /**
@@ -235,7 +250,7 @@ export function createSync(deps: SyncDeps) {
    * reconnects or restarts it when a thread needs it.
    */
   const idleMs = parseDuration(idleDisconnect);
-  async function releaseIdleMachines(rows: Row[]): Promise<void> {
+  async function releaseIdleMachines(rows: Row[], actions: Promise<void>[]): Promise<void> {
     if (idleMs <= 0) return;
     const now = Date.now();
     const candidates = rows.filter((row) => row.phase === "active" && guard.mayAct(row.hostId));
@@ -263,20 +278,27 @@ export function createSync(deps: SyncDeps) {
     for (const hostId of machinesToRelease(activity, now, idleMs)) {
       const row = candidates.find((r) => r.hostId === hostId)!;
       const reason = `idle for ${idleDisconnect}; Ona's own timeout will stop the box`;
-      await guard
-        .run(
-          hostId,
-          "release-idle",
-          reason,
-          async () => {
-            bb.log.info(`${row.machine}: ${reason}; closing the tunnel`);
-            await suspendWithoutStop(row);
-          },
-          { cooldown: false },
-        )
-        .catch((error: unknown) => {
-          bb.log.warn(`${row.machine}: could not let go: ${errorText(error)}`);
-        });
+      // Started, not awaited: one box's settle must not hold the next box's suspend or the pass (reconcile waits for `actions` only under `wait`).
+      actions.push(
+        guard
+          .run(
+            hostId,
+            "release-idle",
+            reason,
+            async () => {
+              bb.log.info(`${row.machine}: ${reason}; closing the tunnel`);
+              const refusal = lifecycleRefusal(await suspendWithoutStop(row), SUSPENDED);
+              if (refusal) throw new Error(refusal);
+            },
+            { cooldown: false },
+          )
+          .then(
+            () => undefined,
+            (error: unknown) => {
+              bb.log.warn(`${row.machine}: could not let go: ${errorText(error)}`);
+            },
+          ),
+      );
     }
   }
 
@@ -344,6 +366,8 @@ export function createSync(deps: SyncDeps) {
   async function act(row: Row, decision: Decision, force: boolean): Promise<void> {
     const { hostId, machine, resource } = row;
     const heavy = decision.action === "heal-daemon" || decision.action === "reconcile-stuck";
+    const report = { step: (text: string) => bb.log.info(`${machine}: ${text}`), log: () => {} };
+    // A thread waiting on a stopped box must not wait out what other passes left (docs/sync.md rule 3).
     await guard
       .run(
         hostId,
@@ -352,19 +376,28 @@ export function createSync(deps: SyncDeps) {
         async () => {
           bb.log.info(`${machine}: ${decision.action} (${decision.reason})`);
           switch (decision.action) {
-            case "suspend-observed":
-              await suspendWithoutStop(row);
+            case "suspend-observed": {
+              const lifecycle = await suspendWithoutStop(row);
+              const refusal = lifecycleRefusal(lifecycle, SUSPENDED);
+              if (refusal) {
+                if (!decision.resumeAfter || lifecycle.phase !== "active") throw new Error(suspendFailure(refusal));
+                // bb's suspend failed (Ona stopped the box under a live turn) and left the machine active, where bb's
+                // resume does nothing: the plugin wakes the box (decision 0002).
+                const startCalled = await provider.wake(resource, report, AbortSignal.timeout(15 * 60_000));
+                return startCalled ? "started it for a waiting thread" : "reconnected it for a waiting thread";
+              }
               if (!decision.resumeAfter) return;
               // A thread is waiting on it: that's you using the box, so let bb start it.
               try {
                 const host = await bb.sdk.hosts.experimental_resume({ hostId });
-                const refusal = lifecycleRefusal(host.lifecycle, RESUMED);
-                return refusal
-                  ? `couldn't resume it for a waiting thread (${refusal})`
+                const resumeRefusal = lifecycleRefusal(host.lifecycle, RESUMED);
+                return resumeRefusal
+                  ? `couldn't resume it for a waiting thread (${resumeRefusal})`
                   : "resumed for a waiting thread";
               } catch (error) {
                 return `bb will resume it on your next message (${errorText(error)})`;
               }
+            }
             case "ensure-tunnel":
               tunnels.ensure(resource.envId);
               return;
@@ -381,7 +414,6 @@ export function createSync(deps: SyncDeps) {
                 return "couldn't tell whether the daemon runs (SSH or the process check on the box failed); not restarting";
               // The check can take 30 s, long enough for the box to be stopped in Ona.
               if (!(await runningNow())) return gone;
-              const report = { step: (text: string) => bb.log.info(`${machine}: ${text}`), log: () => {} };
               await provider.reconnect(resource, report, AbortSignal.timeout(15 * 60_000));
               return "daemon was down; restarted it";
             }
@@ -397,7 +429,7 @@ export function createSync(deps: SyncDeps) {
             }
           }
         },
-        { force, heavy, cooldown: heavy },
+        { force, heavy, cooldown: heavy, threadWaiting: decision.resumeAfter },
       )
       .catch((error: unknown) => {
         bb.log.warn(`${machine}: ${decision.action} failed: ${errorText(error)}`);
@@ -438,18 +470,20 @@ export function createSync(deps: SyncDeps) {
               ? ((await workspaces(row.hostId, now))?.busy ?? false)
               : false,
         };
-        const decision = decide(view, await onaView(row.resource.envId, listing), now);
+        const onaState = await onaView(row.resource.envId, listing);
+        const decision = decide(view, onaState, now);
         // With autoRepair off, only observed stops and deletions (and the resume a waiting thread asks for) reach bb; tunnels reopen after a reload, and idle releases run below.
         const skipped = !autoRepair && !["none", "suspend-observed", "ensure-tunnel"].includes(decision.action);
-        guard.note(
-          row.hostId,
-          skipped ? `${decision.reason} (would ${decision.action}; autoRepair is off)` : decision.reason,
-        );
+        const reason = skipped ? `${decision.reason} (would ${decision.action}; autoRepair is off)` : decision.reason;
+        guard.note(row.hostId, reason);
+        // A connection the pass can trust ends a hold (docs/sync.md rule 3).
+        if (view.status === "connected" && view.tunnel === "up" && shownRunning(onaState)) guard.connected(row.hostId);
         if (decision.action === "none" || skipped) continue;
         actions.push(act(row, decision, options.force ?? false));
       }
       // A failed or empty listing is unknown (docs/sync.md rule 4): no idle release that pass.
-      if (keys.has(ALL) && listing?.envs.length && snapshot.lastError === null) await releaseIdleMachines(rows);
+      if (keys.has(ALL) && listing?.envs.length && snapshot.lastError === null)
+        await releaseIdleMachines(rows, actions);
       if (options.wait) await Promise.all(actions);
     } catch (error) {
       bb.log.warn(`reconcile failed: ${errorText(error)}`);

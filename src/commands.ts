@@ -6,25 +6,21 @@ import { clockTime, parseKeepAlive, type KeepAlives } from "./keepalive.ts";
 import { randomFriendlyName } from "./names.ts";
 import {
   errorText,
-  firstLine,
   isRunning,
-  isStarting,
   matchEnvironment,
+  reasonOf,
   sshHost,
   type BoxFacts,
   type OnaCli,
-  type OnaEnvironment,
   type OnaListing,
   type OnaSnapshot,
 } from "./ona.ts";
 import { onaRef, type registerOnaProvider } from "./provider.ts";
-import { ALL, short, STOPPED, type HostGuard } from "./reconcile.ts";
+import { ALL, short, type HostGuard } from "./reconcile.ts";
 import { runOnce, type ShellBackend, type ShellTarget, type ThreadTerminalPlan } from "./shells.ts";
 import type { TunnelManager } from "./ssh.ts";
 import type { Row, StatusRow, Sync } from "./sync.ts";
-
-/** The first non-blank line of Ona's error, trimmed, or "no listing". */
-const reasonOf = (error: string | null) => firstLine(error ?? "") ?? "no listing";
+import { notActiveRefusal, notRunningInOna, resumeCommand } from "./wake.ts";
 
 export interface CliResult {
   exitCode: number;
@@ -99,46 +95,6 @@ export async function keepAliveCommand(
     exitCode: 0,
     stdout: `Keeping ${ref} alive until ${clockTime(until)}. End it early with: bb ona keep-alive ${ref} off`,
   };
-}
-
-type HostPhase = Awaited<ReturnType<BbPluginApi["sdk"]["hosts"]["list"]>>[number]["lifecycle"]["phase"];
-
-/** What to do about a machine `bb ona reconnect` refused. The switch covers every phase the SDK lists (lint checks it). */
-function notActiveHint(phase: Exclude<HostPhase, "active">, machine: string): string {
-  switch (phase) {
-    // Which phases bb accepts a resume in: docs/ona-notes.md.
-    case "suspended":
-    case "suspending":
-      return `Resume it with \`bb machine resume ${machine}\`.`;
-    case "creating":
-    case "resuming":
-      break;
-    case "removing":
-    case "destroyed":
-      return "It is gone or being removed.";
-  }
-  // Also a phase a newer bb adds: Row.phase is a string at runtime.
-  return "Try again once bb shows it active.";
-}
-
-/** The refusal for a machine bb doesn't show active. */
-function notActiveRefusal(row: Row): CliResult {
-  const hint = notActiveHint(row.phase as Exclude<HostPhase, "active">, row.machine);
-  return { exitCode: 1, stderr: `${row.machine} is ${row.phase} in bb, so it was not reconnected. ${hint}` };
-}
-
-/** What `bb ona reconnect` says for a box Ona doesn't show running; `env` is undefined when Ona lists no such box. */
-function notRunningInOna(machine: string, env: OnaEnvironment | undefined): string {
-  const check = `Check the box in Ona and \`bb ona status ${machine}\`.`;
-  if (!env) return `${machine} is not listed in Ona, so it was not reconnected. ${check}`;
-  const phase = env.status?.phase;
-  const state = short(phase ?? "unknown");
-  if (phase !== undefined && STOPPED.has(phase)) {
-    return `${machine} is ${state} in Ona, so it was not reconnected. Once bb no longer shows it connected, \`bb ona sync ${machine}\` marks it suspended; then run \`bb machine resume ${machine}\`.`;
-  }
-  if (isStarting(env))
-    return `${machine} is ${state} in Ona, so it was not reconnected. Try again once Ona shows it running.`;
-  return `${machine} is ${state} in Ona, so it was not reconnected. ${check}`;
 }
 
 /** What the status header says about the ona CLI. */
@@ -228,8 +184,9 @@ export const usage = [
   "  bb ona rename <ref> [name]    Rename the Ona environment (random fun name if omitted) and its bb machine",
   "  bb ona reconnect <ref>        Reopen an active machine's tunnel and restart its bb daemon",
   "                                Refused unless bb shows the machine active and Ona shows its box running.",
+  "  bb ona resume <ref>           Start a stopped box and reconnect bb's daemon (your action; a running box is only reconnected)",
   "  bb ona status [ref] [--json]  bb's view of each devbox next to Ona's, its box facts, and what the plugin last did",
-  "  bb ona sync [ref]             Re-check Ona now and repair (ignores cooldowns, keeps the safety rules)",
+  "  bb ona sync [ref]             Re-check Ona now and repair (ignores cooldowns, backoff and the give-up, keeps the safety rules)",
   "  bb ona keep-alive <ref> <duration|off>  Keep a running devbox from Ona's inactivity timeout (at most 12h)",
   "  bb ona move <thread-id> <ref>  Continue a thread in a new one on another devbox at the same path",
   "  bb ona update [ref] [--force] Apply pending Claude Code / Codex updates now (also runs weekdays 09:00)",
@@ -274,6 +231,11 @@ export const commands = [
     usage: "bb ona reconnect <ref>",
   },
   {
+    name: "resume",
+    summary: "Start a stopped devbox and reconnect its bb daemon",
+    usage: "bb ona resume <ref>",
+  },
+  {
     name: "status",
     summary: "Compare bb's and Ona's view of each devbox",
     usage: "bb ona status [ref] [--json]",
@@ -301,7 +263,7 @@ export interface OnaCommandDeps {
   tunnels: TunnelManager;
   guard: HostGuard;
   keepAlives: KeepAlives;
-  provider: Pick<ReturnType<typeof registerOnaProvider>, "reconnect">;
+  provider: Pick<ReturnType<typeof registerOnaProvider>, "reconnect" | "wake">;
   shellBackend: ShellBackend;
   machines: Sync["machines"];
   reconcile: Sync["reconcile"];
@@ -481,6 +443,15 @@ export function onaCommands(deps: OnaCommandDeps) {
           if (!ran) return busyRefusal();
           return { exitCode: 0, stdout: [...steps, `Reconnected ${row.machine}`].join("\n") };
         }
+        case "resume": {
+          if (!ref) break;
+          // Awaited, so a refused or failed start reaches the catch below and exits 1 (as `reconnect` does).
+          return await resumeCommand(
+            { snapshot, findMachine, guard, provider },
+            ref,
+            ctx.signal ?? new AbortController().signal,
+          );
+        }
         case "status": {
           const rows = await statusRows(ref);
           if (json) return { exitCode: 0, stdout: JSON.stringify(rows) };
@@ -507,7 +478,7 @@ export function onaCommands(deps: OnaCommandDeps) {
         }
         case "keep-alive": {
           if (!ref) break;
-          return keepAliveCommand({ snapshot, findMachine, resolveEnvId, keepAlives }, ref, newName);
+          return await keepAliveCommand({ snapshot, findMachine, resolveEnvId, keepAlives }, ref, newName);
         }
         case "shell": {
           if (!ref) break;
