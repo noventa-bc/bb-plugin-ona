@@ -1,9 +1,9 @@
-// The provider's bootstrap and remove paths, driven through `create` (adopt mode), `resume` and `remove` in the
-// fake host of ./provider-fake.ts. setTimeout and Date are mocked, so each tick is one poll interval and the
-// tests are instant.
+// The provider's bootstrap, resume, remove and cleanup paths, driven through `create` (adopt mode), `resume`,
+// `remove` and `reconcileCleanup` in the fake host of ./provider-fake.ts. setTimeout and Date are mocked, so each
+// tick is one poll interval and the tests are instant.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { resourceSchema } from "../src/provider.ts";
+import { envNameForKey, resourceSchema } from "../src/provider.ts";
 import { tick, useFakeClock } from "./fake-clock.ts";
 import { adoptedResource, box, connectCalls, gated, lifecycle, register, resume, start } from "./provider-fake.ts";
 
@@ -100,6 +100,18 @@ test("a resume that fails with the box's tunnel already open, connecting or up, 
   }
 });
 
+// sync sets the no-stop flag before bb's suspend. If that suspend leaves it set, the user's next suspend
+// must still stop the box.
+test("a resume clears a no-stop flag a suspend left, so the next suspend stops the box (fails if the flag outlives the resume)", async () => {
+  const { provider, releasing, calls } = register({ found: box("RUNNING") });
+  releasing.add("env-1");
+  const signal = new AbortController().signal;
+  await provider.resume!({ ...lifecycle(), hostId: "host-1", resource: adoptedResource, signal });
+  const before = calls.length;
+  await provider.suspend!({ ...lifecycle(), hostId: "host-1", resource: adoptedResource, signal });
+  assert.deepEqual(calls.slice(before), ["get RUNNING", "stop env-1"]);
+});
+
 // The lookup-throws test below guards the order: the tunnel closes after the move-aside, and on a failed lookup.
 test("remove of an adopted machine closes its tunnel", async () => {
   const { provider, tunnels } = register({ found: box("RUNNING"), phases: ["RUNNING"], tunnel: "up" });
@@ -172,6 +184,45 @@ test("a refused remove of a bb-created machine closes its tunnel and keeps its k
   assert.equal(removed.status, "failed");
   assert.deepEqual(tunnels, ["stop env-1"]);
   assert.deepEqual(forgotten, []);
+});
+
+// Cleanup finds a box by the name its key gives it: a created box carries that name, an adopted box keeps its own.
+test("reconcileCleanup deletes the box its key names and closes its tunnel (fails if an orphaned box is kept)", async () => {
+  const created = { ...box("RUNNING"), metadata: { name: envNameForKey("key-1") } };
+  const { provider, calls, tunnels } = register({ found: created });
+  const cleaned = await provider.reconcileCleanup({
+    key: "key-1",
+    report: lifecycle().report,
+    signal: new AbortController().signal,
+  });
+  assert.equal(cleaned.status, "removed");
+  assert.deepEqual(calls, ["delete env-1"]);
+  assert.deepEqual(tunnels, ["stop env-1"]);
+});
+
+test("reconcileCleanup of a box Ona no longer lists deletes nothing and closes no tunnel (fails if a missing box throws)", async () => {
+  const created = { ...box("RUNNING"), metadata: { name: envNameForKey("key-1") } };
+  const { provider, calls, tunnels } = register({ found: created, gone: true });
+  const cleaned = await provider.reconcileCleanup({
+    key: "key-1",
+    report: lifecycle().report,
+    signal: new AbortController().signal,
+  });
+  assert.equal(cleaned.status, "removed");
+  assert.deepEqual(calls, []);
+  assert.deepEqual(tunnels, []);
+});
+
+test("reconcileCleanup of an adopted box's key never deletes the box (fails if the lookup reaches the adopted box)", async () => {
+  const { provider, calls, tunnels } = register({ found: box("RUNNING") });
+  const cleaned = await provider.reconcileCleanup({
+    key: adoptedResource.key,
+    report: lifecycle().report,
+    signal: new AbortController().signal,
+  });
+  assert.equal(cleaned.status, "removed");
+  assert.deepEqual(calls, []);
+  assert.deepEqual(tunnels, []);
 });
 
 // A relative legacy dataDir is kept: the scripts resolve it against $HOME on the box.

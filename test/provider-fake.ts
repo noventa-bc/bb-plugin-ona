@@ -18,6 +18,7 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * `phases`: what each Ona lookup returns in turn, the last one repeated: a phase, a box, null (a box Ona no
  * longer has) or an Error (the lookup throws). Without phases, every lookup returns `found`.
  * `lookupFails`: every Ona lookup throws.
+ * `gone`: Ona no longer lists the box, so a lookup by name finds nothing.
  * `unpushed`: the box has unpushed commits, so a remove is refused.
  * `reopenDuringMove`: a tunnel opens while an adopted remove's move-aside script runs.
  * `rootExits`: the `~/.bb-machines` script's exit codes in turn, the last one repeated.
@@ -31,6 +32,7 @@ export type Setup = {
   found: OnaEnvironment;
   phases?: (string | OnaEnvironment | Error | null)[];
   lookupFails?: boolean;
+  gone?: boolean;
   unpushed?: boolean;
   reopenDuringMove?: boolean;
   rootExits?: number[];
@@ -51,11 +53,15 @@ export const connectCalls = gated("ssh", "curl", "preflight", "bootstrap");
 /** The next entry in turn, the last one repeated. */
 const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
 
-/** The provider in a fake host. `calls` logs Ona lookups, starts and every SSH command connect runs; `tunnels`, tunnel opens and closes. */
+/**
+ * The provider in a fake host. `calls` logs Ona lookups, starts, stops, deletes and every SSH command connect runs;
+ * `tunnels`, tunnel opens and closes.
+ */
 export function register({
   found,
   phases = [],
   lookupFails,
+  gone,
   unpushed,
   reopenDuringMove,
   rootExits = [],
@@ -71,13 +77,15 @@ export function register({
   const tunnels: string[] = [];
   const open = new Map(tunnel ? [[found.id, tunnel]] : []);
   const forgotten: string[] = [];
+  const releasing = new Set<string>();
   // As the tunnel manager does: an ensure on an open tunnel changes nothing.
   const ensure = (envId: string) => {
     tunnels.push(`ensure ${envId}`);
     if (!open.has(envId)) open.set(envId, "connecting");
   };
   const ona = {
-    findEnvironment: async () => found,
+    // By name, as cleanup finds a created box by its key-derived name; an adopted box keeps its own.
+    findEnvironment: async (ref: string) => (gone || ref !== found.metadata.name ? null : found),
     getEnvironmentIfExists: async (_id: string, signal: AbortSignal) => {
       // As the real CLI call would: a loop that probes past an abort fails instead of spinning.
       signal.throwIfAborted();
@@ -96,6 +104,8 @@ export function register({
       return env;
     },
     start: async () => void calls.push("start"),
+    stop: async (envId: string) => void calls.push(`stop ${envId}`),
+    delete: async (envId: string) => void calls.push(`delete ${envId}`),
   } as unknown as OnaCli;
   const executor: MachineExecutor = {
     async exec({ command, onOutput }) {
@@ -157,12 +167,12 @@ export function register({
     waitForSharedHome: mountExits.length > 0,
     port: () => 1,
     markConnected: async () => {},
-    releasing: new Set(),
+    releasing,
     forgetBox: async (envId: string) => void forgotten.push(envId),
     executorFor: () => executor,
   });
   const provider = host.harness.registrations.machineProviders.get("ona")!;
-  return { provider, reconnect, calls, tunnels, open, forgotten };
+  return { provider, reconnect, calls, tunnels, open, forgotten, releasing };
 }
 
 /** `steps` collects the progress lines the user sees. */
