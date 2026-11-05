@@ -220,7 +220,8 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 - In SDK 0.6.109 a provider resource is written by the provider's own lifecycle
   hooks (`create`, `suspend`, `resume`, through `checkpoint` or the returned
   `resource`) and read with `bb.experimental_machines.getResource` (checked 2026-11-03).
-- bb 0.48.1's Settings > Machines "Add a machine" dialog lists no machine provider.
+- bb 0.48.1's Settings > Machines "Add a machine" dialog lists no machine provider. Its only
+  list is the connection method (`serverAccess.providers`, labelled "Connection method").
   Its only create call sends `machineProviderId` `manual` with `inputs` null
   (`AddMachineDialog-B_sUphZB.js`, line 1), so a plugin's machine provider and its
   inputs control never show there. Checked 2026-11-05 in the bb app's
@@ -232,7 +233,8 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   control registered for that machine provider and plugin, and renders it in a
   plugin slot with `value` and `onChange`. Checked 2026-11-05.
 - For a provider with an input schema and no control registered, the composer's value is the
-  saved value when there is one, otherwise `{}` when the provider accepts empty inputs,
+  saved value when there is one (see the restore bullet below), otherwise `{}` when the provider
+  accepts empty inputs,
   otherwise null. The blocked reason is `<name> needs its plugin's control.` when the
   provider does not accept empty inputs, and none otherwise (search
   `needs its plugin's control` in `NewThreadComposer-DjqGA_pM.js`, line 1). With a control
@@ -251,7 +253,10 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   Checked 2026-11-05.
 - bb 0.48.1's composer passes the saved `providerMachine.inputs` back to the control as its
   `value` when the saved selection names the same environment selection and machine provider
-  (search `selectionValue` in `NewThreadComposer-DjqGA_pM.js`, line 1). Checked 2026-11-05.
+  (search `selectionValue` in `NewThreadComposer-DjqGA_pM.js`, line 1), and the user has not
+  picked a different environment or machine in that composer session. That pick sets the
+  composer's `ot` flag, which the saved value's condition reads (search `st(!0)` in the same
+  file, line 1). Checked 2026-11-05.
 - bb 0.48.1 gives a control's blocked reason to the composer's prompt as `disabledReason` and
   disables the prompt (search `disabledReason:n??void 0` in the same file, line 1). Checked
   2026-11-05.

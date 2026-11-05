@@ -244,6 +244,7 @@ const projectInput =
 function OnaProjectField({ value, onChange }: PluginMachineProviderInputsProps) {
   const [text, setText] = useState(() => projectOfSavedInputs(value));
   const id = useId();
+  const helpId = `${id}-help`;
   useEffect(() => {
     onChange(projectInputsChange(text));
   }, [text, onChange]);
@@ -256,11 +257,11 @@ function OnaProjectField({ value, onChange }: PluginMachineProviderInputsProps) 
         id={id}
         value={text}
         placeholder="Project name or id"
-        aria-describedby={`${id}-help`}
+        aria-describedby={helpId}
         onChange={(event) => setText(event.target.value)}
         className={projectInput}
       />
-      <span id={`${id}-help`} className="text-subtle-foreground">
+      <span id={helpId} className="text-subtle-foreground">
         Blank uses the plugin's defaultProject setting
       </span>
     </div>
@@ -311,8 +312,7 @@ export default definePluginApp((app) => {
     title: "Devbox editor",
     component: DevboxEditor,
   });
-  // ONA_MACHINE_PROVIDER_ID equals PROVIDER_ID in src/provider.ts (a test checks it). app.tsx cannot
-  // import that module: it pulls in server code.
+  // src/provider.ts builds PROVIDER_ID from this constant; app.tsx cannot import that module (it pulls in server code).
   app.slots.experimental_machineProviderInputs({
     machineProviderId: ONA_MACHINE_PROVIDER_ID,
     component: OnaProjectField,

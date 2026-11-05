@@ -19,7 +19,6 @@ export function projectInputsChange(text: string): PluginMachineProviderInputsCh
 
 /** The project a saved value names, for the field to start from. Anything else reads as blank. */
 export function projectOfSavedInputs(value: unknown): string {
-  if (typeof value !== "object" || value === null) return "";
-  const project = (value as { project?: unknown }).project;
+  const project = (value as { project?: unknown } | null)?.project;
   return typeof project === "string" ? project : "";
 }
