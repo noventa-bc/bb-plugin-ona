@@ -103,6 +103,7 @@ export function register({
       return env;
     },
     start: async () => void calls.push("start"),
+    delete: async (envId: string) => void calls.push(`delete ${envId}`),
   } as unknown as OnaCli;
   const executor: MachineExecutor = {
     async exec({ command, onOutput }) {

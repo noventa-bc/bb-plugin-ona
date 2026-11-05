@@ -167,7 +167,7 @@ function notDeletingMessage(
   if (work.files > 0) found.push(`${work.files} uncommitted file(s)`);
   return (
     `Not deleting Ona environment ${name}: it has ${found.join(" and ")} ${where}. ` +
-    `Push or commit them, or delete the box in Ona with \`ona environment delete ${envId}\`, ` +
+    `Commit and push, or discard, the work, or delete the box in Ona with \`ona environment delete ${envId}\`, ` +
     "then run `bb machine retry-cleanup` again."
   );
 }
@@ -433,7 +433,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
           await disconnect(env.id);
           return { status: "failed", message: notDeletingMessage(env.metadata.name ?? env.id, env.id, work) };
         }
-        report.step(`Deleting orphaned Ona environment ${env.metadata.name}`);
+        report.step(`Deleting orphaned Ona environment ${env.metadata.name ?? env.id}`);
         await disconnect(env.id);
         await ona.delete(env.id, signal);
       }

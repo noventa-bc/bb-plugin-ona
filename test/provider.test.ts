@@ -188,12 +188,15 @@ test("a refused remove of a bb-created machine names its uncommitted files and k
   assert.deepEqual(forgotten, []);
 });
 
-test("an orphan cleanup keeps a created box that holds uncommitted files, and closes its tunnel", async () => {
+test("an orphan cleanup keeps a created box with unpushed commits and uncommitted files", async () => {
   const found = {
     ...box("RUNNING"),
-    status: { phase: "ENVIRONMENT_PHASE_RUNNING", content: { git: { branch: "feat", totalChangedFiles: 1 } } },
+    status: {
+      phase: "ENVIRONMENT_PHASE_RUNNING",
+      content: { git: { branch: "feat", totalUnpushedCommits: 2, totalChangedFiles: 1 } },
+    },
   };
-  const { provider, tunnels } = register({ found, tunnel: "up" });
+  const { provider, tunnels, calls } = register({ found, tunnel: "up" });
   const cleaned = await provider.reconcileCleanup({
     key: "key-1",
     report: lifecycle().report,
@@ -201,8 +204,12 @@ test("an orphan cleanup keeps a created box that holds uncommitted files, and cl
   });
   assert.equal(cleaned.status, "failed");
   if (cleaned.status !== "failed") return;
-  assert.match(cleaned.message, /1 uncommitted file\(s\) on branch feat/);
+  assert.match(cleaned.message, /2 unpushed commit\(s\) and 1 uncommitted file\(s\) on branch feat/);
   assert.deepEqual(tunnels, ["stop env-1"]);
+  assert.deepEqual(
+    calls.filter((call) => call.startsWith("delete")),
+    [],
+  );
 });
 
 // A relative legacy dataDir is kept: the scripts resolve it against $HOME on the box.

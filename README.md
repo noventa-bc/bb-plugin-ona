@@ -185,7 +185,7 @@ bb machine create --provider ona --inputs '{"mode":"adopt","environment":"<name-
 Create a new one from an Ona project. It gets a fun name such as
 `nimble-badger-ca1b`, and bb deletes it when you remove the machine. If Ona
 reports unpushed commits or uncommitted files on the box, the remove fails and
-the box is kept: push or commit them, or delete the box with
+the box is kept: commit and push, or discard, the work, or delete the box with
 `ona environment delete <id>`, then run `bb machine retry-cleanup`:
 
 ```sh
