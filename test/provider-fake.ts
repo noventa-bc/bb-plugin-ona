@@ -18,11 +18,11 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * `phases`: what `getEnvironmentIfExists` returns for `found`'s id, in turn, the last one repeated: a phase, a box,
  * null (a box Ona no longer has) or an Error (the lookup throws). Without phases it returns `found`; any other id
  * gets null. `findEnvironment` finds `found` only by its name.
- * `lookupFails`: `getEnvironmentIfExists` and `findEnvironment` throw.
+ * `lookupFails`: `findEnvironment` throws, and so does `getEnvironmentIfExists` for `found`'s id.
  * `unpushed`: the box has unpushed commits, so a remove is refused.
  * `reopenDuringMove`: a tunnel opens while an adopted remove's move-aside script runs.
  * `rootExits`: the `~/.bb-machines` script's exit codes in turn, the last one repeated.
- * `preflightExit`: the prerequisites check's exit code. Every other command exits 0.
+ * `preflightExit`: the prerequisites check's exit code. Every other command exits 0 unless an option here says otherwise.
  * `sshExits`, `mountExits`, `curlExits`: the SSH, shared-home and tunnel probes' exit codes in turn, the last one
  * repeated (default 0). A failed SSH probe prints "refused". Listing `mountExits` turns the shared-home wait on.
  * `codexHome`: the Codex home is set, so connect runs its `mkdir`.
@@ -53,7 +53,7 @@ export const connectCalls = gated("ssh", "curl", "preflight", "bootstrap");
 const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
 
 /**
- * The provider in a fake host. `calls` logs Ona lookups, starts, stops, deletes and every SSH command connect runs;
+ * The provider in a fake host. `calls` logs `get` lookups by id, starts, stops, deletes and every SSH command connect runs;
  * `tunnels`, tunnel opens and closes.
  */
 export function register({

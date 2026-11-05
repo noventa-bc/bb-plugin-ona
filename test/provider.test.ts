@@ -156,7 +156,7 @@ test("a resume that fails at preflight still clears the flag (fails if a failed 
 });
 
 // The lookup-throws test below guards the order: the tunnel closes after the move-aside, and on a failed lookup.
-test("remove of an adopted machine closes its tunnel", async () => {
+test("remove of an adopted machine closes its tunnel (fails if an adopted remove deletes or stops its box)", async () => {
   const { provider, calls, tunnels } = register({ found: box("RUNNING"), phases: ["RUNNING"], tunnel: "up" });
   const removed = await provider.remove({
     report: lifecycle().report,
@@ -169,7 +169,7 @@ test("remove of an adopted machine closes its tunnel", async () => {
   assert.deepEqual(calls, ["get RUNNING"]);
 });
 
-test("remove of an adopted machine whose Ona lookup throws still closes its tunnel", async () => {
+test("remove of an adopted machine whose Ona lookup throws still closes its tunnel (fails if it deletes or stops the box)", async () => {
   const { provider, calls, tunnels, forgotten } = register({ found: box("RUNNING"), lookupFails: true, tunnel: "up" });
   await assert.rejects(
     provider.remove({
@@ -200,7 +200,7 @@ test("remove of a bb-created machine whose Ona lookup throws still closes its tu
   assert.deepEqual(forgotten, [], "the keys stay for bb's retry");
 });
 
-test("remove of an adopted machine closes a tunnel that reopened during the move-aside", async () => {
+test("remove of an adopted machine closes a tunnel that reopened during the move-aside (fails if it deletes or stops the box)", async () => {
   const { provider, calls, open, tunnels } = register({
     found: box("RUNNING"),
     phases: ["RUNNING"],
@@ -274,7 +274,7 @@ test("reconcileCleanup deletes nothing and closes no tunnel when no box carries 
   assert.deepEqual(tunnels, []);
 });
 
-// Cleanup finds existing boxes only by this name, so a changed formula orphans every one of them.
+// A changed formula would orphan every box already made with it.
 test("envNameForKey keeps its formula, so existing boxes keep their names (fails if the formula changes)", () => {
   assert.equal(envNameForKey("key-1"), "bold-pancake-6978");
 });
