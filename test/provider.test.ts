@@ -428,7 +428,9 @@ test("wake waits for a STOPPING box that Ona settles as starting, then connects 
   assert.deepEqual(calls.slice(-connectCalls.length), connectCalls);
 });
 
-// Each wait alone could run 15 or 10 minutes; the shared 25-minute deadline has to end the loop instead.
+// 180 STARTING reads at 5 s fill the 15-minute start cap; 109 STOPPING reads then end the stop wait at the
+// STARTING read at 1435 s, 65 s before the deadline. Without the shared deadline, the last start wait would run
+// its full 15 minutes.
 test("wake's waits share one 25-minute deadline, so a box Ona keeps starting and stopping is refused at 25 minutes (fails if each wait gets its own cap)", async () => {
   const phases = [...Array<string>(180).fill("STARTING"), ...Array<string>(109).fill("STOPPING"), "STARTING"];
   const { wake, calls } = register({ found: box("STARTING"), phases });
@@ -441,7 +443,8 @@ test("wake's waits share one 25-minute deadline, so a box Ona keeps starting and
   for (let i = 0; i < 1_000 && refusedAt === 0; i++) await tick(5_000);
   await assert.rejects(attempt, /starting, so it was not started/);
   assert.ok(!calls.includes("start"), calls.join(", "));
-  assert.ok(refusedAt - began <= 25 * 60_000, `refused after ${(refusedAt - began) / 60_000} minutes`);
+  const elapsed = refusedAt - began;
+  assert.ok(elapsed >= 24.9 * 60_000 && elapsed <= 25 * 60_000, `refused after ${elapsed / 60_000} minutes`);
 });
 
 test("wake closes the tunnel it opened for a stopped box it starts, when the connect fails (fails if the tunnel stays open)", async () => {

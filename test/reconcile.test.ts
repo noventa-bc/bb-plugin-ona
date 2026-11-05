@@ -232,6 +232,7 @@ test("guard: one action per machine, cooldown after it", async () => {
   await advance(0);
   assert.equal(guard.busyWith("h1"), "heal-daemon");
   assert.equal(await guard.run("h1", "heal-daemon", "r", async () => {}), false);
+  assert.equal(await guard.run("h1", "heal-daemon", "r", async () => {}, { force: true }), false);
   finish();
   assert.equal(await first, true);
   assert.equal(guard.mayAct("h1"), false);

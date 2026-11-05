@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ALL, GIVE_UP_AFTER } from "../src/reconcile.ts";
 import type { ThreadRecord } from "../src/sync.ts";
-import { enableFakeClock, resetFakeClock } from "./fake-clock.ts";
+import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
 import { box, connectCalls, register as registerOna } from "./provider-fake.ts";
 import { HOUR, idle, NOW, world } from "./sync-fakes.ts";
 
@@ -73,8 +73,82 @@ test("a box Ona starts before the waiting thread's wake is connected, not starte
   assert.equal(record.error, undefined);
 });
 
-// Three failed passes in a row: the guard has given up on h1, so only a forced pass wakes it for the thread.
-test("a waiting thread's pass on a stopped box runs past the give-up, so the wake runs (fails if the pass honours the give-up)", async () => {
+// Another action gave up on h1. The record is set directly: a real pass would wait out the cooldown on the system
+// clock. Its failures do not hold a thread's pass, so the wake runs.
+test("a waiting thread's pass runs past another action's give-up, so the wake runs (fails if the pass honours the give-up)", async () => {
+  const ona = registerOna({ found: { ...box("STOPPED"), id: "env-h1" }, phases: ["STOPPED", "RUNNING"] });
+  const waiting: ThreadRecord = {
+    id: "t1",
+    status: "active",
+    updatedAt: NOW,
+    runtime: { displayStatus: "waiting-for-host" },
+  };
+  const { sync, calls, guard } = world([idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waiting] })], {
+    refuse: REFUSED,
+    wake: ona.wake,
+  });
+  guard.records.set("h1", {
+    action: "heal-daemon",
+    reason: "the daemon wasn't connected",
+    at: NOW,
+    error: "restart failed",
+    failures: GIVE_UP_AFTER,
+    quietUntil: NOW + HOUR,
+  });
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.deepEqual(calls, ["suspend h1"]);
+  assert.deepEqual(ona.calls.slice(-connectCalls.length), connectCalls);
+  const record = guard.records.get("h1")!;
+  assert.match(record.reason, /; started it for a waiting thread$/);
+  assert.equal(record.error, undefined);
+});
+
+// Passes that keep finding a thread waiting, with bb refusing the suspend and the wake failing every time.
+test("a waiting thread's passes make at most GIVE_UP_AFTER attempts, then the guard gives up (fails if every pass is forced)", async () => {
+  enableFakeClock();
+  try {
+    const waiting: ThreadRecord = {
+      id: "t1",
+      status: "active",
+      updatedAt: NOW,
+      runtime: { displayStatus: "waiting-for-host" },
+    };
+    const { sync, calls, guard } = world([idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waiting] })], {
+      refuse: REFUSED,
+      wake: async () => {
+        throw new Error("Ona would not start the box");
+      },
+    });
+    for (let pass = 0; pass < 10; pass++) {
+      await sync.reconcile(new Set(["h1"]), { wait: true });
+      await tick(2 * 60_000);
+    }
+    assert.equal(calls.filter((call) => call === "suspend h1").length, GIVE_UP_AFTER);
+    assert.equal(guard.records.get("h1")!.failures, GIVE_UP_AFTER);
+    const [row] = await sync.statusRows();
+    assert.match(row!.retry ?? "", /^gave up after 3 failures/);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+// No thread waits on the box, so the give-up holds the pass: nothing is suspended.
+test("a stopped box with no thread waiting makes no suspend once a pass has given up on it (fails if every suspend-observed is forced)", async () => {
+  const { sync, calls, guard } = world([idle("h1", { ona: "STOPPED", status: "disconnected" })], { refuse: REFUSED });
+  guard.records.set("h1", {
+    action: "suspend-observed",
+    reason: "Ona stopped the box",
+    at: NOW,
+    error: NOT_CONNECTED,
+    failures: GIVE_UP_AFTER,
+    quietUntil: NOW + HOUR,
+  });
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.ok(!calls.includes("suspend h1"), calls.join(", "));
+});
+
+// A give-up left by a pass with no thread waiting does not hold a thread that starts waiting after it.
+test("a thread that starts waiting after a no-thread pass gave up still gets its wake (fails if a failed observed stop holds the thread's pass)", async () => {
   const ona = registerOna({ found: { ...box("STOPPED"), id: "env-h1" }, phases: ["STOPPED", "RUNNING"] });
   const waiting: ThreadRecord = {
     id: "t1",
@@ -97,9 +171,36 @@ test("a waiting thread's pass on a stopped box runs past the give-up, so the wak
   await sync.reconcile(new Set(["h1"]), { wait: true });
   assert.deepEqual(calls, ["suspend h1"]);
   assert.deepEqual(ona.calls.slice(-connectCalls.length), connectCalls);
+  assert.match(guard.records.get("h1")!.reason, /; started it for a waiting thread$/);
+});
+
+// The thread's own failures count from one: the other action's count does not carry into them.
+test("a waiting thread's pass that fails after another action gave up counts its own failures from one (fails if the other count carries over)", async () => {
+  const waiting: ThreadRecord = {
+    id: "t1",
+    status: "active",
+    updatedAt: NOW,
+    runtime: { displayStatus: "waiting-for-host" },
+  };
+  const { sync, guard } = world([idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waiting] })], {
+    refuse: REFUSED,
+    wake: async () => {
+      throw new Error("Ona would not start the box");
+    },
+  });
+  guard.records.set("h1", {
+    action: "heal-daemon",
+    reason: "the daemon wasn't connected",
+    at: NOW,
+    error: "restart failed",
+    failures: GIVE_UP_AFTER,
+    quietUntil: NOW + HOUR,
+  });
+  await sync.reconcile(new Set(["h1"]), { wait: true });
   const record = guard.records.get("h1")!;
-  assert.match(record.reason, /; started it for a waiting thread$/);
-  assert.equal(record.error, undefined);
+  assert.equal(record.failures, 1);
+  assert.equal(record.threadWaiting, true);
+  assert.equal(record.error, "Ona would not start the box");
 });
 
 // Bug: the status row showed bb's raw suspend message, which doesn't say what the user should do.

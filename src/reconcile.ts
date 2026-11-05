@@ -217,14 +217,18 @@ export interface HostRecord {
   failures: number;
   /** No automatic action before this time. */
   quietUntil: number;
+  /** Set when the pass found a thread waiting: a failure then is that thread's own (see `HostGuard.run`). */
+  threadWaiting?: boolean;
 }
 
 /**
  * Rule 5: one action per machine at a time, a cooldown after each one,
  * exponential backoff after failures, and no more automatic retries after
- * GIVE_UP_AFTER failures in a row (`bb ona sync`, and a waiting thread's pass
- * on a stopped box, force one). Heavy actions (SSH probes, daemon restarts)
- * run at most `limit` at a time.
+ * GIVE_UP_AFTER failures in a row (`bb ona sync`, `bb ona reconnect` and `bb ona resume`
+ * force one; any pass that finds a thread waiting on a box Ona shows stopped or
+ * stopping skips what other passes left, and its own failures back off and give up
+ * as usual). Heavy actions (SSH probes, daemon restarts) run at most `limit` at a
+ * time.
  */
 export class HostGuard {
   private readonly busy = new Map<string, string>();
@@ -259,19 +263,23 @@ export class HostGuard {
 
   /**
    * Run `fn` as the machine's one action; a string it returns is appended to
-   * the recorded reason. Returns false (without running it)
-   * when the machine is busy, cooling down or given up, unless forced.
+   * the recorded reason. Returns false (without running it) when the machine is
+   * busy, cooling down or given up, unless forced: by `force`, or by `threadWaiting`
+   * unless the machine's last pass was that thread's own failure.
    */
   async run(
     hostId: string,
     action: string,
     reason: string,
     fn: () => Promise<string | void>,
-    options: { force?: boolean; heavy?: boolean; cooldown?: boolean } = {},
+    options: { force?: boolean; heavy?: boolean; cooldown?: boolean; threadWaiting?: boolean } = {},
   ): Promise<boolean> {
-    if (!this.mayAct(hostId, options.force)) return false;
-    this.busy.set(hostId, action);
     const previous = this.records.get(hostId);
+    // A pass that finds a thread waiting skips what other passes left; its own failure backs off like any action.
+    const ownFailure = previous?.threadWaiting === true && previous.failures > 0;
+    const force = options.force || (options.threadWaiting === true && !ownFailure);
+    if (!this.mayAct(hostId, force)) return false;
+    this.busy.set(hostId, action);
     try {
       if (options.heavy) await this.acquire();
       let outcome: string | void;
@@ -289,7 +297,7 @@ export class HostGuard {
         quietUntil: options.cooldown === false ? now : now + COOLDOWN_MS,
       });
     } catch (error) {
-      const failures = (options.force ? 0 : (previous?.failures ?? 0)) + 1;
+      const failures = (force ? 0 : (previous?.failures ?? 0)) + 1;
       const now = this.clock.now();
       this.records.set(hostId, {
         action,
@@ -298,6 +306,7 @@ export class HostGuard {
         error: error instanceof Error ? error.message : String(error),
         failures,
         quietUntil: now + Math.min(COOLDOWN_MS * 2 ** (failures - 1), MAX_BACKOFF_MS),
+        threadWaiting: options.threadWaiting,
       });
       throw error;
     } finally {

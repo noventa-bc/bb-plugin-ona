@@ -127,7 +127,7 @@ you asked for, so safety rule 1 does not gate it.
    is matched as given and resolved against `$HOME`), each as given and resolved
    through symlinks. A process listing that can't be trusted, a folder path with
    a newline in it, a failed SSH connection or a timeout counts as unknown, and
-   nothing is restarted. _Why: a restart kills running agent turns._ `bb ona sync`, `bb ona resume` and a waiting thread's pass on a stopped box force past cooldowns, backoff and the give-up only; `bb ona sync` still runs this check. `bb ona resume`, like `bb ona reconnect`, runs bb's start on the box and does not run the daemon check.
+   nothing is restarted. _Why: a restart kills running agent turns._ Four callers force the guard, skipping the cooldown, backoff and give-up: `bb ona sync`, `bb ona reconnect`, `bb ona resume`, and any pass that finds a thread waiting on a box Ona shows stopped or stopping. The first three skip them outright, and `bb ona sync` still runs this check. The thread's pass skips only what other passes left: its own failures back off and give up as usual (rule 5: the third failure in a row stops automatic tries). `bb ona resume`, like `bb ona reconnect`, runs bb's start on the box and does not run the daemon check.
 4. **Unknown is not gone.** A failed or empty `ona environment list` changes
    nothing, and "missing" needs two listings in a row. A lookup by id
    (`ona environment get`) that fails is unknown too; only Ona saying the id
@@ -144,7 +144,7 @@ you asked for, so safety rule 1 does not gate it.
 - **When the plugin starts** (load, reload, bb restart). This check is what reopens the tunnels.
 - **Right away** when a thread is waiting for an Ona machine. A running box only, except
   a box Ona shows stopped that a waiting thread needs: bb resumes it, or starts it when bb's suspend was refused (the stopped rows
-  above; [decision 0002](decisions/0002-repairs-never-start-or-stop.md)). That pass forces: it skips cooldowns, backoff and the give-up (rule 3).
+  above; [decision 0002](decisions/0002-repairs-never-start-or-stop.md)). Any pass that finds a thread waiting on a box Ona shows stopped or stopping skips only the cooldown, backoff and give-up that other passes left (rule 3); its own failures back off and give up as usual.
 - **Workspace work** (bb sets up, tears down, retries or retires a workspace) is read by the
   check of its own machine (the check 46 s after a disconnect, or the realtime
   reconnect's pass 2 s later), and by the 2-minute pass at the latest. A failed teardown
