@@ -185,35 +185,28 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
   }
 
   async function ensureRunning(env: OnaEnvironment, report: PluginMachineProviderProgress, signal: AbortSignal) {
+    // Ona's own starts and stops finish first, one wait at a time, each judged on the read it settles on: a box that
+    // starts or stops again while it is waited for is waited for again. A running box needs no start.
+    while (!isRunning(env) && (isStarting(env) || env.status?.phase === "ENVIRONMENT_PHASE_STOPPING")) {
+      const verb = isStarting(env) ? "starting" : "stopping";
+      report.step(`Waiting for Ona to finish ${verb} ${env.metadata.name ?? env.id}`);
+      const settled = await pollUntil(
+        async () => {
+          const current = await ona.getEnvironmentIfExists(env.id, signal);
+          if (!current) throw new Error(`Ona environment ${env.metadata.name ?? env.id} disappeared while ${verb}.`);
+          const stillWaiting =
+            verb === "starting" ? isStarting(current) : current.status?.phase === "ENVIRONMENT_PHASE_STOPPING";
+          return stillWaiting ? undefined : current;
+        },
+        { deadlineMs: (verb === "starting" ? 15 : 10) * 60_000, intervalMs: 5_000, signal },
+      );
+      // A wait that runs out leaves the box as the last read showed it: judged below.
+      if (!settled) break;
+      env = settled;
+    }
     if (isRunning(env)) return;
-    // Someone (Ona UI, CLI) is already starting it: wait instead of starting it again.
-    if (isStarting(env)) {
-      report.step(`Waiting for Ona to finish starting ${env.metadata.name ?? env.id}`);
-      const settled = await pollUntil(
-        async () => {
-          const current = await ona.getEnvironmentIfExists(env.id, signal);
-          if (!current) throw new Error(`Ona environment ${env.metadata.name ?? env.id} disappeared while starting.`);
-          return isStarting(current) ? undefined : current;
-        },
-        { deadlineMs: 15 * 60_000, intervalMs: 5_000, signal },
-      );
-      if (settled && isRunning(settled)) return;
-      if (settled) env = settled;
-    }
-    // Ona refuses to start an environment that is still stopping; let it finish first, then judge the box it settles on.
-    if (env.status?.phase === "ENVIRONMENT_PHASE_STOPPING") {
-      report.step(`Waiting for Ona to finish stopping ${env.metadata.name ?? env.id}`);
-      const settled = await pollUntil(
-        async () => {
-          const current = await ona.getEnvironmentIfExists(env.id, signal);
-          if (!current) throw new Error(`Ona environment ${env.metadata.name ?? env.id} disappeared while stopping.`);
-          return current.status?.phase !== "ENVIRONMENT_PHASE_STOPPING" ? current : undefined;
-        },
-        { deadlineMs: 10 * 60_000, intervalMs: 5_000, signal },
-      );
-      if (settled) env = settled;
-    }
-    // Only a box the last read shows stopped is started: a deleting, deleted or failed box is refused (docs/sync.md rule 1).
+    // Only a box the last read shows stopped or stopping is started (a stop wait that runs out still reaches the start,
+    // which Ona refuses, as on main). A deleting, deleted or failed box is refused (docs/sync.md rule 1).
     const phase = env.status?.phase ?? "";
     if (!STOPPED.has(phase)) {
       throw new Error(`Ona shows ${env.metadata.name ?? env.id} ${short(phase || "unknown")}, so it was not started.`);
@@ -301,7 +294,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
   }
 
   /**
-   * connect() for a machine bb doesn't show active yet (create, resume, and a wake that starts the box). An open
+   * connect() for a machine bb doesn't show active yet (create, resume); a wake that starts its box comes here too, with
+   * bb showing the machine active. An open
    * tunnel keeps the box awake (decision 0003), so a failure closes the box's tunnel. A wake of a running box calls
    * connect() instead, so its tunnel stays open.
    */
@@ -488,7 +482,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       // The stored name goes stale after `bb ona rename`; only a lifecycle hook can store the current one.
       const current = { ...owned, envName: nameOf(env, owned) };
       await checkpoint(current);
-      // bootstrap with the creation key starts the already-enrolled daemon and leaves a matching live one alone.
+      // bootstrap with the creation key starts, or re-enrolls, the daemon.
       await connectOrClose(current, report, signal, !isRunning(env));
       return { resource: current };
     },

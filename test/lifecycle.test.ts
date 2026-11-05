@@ -204,8 +204,35 @@ test("a read that throws when called surfaces at once, not after the deadline (f
       () => {
         throw new TypeError("hosts.get is not a function");
       },
-      { intervalMs: 1, deadlineMs: 60_000 },
+      { intervalMs: 1, deadlineMs: 50 },
     ),
-    /hosts\.get is not a function/,
+    { name: "TypeError", message: "hosts.get is not a function" },
+  );
+});
+
+test("a later read that answers clears the remembered read error, so the deadline names no stale error (fails if the old error is kept)", async () => {
+  let reads = 0;
+  await assert.rejects(
+    settledLifecycle(
+      async () => {
+        reads++;
+        if (reads === 1) throw new Error("bb is down");
+        return { lifecycle: { phase: "suspending", message: null } };
+      },
+      { intervalMs: 1, deadlineMs: 20 },
+    ),
+    { name: "Error", message: "bb is still suspending the machine" },
+  );
+});
+
+test("a settle whose reads fail with no message says so after the colon (fails if the message is left empty)", async () => {
+  await assert.rejects(
+    settledLifecycle(
+      async () => {
+        throw new Error("");
+      },
+      { intervalMs: 1, deadlineMs: 5 },
+    ),
+    /could not be read: no detail$/,
   );
 });

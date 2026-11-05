@@ -25,7 +25,7 @@ export default tseslint.config(
       "@typescript-eslint/prefer-promise-reject-errors": "error",
       "@typescript-eslint/only-throw-error": "error",
       "@typescript-eslint/switch-exhaustiveness-check": "error",
-      // A `return promise` inside try skips its catch: the round-2 resume case did that. Awaited inside a try, not elsewhere.
+      // A `return promise` inside try skips its catch, so the rule wants `return await` there and nowhere else.
       "@typescript-eslint/return-await": ["error", "in-try-catch"],
       "max-lines": ["error", { max: 500, skipBlankLines: true, skipComments: true }],
       "no-restricted-syntax": [

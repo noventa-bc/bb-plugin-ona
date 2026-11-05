@@ -120,7 +120,7 @@ export async function settledLifecycle(
         failure.message = undefined;
         return host.lifecycle.phase !== "suspending" ? host : undefined;
       } catch (error: unknown) {
-        failure.message = error instanceof Error ? error.message : String(error);
+        failure.message = (error instanceof Error ? error.message : String(error)) || "no detail";
         return undefined;
       }
     },

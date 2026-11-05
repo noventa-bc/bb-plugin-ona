@@ -411,3 +411,18 @@ test("wake refuses a STOPPING box that Ona settles as deleting, and starts nothi
   );
   assert.ok(!calls.includes("start"), calls.join(", "));
 });
+
+// A box Ona is stopping can be started by someone else while the stop finishes: wake must connect it, not refuse it.
+test("wake connects a STOPPING box that Ona settles as running, and does not start it (fails if the stopped check runs before the running check)", async () => {
+  const { wake, calls } = register({ found: box("STOPPING"), phases: ["STOPPING", "RUNNING"] });
+  await wake(adoptedResource, lifecycle().report, new AbortController().signal);
+  assert.ok(!calls.includes("start"), calls.join(", "));
+  assert.deepEqual(calls.slice(-connectCalls.length), connectCalls);
+});
+
+test("wake waits for a STOPPING box that Ona settles as starting, then connects it without starting it (fails if the stopped check refuses the starting box)", async () => {
+  const { wake, calls } = register({ found: box("STOPPING"), phases: ["STOPPING", "STARTING", "RUNNING"] });
+  await wake(adoptedResource, lifecycle().report, new AbortController().signal);
+  assert.ok(!calls.includes("start"), calls.join(", "));
+  assert.deepEqual(calls.slice(-connectCalls.length), connectCalls);
+});
