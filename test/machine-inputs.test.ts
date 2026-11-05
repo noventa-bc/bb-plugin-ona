@@ -19,10 +19,10 @@ test("a refused name's reason quotes ONA_NAME_MESSAGE", () => {
 });
 
 test("the name rule: 1 to 80 characters, a letter or digit first, then letters, digits, '.', '_' or '-'", () => {
-  for (const name of ["a".repeat(80), "a_b.c-1"]) {
+  for (const name of ["a".repeat(80), "a_b.c-1", "a", "1app", "App-1", "myApp"]) {
     assert.equal(projectInputsChange(name).status, "ready", `expected ready: ${name}`);
   }
-  for (const name of ["a".repeat(81), "-rf", "_a", ".a", "a;b", "a b", "a/b"]) {
+  for (const name of ["a".repeat(81), "-rf", "_a", ".a", "a;b", "a b", "a/b", "a\nb"]) {
     assert.equal(projectInputsChange(name).status, "blocked", `expected blocked: ${name}`);
   }
   // Two calls in a row on purpose: with a global flag, the pattern keeps lastIndex between calls.

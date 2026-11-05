@@ -221,7 +221,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   hooks (`create`, `suspend`, `resume`, through `checkpoint` or the returned
   `resource`) and read with `bb.experimental_machines.getResource` (checked 2026-11-03).
 - bb 0.48.1's Settings > Machines "Add a machine" dialog lists no machine provider. Its only
-  list is the connection method (`serverAccess.providers`, labelled "Connection method").
+  provider list is the connection method (`serverAccess.providers`, labelled "Connection method").
   Its only create call sends `machineProviderId` `manual` with `inputs` null
   (`AddMachineDialog-B_sUphZB.js`, line 1), so a plugin's machine provider and its
   inputs control never show there. Checked 2026-11-05 in the bb app's
@@ -252,11 +252,14 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   `invalid_request`), and calls the plugin's `validate({inputs})` before `create`.
   Checked 2026-11-05.
 - bb 0.48.1's composer passes the saved `providerMachine.inputs` back to the control as its
-  `value` when the saved selection names the same environment selection and machine provider
-  (search `selectionValue` in `NewThreadComposer-DjqGA_pM.js`, line 1), and the user has not
-  picked a different environment or machine in that composer session. That pick sets the
-  composer's `ot` flag, which the saved value's condition reads (search `st(!0)` in the same
-  file, line 1). Checked 2026-11-05.
+  `value` only when the saved selection names the same environment selection and machine
+  provider, and the saved `providerMachine.type` is `new` (search `selectionValue` in
+  `NewThreadComposer-DjqGA_pM.js`, line 1). The flag also resets to false when the composer's
+  session key changes: `J`, a JSON key over the project and the new-thread settings, no longer
+  equals the state `nt` (the `nt!==J&&` branch, search `nt!==J`). The user's pick of a
+  different environment or machine in that composer session sets the composer's `ot` flag
+  (`st(!0)` in the same file, line 1). The machine restore reads the flag in its `!ot&&`
+  condition; the same file has three `!ot&&` conditions (search `!ot&&`). Checked 2026-11-05.
 - bb 0.48.1 gives a control's blocked reason to the composer's prompt as `disabledReason` and
   disables the prompt (search `disabledReason:n??void 0` in the same file, line 1). Checked
   2026-11-05.
