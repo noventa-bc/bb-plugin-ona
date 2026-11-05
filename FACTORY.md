@@ -109,7 +109,11 @@ those and the "skipped or not checked" lines ponytail ends with.
    orchestrator's own verdict), `code-review` (its recipe followed by hand:
    the Skill itself starts many agents) and `/ponytail-review branch`, each
    on the branch against `origin/main`, in its own agent, briefed with the
-   builder's worktree path (a fresh agent starts in the main checkout), and
+   builder's worktree path (a fresh agent starts in the main checkout) and
+   told to run tests and mutants in a scratch folder of its own under the
+   session scratchpad (`git archive <sha>` into a new folder, which has no
+   history, so git commands stay `git -C <worktree>`; link `node_modules`
+   only when the folder has none), and
    sends blocking findings back to the builder. Code, here, is anything but
    comments, lint messages, Markdown, a lockfile, a `package.json` override
    and the version bump (step 7); the ten numbered Code Review Rules in
@@ -139,7 +143,9 @@ those and the "skipped or not checked" lines ponytail ends with.
    behaviour beyond that is its own item.
    Code converges in three rounds; from round 4 on, the orchestrator opens
    the PR once nothing blocks and the passes it gets have run on the code as
-   it stands.
+   it stands. Before a round swaps or retitles a test, run the old test
+   against the mutant its title names: a title can be right for a clause the
+   round misread.
 
 7. **Open the PR.** The title is a Conventional Commit (`type(scope):
 subject`, see `AGENTS.md`): the squash merge makes it the commit on
@@ -250,3 +256,8 @@ Rules the owner gave that no section above states. Checked 2026-11-02.
 - The owner may stop the session when the weekly usage limit nears 99%. The
   orchestrator cannot see the limit; when the owner says to halt, finish the
   step in hand, write the handoffs and report, and open no new PR.
+- Every feature the CLI has gets a UI control too, unless the owner says it is
+  not needed; the orchestrator asks the owner where it goes (checked 2026-11-05).
+- A commit subject or PR title is at most 100 characters (`scripts/conventional.sh`
+  has the rule; `.githooks/commit-msg` refuses longer, after the pre-commit
+  check has run): measure it first.
