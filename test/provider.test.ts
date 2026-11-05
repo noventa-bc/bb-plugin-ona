@@ -114,7 +114,7 @@ test("a resume clears a no-stop flag a suspend left, so the next suspend stops t
 
 // The lookup-throws test below guards the order: the tunnel closes after the move-aside, and on a failed lookup.
 test("remove of an adopted machine closes its tunnel", async () => {
-  const { provider, tunnels } = register({ found: box("RUNNING"), phases: ["RUNNING"], tunnel: "up" });
+  const { provider, calls, tunnels } = register({ found: box("RUNNING"), phases: ["RUNNING"], tunnel: "up" });
   const removed = await provider.remove({
     report: lifecycle().report,
     hostId: "host-1",
@@ -123,6 +123,10 @@ test("remove of an adopted machine closes its tunnel", async () => {
   });
   assert.equal(removed.status, "removed");
   assert.deepEqual(tunnels, ["stop env-1"]);
+  assert.deepEqual(
+    calls.filter((call) => call.startsWith("delete")),
+    [],
+  );
 });
 
 test("remove of an adopted machine whose Ona lookup throws still closes its tunnel", async () => {
@@ -156,7 +160,7 @@ test("remove of a bb-created machine whose Ona lookup throws still closes its tu
 });
 
 test("remove of an adopted machine closes a tunnel that reopened during the move-aside", async () => {
-  const { provider, open, tunnels } = register({
+  const { provider, calls, open, tunnels } = register({
     found: box("RUNNING"),
     phases: ["RUNNING"],
     tunnel: "up",
@@ -170,6 +174,10 @@ test("remove of an adopted machine closes a tunnel that reopened during the move
   });
   assert.equal(open.get("env-1") ?? "off", "off");
   assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"]);
+  assert.deepEqual(
+    calls.filter((call) => call.startsWith("delete")),
+    [],
+  );
   assert.equal(removed.status, "removed");
 });
 
@@ -186,7 +194,7 @@ test("a refused remove of a bb-created machine closes its tunnel and keeps its k
   assert.deepEqual(forgotten, []);
 });
 
-// Cleanup finds a box by the name its key gives it: a created box carries that name, an adopted box keeps its own.
+// Cleanup looks a box up by the name its key gives it.
 test("reconcileCleanup deletes the box its key names and closes its tunnel (fails if an orphaned box is kept)", async () => {
   const created = { ...box("RUNNING"), metadata: { name: envNameForKey("key-1") } };
   const { provider, calls, tunnels } = register({ found: created });
@@ -200,20 +208,7 @@ test("reconcileCleanup deletes the box its key names and closes its tunnel (fail
   assert.deepEqual(tunnels, ["stop env-1"]);
 });
 
-test("reconcileCleanup of a box Ona no longer lists deletes nothing and closes no tunnel (fails if a missing box throws)", async () => {
-  const created = { ...box("RUNNING"), metadata: { name: envNameForKey("key-1") } };
-  const { provider, calls, tunnels } = register({ found: created, gone: true });
-  const cleaned = await provider.reconcileCleanup({
-    key: "key-1",
-    report: lifecycle().report,
-    signal: new AbortController().signal,
-  });
-  assert.equal(cleaned.status, "removed");
-  assert.deepEqual(calls, []);
-  assert.deepEqual(tunnels, []);
-});
-
-test("reconcileCleanup of an adopted box's key never deletes the box (fails if the lookup reaches the adopted box)", async () => {
+test("reconcileCleanup looks a box up by the name its key gives it, so a box under its own name is kept (fails if the lookup reaches it by id)", async () => {
   const { provider, calls, tunnels } = register({ found: box("RUNNING") });
   const cleaned = await provider.reconcileCleanup({
     key: adoptedResource.key,

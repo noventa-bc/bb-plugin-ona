@@ -16,9 +16,9 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
 
 /**
  * `phases`: what each Ona lookup returns in turn, the last one repeated: a phase, a box, null (a box Ona no
- * longer has) or an Error (the lookup throws). Without phases, every lookup returns `found`.
+ * longer has) or an Error (the lookup throws). Without phases, every `getEnvironmentIfExists` lookup returns
+ * `found`; `findEnvironment` returns it only when the ref is its name.
  * `lookupFails`: every Ona lookup throws.
- * `gone`: Ona no longer lists the box, so a lookup by name finds nothing.
  * `unpushed`: the box has unpushed commits, so a remove is refused.
  * `reopenDuringMove`: a tunnel opens while an adopted remove's move-aside script runs.
  * `rootExits`: the `~/.bb-machines` script's exit codes in turn, the last one repeated.
@@ -32,7 +32,6 @@ export type Setup = {
   found: OnaEnvironment;
   phases?: (string | OnaEnvironment | Error | null)[];
   lookupFails?: boolean;
-  gone?: boolean;
   unpushed?: boolean;
   reopenDuringMove?: boolean;
   rootExits?: number[];
@@ -61,7 +60,6 @@ export function register({
   found,
   phases = [],
   lookupFails,
-  gone,
   unpushed,
   reopenDuringMove,
   rootExits = [],
@@ -85,7 +83,7 @@ export function register({
   };
   const ona = {
     // By name, as cleanup finds a created box by its key-derived name; an adopted box keeps its own.
-    findEnvironment: async (ref: string) => (gone || ref !== found.metadata.name ? null : found),
+    findEnvironment: async (ref: string) => (ref !== found.metadata.name ? null : found),
     getEnvironmentIfExists: async (_id: string, signal: AbortSignal) => {
       // As the real CLI call would: a loop that probes past an abort fails instead of spinning.
       signal.throwIfAborted();
