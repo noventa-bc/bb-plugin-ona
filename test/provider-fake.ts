@@ -15,13 +15,16 @@ export const box = (phase: string): OnaEnvironment => ({
 export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, key: "key-1" };
 
 /**
- * `phases`: what each Ona lookup returns in turn, the last one repeated: a phase, a box, null (a box Ona no
- * longer has) or an Error (the lookup throws). Without phases, every lookup returns `found`.
- * `lookupFails`: every Ona lookup throws.
+ * `phases`: what `getEnvironmentIfExists` returns for `found`'s id, in turn, the last one repeated: a phase, a box,
+ * null (a box Ona no longer has) or an Error (the lookup throws). Without phases it returns `found`; any other id
+ * gets null. `findEnvironment` finds `found` only by its name.
+ * `lookupFails`: `findEnvironment` throws, and so does `getEnvironmentIfExists` for `found`'s id.
  * `unpushed`: the box has unpushed commits, so a remove is refused.
+ * `uncommitted`: the box has uncommitted files and no unpushed commits, so a remove is refused.
  * `reopenDuringMove`: a tunnel opens while an adopted remove's move-aside script runs.
  * `rootExits`: the `~/.bb-machines` script's exit codes in turn, the last one repeated.
- * `preflightExit`: the prerequisites check's exit code. Every other command exits 0.
+ * `preflightExit`: the prerequisites check's exit code. Every other command exits 0 unless an option here says
+ * otherwise.
  * `sshExits`, `mountExits`, `curlExits`: the SSH, shared-home and tunnel probes' exit codes in turn, the last one
  * repeated (default 0). A failed SSH probe prints "refused". Listing `mountExits` turns the shared-home wait on.
  * `codexHome`: the Codex home is set, so connect runs its `mkdir`.
@@ -32,6 +35,7 @@ export type Setup = {
   phases?: (string | OnaEnvironment | Error | null)[];
   lookupFails?: boolean;
   unpushed?: boolean;
+  uncommitted?: boolean;
   reopenDuringMove?: boolean;
   rootExits?: number[];
   rootOutput?: string;
@@ -51,12 +55,16 @@ export const connectCalls = gated("ssh", "curl", "preflight", "bootstrap");
 /** The next entry in turn, the last one repeated. */
 const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
 
-/** The provider in a fake host. `calls` logs Ona lookups, starts and every SSH command connect runs; `tunnels`, tunnel opens and closes. */
+/**
+ * The provider in a fake host. `calls` logs the `get` lookups by id that reach Ona, starts, stops, deletes and every
+ * SSH command connect runs; `tunnels`, the ensure and stop calls.
+ */
 export function register({
   found,
   phases = [],
   lookupFails,
   unpushed,
+  uncommitted,
   reopenDuringMove,
   rootExits = [],
   rootOutput = "",
@@ -71,19 +79,33 @@ export function register({
   const tunnels: string[] = [];
   const open = new Map(tunnel ? [[found.id, tunnel]] : []);
   const forgotten: string[] = [];
+  const releasing = new Set<string>();
   // As the tunnel manager does: an ensure on an open tunnel changes nothing.
   const ensure = (envId: string) => {
     tunnels.push(`ensure ${envId}`);
     if (!open.has(envId)) open.set(envId, "connecting");
   };
   const ona = {
-    findEnvironment: async () => found,
-    getEnvironmentIfExists: async (_id: string, signal: AbortSignal) => {
+    // By name, as cleanup finds a created box by its key-derived name; an adopted box keeps its own.
+    findEnvironment: async (ref: string) => {
+      if (lookupFails) throw new Error("Ona is unreachable");
+      return ref !== found.metadata.name ? null : found;
+    },
+    getEnvironmentIfExists: async (id: string, signal: AbortSignal) => {
+      if (id !== found.id) return null;
       // As the real CLI call would: a loop that probes past an abort fails instead of spinning.
       signal.throwIfAborted();
-      if (lookupFails) throw new Error("Ona is unreachable");
-      if (unpushed) {
-        const git = { totalUnpushedCommits: 2, branch: "feat" };
+      if (lookupFails) {
+        calls.push("get failed");
+        throw new Error("Ona is unreachable");
+      }
+      if (unpushed || uncommitted) {
+        const git = {
+          totalUnpushedCommits: unpushed ? 2 : 0,
+          totalChangedFiles: uncommitted ? 1 : 0,
+          branch: "feat",
+        };
+        calls.push("get RUNNING");
         return { ...box("RUNNING"), status: { phase: "ENVIRONMENT_PHASE_RUNNING", content: { git } } };
       }
       const answer = phases.length ? next(phases)! : found;
@@ -96,6 +118,8 @@ export function register({
       return env;
     },
     start: async () => void calls.push("start"),
+    stop: async (envId: string) => void calls.push(`stop ${envId}`),
+    delete: async (envId: string) => void calls.push(`delete ${envId}`),
   } as unknown as OnaCli;
   const executor: MachineExecutor = {
     async exec({ command, onOutput }) {
@@ -157,12 +181,12 @@ export function register({
     waitForSharedHome: mountExits.length > 0,
     port: () => 1,
     markConnected: async () => {},
-    releasing: new Set(),
+    releasing,
     forgetBox: async (envId: string) => void forgotten.push(envId),
     executorFor: () => executor,
   });
   const provider = host.harness.registrations.machineProviders.get("ona")!;
-  return { provider, reconnect, calls, tunnels, open, forgotten };
+  return { provider, reconnect, calls, tunnels, open, forgotten, releasing };
 }
 
 /** `steps` collects the progress lines the user sees. */

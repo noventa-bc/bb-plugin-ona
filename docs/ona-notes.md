@@ -34,6 +34,10 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
     `totalUnpushedCommits` (a number) and `unpushedCommits` (one string per
     commit). Absent when the box has no git content (checked 2026-10-30 on a
     live listing).
+  - `status.content.git`: `totalChangedFiles` (a number) and `changedFiles`
+    (one path per entry) for uncommitted changes. A stopped box shows them in
+    both `ona environment list -o json` and `ona environment get <id> -o json`;
+    a clean box has no `totalChangedFiles` at all (checked 2026-11-05).
   - `status.devcontainer.phase`
   - `status.environmentUrls.*`
   - `metadata.lastStartedAt`: RFC 3339 with microseconds, on a running and a

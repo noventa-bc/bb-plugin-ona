@@ -209,7 +209,9 @@ service. The `bb ona` commands are in `src/commands.ts`.
 The shared listing is `OnaSnapshot` in `src/ona.ts`. Removing an Ona machine
 drops the box's stored keys (`forgetBox()` in `src/sync.ts`, called from the provider's `remove()`).
 `remove()` refuses to delete a created box that Ona reports unpushed commits
-on (`unpushedWork()` in `src/ona.ts`), before it deletes or forgets anything.
+or uncommitted files on (`unpushedWork()` in `src/ona.ts`), before it deletes
+or forgets anything. `reconcileCleanup()` in `src/provider.ts` refuses the same
+way for an orphaned created box.
 Every `remove()` path closes the box's tunnel (`remove` in `src/provider.ts`).
 For an adopted box, `remove()` runs `MOVE_MACHINE_ASIDE` (`src/provider.ts`)
 over SSH, only when `ona environment get`, made just before, says the box is

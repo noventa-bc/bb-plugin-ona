@@ -1,9 +1,9 @@
-// The provider's bootstrap and remove paths, driven through `create` (adopt mode), `resume` and `remove` in the
-// fake host of ./provider-fake.ts. setTimeout and Date are mocked, so each tick is one poll interval and the
-// tests are instant.
+// The provider's bootstrap, suspend, resume, remove and cleanup paths, driven through `create` (adopt mode),
+// `suspend`, `resume`, `remove` and `reconcileCleanup` in the fake host of ./provider-fake.ts. setTimeout and Date
+// are mocked, so each tick is one poll interval and the tests are instant.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { resourceSchema } from "../src/provider.ts";
+import { envNameForKey, resourceSchema } from "../src/provider.ts";
 import { tick, useFakeClock } from "./fake-clock.ts";
 import { adoptedResource, box, connectCalls, gated, lifecycle, register, resume, start } from "./provider-fake.ts";
 
@@ -100,9 +100,64 @@ test("a resume that fails with the box's tunnel already open, connecting or up, 
   }
 });
 
+// sync sets the no-stop flag before bb's suspend. If that suspend leaves it set, the user's next suspend
+// must still stop the box.
+test("a resume clears a no-stop flag a suspend left, so the next suspend stops the box (fails if the flag outlives the resume)", async () => {
+  const { provider, releasing, calls } = register({ found: box("RUNNING") });
+  releasing.add("env-1");
+  const signal = new AbortController().signal;
+  await provider.resume!({ ...lifecycle(), hostId: "host-1", resource: adoptedResource, signal });
+  const before = calls.length;
+  await provider.suspend!({ ...lifecycle(), hostId: "host-1", resource: adoptedResource, signal });
+  assert.deepEqual(calls.slice(before), ["get RUNNING", "stop env-1"]);
+});
+
+// sync sets the flag before bb's suspend, so a flagged suspend only closes the tunnel.
+test("a flagged suspend only closes the tunnel and consumes the flag (fails if it stops the box or keeps the flag)", async () => {
+  const { provider, calls, releasing, tunnels } = register({ found: box("RUNNING"), tunnel: "up" });
+  releasing.add("env-1");
+  await provider.suspend!({
+    ...lifecycle(),
+    hostId: "host-1",
+    resource: adoptedResource,
+    signal: new AbortController().signal,
+  });
+  assert.deepEqual(tunnels, ["stop env-1"]);
+  assert.deepEqual(calls, []);
+  assert.equal(releasing.size, 0);
+});
+
+test("a resume clears only its own box's flag (fails if another box's flag is wiped)", async () => {
+  const { provider, releasing } = register({ found: box("RUNNING") });
+  releasing.add("env-1");
+  releasing.add("env-2");
+  await provider.resume!({
+    ...lifecycle(),
+    hostId: "host-1",
+    resource: adoptedResource,
+    signal: new AbortController().signal,
+  });
+  assert.deepEqual([...releasing], ["env-2"]);
+});
+
+test("a resume that fails at preflight still clears the flag (fails if a failed resume keeps it)", async () => {
+  const { provider, releasing } = register({ found: box("RUNNING"), preflightExit: 3 });
+  releasing.add("env-1");
+  await assert.rejects(
+    provider.resume!({
+      ...lifecycle(),
+      hostId: "host-1",
+      resource: adoptedResource,
+      signal: new AbortController().signal,
+    }),
+    /^Error: Devbox is missing bb prerequisites: missing: node$/,
+  );
+  assert.equal(releasing.size, 0);
+});
+
 // The lookup-throws test below guards the order: the tunnel closes after the move-aside, and on a failed lookup.
-test("remove of an adopted machine closes its tunnel", async () => {
-  const { provider, tunnels } = register({ found: box("RUNNING"), phases: ["RUNNING"], tunnel: "up" });
+test("remove of an adopted machine closes its tunnel (fails if an adopted remove deletes or stops its box)", async () => {
+  const { provider, calls, tunnels } = register({ found: box("RUNNING"), phases: ["RUNNING"], tunnel: "up" });
   const removed = await provider.remove({
     report: lifecycle().report,
     hostId: "host-1",
@@ -111,10 +166,11 @@ test("remove of an adopted machine closes its tunnel", async () => {
   });
   assert.equal(removed.status, "removed");
   assert.deepEqual(tunnels, ["stop env-1"]);
+  assert.deepEqual(calls, ["get RUNNING"]);
 });
 
-test("remove of an adopted machine whose Ona lookup throws still closes its tunnel", async () => {
-  const { provider, tunnels, forgotten } = register({ found: box("RUNNING"), lookupFails: true, tunnel: "up" });
+test("remove of an adopted machine whose Ona lookup throws still closes its tunnel (fails if it deletes or stops the box)", async () => {
+  const { provider, calls, tunnels, forgotten } = register({ found: box("RUNNING"), lookupFails: true, tunnel: "up" });
   await assert.rejects(
     provider.remove({
       report: lifecycle().report,
@@ -126,6 +182,7 @@ test("remove of an adopted machine whose Ona lookup throws still closes its tunn
   );
   assert.deepEqual(tunnels, ["stop env-1"]);
   assert.deepEqual(forgotten, [], "the keys stay for bb's retry");
+  assert.deepEqual(calls, ["get failed"]);
 });
 
 test("remove of a bb-created machine whose Ona lookup throws still closes its tunnel", async () => {
@@ -143,8 +200,8 @@ test("remove of a bb-created machine whose Ona lookup throws still closes its tu
   assert.deepEqual(forgotten, [], "the keys stay for bb's retry");
 });
 
-test("remove of an adopted machine closes a tunnel that reopened during the move-aside", async () => {
-  const { provider, open, tunnels } = register({
+test("remove of an adopted machine closes a tunnel that reopened during the move-aside (fails if it deletes or stops the box)", async () => {
+  const { provider, calls, open, tunnels } = register({
     found: box("RUNNING"),
     phases: ["RUNNING"],
     tunnel: "up",
@@ -158,6 +215,7 @@ test("remove of an adopted machine closes a tunnel that reopened during the move
   });
   assert.equal(open.get("env-1") ?? "off", "off");
   assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"]);
+  assert.deepEqual(calls, ["get RUNNING"]);
   assert.equal(removed.status, "removed");
 });
 
@@ -172,6 +230,110 @@ test("a refused remove of a bb-created machine closes its tunnel and keeps its k
   assert.equal(removed.status, "failed");
   assert.deepEqual(tunnels, ["stop env-1"]);
   assert.deepEqual(forgotten, []);
+});
+
+// An adopted box keeps its own name, so the key-derived name never finds it.
+test("reconcileCleanup deletes the box its key names, running or stopped, and closes its tunnel (fails if a stopped orphan is kept)", async () => {
+  for (const phase of ["RUNNING", "STOPPED"]) {
+    const created = { ...box(phase), metadata: { name: envNameForKey("key-1") } };
+    const { provider, calls, tunnels } = register({ found: created });
+    const cleaned = await provider.reconcileCleanup({
+      key: "key-1",
+      report: lifecycle().report,
+      signal: new AbortController().signal,
+    });
+    assert.equal(cleaned.status, "removed", phase);
+    assert.deepEqual(calls, ["delete env-1"], phase);
+    assert.deepEqual(tunnels, ["stop env-1"], phase);
+  }
+});
+
+test("reconcileCleanup with a failed Ona listing rejects and deletes nothing (fails if an unknown listing counts as removed)", async () => {
+  const { provider, calls, tunnels } = register({ found: box("RUNNING"), lookupFails: true });
+  await assert.rejects(
+    provider.reconcileCleanup({
+      key: "key-1",
+      report: lifecycle().report,
+      signal: new AbortController().signal,
+    }),
+    /Ona is unreachable/,
+  );
+  assert.deepEqual(calls, []);
+  assert.deepEqual(tunnels, []);
+});
+
+test("reconcileCleanup deletes nothing and closes no tunnel when no box carries the key's name (fails if a name miss still deletes)", async () => {
+  const { provider, calls, tunnels } = register({ found: box("RUNNING") });
+  const cleaned = await provider.reconcileCleanup({
+    key: adoptedResource.key,
+    report: lifecycle().report,
+    signal: new AbortController().signal,
+  });
+  assert.equal(cleaned.status, "removed");
+  assert.deepEqual(calls, []);
+  assert.deepEqual(tunnels, []);
+});
+
+// A changed formula would orphan every box already made with it.
+test("envNameForKey keeps its formula, so existing boxes keep their names (fails if the formula changes)", () => {
+  assert.equal(envNameForKey("key-1"), "bold-pancake-6978");
+});
+
+test("a refused remove of a bb-created machine names its uncommitted files and keeps its keys", async () => {
+  const { provider, forgotten } = register({ found: box("RUNNING"), uncommitted: true });
+  const removed = await provider.remove({
+    report: lifecycle().report,
+    hostId: "host-1",
+    resource: { envId: "env-1", envName: "box", adopted: false, key: "key-1" },
+    signal: new AbortController().signal,
+  });
+  assert.equal(removed.status, "failed");
+  if (removed.status !== "failed") return;
+  assert.match(removed.message, /1 uncommitted file\(s\) on branch feat/);
+  assert.deepEqual(forgotten, []);
+});
+
+// The box an orphan cleanup finds by its key: named as envNameForKey gives it.
+const orphanBox = (git: { totalUnpushedCommits?: number; totalChangedFiles?: number }) => ({
+  ...box("RUNNING"),
+  metadata: { name: envNameForKey("key-1") },
+  status: { phase: "ENVIRONMENT_PHASE_RUNNING", content: { git: { branch: "feat", ...git } } },
+});
+
+test("an orphan cleanup keeps a created box with unpushed commits and uncommitted files", async () => {
+  const { provider, tunnels, calls } = register({
+    found: orphanBox({ totalUnpushedCommits: 2, totalChangedFiles: 1 }),
+    tunnel: "up",
+  });
+  const cleaned = await provider.reconcileCleanup({
+    key: "key-1",
+    report: lifecycle().report,
+    signal: new AbortController().signal,
+  });
+  assert.equal(cleaned.status, "failed");
+  if (cleaned.status !== "failed") return;
+  assert.match(cleaned.message, /2 unpushed commit\(s\) and 1 uncommitted file\(s\) on branch feat/);
+  assert.deepEqual(tunnels, ["stop env-1"]);
+  assert.deepEqual(
+    calls.filter((call) => call.startsWith("delete")),
+    [],
+  );
+});
+
+test("an orphan cleanup keeps a created box with uncommitted files and no unpushed commits", async () => {
+  const { provider, calls } = register({ found: orphanBox({ totalChangedFiles: 1 }) });
+  const cleaned = await provider.reconcileCleanup({
+    key: "key-1",
+    report: lifecycle().report,
+    signal: new AbortController().signal,
+  });
+  assert.equal(cleaned.status, "failed");
+  if (cleaned.status !== "failed") return;
+  assert.match(cleaned.message, /1 uncommitted file\(s\) on branch feat/);
+  assert.deepEqual(
+    calls.filter((call) => call.startsWith("delete")),
+    [],
+  );
 });
 
 // A relative legacy dataDir is kept: the scripts resolve it against $HOME on the box.
