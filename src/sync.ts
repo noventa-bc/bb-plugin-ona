@@ -28,6 +28,7 @@ import {
   type MachineView,
   type OnaView,
   type PassScheduler,
+  shownRunning,
 } from "./reconcile.ts";
 import { liveThreads, stuckThreads, threadStatuses, type LiveThreadsArgs, type ThreadState } from "./updates.ts";
 
@@ -366,7 +367,7 @@ export function createSync(deps: SyncDeps) {
     const { hostId, machine, resource } = row;
     const heavy = decision.action === "heal-daemon" || decision.action === "reconcile-stuck";
     const report = { step: (text: string) => bb.log.info(`${machine}: ${text}`), log: () => {} };
-    // Forced and thread passes follow docs/sync.md rule 3.
+    // A thread waiting on a stopped box must not wait out what other passes left (docs/sync.md rule 3).
     await guard
       .run(
         hostId,
@@ -469,15 +470,14 @@ export function createSync(deps: SyncDeps) {
               ? ((await workspaces(row.hostId, now))?.busy ?? false)
               : false,
         };
-        const decision = decide(view, await onaView(row.resource.envId, listing), now);
+        const onaState = await onaView(row.resource.envId, listing);
+        const decision = decide(view, onaState, now);
         // With autoRepair off, only observed stops and deletions (and the resume a waiting thread asks for) reach bb; tunnels reopen after a reload, and idle releases run below.
         const skipped = !autoRepair && !["none", "suspend-observed", "ensure-tunnel"].includes(decision.action);
-        guard.note(
-          row.hostId,
-          skipped ? `${decision.reason} (would ${decision.action}; autoRepair is off)` : decision.reason,
-        );
-        // bb shows the machine connected: a thread's failed chain ends (docs/sync.md rule 3).
-        if (view.status === "connected") guard.connected(row.hostId);
+        const reason = skipped ? `${decision.reason} (would ${decision.action}; autoRepair is off)` : decision.reason;
+        guard.note(row.hostId, reason);
+        // The hold ends when bb shows the machine connected with its tunnel up, on a box Ona shows running (docs/sync.md rule 3).
+        if (view.status === "connected" && view.tunnel === "up" && shownRunning(onaState)) guard.connected(row.hostId);
         if (decision.action === "none" || skipped) continue;
         actions.push(act(row, decision, options.force ?? false));
       }

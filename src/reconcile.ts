@@ -61,7 +61,9 @@ export interface Decision {
   resumeAfter?: boolean;
 }
 
-const RUNNING = "ENVIRONMENT_PHASE_RUNNING";
+export const RUNNING = "ENVIRONMENT_PHASE_RUNNING";
+/** Ona shows the environment running; a failed listing is unknown (rule 4). */
+export const shownRunning = (ona: { kind: string; phase?: string }) => ona.kind === "env" && ona.phase === RUNNING;
 export const STOPPED = new Set(["ENVIRONMENT_PHASE_STOPPED", "ENVIRONMENT_PHASE_STOPPING"]);
 const GONE = new Set(["ENVIRONMENT_PHASE_DELETED", "ENVIRONMENT_PHASE_DELETING"]);
 
@@ -224,10 +226,9 @@ export interface HostRecord {
 /**
  * Rule 5: one action per machine at a time, a cooldown after each one,
  * exponential backoff after failures, and no more automatic retries after
- * GIVE_UP_AFTER failures in a row, counted across every unforced pass once a thread's
- * pass has failed on the box, until bb shows it connected (docs/sync.md rule 3). The
- * forcing callers skip the cooldown, backoff and give-up. Heavy actions (SSH probes,
- * daemon restarts) run at most `limit` at a time.
+ * GIVE_UP_AFTER failures in a row. A thread's pass can skip the give-up that other passes
+ * left, and a hold keeps the count across successes (docs/sync.md rule 3). Heavy actions
+ * (SSH probes, daemon restarts) run at most `limit` at a time.
  */
 export class HostGuard {
   private readonly busy = new Map<string, string>();
@@ -260,10 +261,10 @@ export class HostGuard {
     return record.failures < GIVE_UP_AFTER && this.clock.now() >= record.quietUntil;
   }
 
-  /** bb shows the machine connected: the chain has ended, and the failures stay (docs/sync.md rule 3). */
+  /** A machine bb shows connected with its tunnel up, on a box Ona shows running: a flagged chain ends and its count starts again (docs/sync.md rule 3). */
   connected(hostId: string): void {
     const record = this.records.get(hostId);
-    if (record?.threadWaiting) this.records.set(hostId, { ...record, threadWaiting: undefined });
+    if (record?.threadWaiting) this.records.set(hostId, { ...record, failures: 0, threadWaiting: undefined });
   }
 
   /**
@@ -278,9 +279,7 @@ export class HostGuard {
     fn: () => Promise<string | void>,
     options: { force?: boolean; heavy?: boolean; cooldown?: boolean; threadWaiting?: boolean } = {},
   ): Promise<boolean> {
-    const previous = this.records.get(hostId);
-    // A thread's chain (docs/sync.md rule 3).
-    const flagged = previous?.threadWaiting === true;
+    const flagged = this.records.get(hostId)?.threadWaiting === true;
     const force = options.force || (options.threadWaiting === true && !flagged);
     if (!this.mayAct(hostId, force)) return false;
     this.busy.set(hostId, action);
@@ -293,17 +292,19 @@ export class HostGuard {
         if (options.heavy) this.release();
       }
       const now = this.clock.now();
-      const held = !force && !options.threadWaiting && flagged;
+      const current = this.records.get(hostId);
+      const held = !force && !options.threadWaiting && current?.threadWaiting === true;
       this.records.set(hostId, {
         action,
         reason: outcome ? `${reason}; ${outcome}` : reason,
         at: now,
-        failures: held ? previous.failures : 0,
+        failures: held ? current.failures : 0,
         quietUntil: options.cooldown === false ? now : now + COOLDOWN_MS,
         threadWaiting: held ? true : undefined,
       });
     } catch (error) {
-      const failures = (force ? 0 : (previous?.failures ?? 0)) + 1;
+      const current = this.records.get(hostId);
+      const failures = (force ? 0 : (current?.failures ?? 0)) + 1;
       const now = this.clock.now();
       this.records.set(hostId, {
         action,
@@ -312,7 +313,7 @@ export class HostGuard {
         error: error instanceof Error ? error.message : String(error),
         failures,
         quietUntil: now + Math.min(COOLDOWN_MS * 2 ** (failures - 1), MAX_BACKOFF_MS),
-        threadWaiting: options.threadWaiting || (!force && flagged) ? true : undefined,
+        threadWaiting: options.threadWaiting || (!force && current?.threadWaiting === true) ? true : undefined,
       });
       throw error;
     } finally {

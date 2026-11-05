@@ -237,3 +237,11 @@ export function world(
 }
 
 export const idle = (hostId: string, extra: Partial<Box> = {}): Box => ({ hostId, envId: `env-${hostId}`, ...extra });
+
+/** A thread bb lists as waiting for its host. */
+export const waitingThread = (): ThreadRecord => ({
+  id: "t1",
+  status: "active",
+  updatedAt: NOW,
+  runtime: { displayStatus: "waiting-for-host" },
+});

@@ -257,6 +257,52 @@ test("guard: failures back off and give up, a forced run still goes", async () =
   assert.match(guard.records.get("h1")!.reason, /ok/);
 });
 
+test("guard: a connected() call during a running action is not undone by the action's success", async () => {
+  const { clock, advance } = fakeClock();
+  const guard = new HostGuard(2, clock);
+  guard.records.set("h1", {
+    action: "suspend-observed",
+    reason: "r",
+    at: 0,
+    error: "e",
+    failures: 2,
+    quietUntil: 0,
+    threadWaiting: true,
+  });
+  let finish!: () => void;
+  const run = guard.run("h1", "heal-daemon", "r", () => new Promise<void>((resolve) => (finish = resolve)));
+  await advance(0);
+  guard.connected("h1");
+  finish();
+  assert.equal(await run, true);
+  assert.equal(guard.records.get("h1")!.threadWaiting, undefined);
+  assert.equal(guard.records.get("h1")!.failures, 0);
+});
+
+test("guard: a forced run's success ends a chain that gave up, so its count and flag go", async () => {
+  const { clock } = fakeClock();
+  const guard = new HostGuard(2, clock);
+  guard.records.set("h1", {
+    action: "suspend-observed",
+    reason: "r",
+    at: 0,
+    error: "e",
+    failures: GIVE_UP_AFTER,
+    quietUntil: 0,
+    threadWaiting: true,
+  });
+  assert.equal(await guard.run("h1", "heal-daemon", "r", async () => "ok", { force: true }), true);
+  assert.equal(guard.records.get("h1")!.failures, 0);
+  assert.equal(guard.records.get("h1")!.threadWaiting, undefined);
+});
+
+test("guard: connected() on a machine with no record creates none, and leaves it free to act", () => {
+  const guard = new HostGuard();
+  guard.connected("h2");
+  assert.equal(guard.records.get("h2"), undefined);
+  assert.equal(guard.mayAct("h2"), true);
+});
+
 test("guard: routine checks don't hide the last action, and keep their own 'since'", async () => {
   const { clock, advance } = fakeClock();
   const guard = new HostGuard(2, clock);

@@ -127,7 +127,7 @@ you asked for, so safety rule 1 does not gate it.
    is matched as given and resolved against `$HOME`), each as given and resolved
    through symlinks. A process listing that can't be trusted, a folder path with
    a newline in it, a failed SSH connection or a timeout counts as unknown, and
-   nothing is restarted. _Why: a restart kills running agent turns._ Four callers force the guard, skipping the cooldown, backoff and give-up: `bb ona sync`, `bb ona reconnect`, `bb ona resume`, and any pass that finds a thread waiting on a box Ona shows stopped or stopping. The first three skip them outright, and `bb ona sync` still runs this check. Before a thread's pass has failed on a box, the thread's pass skips the cooldown, backoff and give-up that other passes left. Once one has, the failure count is kept across every unforced pass, a success included, and the usual backoff and give-up apply, until bb shows the machine connected, a thread's pass succeeds, or `bb ona sync`, `bb ona reconnect` or `bb ona resume` acts on the box (rule 5: the third failure in a row stops automatic tries). `bb ona resume`, like `bb ona reconnect`, runs bb's start on the box and does not run the daemon check.
+   nothing is restarted. _Why: a restart kills running agent turns._ Four callers force the guard, skipping the cooldown, backoff and give-up: `bb ona sync`, `bb ona reconnect`, `bb ona resume`, and any pass that finds a thread waiting on a box Ona shows stopped or stopping. The first three skip them outright, and `bb ona sync` still runs this check. Before a thread's pass has failed on a box, the thread's pass skips what other passes left. Once one has, a success does not reset the failure count, and the usual backoff and give-up apply. The hold ends, and the count and the hold are cleared, when bb shows the machine connected with its tunnel up on a box Ona shows running, when a thread's pass succeeds, or when `bb ona sync`, `bb ona reconnect` or `bb ona resume` acts on the box; after that a thread's pass is forced again past what other passes left. `bb ona reconnect` runs bb's daemon bootstrap on a box Ona shows running and never starts one; `bb ona resume` also starts a stopped box. Neither runs the daemon check.
 4. **Unknown is not gone.** A failed or empty `ona environment list` changes
    nothing, and "missing" needs two listings in a row. A lookup by id
    (`ona environment get`) that fails is unknown too; only Ona saying the id
@@ -136,7 +136,7 @@ you asked for, so safety rule 1 does not gate it.
    make the machine wait 5 minutes after a success before its next one; suspends, tunnel
    reopens and idle releases do not wait after a success. A failure backs off for every
    action (5, then 10 min; the third failure in a row stops automatic tries until
-   `bb ona sync`), and `bb ona status` says so. The one exception is a thread's pass, until a thread's pass has failed on the box: it skips the cooldown, backoff and give-up that other passes left (rule 3). Daemon checks, restarts and bb
+   `bb ona sync`), and `bb ona status` says so. The exceptions are in rule 3. Daemon checks, restarts and bb
    reconciles run at most 2 at a time.
 
 **When the plugin checks.**
