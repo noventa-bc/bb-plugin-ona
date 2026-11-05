@@ -51,7 +51,11 @@ before(async () => {
       threads: {
         list: async () => [],
         get: async ({ threadId }) =>
-          threadId === "thread-1" ? { environmentId: "ws-1", providerId: "claude-code" } : {},
+          threadId === "thread-1"
+            ? { environmentId: "ws-1", providerId: "claude-code" }
+            : threadId === "thread-2"
+              ? { environmentId: null }
+              : {},
         events: {
           list: async ({ types }) =>
             types?.includes("turn/completed") ? [{ seq: 7 }] : [{ seq: 1, data: { providerThreadId: "s1" } }],
@@ -129,16 +133,42 @@ test("resume while Ona is already starting the box waits for it instead of start
 });
 
 // Bug: a thread header listed every bb host to find the one its thread runs on.
-test("thread_devbox looks up only the thread's host: no hosts.list, one hosts.get", local, async () => {
-  const sdk = host.harness.inspection.sdk;
-  const lists = sdk.callsTo("hosts.list").length;
-  const gets = sdk.callsTo("hosts.get").length;
-  const reply = (await host.harness.behavior.callRpc("thread_devbox", { threadId: "thread-1" })) as {
-    devbox: { hostId: string } | null;
-  };
-  assert.equal(reply.devbox?.hostId, "host-1");
-  assert.equal(sdk.callsTo("hosts.list").length - lists, 0);
-  assert.equal(sdk.callsTo("hosts.get").length - gets, 1);
+test(
+  "thread_devbox looks up only the thread's host: no hosts.list, one hosts.get, one thread read",
+  local,
+  async () => {
+    const sdk = host.harness.inspection.sdk;
+    const lists = sdk.callsTo("hosts.list").length;
+    const gets = sdk.callsTo("hosts.get").length;
+    const threadReads = sdk.callsTo("threads.get").length;
+    const reply = (await host.harness.behavior.callRpc("thread_devbox", { threadId: "thread-1" })) as {
+      devbox: { hostId: string } | null;
+    };
+    assert.equal(reply.devbox?.hostId, "host-1");
+    assert.equal(sdk.callsTo("hosts.list").length - lists, 0);
+    assert.equal(sdk.callsTo("hosts.get").length - gets, 1);
+    assert.equal(sdk.callsTo("threads.get").length - threadReads, 1);
+  },
+);
+
+test(
+  "thread_devbox answers pending, from one thread read, for a thread bb has not given a workspace yet",
+  local,
+  async () => {
+    const threadReads = host.harness.inspection.sdk.callsTo("threads.get").length;
+    assert.deepEqual(await host.harness.behavior.callRpc("thread_devbox", { threadId: "thread-2" }), {
+      devbox: null,
+      pending: true,
+    });
+    assert.equal(host.harness.inspection.sdk.callsTo("threads.get").length - threadReads, 1);
+  },
+);
+
+test("thread_move's refusal reaches the menu as a conflict with the move's message", local, async () => {
+  await assert.rejects(host.harness.behavior.callRpc("thread_move", { threadId: "thread-0", hostId: "host-1" }), {
+    code: "conflict",
+    message: /is not on a devbox this plugin manages right now/,
+  });
 });
 
 test("thread_cost prices a Claude thread from the box's session files and caches it per turn", local, async () => {

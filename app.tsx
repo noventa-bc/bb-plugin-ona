@@ -4,7 +4,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { ComponentProps } from "react";
 import type { LegacyThreadHeaderActionRegistration } from "@get-bb/plugin-sdk/internal/plugin-app-collector";
-import { definePluginApp, experimental_Icon as Icon, useRpc } from "@get-bb/plugin-sdk/app";
+import {
+  definePluginApp,
+  experimental_Icon as Icon,
+  experimental_THREAD_ACTION_GROUPS as GROUPS,
+  useRpc,
+} from "@get-bb/plugin-sdk/app";
+import { remember } from "./src/move.ts";
 import type { Devbox, rpcContract, ThreadCost } from "./src/rpc.ts";
 
 /**
@@ -185,7 +191,88 @@ function hideKnownWarnings() {
   document.head.appendChild(style);
 }
 
+type MoveData = ReturnType<typeof useMoveData>;
+
+/**
+ * The thread menu's "Move to devbox" (src/move.ts): the devboxes, listed again with each new set
+ * of threads so their bb status labels (connected, suspended, …) stay close to current, and each
+ * shown thread's devbox, asked with each new set of threads until a reply is stored; a thread bb
+ * has not given a workspace yet is asked again 15 s after each such reply while it stays shown
+ * (`remember` in src/move.ts; `place` records a moved thread's target box without a call).
+ */
+function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
+  const rpc = useRpc<typeof rpcContract>();
+  const [devboxes, setDevboxes] = useState<Devbox[]>([]);
+  const [threads, setThreads] = useState<Record<string, Devbox | null>>({});
+  useEffect(() => {
+    // The cleanup before the next run (or unmount) ends this run's re-asks (a timer left over fires
+    // once and does nothing) and drops its devboxes reply unless the list is still empty.
+    let live = true;
+    void rpc.call("devboxes_list", null).then(
+      // shortcut: an empty list counts as not loaded, so a reply from an older run can fill it; upgrade to
+      // a run counter if a stale list shows up in practice.
+      (reply) => setDevboxes((current) => (live || current.length === 0 ? reply.devboxes : current)),
+      () => undefined,
+    );
+    const ask = (threadId: string) =>
+      void rpc.call("thread_devbox", { threadId }).then(
+        (reply) => {
+          setThreads((known) => remember(known, threadId, reply));
+          // shortcut: a thread that never gets a workspace (bb abandons one whose box creation the user
+          // stopped) is asked every 15 s while it is shown, cap the re-asks if that shows up in practice.
+          if (live && reply.devbox === null && reply.pending) setTimeout(() => live && ask(threadId), 15_000);
+        },
+        () => undefined,
+      );
+    for (const threadId of threadIds.filter((id) => !(id in threads))) ask(threadId);
+    // `threads` is left out on purpose: a reply must not trigger another round of calls.
+    return () => {
+      live = false;
+    };
+  }, [rpc, threadIds]);
+  const place = (threadId: string, devbox: Devbox | undefined) =>
+    setThreads((known) => ({ ...known, [threadId]: devbox ?? null }));
+  return { rpc, devboxes, threads, place };
+}
+
 export default definePluginApp((app) => {
+  app.slots.experimental_threadAction<MoveData>({
+    id: "move-to-devbox",
+    title: "Move to devbox",
+    icon: "ArrowRightLeft",
+    group: GROUPS.lifecycle,
+    useData: useMoveData,
+    item({ thread, data, navigate }) {
+      const current = data.threads[thread.id];
+      if (!current) return null;
+      const others = data.devboxes.filter((box) => box.hostId !== current.hostId);
+      return {
+        label: "Move to devbox",
+        icon: "ArrowRightLeft",
+        disabled: others.length === 0,
+        choices: {
+          hint: "A new thread continues the work there; this one stays. Uncommitted changes stay on this box.",
+          items: others.map((box) => ({ id: box.hostId, label: `${box.envName} (${box.status})` })),
+        },
+        async run({ value }) {
+          if (!value) return;
+          // bb only logs a thread action's error, so the refusal is shown here.
+          await data.rpc.call("thread_move", { threadId: thread.id, hostId: value }).then(
+            (moved) => {
+              // The new thread has no workspace yet, so asking bb now would read null.
+              data.place(
+                moved.threadId,
+                others.find((box) => box.hostId === value),
+              );
+              navigate.toThread(moved.threadId);
+            },
+            (error: unknown) => window.alert(error instanceof Error ? error.message : String(error)),
+          );
+        },
+      };
+    },
+  });
+
   hideKnownWarnings();
   (app.slots as typeof app.slots & ThreadHeaderActionSlot).experimental_threadHeaderAction({
     id: "devbox",
