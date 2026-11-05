@@ -105,3 +105,34 @@ test("a connected report with the tunnel closed does not end a thread's hold, so
     await resetFakeClock();
   }
 });
+
+// bb reports the machine connected with its tunnel up, but Ona still shows the box stopped: the hold stays, so the wakes stay
+// bounded. bb reports disconnected again before each stop.
+test("a connected report with Ona still showing the box stopped does not end a thread's hold, so the wakes stay bounded (fails if the Ona check is dropped)", async () => {
+  enableFakeClock();
+  try {
+    let wakes = 0;
+    const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+    const { sync, hosts } = world([host], {
+      refuse: REFUSED,
+      daemonAlive: true,
+      wake: async () => {
+        wakes++;
+        host.tunnel = "up";
+        hosts.get("h1")!.status = "connected";
+        throw new Error("connect failed");
+      },
+    });
+    for (let cycle = 0; cycle < 6; cycle++) {
+      host.ona = "STOPPED";
+      hosts.get("h1")!.status = "disconnected";
+      await sync.reconcile(new Set(["h1"]), { wait: true });
+      await tick(6 * 60_000);
+      await sync.reconcile(new Set(["h1"]), { wait: true });
+      await tick(20 * 60_000);
+    }
+    assert.ok(wakes <= GIVE_UP_AFTER, `${wakes} wakes`);
+  } finally {
+    await resetFakeClock();
+  }
+});

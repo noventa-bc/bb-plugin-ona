@@ -313,6 +313,7 @@ test("a flagged record on a machine bb shows connected loses its flag and its fa
     await sync.reconcile(new Set(["h1"]), { wait: true });
     assert.equal(guard.records.get("h1")!.threadWaiting, undefined);
     assert.equal(guard.records.get("h1")!.failures, 0);
+    assert.equal(guard.mayAct("h1"), true);
     hosts.get("h1")!.status = "disconnected";
     host.ona = "STOPPED";
     for (let pass = 0; pass < GIVE_UP_AFTER; pass++) {

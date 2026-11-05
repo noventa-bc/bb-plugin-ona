@@ -261,10 +261,12 @@ export class HostGuard {
     return record.failures < GIVE_UP_AFTER && this.clock.now() >= record.quietUntil;
   }
 
-  /** A machine bb shows connected with its tunnel up, on a box Ona shows running: a flagged chain ends and its count starts again (docs/sync.md rule 3). */
+  /** A machine bb shows connected with its tunnel up, on a box Ona shows running: a flagged chain ends, and its count and backoff start again (docs/sync.md rule 3). */
   connected(hostId: string): void {
     const record = this.records.get(hostId);
-    if (record?.threadWaiting) this.records.set(hostId, { ...record, failures: 0, threadWaiting: undefined });
+    if (record?.threadWaiting) {
+      this.records.set(hostId, { ...record, failures: 0, quietUntil: this.clock.now(), threadWaiting: undefined });
+    }
   }
 
   /**
