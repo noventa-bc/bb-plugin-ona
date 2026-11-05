@@ -220,12 +220,57 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 - In SDK 0.6.109 a provider resource is written by the provider's own lifecycle
   hooks (`create`, `suspend`, `resume`, through `checkpoint` or the returned
   `resource`) and read with `bb.experimental_machines.getResource` (checked 2026-11-03).
+- bb 0.48.1's Settings > Machines "Add a machine" dialog lists no machine provider. Its only
+  provider list is the connection method (`serverAccess.providers`, labelled "Connection method").
+  Its only create call sends `machineProviderId` `manual` with `inputs` null
+  (`AddMachineDialog-B_sUphZB.js`, line 1), so a plugin's machine provider and its
+  inputs control never show there. Checked 2026-11-05 in the bb app's
+  `app.asar.unpacked/node_modules/bb-app/app/dist/assets/`.
+- bb 0.48.1 renders a machine provider's inputs control only in the new-thread
+  composer (`NewThreadComposer-DjqGA_pM.js`, line 1, search `machineProviderInputs`).
+  The composer takes the machine from the environment provider that names it
+  (`machineProviderId`, `machineInputs`, `machineAcceptsEmptyInputs`), finds the
+  control registered for that machine provider and plugin, and renders it in a
+  plugin slot with `value` and `onChange`. Checked 2026-11-05.
+- For a provider with an input schema and no control registered, the composer's value is the
+  saved value when there is one (see the restore bullet below), otherwise `{}` when the provider
+  accepts empty inputs,
+  otherwise null. The blocked reason is `<name> needs its plugin's control.` when the
+  provider does not accept empty inputs, and none otherwise (search
+  `needs its plugin's control` in `NewThreadComposer-DjqGA_pM.js`, line 1). With a control
+  registered, `Configure <name>.` (same search) shows before the control's first report,
+  when there is no saved value and the provider does not accept empty inputs. A provider
+  with no input schema gets null, no reason, and no `new` selection. bb sets
+  `acceptsEmptyInputs` by validating `{}` against the provider's schema
+  (`server/dist/start-server.js`, line 101460, `acceptsEmptyInputs`). Checked 2026-11-05.
+- The composer sends `providerMachine` as `{type: "new", machineProviderId, inputs}`
+  with the control's value (`NewThreadComposer-DjqGA_pM.js`, line 1). bb's
+  `prepareMachineProviderSelection` (`server/dist/start-server.js`, line 101774, called
+  from `submitMachine` at line 101906 and `completeProviderSelection` at line 107158)
+  refuses an unknown or unavailable provider and any inputs for a provider with no
+  schema, parses the inputs with the provider's schema (issues give 400
+  `invalid_request`), and calls the plugin's `validate({inputs})` before `create`.
+  Checked 2026-11-05.
+- bb 0.48.1's composer passes the saved `providerMachine.inputs` back to the control as its
+  `value` only when the saved selection names the same environment selection and machine
+  provider, and the saved `providerMachine.type` is `new` (search `selectionValue` in
+  `NewThreadComposer-DjqGA_pM.js`, line 1). The flag also resets to false when the composer's
+  session key changes: `J`, a JSON key over the project and the new-thread settings, no longer
+  equals the state `nt` (the `nt!==J&&` branch, search `nt!==J`). The user's pick of a
+  different environment or machine in that composer session sets the composer's `ot` flag
+  (`st(!0)` in the same file, line 1). The machine restore reads the flag in its condition
+  `initialValue:!ot&&` (search `initialValue:!ot&&`, one match in the file); the same file has
+  three `!ot&&` conditions in all (search `!ot&&`). Checked 2026-11-05.
+- bb 0.48.1 gives a control's blocked reason to the composer's prompt as `disabledReason` and
+  disables the prompt (search `disabledReason:n??void 0` in the same file, line 1). Checked
+  2026-11-05.
+- The control's types: `PluginMachineProviderInputsProps` in the SDK 0.6.109 typings
+  (`bb-plugin-sdk-app.d.ts`). Checked 2026-11-05.
 - SDK surfaces in 0.6.109 that the plugin doesn't use (checked 2026-11-03):
   - host entries: `experimental_defineHostEntry` (plugin code on the daemon,
     fs watch, signals) and the `experimental_host.deleted` event
   - UI: `settingsSection` and `navPanel`
-  - provider inputs: `experimental_machineProviderInputs` and
-    `experimental_environmentProviderInputs`
+  - provider inputs: `experimental_environmentProviderInputs`
   - `bb.agents.contributeInstructions`
   - `bb.realtime.publish`
   - declarative `defineCli`
