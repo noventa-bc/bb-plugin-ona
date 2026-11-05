@@ -28,8 +28,9 @@ the quick fix is right and when it is not.
 - **Reviewer.** A fresh agent (not the builder) briefed to break the change:
   it hunts for the input, timing or state that makes it wrong, and reports
   only findings with a concrete failing case. Plus the repo's `code-review`
-  pass and `/ponytail-review`: three passes on every PR this flow opens, all
-  independent of the orchestrator. Blocking findings go back to the builder
+  pass and `/ponytail-review`: three passes on every PR that changes code,
+  one (`code-review`) on a PR that changes only Markdown, a lockfile or a
+  `package.json` override, all independent of the orchestrator. Blocking findings go back to the builder
   (step 6 says which block).
 
 Subagents run on Haiku at max effort by default (for example: builders of
@@ -110,7 +111,9 @@ those and the "skipped or not checked" lines ponytail ends with.
    its own agent, briefed with the builder's worktree path (a fresh agent
    starts in the main checkout), and sends blocking findings
    back to the builder. All three passes run on the first round of every PR
-   this flow opens, with no exception for a small or docs-only change. After
+   that changes code, however small; a PR that changes only Markdown, a
+   lockfile or a `package.json` override gets the `code-review` pass alone
+   (owner, 2026-11-05: three passes on a two-line override overlap). After
    that, `code-review` runs every round; the adversarial pass and
    `/ponytail-review` run on every round whose diff changed code since they
    last ran (comments, lint messages and docs are not code, except the Code
