@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { onaCommands, usage, type OnaCommandDeps } from "../src/commands.ts";
-import { createMove, handOverMessage, type MoveDeps, type OutlineItem } from "../src/move.ts";
+import { createMove, handOverMessage, remember, type MoveDeps, type OutlineItem } from "../src/move.ts";
+import type { Devbox } from "../src/rpc.ts";
 
 // A fake of the bb calls a move makes (MoveDeps): thread t1 on workspace e1 at
 // /workspaces/app on host h-src. Hosts h-src and h-dst are Ona devboxes named
@@ -19,6 +20,8 @@ function world(
     environmentId?: string | null;
     path?: string | null;
     onSpawn?: () => Promise<void>;
+    /** Runs inside every environment read after the first (hold it to delay a second move's reads). */
+    onLaterEnvRead?: () => Promise<void>;
     provisionType?: "managed-worktree" | "personal" | "unmanaged" | null;
     noOutline?: boolean;
     envHost?: string;
@@ -28,6 +31,7 @@ function world(
 ) {
   const spawned: unknown[] = [];
   let spawnCalls = 0;
+  let envReads = 0;
   const boxes: Record<string, string> = { "h-src": "src-box", "h-dst": "dst-box" };
   const deps = {
     sdk: {
@@ -51,11 +55,14 @@ function world(
         },
       },
       environments: {
-        get: async () => ({
-          hostId: options.envHost ?? "h-src",
-          path: options.path === undefined ? "/workspaces/app" : options.path,
-          workspaceProvisionType: options.provisionType ?? null,
-        }),
+        get: async () => {
+          if (envReads++ > 0) await options.onLaterEnvRead?.();
+          return {
+            hostId: options.envHost ?? "h-src",
+            path: options.path === undefined ? "/workspaces/app" : options.path,
+            workspaceProvisionType: options.provisionType ?? null,
+          };
+        },
       },
     },
     machineOfHost: async (hostId: string) => (boxes[hostId] ? { resource: { envName: boxes[hostId] } } : null),
@@ -190,11 +197,32 @@ test("a spawn that times out while bb starts the box says the thread is coming, 
 
 test("a second move while the first spawn is pending is refused, and spawn runs once", async () => {
   let release = () => {};
-  const { move, spawnCalls } = world({ onSpawn: () => new Promise<void>((resolve) => (release = resolve)) });
+  let started = () => {};
+  const spawnStarted = new Promise<void>((resolve) => (started = resolve));
+  const { move, spawnCalls } = world({
+    onSpawn: () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+        started();
+      }),
+  });
   const first = move({ threadId: "t1", hostId: "h-dst" });
+  await spawnStarted;
   await assert.rejects(move({ threadId: "t1", hostId: "h-dst" }), /a move of this thread is still in progress/i);
   release();
   assert.deepEqual(await first, { threadId: "t2" });
+  assert.equal(spawnCalls(), 1);
+});
+
+test("a second move whose reads finish after the first spawn returned is still refused", async () => {
+  let releaseSecond = () => {};
+  const secondHeld = new Promise<void>((resolve) => (releaseSecond = resolve));
+  const { move, spawnCalls } = world({ onLaterEnvRead: () => secondHeld });
+  const first = move({ threadId: "t1", hostId: "h-dst" });
+  const second = move({ threadId: "t1", hostId: "h-dst" });
+  assert.deepEqual(await first, { threadId: "t2" });
+  releaseSecond();
+  await assert.rejects(second, /a move of this thread is still in progress/i);
   assert.equal(spawnCalls(), 1);
 });
 
@@ -221,7 +249,7 @@ test("the hand-over message keeps the first outline item and the last 99, and sa
   const text = handOverMessage({ title: "Login fix", source: "src-box", path: "/workspaces/app", outline });
   const kept = Array.from({ length: 99 }, (_, i) => `- user: message ${i + 2}`);
   assert.ok(
-    text.endsWith(["- user: message 0", "(1 earlier messages left out.)", ...kept].join("\n")),
+    text.endsWith(["- user: message 0", "(1 earlier message left out.)", ...kept].join("\n")),
     "item 0, the note, then items 2 to 100",
   );
   assert.doesNotMatch(text, /message 1\n/);
@@ -246,6 +274,20 @@ test("without an outline the hand-over message names the thread alone", () => {
   const text = handOverMessage({ title: "Login fix", source: "src-box", path: "/workspaces/app", outline: [] });
   assert.doesNotMatch(text, /outline/);
   assert.match(text, /continues thread "Login fix"/);
+});
+
+const BOX = { hostId: "h-dst", envName: "dst-box" } as Devbox;
+
+test("remember skips a pending null, so the thread is asked again", () => {
+  const known = {};
+  assert.equal(remember(known, "t2", { devbox: null, pending: true }), known);
+  assert.deepEqual(remember(known, "t2", { devbox: BOX }), { t2: BOX });
+  assert.deepEqual(remember(known, "t3", { devbox: null }), { t3: null }, "a settled null is kept");
+});
+
+test("remember keeps an entry already stored, such as the box a move placed", () => {
+  const known = { t2: BOX };
+  assert.equal(remember(known, "t2", { devbox: null }), known);
 });
 
 // `bb ona move`: only the machine lookup and the move are faked; one machine, ona:box on host_1.

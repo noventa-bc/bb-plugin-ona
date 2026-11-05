@@ -30,10 +30,10 @@ export const rpcContract = defineRpcContract({
     input: z.null(),
     output: z.object({ devboxes: z.array(devboxSchema) }),
   },
-  /** The Ona devbox a thread runs on, or null when it runs elsewhere. */
+  /** The Ona devbox a thread runs on, or null when it runs elsewhere; `pending` while it has no workspace yet. */
   thread_devbox: {
     input: z.object({ threadId: z.string().min(1) }),
-    output: z.object({ devbox: devboxSchema.nullable() }),
+    output: z.object({ devbox: devboxSchema.nullable(), pending: z.boolean().optional() }),
   },
   /** Spend so far for a thread on an Ona devbox, or null (other threads, nothing to price yet). */
   thread_cost: {

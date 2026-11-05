@@ -10,6 +10,7 @@ import {
   experimental_THREAD_ACTION_GROUPS as GROUPS,
   useRpc,
 } from "@get-bb/plugin-sdk/app";
+import { remember } from "./src/move.ts";
 import type { Devbox, rpcContract, ThreadCost } from "./src/rpc.ts";
 
 /**
@@ -195,7 +196,8 @@ type MoveData = ReturnType<typeof useMoveData>;
 /**
  * The thread menu's "Move to devbox" (src/move.ts): the devboxes, listed again with each new set of
  * threads so their bb status labels (connected, suspended, …) stay close to current, and each shown
- * thread's devbox, asked once (`place` records a moved thread's target box without a call).
+ * thread's devbox, asked with each new set of threads until a reply is stored (`remember` in src/move.ts;
+ * `place` records a moved thread's target box without a call).
  */
 function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
   const rpc = useRpc<typeof rpcContract>();
@@ -208,7 +210,7 @@ function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
     );
     for (const threadId of threadIds.filter((id) => !(id in threads))) {
       void rpc.call("thread_devbox", { threadId }).then(
-        (reply) => setThreads((known) => ({ ...known, [threadId]: reply.devbox })),
+        (reply) => setThreads((known) => remember(known, threadId, reply)),
         () => undefined,
       );
     }

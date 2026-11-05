@@ -3,8 +3,9 @@
 // another host (docs/ona-notes.md), so this is a plain spawn; the source thread
 // stays as it is. bb resumes a stopped target itself, as the user's own action
 // (decision 0002); the plugin resumes nothing.
+// app.tsx imports `remember` from here, so this file imports types only (no node modules in the app bundle).
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
-import { errorText } from "./ona.ts";
+import type { Devbox } from "./rpc.ts";
 
 type Sdk = BbPluginApi["sdk"];
 
@@ -35,7 +36,8 @@ export function handOverMessage(args: { title: string; source: string; path: str
     lines.push("", "The old thread's conversation, in outline:");
     const leftOut = Math.max(0, args.outline.length - OUTLINE_MAX_ITEMS);
     for (const [index, item] of args.outline.entries()) {
-      if (index === 1 && leftOut > 0) lines.push(`(${leftOut} earlier messages left out.)`);
+      if (index === 1 && leftOut > 0)
+        lines.push(`(${leftOut} earlier ${leftOut === 1 ? "message" : "messages"} left out.)`);
       if (index === 0 || index > leftOut) lines.push(`- ${item.role}: ${item.preview}`);
     }
   }
@@ -44,10 +46,37 @@ export function handOverMessage(args: { title: string; source: string; path: str
 
 const IN_PROGRESS = "A move of this thread is still in progress; wait for the new thread to appear.";
 
+/**
+ * The app's map of thread id -> devbox after a `thread_devbox` reply: an entry already stored is kept
+ * (a late reply must not undo `place`), and a pending null (no workspace yet) is not stored, so it is asked again.
+ */
+export function remember(
+  known: Record<string, Devbox | null>,
+  threadId: string,
+  reply: { devbox: Devbox | null; pending?: boolean },
+): Record<string, Devbox | null> {
+  if (threadId in known || (reply.devbox === null && reply.pending)) return known;
+  return { ...known, [threadId]: reply.devbox };
+}
+
 export function createMove({ sdk, machineOfHost }: MoveDeps) {
-  /** Threads with a move bb has not finished: thread id -> the refusal a second move gets. */
+  /**
+   * Threads with a move bb has not finished: thread id -> the refusal a second move gets. Shared by the menu,
+   * `bb ona move` and other windows in this plugin process: a second spawn would make a second thread.
+   */
   const inFlight = new Map<string, string>();
-  return async function move({ threadId, hostId }: { threadId: string; hostId: string }) {
+  return async function move(args: { threadId: string; hostId: string }) {
+    // Checked and set before any await, so two calls for one thread can't both pass.
+    const refusal = inFlight.get(args.threadId);
+    if (refusal) throw new Error(refusal);
+    inFlight.set(args.threadId, IN_PROGRESS);
+    // A timeout replaces the entry with its own text and leaves it: bb is still creating that thread.
+    return start(args).finally(() => {
+      if (inFlight.get(args.threadId) === IN_PROGRESS) inFlight.delete(args.threadId);
+    });
+  };
+
+  async function start({ threadId, hostId }: { threadId: string; hostId: string }) {
     const thread = await sdk.threads.get({ threadId });
     const environment = thread.environmentId
       ? await sdk.environments.get({ environmentId: thread.environmentId })
@@ -58,7 +87,7 @@ export function createMove({ sdk, machineOfHost }: MoveDeps) {
     const target = await machineOfHost(hostId);
     if (!target) throw new Error(`Machine ${hostId} is not an Ona devbox.`);
     if (environment.hostId === hostId) throw new Error(`The thread already runs on ${target.resource.envName}.`);
-    // bb sets this only for its default providers; any other provider reads null, so null is not refused.
+    // bb sets this only for its default providers (docs/ona-notes.md).
     const kind = environment.workspaceProvisionType;
     if (kind === "managed-worktree" || kind === "personal") {
       throw new Error(
@@ -74,11 +103,6 @@ export function createMove({ sdk, machineOfHost }: MoveDeps) {
       () => [],
     );
     const prompt = handOverMessage({ title, source: source.resource.envName, path, outline });
-    // Shared by the menu, `bb ona move`, other windows and reloads: a second spawn would make a second thread.
-    const refusal = inFlight.get(threadId);
-    if (refusal) throw new Error(refusal);
-    inFlight.set(threadId, IN_PROGRESS);
-    let timedOut = false;
     try {
       const created = await sdk.threads.spawn({
         projectId: thread.projectId,
@@ -92,14 +116,12 @@ export function createMove({ sdk, machineOfHost }: MoveDeps) {
     } catch (error) {
       // The SDK client gives up while bb goes on with the request (docs/ona-notes.md), so bb still creates the thread.
       if (error instanceof Error && error.name === "BbRequestTimeoutError") {
-        timedOut = true;
         const starting = `bb is still starting ${target.resource.envName}; the new thread should appear in the project once it is up. Do not move it again.`;
         inFlight.set(threadId, starting);
         throw new Error(starting);
       }
-      throw new Error(`bb could not start the thread on ${target.resource.envName}: ${errorText(error)}`);
-    } finally {
-      if (!timedOut) inFlight.delete(threadId);
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`bb could not start the thread on ${target.resource.envName}: ${reason}`);
     }
-  };
+  }
 }

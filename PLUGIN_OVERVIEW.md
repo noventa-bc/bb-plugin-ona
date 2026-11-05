@@ -14,7 +14,7 @@ and you drive them from bb as usual.
   thread or message on it starts it first.
 - **Spend per thread**: a devbox thread's header shows its cost so far (OpenAI's
   estimate for Codex, tokens × Anthropic list prices for Claude Code).
-- **Move to devbox** in a devbox thread's menu (or `bb ona move <thread-id> <name>`)
+- **Move to devbox** in a devbox thread's menu (or `bb ona move <thread-id> <ref>`)
   continues the thread in a new thread on another devbox, at the same path.
 - **Shell access**: `ssh "$(bb ona host <name>)"`, `bb ona open <name>` for
   your Ona editor, and bb's terminal panel on the devbox.
