@@ -3,7 +3,7 @@
 // Each bb machine is one Ona environment. bb's daemon runs inside the devbox
 // and reaches this server through an SSH reverse tunnel, so the server stays
 // on loopback and nothing goes through a third-party relay.
-import type { BbPluginApi } from "@get-bb/plugin-sdk";
+import { experimental_PluginRpcRefusal, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { KeepAlives } from "./src/keepalive.ts";
 import { errorText, isRunning, isStopped, OnaCli, OnaSnapshot, sshHost } from "./src/ona.ts";
@@ -22,6 +22,7 @@ import { commands, onaCommands } from "./src/commands.ts";
 import { connectedAtKey, createSync, forgetBox, matchesRef, watchRealtime, type Row } from "./src/sync.ts";
 import { ALL, HostGuard, PassScheduler } from "./src/reconcile.ts";
 import { createThreadCost } from "./src/cost-service.ts";
+import { createMove } from "./src/move.ts";
 import { rpcContract, type Devbox } from "./src/rpc.ts";
 import { threadTerminalPlan, type ShellBackend, type ShellTarget } from "./src/shells.ts";
 import { TunnelManager } from "./src/ssh.ts";
@@ -388,10 +389,17 @@ export default async function plugin(bb: BbPluginApi) {
     return { terminalId: terminal.id, via: plan.via };
   }
 
+  const move = createMove({ sdk: bb.sdk, machineOfHost });
+
   bb.rpc.register(rpcContract, {
     devboxes_list: async () => ({ devboxes: await devboxes() }),
     thread_devbox: async ({ threadId }) => ({ devbox: await threadDevbox(threadId) }),
     thread_cost: async ({ threadId }) => ({ cost: await costs.threadCost(threadId) }),
+    // A refusal carries the message to the menu; a plain throw would reach it as a crash.
+    thread_move: (input) =>
+      move(input).catch((error: unknown) => {
+        throw new experimental_PluginRpcRefusal({ code: "conflict", message: errorText(error) });
+      }),
     devbox_open_editor: async ({ hostId }) => {
       const row = await findMachine(hostId);
       if (!row) return { opened: false };
@@ -449,6 +457,7 @@ export default async function plugin(bb: BbPluginApi) {
       defaultProject,
       findMachine,
       resolveEnvId,
+      move,
       shellTarget,
       openThreadTerminal,
       setup,

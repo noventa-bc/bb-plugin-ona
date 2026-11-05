@@ -231,6 +231,7 @@ export const usage = [
   "  bb ona status [ref] [--json]  bb's view of each devbox next to Ona's, its box facts, and what the plugin last did",
   "  bb ona sync [ref]             Re-check Ona now and repair (ignores cooldowns, keeps the safety rules)",
   "  bb ona keep-alive <ref> <duration|off>  Keep a running devbox from Ona's inactivity timeout (at most 12h)",
+  "  bb ona move <thread-id> <ref>  Continue a thread in a new thread on another devbox, at the same path",
   "  bb ona update [ref] [--force] Apply pending Claude Code / Codex updates now (also runs weekdays 09:00)",
   "",
   "<ref> is a bb machine name/id or an Ona environment name/id.",
@@ -282,6 +283,7 @@ export const commands = [
     summary: "Re-check Ona now and repair out-of-step devboxes",
     usage: "bb ona sync [ref]",
   },
+  { name: "move", summary: "Continue a thread on another devbox", usage: "bb ona move <thread-id> <ref>" },
   {
     name: "keep-alive",
     summary: "Keep a running devbox from Ona's inactivity timeout for a while",
@@ -307,6 +309,8 @@ export interface OnaCommandDeps {
   defaultProject: string;
   findMachine(ref: string): Promise<Row | null>;
   resolveEnvId(ref: string): Promise<string>;
+  /** src/move.ts */
+  move(args: { threadId: string; hostId: string }): Promise<{ threadId: string }>;
   shellTarget(ref: string): Promise<ShellTarget>;
   openThreadTerminal(
     threadId: string,
@@ -337,6 +341,7 @@ export function onaCommands(deps: OnaCommandDeps) {
     defaultProject,
     findMachine,
     resolveEnvId,
+    move,
     shellTarget,
     openThreadTerminal,
     setup,
@@ -491,6 +496,14 @@ export function onaCommands(deps: OnaCommandDeps) {
             wait: true,
           });
           return { exitCode: 0, stdout: formatStatus(await statusRows(ref), onaHealth()) };
+        }
+        case "move": {
+          // `ref` is the thread here and `newName` the devbox.
+          if (!ref || !newName) break;
+          const row = await findMachine(newName);
+          if (!row) return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${newName}".` };
+          const moved = await move({ threadId: ref, hostId: row.hostId });
+          return { exitCode: 0, stdout: `Started ${moved.threadId} on ${row.machine}; ${ref} stays as it is.` };
         }
         case "keep-alive": {
           if (!ref) break;

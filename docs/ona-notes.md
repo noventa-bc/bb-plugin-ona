@@ -193,6 +193,21 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   unknown after interruption. Automatic cleanup is blocked; inspect the workspace before
   recovering it." `sweepProviderEnvironmentInSlot` records that error as a failed
   teardown (checked 2026-11-04).
+- bb 0.48.1 refuses a fork onto another host: `assertForkSourceHost` throws 400
+  "Fork environment must use the source thread's host" when the request's
+  `originKind` is `fork` and the target host differs from the source thread's.
+  `createThreadFromRequest` runs that check only with an `originKind`, so a
+  create or `threads.spawn` with neither `originKind` nor `sourceThreadId`
+  meets no host check beyond the host being usable (`resolveHostThreadRequestEnvironment`
+  and `assertUsableHostId`: not destroyed). It then calls
+  `ensureHostSessionReadyForWork`, which refuses a host being removed, waits
+  for machine maintenance and calls `resumeMachine` before the work, so a
+  suspended target is resumed by bb (checked 2026-11-05 in `server/dist/start-server.js`).
+- bb 0.48.1 caps each `threads.conversationOutline` item's `preview` at 200
+  characters (`CONVERSATION_OUTLINE_PREVIEW_MAX_LENGTH`) and returns one item
+  per user or assistant message, with no limit on their number (checked 2026-11-05).
+- bb 0.48.1's app only logs an error thrown by a thread action's `run`
+  (`console.error`), so a plugin shows its own (checked 2026-11-05).
 - In SDK 0.6.109 a provider resource is written by the provider's own lifecycle
   hooks (`create`, `suspend`, `resume`, through `checkpoint` or the returned
   `resource`) and read with `bb.experimental_machines.getResource` (checked 2026-11-03).

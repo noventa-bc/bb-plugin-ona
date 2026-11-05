@@ -1,4 +1,4 @@
-// RPCs behind the thread header's Editor button and spend chip. app.tsx imports only the contract's type.
+// RPCs behind the thread header's Editor button and spend chip, and the thread menu's Move to devbox. app.tsx imports only the contract's type.
 import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 
@@ -39,6 +39,11 @@ export const rpcContract = defineRpcContract({
   thread_cost: {
     input: z.object({ threadId: z.string().min(1) }),
     output: z.object({ cost: threadCostSchema.nullable() }),
+  },
+  /** A new thread on another devbox at the same path, handed the work over (src/move.ts). */
+  thread_move: {
+    input: z.object({ threadId: z.string().min(1), hostId: z.string().min(1) }),
+    output: z.object({ threadId: z.string() }),
   },
   devbox_open_editor: {
     input: z.object({ hostId: z.string().min(1) }),
