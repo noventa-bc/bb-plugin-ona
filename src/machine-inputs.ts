@@ -2,6 +2,10 @@
 // imports this file, so it imports types only (no node modules in the app bundle).
 import type { PluginMachineProviderInputsChange } from "@get-bb/plugin-sdk/app";
 
+// The machine provider the field belongs to. test/machine-inputs.test.ts keeps it equal to
+// PROVIDER_ID in src/provider.ts.
+export const ONA_MACHINE_PROVIDER_ID = "ona";
+
 // The rule of `onaRef` in src/provider.ts, the server's check on a project name. The test in
 // test/machine-inputs.test.ts keeps the two equal.
 export const ONA_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
@@ -19,7 +23,7 @@ export function projectInputsChange(text: string): PluginMachineProviderInputsCh
 
 /** The project a saved value names, for the field to start from. Anything else reads as blank. */
 export function projectOfSavedInputs(value: unknown): string {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return "";
+  if (typeof value !== "object" || value === null) return "";
   const project = (value as { project?: unknown }).project;
   return typeof project === "string" ? project : "";
 }

@@ -1,7 +1,7 @@
 // Thread header for threads that run on an Ona devbox: what the thread has
 // spent so far, and an Editor button that opens the box in the Ona editor.
 // bb's own terminal panel already covers shells.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ComponentProps } from "react";
 import type { LegacyThreadHeaderActionRegistration } from "@get-bb/plugin-sdk/internal/plugin-app-collector";
 import {
@@ -11,7 +11,7 @@ import {
   type PluginMachineProviderInputsProps,
   useRpc,
 } from "@get-bb/plugin-sdk/app";
-import { projectInputsChange, projectOfSavedInputs } from "./src/machine-inputs.ts";
+import { ONA_MACHINE_PROVIDER_ID, projectInputsChange, projectOfSavedInputs } from "./src/machine-inputs.ts";
 import { remember } from "./src/move.ts";
 import type { Devbox, rpcContract, ThreadCost } from "./src/rpc.ts";
 
@@ -243,20 +243,28 @@ const projectInput =
 /** The "Ona project" field under the composer's "New Ona devbox": blank means the defaultProject setting. */
 function OnaProjectField({ value, onChange }: PluginMachineProviderInputsProps) {
   const [text, setText] = useState(() => projectOfSavedInputs(value));
+  const fieldId = useId();
+  const helpId = useId();
   useEffect(() => {
     onChange(projectInputsChange(text));
   }, [text, onChange]);
   return (
-    <label className="flex flex-col gap-1 text-xs">
-      <span className="font-medium text-foreground">Ona project</span>
+    <div className="flex flex-col gap-1 text-xs">
+      <label htmlFor={fieldId} className="font-medium text-foreground">
+        Ona project
+      </label>
       <input
+        id={fieldId}
         value={text}
         placeholder="Project name or id"
+        aria-describedby={helpId}
         onChange={(event) => setText(event.target.value)}
         className={projectInput}
       />
-      <span className="text-subtle-foreground">Blank uses the plugin's defaultProject setting</span>
-    </label>
+      <span id={helpId} className="text-subtle-foreground">
+        Blank uses the plugin's defaultProject setting
+      </span>
+    </div>
   );
 }
 
@@ -304,6 +312,10 @@ export default definePluginApp((app) => {
     title: "Devbox editor",
     component: DevboxEditor,
   });
-  // "ona" is PROVIDER_ID in src/provider.ts; app.tsx cannot import that module (it pulls in server code).
-  app.slots.experimental_machineProviderInputs({ machineProviderId: "ona", component: OnaProjectField });
+  // ONA_MACHINE_PROVIDER_ID equals PROVIDER_ID in src/provider.ts (a test checks it). app.tsx cannot
+  // import that module: it pulls in server code.
+  app.slots.experimental_machineProviderInputs({
+    machineProviderId: ONA_MACHINE_PROVIDER_ID,
+    component: OnaProjectField,
+  });
 });

@@ -231,12 +231,15 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   (`machineProviderId`, `machineInputs`, `machineAcceptsEmptyInputs`), finds the
   control registered for that machine provider and plugin, and renders it in a
   plugin slot with `value` and `onChange`. Checked 2026-11-05.
-- With no control registered, the composer's value is `{}` when the provider accepts
-  empty inputs. Otherwise it shows the blocked reason `<name> needs its plugin's control.`
-  or `Configure <name>.` (search `needs its plugin's control` in the same file).
-  bb sets `acceptsEmptyInputs` by validating `{}` against the provider's schema, and a
-  provider with no schema counts as accepting it (`server/dist/start-server.js`, line
-  101460, `acceptsEmptyInputs`). Checked 2026-11-05.
+- With no control registered, the composer's value is the saved value when there is one,
+  otherwise `{}` when the provider accepts empty inputs, otherwise null. The blocked reason
+  is `<name> needs its plugin's control.` when the provider does not accept empty inputs,
+  and none otherwise (search `needs its plugin's control` in
+  `NewThreadComposer-DjqGA_pM.js`, line 1). With a control registered, `Configure <name>.`
+  (same search) shows before the control's first report, when there is no saved value and
+  the provider does not accept empty inputs. bb sets `acceptsEmptyInputs` by validating `{}`
+  against the provider's schema, and a provider with no schema counts as accepting it
+  (`server/dist/start-server.js`, line 101460, `acceptsEmptyInputs`). Checked 2026-11-05.
 - The composer sends `providerMachine` as `{type: "new", machineProviderId, inputs}`
   with the control's value (`NewThreadComposer-DjqGA_pM.js`, line 1). bb's
   `prepareMachineProviderSelection` (`server/dist/start-server.js`, line 101774, called
