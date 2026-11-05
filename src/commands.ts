@@ -231,7 +231,7 @@ export const usage = [
   "  bb ona status [ref] [--json]  bb's view of each devbox next to Ona's, its box facts, and what the plugin last did",
   "  bb ona sync [ref]             Re-check Ona now and repair (ignores cooldowns, keeps the safety rules)",
   "  bb ona keep-alive <ref> <duration|off>  Keep a running devbox from Ona's inactivity timeout (at most 12h)",
-  "  bb ona move <thread-id> <ref>  Continue a thread in a new thread on another devbox",
+  "  bb ona move <thread-id> <ref>  Continue a thread in a new one on another devbox at the same path",
   "  bb ona update [ref] [--force] Apply pending Claude Code / Codex updates now (also runs weekdays 09:00)",
   "",
   "<ref> is a bb machine name/id or an Ona environment name/id.",
@@ -283,7 +283,7 @@ export const commands = [
     summary: "Re-check Ona now and repair out-of-step devboxes",
     usage: "bb ona sync [ref]",
   },
-  { name: "move", summary: "Continue a thread on another devbox", usage: "bb ona move <thread-id> <ref>" },
+  { name: "move", summary: "Continue a thread on another devbox, same path", usage: "bb ona move <thread-id> <ref>" },
   {
     name: "keep-alive",
     summary: "Keep a running devbox from Ona's inactivity timeout for a while",

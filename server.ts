@@ -347,13 +347,17 @@ export default async function plugin(bb: BbPluginApi) {
     };
   }
 
-  /** The Ona devbox a thread runs on, if any. */
-  async function threadDevbox(threadId: string): Promise<Devbox | null> {
-    const thread = await bb.sdk.threads.get({ threadId });
-    if (!thread.environmentId) return null;
-    const environment = await bb.sdk.environments.get({ environmentId: thread.environmentId });
+  /** The Ona devbox a workspace is on, if any. */
+  async function workspaceDevbox(environmentId: string): Promise<Devbox | null> {
+    const environment = await bb.sdk.environments.get({ environmentId });
     const row = await machineOfHost(environment.hostId);
     return row ? devboxOf(row) : null;
+  }
+
+  /** The Ona devbox a thread runs on, if any. */
+  async function threadDevbox(threadId: string): Promise<Devbox | null> {
+    const { environmentId } = await bb.sdk.threads.get({ threadId });
+    return environmentId ? workspaceDevbox(environmentId) : null;
   }
 
   const costs = createThreadCost({ bb, runCollector: provider.runCollector, threadDevbox, snapshot });
@@ -394,10 +398,10 @@ export default async function plugin(bb: BbPluginApi) {
   bb.rpc.register(rpcContract, {
     devboxes_list: async () => ({ devboxes: await devboxes() }),
     thread_devbox: async ({ threadId }) => {
-      // bb creates a thread before its workspace; the app asks again with the next set of visible threads, or in 15 s.
+      // bb creates a thread before its workspace; the app asks again every 15 s while the thread is shown.
       const { environmentId } = await bb.sdk.threads.get({ threadId });
       if (!environmentId) return { devbox: null, pending: true };
-      return { devbox: await threadDevbox(threadId) };
+      return { devbox: await workspaceDevbox(environmentId) };
     },
     thread_cost: async ({ threadId }) => ({ cost: await costs.threadCost(threadId) }),
     // A refusal carries the message to the menu; a plain throw would reach it as a crash.

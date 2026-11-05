@@ -137,18 +137,33 @@ test("thread_devbox looks up only the thread's host: no hosts.list, one hosts.ge
   const sdk = host.harness.inspection.sdk;
   const lists = sdk.callsTo("hosts.list").length;
   const gets = sdk.callsTo("hosts.get").length;
+  const threadReads = sdk.callsTo("threads.get").length;
   const reply = (await host.harness.behavior.callRpc("thread_devbox", { threadId: "thread-1" })) as {
     devbox: { hostId: string } | null;
   };
   assert.equal(reply.devbox?.hostId, "host-1");
   assert.equal(sdk.callsTo("hosts.list").length - lists, 0);
   assert.equal(sdk.callsTo("hosts.get").length - gets, 1);
+  assert.equal(sdk.callsTo("threads.get").length - threadReads, 1);
 });
 
-test("thread_devbox answers pending for a thread bb has not given a workspace yet", local, async () => {
-  assert.deepEqual(await host.harness.behavior.callRpc("thread_devbox", { threadId: "thread-2" }), {
-    devbox: null,
-    pending: true,
+test(
+  "thread_devbox answers pending, from one thread read, for a thread bb has not given a workspace yet",
+  local,
+  async () => {
+    const threadReads = host.harness.inspection.sdk.callsTo("threads.get").length;
+    assert.deepEqual(await host.harness.behavior.callRpc("thread_devbox", { threadId: "thread-2" }), {
+      devbox: null,
+      pending: true,
+    });
+    assert.equal(host.harness.inspection.sdk.callsTo("threads.get").length - threadReads, 1);
+  },
+);
+
+test("thread_move's refusal reaches the menu as a conflict with the move's message", local, async () => {
+  await assert.rejects(host.harness.behavior.callRpc("thread_move", { threadId: "thread-0", hostId: "host-1" }), {
+    code: "conflict",
+    message: /is not on a devbox this plugin manages right now/,
   });
 });
 
