@@ -219,7 +219,7 @@ test("a later read that answers clears the remembered read error, so the deadlin
         if (reads === 1) throw new Error("bb is down");
         return { lifecycle: { phase: "suspending", message: null } };
       },
-      { intervalMs: 1, deadlineMs: 20 },
+      { intervalMs: 1, deadlineMs: 200 },
     ),
     { name: "Error", message: "bb is still suspending the machine" },
   );

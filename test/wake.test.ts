@@ -129,7 +129,7 @@ test("bb ona resume on a STARTING box waits for Ona to finish and does not start
   const { deps, calls } = fixture(box("STARTING"), ["STARTING", "RUNNING"]);
   const result = await dispatch(deps)("box");
   assert.equal(result.exitCode, 0);
-  assert.match(result.stdout ?? "", /^Waited for box to start and reconnected it$/m);
+  assert.match(result.stdout ?? "", /^Reconnected box$/m);
   assert.ok(!calls.includes("start"), calls.join(", "));
 });
 
@@ -154,4 +154,12 @@ test("bb ona keep-alive reports a rejected lookup as exit 1, not a rejection (fa
   const result = await run(["keep-alive", "box", "2h"], {});
   assert.equal(result.exitCode, 1);
   assert.match(result.stderr ?? "", /bb is down/);
+});
+
+test("bb ona resume on a STOPPING box that Ona settles as running reports a reconnect, not a start (fails if the done line claims a start that was not called)", async () => {
+  const { deps, calls } = fixture(box("STOPPING"), ["STOPPING", "RUNNING"]);
+  const result = await dispatch(deps)("box");
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout ?? "", /^Reconnected box$/m);
+  assert.ok(!calls.includes("start"), calls.join(", "));
 });

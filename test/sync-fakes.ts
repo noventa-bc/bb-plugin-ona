@@ -220,7 +220,12 @@ export function world(
         calls.push("restart daemon");
         if (options.reconnectFails) throw new Error(options.reconnectFails);
       },
-      wake: options.wake ?? (async (resource) => void calls.push(`wake ${resource.envId}`)),
+      wake:
+        options.wake ??
+        (async (resource) => {
+          calls.push(`wake ${resource.envId}`);
+          return false;
+        }),
     },
     keepAliveUntil: () => null,
     hostByEnv: new Map(),

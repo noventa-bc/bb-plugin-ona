@@ -186,7 +186,7 @@ export const usage = [
   "                                Refused unless bb shows the machine active and Ona shows its box running.",
   "  bb ona resume <ref>           Start a stopped box and reconnect bb's daemon (your action; a running box is only reconnected)",
   "  bb ona status [ref] [--json]  bb's view of each devbox next to Ona's, its box facts, and what the plugin last did",
-  "  bb ona sync [ref]             Re-check Ona now and repair (ignores cooldowns and backoff, keeps the safety rules)",
+  "  bb ona sync [ref]             Re-check Ona now and repair (ignores cooldowns, backoff and the give-up, keeps the safety rules)",
   "  bb ona keep-alive <ref> <duration|off>  Keep a running devbox from Ona's inactivity timeout (at most 12h)",
   "  bb ona move <thread-id> <ref>  Continue a thread in a new one on another devbox at the same path",
   "  bb ona update [ref] [--force] Apply pending Claude Code / Codex updates now (also runs weekdays 09:00)",

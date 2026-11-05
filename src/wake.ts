@@ -2,7 +2,7 @@
 // machine; a running box is only reconnected. It also holds the reconnect refusals that `bb ona reconnect` shares with it.
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import type { CliResult } from "./commands.ts";
-import { isRunning, isStarting, reasonOf, type OnaEnvironment, type OnaListing } from "./ona.ts";
+import { isStarting, reasonOf, type OnaEnvironment, type OnaListing } from "./ona.ts";
 import type { registerOnaProvider } from "./provider.ts";
 import { short, STOPPED, type HostGuard } from "./reconcile.ts";
 import type { Row } from "./sync.ts";
@@ -74,13 +74,15 @@ export async function resumeCommand(deps: ResumeDeps, ref: string, signal: Abort
     return { exitCode: 1, stderr: `${row.machine} is not listed in Ona, so it was not resumed. Check the box in Ona.` };
   const steps: string[] = [];
   const report = { step: (text: string) => steps.push(text), log: () => {} };
+  // Set by the wake: true when it called Ona's start (a box that Ona started or ran by itself needs none).
+  const outcome: { started?: boolean } = {};
   // guard.run is the busy check: it returns false, without running, while another action holds the machine.
   const ran = await guard.run(
     row.hostId,
     "resume",
     "requested with bb ona resume",
     async () => {
-      await provider.wake(row.resource, report, signal);
+      outcome.started = await provider.wake(row.resource, report, signal);
     },
     { force: true, cooldown: false },
   );
@@ -90,10 +92,6 @@ export async function resumeCommand(deps: ResumeDeps, ref: string, signal: Abort
       stderr: `${row.machine} is busy (${guard.busyWith(row.hostId) ?? "another action"}); try again shortly or see \`bb ona status\`.`,
     };
   }
-  const done = isRunning(env)
-    ? `Reconnected ${row.machine}`
-    : isStarting(env)
-      ? `Waited for ${row.machine} to start and reconnected it`
-      : `Started ${row.machine} and reconnected it`;
+  const done = outcome.started ? `Started ${row.machine} and reconnected it` : `Reconnected ${row.machine}`;
   return { exitCode: 0, stdout: [...steps, done].join("\n") };
 }

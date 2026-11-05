@@ -109,7 +109,7 @@ export interface SyncDeps {
       resource: OnaResource,
       report: { step(text: string): void; log(text: string): void },
       signal: AbortSignal,
-    ): Promise<void>;
+    ): Promise<boolean>;
   };
   keepAliveUntil(envId: string): number | null;
   /** Ona env id -> bb host id, refreshed on every pass; shared with the tunnels and events. */
