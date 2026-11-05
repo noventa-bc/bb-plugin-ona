@@ -28,9 +28,8 @@ the quick fix is right and when it is not.
 - **Reviewer.** A fresh agent (not the builder) briefed to break the change:
   it hunts for the input, timing or state that makes it wrong, and reports
   only findings with a concrete failing case. Plus the repo's `code-review`
-  pass and `/ponytail-review`: three passes on every PR that changes code,
-  one (`code-review`) on a PR that changes only Markdown, a lockfile or a
-  `package.json` override, all independent of the orchestrator. Blocking findings go back to the builder
+  pass and `/ponytail-review`: the passes step 6 gives a PR, all
+  independent of the orchestrator. Blocking findings go back to the builder
   (step 6 says which block).
 
 Subagents run on Haiku at max effort by default (for example: builders of
@@ -76,8 +75,8 @@ those and the "skipped or not checked" lines ponytail ends with.
    let the owner pick. A task that touches bb's machine lifecycle (create,
    resume, suspend, remove, reconnect, the daemon) has its brief name the bb
    server function the builder reads first; a task that calls bb's API names
-   the server-side validation of that call too (the SDK typings do not show
-   it: a fork onto another host is refused only there). The source path is in
+   the server-side validation of that call too (it lives only in the server
+   source: a fork onto another host is refused there). The source path is in
    `docs/ona-notes.md` (bb SDK section). Read it with bounded grep (`grep -n`,
    piped to `head`). Its round-1 adversarial reviewer is briefed to read that
    source too, so it runs on Opus (see the model paragraph under Roles).
@@ -98,7 +97,8 @@ those and the "skipped or not checked" lines ponytail ends with.
    a failing test first where possible (each test names, in its title or the
    handoff, the bug it fails on; a test that still passes with the rule
    deleted is not done; stage the fix before a mutant you restore with
-   `git checkout`, or the restore brings back the unfixed file), keeps
+   `git -C <worktree> checkout -- <file>`, or the restore brings back the
+   unfixed file), keeps
    `npm run check` green, writes
    `.agent/HANDOFF.md`, and leaves the work staged for the orchestrator.
 6. **Review.** The orchestrator commits the builder's staged work on its
@@ -110,17 +110,17 @@ those and the "skipped or not checked" lines ponytail ends with.
    `/ponytail-review branch`, each on the branch against `origin/main`, in
    its own agent, briefed with the builder's worktree path (a fresh agent
    starts in the main checkout), and sends blocking findings
-   back to the builder. All three passes run on the first round of every PR
-   that changes code, however small; a PR that changes only Markdown, a
-   lockfile or a `package.json` override gets the `code-review` pass alone
-   (owner, 2026-11-05: three passes on a two-line override overlap). After
-   that, `code-review` runs every round; the adversarial pass and
+   back to the builder. Code, here, is anything but comments, lint messages,
+   Markdown, a lockfile and a `package.json` override; the Code Review Rules
+   in `AGENTS.md` and the rules table in `docs/sync.md` count as code. A PR
+   that changes code gets all three passes on its first round, however
+   small the change; a PR that changes no code gets the `code-review` pass
+   alone (owner, 2026-11-05: three passes on a two-line override overlap).
+   After that, `code-review` runs every round; the adversarial pass and
    `/ponytail-review` run on every round whose diff changed code since they
-   last ran (comments, lint messages and docs are not code, except the Code
-   Review Rules in `AGENTS.md` and the rules table in `docs/sync.md`). A PR
-   opens after a round with no blocking finding, and only once all three have run
-   on code that has not changed since. Check the ten Code Review Rules in
-   `AGENTS.md`.
+   last ran. A PR opens after a round with no blocking finding, and only
+   once the passes it gets have run on code that has not changed since.
+   Check the ten Code Review Rules in `AGENTS.md`.
 
    **Converge.** The item's code is the PR's scope, and reviewer briefs name
    it and ask for anything outside it under a separate "Pre-existing" heading.
@@ -136,7 +136,7 @@ those and the "skipped or not checked" lines ponytail ends with.
    adds no behaviour beyond a fix for a blocking finding: a fix that needs
    behaviour beyond that is its own item.
    Code converges in three rounds; from round 4 on, the orchestrator opens
-   the PR once nothing blocks and the passes above have run on the code as
+   the PR once nothing blocks and the passes it gets have run on the code as
    it stands.
 
 7. **Open the PR.** The title is a Conventional Commit (`type(scope):
@@ -148,7 +148,7 @@ subject`, see `AGENTS.md`): the squash merge makes it the commit on
    nothing), and CI checks the same rule. A version bump is not a code change
    for the review passes. Then push the branch and open a pull request
    against `main`. The description carries: the roadmap labels, what changed and why, how it
-   was tested, the three review passes and what each found, the owner
+   was tested, the review passes it got and what each found, the owner
    live-test steps from the handoff, and anything left out. Nothing from the
    "Weaknesses for the roadmap" handoff section goes in the PR; the
    orchestrator adds each to the private roadmap.

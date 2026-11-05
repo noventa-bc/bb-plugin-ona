@@ -78,7 +78,7 @@ Change these together, in the same edit.
 
 ## Code Review Rules
 
-The safety rules behind 1–4 are in `docs/sync.md`. Cite `file:line` for each finding. Report at most 5 nits. Run `/ponytail-review branch` in its own agent (FACTORY.md step 6).
+The safety rules behind 1–4 are in `docs/sync.md`. Cite `file:line` for each finding. Report at most 5 nits. Run `/ponytail-review branch` in its own agent when FACTORY.md step 6 gives the PR that pass.
 
 1. No SSH, start or stop of a box unless an Ona listing from the same check says the box is RUNNING. A failed listing means "unknown".
 2. Automatic suspends never stop a box.
