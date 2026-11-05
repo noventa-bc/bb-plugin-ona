@@ -205,11 +205,13 @@ function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
   const [devboxes, setDevboxes] = useState<Devbox[]>([]);
   const [threads, setThreads] = useState<Record<string, Devbox | null>>({});
   useEffect(() => {
-    // The cleanup before the next run (or unmount) ends this run's devboxes reply and its re-asks;
-    // a timer left over fires once and does nothing.
+    // The cleanup before the next run (or unmount) ends this run's re-asks (a timer left over fires
+    // once and does nothing) and drops its devboxes reply unless the list is still empty.
     let live = true;
     void rpc.call("devboxes_list", null).then(
-      // A reply from an older run fills an empty list and never replaces a newer one.
+      // A reply from an older run fills an empty list only. shortcut: a newer reply with no devboxes is
+      // "empty" too, so a box removed between two listings can stay listed until the next set of threads
+      // (choosing it is refused); upgrade to a run counter if that shows up in practice.
       (reply) => setDevboxes((current) => (live || current.length === 0 ? reply.devboxes : current)),
       () => undefined,
     );
