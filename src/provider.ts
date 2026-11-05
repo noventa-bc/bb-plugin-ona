@@ -155,6 +155,23 @@ export function envNameForKey(key: string): string {
   return friendlyName(key);
 }
 
+/** The refusal a remove or an orphan cleanup gives when a delete would lose work on the box; both paths say the same. */
+function notDeletingMessage(
+  name: string,
+  envId: string,
+  work: { branch?: string; count: number; files: number },
+): string {
+  const where = work.branch ? `on branch ${work.branch}` : "on its current branch";
+  const found: string[] = [];
+  if (work.count > 0) found.push(`${work.count} unpushed commit(s)`);
+  if (work.files > 0) found.push(`${work.files} uncommitted file(s)`);
+  return (
+    `Not deleting Ona environment ${name}: it has ${found.join(" and ")} ${where}. ` +
+    `Commit and push, or discard, the work, or delete the box in Ona with \`ona environment delete ${envId}\`, ` +
+    "then run `bb machine retry-cleanup` again."
+  );
+}
+
 export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
   const reconnect = (resource: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal) =>
     connect(resource, resource.key, report, signal);
@@ -410,7 +427,13 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       // adopted environments are never deleted.
       const env = await ona.findEnvironment(envNameForKey(key), signal);
       if (env) {
-        report.step(`Deleting orphaned Ona environment ${env.metadata.name}`);
+        // Same check as remove: a delete would lose the work on the box.
+        const work = unpushedWork(env);
+        if (work) {
+          await disconnect(env.id);
+          return { status: "failed", message: notDeletingMessage(env.metadata.name ?? env.id, env.id, work) };
+        }
+        report.step(`Deleting orphaned Ona environment ${env.metadata.name ?? env.id}`);
         await disconnect(env.id);
         await ona.delete(env.id, signal);
       }
@@ -515,17 +538,10 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         throw error;
       });
       const live = env && !isDeleted(env) ? env : null;
-      const unpushed = live && unpushedWork(live);
-      if (unpushed) {
+      const work = live && unpushedWork(live);
+      if (work) {
         await disconnect(owned.envId);
-        const where = unpushed.branch ? `on branch ${unpushed.branch}` : "on its current branch";
-        return {
-          status: "failed",
-          message:
-            `Not deleting Ona environment ${nameOf(live, owned)}: it has ${unpushed.count} unpushed commit(s) ${where}. ` +
-            `Push them, or delete the box in Ona with \`ona environment delete ${owned.envId}\`, ` +
-            "then run `bb machine retry-cleanup` again.",
-        };
+        return { status: "failed", message: notDeletingMessage(nameOf(live, owned), owned.envId, work) };
       }
       await disconnect(owned.envId);
       await deps.forgetBox(owned.envId);

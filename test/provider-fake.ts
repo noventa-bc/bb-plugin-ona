@@ -20,9 +20,11 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * gets null. `findEnvironment` finds `found` only by its name.
  * `lookupFails`: `findEnvironment` throws, and so does `getEnvironmentIfExists` for `found`'s id.
  * `unpushed`: the box has unpushed commits, so a remove is refused.
+ * `uncommitted`: the box has uncommitted files and no unpushed commits, so a remove is refused.
  * `reopenDuringMove`: a tunnel opens while an adopted remove's move-aside script runs.
  * `rootExits`: the `~/.bb-machines` script's exit codes in turn, the last one repeated.
- * `preflightExit`: the prerequisites check's exit code. Every other command exits 0 unless an option here says otherwise.
+ * `preflightExit`: the prerequisites check's exit code. Every other command exits 0 unless an option here says
+ * otherwise.
  * `sshExits`, `mountExits`, `curlExits`: the SSH, shared-home and tunnel probes' exit codes in turn, the last one
  * repeated (default 0). A failed SSH probe prints "refused". Listing `mountExits` turns the shared-home wait on.
  * `codexHome`: the Codex home is set, so connect runs its `mkdir`.
@@ -33,6 +35,7 @@ export type Setup = {
   phases?: (string | OnaEnvironment | Error | null)[];
   lookupFails?: boolean;
   unpushed?: boolean;
+  uncommitted?: boolean;
   reopenDuringMove?: boolean;
   rootExits?: number[];
   rootOutput?: string;
@@ -53,14 +56,15 @@ export const connectCalls = gated("ssh", "curl", "preflight", "bootstrap");
 const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
 
 /**
- * The provider in a fake host. `calls` logs `get` lookups by id, starts, stops, deletes and every SSH command connect runs;
- * `tunnels`, tunnel opens and closes.
+ * The provider in a fake host. `calls` logs the `get` lookups by id that reach Ona, starts, stops, deletes and every
+ * SSH command connect runs; `tunnels`, the ensure and stop calls.
  */
 export function register({
   found,
   phases = [],
   lookupFails,
   unpushed,
+  uncommitted,
   reopenDuringMove,
   rootExits = [],
   rootOutput = "",
@@ -95,8 +99,13 @@ export function register({
         calls.push("get failed");
         throw new Error("Ona is unreachable");
       }
-      if (unpushed) {
-        const git = { totalUnpushedCommits: 2, branch: "feat" };
+      if (unpushed || uncommitted) {
+        const git = {
+          totalUnpushedCommits: unpushed ? 2 : 0,
+          totalChangedFiles: uncommitted ? 1 : 0,
+          branch: "feat",
+        };
+        calls.push("get RUNNING");
         return { ...box("RUNNING"), status: { phase: "ENVIRONMENT_PHASE_RUNNING", content: { git } } };
       }
       const answer = phases.length ? next(phases)! : found;

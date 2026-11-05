@@ -430,20 +430,39 @@ test("listEnvironments parses a box whose readiness fields have odd types, and t
   assert.deepEqual(readiness(env!), { state: "waiting", reason: "starting" });
 });
 
-test("unpushedWork reports unpushed commits so remove keeps the box", async () => {
+type Git = NonNullable<NonNullable<NonNullable<OnaEnvironment["status"]>["content"]>["git"]>;
+const boxWithGit = (git?: Git): OnaEnvironment => ({ id: "env-0001", metadata: {}, status: { content: { git } } });
+
+test("unpushedWork reports unpushed commits and uncommitted files so remove keeps the box", async () => {
   setFake({ FAKE_ONA_GET: fixture("unpushed-environment.json") });
-  assert.deepEqual(unpushedWork(await cli.getEnvironment("env-6bbb")), { branch: "feature-x", count: 3 });
+  assert.deepEqual(unpushedWork(await cli.getEnvironment("env-6bbb")), { branch: "feature-x", count: 3, files: 1 });
 });
 
-test("unpushedWork is null for zero commits and when Ona doesn't say", async () => {
-  type Git = NonNullable<NonNullable<NonNullable<OnaEnvironment["status"]>["content"]>["git"]>;
-  const env = (git?: Git): OnaEnvironment => ({ id: "env-0001", metadata: {}, status: { content: { git } } });
-  assert.equal(unpushedWork(env({ branch: "main", totalUnpushedCommits: 0 })), null, "zero");
-  assert.equal(unpushedWork(env({ branch: "main" })), null, "no count");
-  assert.equal(unpushedWork(env()), null, "no git content");
+// Bug: on main, a box with uncommitted files and no unpushed commits was deleted with its files.
+test("a box with uncommitted files and no unpushed commits is kept, with the files count as a string too", () => {
+  const kept = { count: 0, files: 1 };
+  assert.deepEqual(unpushedWork(boxWithGit({ totalUnpushedCommits: 0, totalChangedFiles: 1 })), kept);
+  assert.deepEqual(unpushedWork(boxWithGit({ totalUnpushedCommits: 0, totalChangedFiles: "1" })), kept);
+});
+
+test("unpushedWork is null for zero commits and files, and when Ona doesn't say", async () => {
+  assert.equal(unpushedWork(boxWithGit({ branch: "main", totalUnpushedCommits: 0 })), null, "zero");
+  assert.equal(unpushedWork(boxWithGit({ totalUnpushedCommits: 0, totalChangedFiles: 0 })), null, "zero files");
+  assert.equal(unpushedWork(boxWithGit({ branch: "main" })), null, "no count");
+  assert.equal(unpushedWork(boxWithGit()), null, "no git content");
   setFake({});
   assert.equal(unpushedWork((await cli.listEnvironments())[0]!), null, "no content at all");
-  assert.deepEqual(unpushedWork(env({ totalUnpushedCommits: "2" })), { count: 2 }, "count as a string, no branch");
+  assert.deepEqual(unpushedWork(boxWithGit({ totalUnpushedCommits: "2" })), { count: 2, files: 0 }, "a string count");
+});
+
+// One odd count from Ona must not fail the whole listing: the count reads as absent.
+test("listEnvironments reads an odd uncommitted-files count as absent", async () => {
+  const file = join(dir, "odd-files.json");
+  const odd = { id: "env-0001", metadata: {}, status: { content: { git: { totalChangedFiles: null } } } };
+  writeFileSync(file, JSON.stringify([odd]));
+  process.env.FAKE_ONA_ENVIRONMENTS = file;
+  const [env] = await cli.listEnvironments();
+  assert.equal(unpushedWork(env!), null);
 });
 
 // What `bb ona status` shows about a box: every fact from one live get.
@@ -505,15 +524,15 @@ test("boxFacts: an odd start, timeout or activity reads as null, and a count tha
     null,
     "an activity with no source",
   );
-  assert.equal(
-    boxFacts(env({ status: { content: { git: { totalUnpushedCommits: -1 } } } })).unpushed,
-    0,
-    "a negative count",
-  );
+  for (const git of [{ totalUnpushedCommits: -1 }, { totalUnpushedCommits: -1, totalChangedFiles: 1 }]) {
+    assert.equal(boxFacts(env({ status: { content: { git } } })).unpushed, 0, JSON.stringify(git));
+  }
   for (const totalUnpushedCommits of ["Infinity", 2.5, "9007199254740993"]) {
     const git = { totalUnpushedCommits };
     assert.equal(boxFacts(env({ status: { content: { git } } })).unpushed, 0, String(totalUnpushedCommits));
   }
+  const uncommitted = boxFacts(env({ status: { content: { git: { totalChangedFiles: 1 } } } }));
+  assert.equal(uncommitted.unpushed, 0, "uncommitted files are not unpushed commits");
   assert.deepEqual(
     boxFacts(env({ status: { content: { git: { branch: "main" } } } })),
     { ...nothing, branch: "main" },
