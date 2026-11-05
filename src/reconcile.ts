@@ -217,16 +217,17 @@ export interface HostRecord {
   failures: number;
   /** No automatic action before this time. */
   quietUntil: number;
-  /** A thread's pass failed on this box, and no thread pass has succeeded since (a forced run starts a fresh chain; see `HostGuard.run`). */
+  /** A thread's pass, forced or not, failed on this box and the chain has not ended since (see `HostGuard.run`). */
   threadWaiting?: boolean;
 }
 
 /**
  * Rule 5: one action per machine at a time, a cooldown after each one,
  * exponential backoff after failures, and no more automatic retries after
- * GIVE_UP_AFTER failures in a row. The forcing callers skip them, and so does a
- * thread's pass before a pass with a thread waiting has failed on the box (docs/sync.md
- * rule 3). Heavy actions (SSH probes, daemon restarts) run at most `limit` at a time.
+ * GIVE_UP_AFTER failures in a row, counted across every unforced pass once a thread's
+ * pass has failed on the box, until bb shows it connected (docs/sync.md rule 3). The
+ * forcing callers skip the cooldown, backoff and give-up. Heavy actions (SSH probes,
+ * daemon restarts) run at most `limit` at a time.
  */
 export class HostGuard {
   private readonly busy = new Map<string, string>();
@@ -259,6 +260,12 @@ export class HostGuard {
     return record.failures < GIVE_UP_AFTER && this.clock.now() >= record.quietUntil;
   }
 
+  /** bb shows the machine connected: the chain has ended, and the failures stay (docs/sync.md rule 3). */
+  connected(hostId: string): void {
+    const record = this.records.get(hostId);
+    if (record?.threadWaiting) this.records.set(hostId, { ...record, threadWaiting: undefined });
+  }
+
   /**
    * Run `fn` as the machine's one action; a string it returns is appended to
    * the recorded reason. Returns false (without running it) when the machine is busy,
@@ -286,13 +293,14 @@ export class HostGuard {
         if (options.heavy) this.release();
       }
       const now = this.clock.now();
+      const held = !force && !options.threadWaiting && flagged;
       this.records.set(hostId, {
         action,
         reason: outcome ? `${reason}; ${outcome}` : reason,
         at: now,
-        failures: 0,
+        failures: held ? previous.failures : 0,
         quietUntil: options.cooldown === false ? now : now + COOLDOWN_MS,
-        threadWaiting: !force && !options.threadWaiting && flagged ? true : undefined,
+        threadWaiting: held ? true : undefined,
       });
     } catch (error) {
       const failures = (force ? 0 : (previous?.failures ?? 0)) + 1;

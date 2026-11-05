@@ -202,10 +202,11 @@ test("a thread pass's success clears the flag, and an other-action success keeps
         throw new Error("connect failed");
       },
     };
-    const { sync } = world([host], options);
+    const { sync, guard } = world([host], options);
     await sync.reconcile(new Set(["h1"]), { wait: true });
     await tick(6 * 60_000);
     await sync.reconcile(new Set(["h1"]), { wait: true });
+    assert.equal(guard.records.get("h1")!.failures, 1, "the other pass's success keeps the count");
     options.daemonAlive = false;
     options.reconnectFails = "daemon restart failed";
     for (let pass = 0; pass < 3; pass++) {
@@ -286,6 +287,99 @@ test("a forced run starts a new chain, so a `bb ona sync` that fails does not ho
   } finally {
     await resetFakeClock();
   }
+});
+
+// The wake's connect fails and closes the tunnel. The tunnel repair succeeds, and the daemon repairs are no-op successes
+// (the daemon is up): the failure count is kept through them, so the thread's wakes stop at the give-up.
+test("a failed start's count holds through the tunnel repair and the no-op daemon repairs after it, so a thread's wakes end (fails if a success resets the count)", async () => {
+  enableFakeClock();
+  try {
+    let wakes = 0;
+    const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+    const { sync } = world([host], {
+      refuse: REFUSED,
+      daemonAlive: true,
+      wake: async () => {
+        wakes++;
+        host.ona = "RUNNING";
+        host.tunnel = "off";
+        throw new Error("connect failed");
+      },
+    });
+    for (let cycle = 0; cycle < 6; cycle++) {
+      host.ona = "STOPPED";
+      await sync.reconcile(new Set(["h1"]), { wait: true });
+      await tick(6 * 60_000);
+      await sync.reconcile(new Set(["h1"]), { wait: true });
+      host.tunnel = "up";
+      for (let pass = 0; pass < 3; pass++) {
+        await tick(20 * 60_000);
+        await sync.reconcile(new Set(["h1"]), { wait: true });
+      }
+      await tick(20 * 60_000);
+    }
+    assert.ok(wakes <= GIVE_UP_AFTER, `${wakes} wakes`);
+    const [row] = await sync.statusRows();
+    assert.match(row!.retry ?? "", /^gave up/);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+// bb shows the machine connected, so the chain ends: the flag goes and the failures stay. A no-thread pass then gives up
+// on the box (its failure is the third), and the thread's pass that follows is forced again.
+test("a flagged record on a machine bb shows connected loses its flag, so the next thread pass is forced again (fails if a connected pass keeps the flag)", async () => {
+  enableFakeClock();
+  try {
+    let wakes = 0;
+    const host = idle("h1", { ona: "RUNNING", status: "connected", threads: [] });
+    const { sync, guard, hosts } = world([host], {
+      refuse: REFUSED,
+      wake: async () => {
+        wakes++;
+        return true;
+      },
+    });
+    guard.records.set("h1", {
+      action: "suspend-observed",
+      reason: "Ona stopped the box",
+      at: NOW,
+      error: "connect failed",
+      failures: 2,
+      quietUntil: NOW,
+      threadWaiting: true,
+    });
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    assert.equal(guard.records.get("h1")!.threadWaiting, undefined);
+    assert.equal(guard.records.get("h1")!.failures, 2);
+    hosts.get("h1")!.status = "disconnected";
+    host.ona = "STOPPED";
+    await tick(10 * 60_000);
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    host.threads = [waitingThread()];
+    await tick(10 * 60_000);
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    assert.equal(wakes, 1);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+// `bb ona sync` on a machine bb shows connected ends the chain as well.
+test("bb ona sync on a machine bb shows connected clears its flag (fails if a forced pass on a connected machine keeps the flag)", async () => {
+  const host = idle("h1", { ona: "RUNNING", status: "connected", threads: [] });
+  const { sync, guard } = world([host], { refuse: REFUSED });
+  guard.records.set("h1", {
+    action: "suspend-observed",
+    reason: "Ona stopped the box",
+    at: NOW,
+    error: "connect failed",
+    failures: 2,
+    quietUntil: NOW,
+    threadWaiting: true,
+  });
+  await sync.reconcile(new Set(["h1"]), { force: true, wait: true });
+  assert.equal(guard.records.get("h1")!.threadWaiting, undefined);
 });
 
 // Passes that keep finding a thread waiting, with bb refusing the suspend and the wake failing every time.

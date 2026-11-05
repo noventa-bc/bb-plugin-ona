@@ -476,6 +476,8 @@ export function createSync(deps: SyncDeps) {
           row.hostId,
           skipped ? `${decision.reason} (would ${decision.action}; autoRepair is off)` : decision.reason,
         );
+        // bb shows the machine connected: a thread's failed chain ends (docs/sync.md rule 3).
+        if (view.status === "connected") guard.connected(row.hostId);
         if (decision.action === "none" || skipped) continue;
         actions.push(act(row, decision, options.force ?? false));
       }
