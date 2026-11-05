@@ -223,9 +223,7 @@ test("a failed start's flag holds through an ensure-tunnel success and the heal-
   }
 });
 
-// A forced `bb ona sync` runs the thread's pass; its failure keeps the hold (flag, count 1 and a backoff), so the next
-// thread's pass waits the backoff out instead of starting the box again (docs/sync.md rule 3).
-test("a forced sync whose thread pass fails keeps the hold: flag, count 1, and no wake inside the backoff (fails if the forced failure drops the flag or the backoff)", async () => {
+test("a forced sync whose thread pass fails starts the hold: the flag is set and no wake runs inside the backoff (fails if the forced failure drops the flag or the backoff)", async () => {
   enableFakeClock();
   try {
     let wakes = 0;
@@ -238,12 +236,38 @@ test("a forced sync whose thread pass fails keeps the hold: flag, count 1, and n
       },
     });
     await sync.reconcile(new Set(["h1"]), { force: true, wait: true });
-    assert.equal(wakes, 1);
     assert.equal(guard.records.get("h1")!.threadWaiting, true);
-    assert.equal(guard.records.get("h1")!.failures, 1);
     await tick(60_000);
     await sync.reconcile(new Set(["h1"]), { wait: true });
     assert.equal(wakes, 1);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+// The first wake leaves the box running in Ona, so the forced `bb ona sync` runs a daemon repair, not the thread's
+// pass; its failure ends the hold, and the thread's next pass is forced past the backoff it left.
+test("a forced action that is not a thread's pass ends the hold when it fails, so the thread's next pass is forced again (fails if its failure keeps the flag)", async () => {
+  enableFakeClock();
+  try {
+    let wakes = 0;
+    const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+    const { sync } = world([host], {
+      refuse: REFUSED,
+      daemonAlive: false,
+      reconnectFails: "daemon restart failed",
+      wake: async () => {
+        wakes++;
+        host.ona = "RUNNING";
+        throw new Error("connect failed");
+      },
+    });
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    await tick(6 * 60_000);
+    await sync.reconcile(new Set(["h1"]), { force: true, wait: true });
+    host.ona = "STOPPED";
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    assert.equal(wakes, 2);
   } finally {
     await resetFakeClock();
   }

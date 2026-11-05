@@ -383,7 +383,7 @@ export function createSync(deps: SyncDeps) {
                 if (!decision.resumeAfter || lifecycle.phase !== "active") throw new Error(suspendFailure(refusal));
                 // bb's suspend failed (Ona stopped the box under a live turn) and left the machine active, where bb's
                 // resume does nothing: the plugin wakes the box (decision 0002).
-                // 15 minutes, as ensureRunning's wait for a box Ona is starting (provider.ts).
+                // The signal caps the whole wake at 15 minutes.
                 const startCalled = await provider.wake(resource, report, AbortSignal.timeout(15 * 60_000));
                 return startCalled ? "started it for a waiting thread" : "reconnected it for a waiting thread";
               }

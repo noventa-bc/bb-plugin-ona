@@ -9,7 +9,7 @@
 // 2. never stop compute: observed suspends skip the provider's stop;
 // 3. never restart a live daemon: probe first (a restart kills running turns);
 // 4. unknown is not gone: a failed or empty listing changes nothing;
-// 5. one action per machine at a time, with cooldown and backoff.
+// 5. one action per machine at a time, with cooldown, backoff and give-up.
 
 export const GRACE_MS = 45_000;
 export const STUCK_MS = 10 * 60_000;
@@ -220,14 +220,13 @@ export interface HostRecord {
   /** No automatic action before this time. */
   quietUntil: number;
   /**
-   * A thread's pass that fails, forced or not, keeps or starts the hold. A success of a thread's pass or of a forced
-   * run ends it, and so does `HostGuard.connected()`; a forced run that fails then records count 1 and a backoff, and
-   * starts a new hold only when the forced pass was a thread's pass (docs/sync.md rule 3).
+   * A thread's pass failed on this box, forced or not, and the hold has not ended since (`run` and `connected()`
+   * below; the events are in docs/sync.md rule 3).
    */
   threadWaiting?: boolean;
 }
 
-/** Safety rule 5: one action per machine at a time, with a cooldown, backoff and give-up (docs/sync.md rule 3). */
+/** Safety rule 5: one action per machine at a time, with a cooldown, backoff and give-up (docs/sync.md rules 3 and 5). */
 export class HostGuard {
   private readonly busy = new Map<string, string>();
   /** The last action actually taken per machine; routine checks never overwrite it. */
