@@ -3,7 +3,7 @@
 // are mocked, so each tick is one poll interval and the tests are instant.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { envNameForKey, resourceSchema } from "../src/provider.ts";
+import { envNameForKey, onaRef, resourceSchema } from "../src/provider.ts";
 import { tick, useFakeClock } from "./fake-clock.ts";
 import { adoptedResource, box, connectCalls, gated, lifecycle, register, resume, start } from "./provider-fake.ts";
 
@@ -482,4 +482,10 @@ test("wake keeps the tunnel when Ona settles a STOPPING box as running and the c
   );
   assert.ok(!calls.includes("start"), calls.join(", "));
   assert.deepEqual(tunnels, ["ensure env-1"]);
+});
+
+// The field trims and treats blank as ready, so the table cannot reach these; `bb ona new` passes its argument untrimmed.
+test("onaRef refuses a trailing newline and the empty name", () => {
+  assert.equal(onaRef.safeParse("a\n").success, false, "trailing newline");
+  assert.equal(onaRef.safeParse("").success, false, "empty name");
 });

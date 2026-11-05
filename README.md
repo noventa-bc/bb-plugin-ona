@@ -219,7 +219,8 @@ bb thread spawn --project <projectId> --machine ona:<name> \
 ```
 
 The **New Ona devbox** option in the environment picker creates a fresh devbox
-for the thread.
+for the thread. Its **Ona project** field picks the project for that devbox; a
+blank field uses the `defaultProject` setting.
 
 Check that the agent CLIs are installed and logged in:
 

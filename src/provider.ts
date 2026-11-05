@@ -2,6 +2,7 @@
 // created for bb or adopted from an existing one.
 import type { BbPluginApi, MachineBootstrapRequest, MachineExecutor } from "@get-bb/plugin-sdk";
 import { z } from "zod";
+import { ONA_MACHINE_PROVIDER_ID, ONA_NAME_MESSAGE, ONA_NAME_PATTERN } from "./machine-inputs.ts";
 import { friendlyName } from "./names.ts";
 import {
   isDeleted,
@@ -20,7 +21,7 @@ import { pollUntil } from "./time.ts";
 
 type PluginMachineProviderProgress = MachineBootstrapRequest["report"];
 
-export const PROVIDER_ID = "ona";
+export const PROVIDER_ID = ONA_MACHINE_PROVIDER_ID;
 
 /** Ona can be slow to wake a dev container; give each SSH check this long. */
 const CHECK_TIMEOUT_MS = 5 * 60_000;
@@ -44,7 +45,7 @@ export const resourceSchema = z.object({
 export type OnaResource = z.infer<typeof resourceSchema>;
 
 /** Ona names/ids passed to the ona CLI: never option-like, no shell metacharacters. */
-export const onaRef = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/, "use letters, digits, '.', '_' or '-'");
+export const onaRef = z.string().regex(ONA_NAME_PATTERN, ONA_NAME_MESSAGE);
 
 // Inputs are persisted and readable by every plugin: references only, no secrets.
 const inputsSchema = z.preprocess(
