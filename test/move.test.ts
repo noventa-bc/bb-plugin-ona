@@ -5,7 +5,9 @@ import { createMove, handOverMessage, type MoveDeps, type OutlineItem } from "..
 
 // A fake of the bb calls a move makes (MoveDeps): thread t1 on workspace e1 at
 // /workspaces/app on host h-src. Hosts h-src and h-dst are Ona devboxes named
-// src-box and dst-box; any other host is not. `spawned` records each spawn.
+// src-box and dst-box; any other host is not. `spawned` records each spawn that
+// returned; `spawnCalls` counts every call, and `onSpawn` runs inside each one
+// (throw to fail it, or wait to keep it pending).
 
 const OUTLINE: OutlineItem[] = [
   { id: "m1", role: "user", preview: "Fix the login bug", attachmentSummary: null },
@@ -16,7 +18,8 @@ function world(
   options: {
     environmentId?: string | null;
     path?: string | null;
-    spawnError?: Error;
+    onSpawn?: () => Promise<void>;
+    provisionType?: "managed-worktree" | "personal" | "unmanaged" | null;
     noOutline?: boolean;
     envHost?: string;
     title?: string | null;
@@ -24,6 +27,7 @@ function world(
   } = {},
 ) {
   const spawned: unknown[] = [];
+  let spawnCalls = 0;
   const boxes: Record<string, string> = { "h-src": "src-box", "h-dst": "dst-box" };
   const deps = {
     sdk: {
@@ -40,7 +44,8 @@ function world(
           return { items: OUTLINE, maxSeq: 2 };
         },
         spawn: async (args: unknown) => {
-          if (options.spawnError) throw options.spawnError;
+          spawnCalls++;
+          await options.onSpawn?.();
           spawned.push(args);
           return { id: "t2" };
         },
@@ -49,12 +54,13 @@ function world(
         get: async () => ({
           hostId: options.envHost ?? "h-src",
           path: options.path === undefined ? "/workspaces/app" : options.path,
+          workspaceProvisionType: options.provisionType ?? null,
         }),
       },
     },
     machineOfHost: async (hostId: string) => (boxes[hostId] ? { resource: { envName: boxes[hostId] } } : null),
   } as unknown as MoveDeps;
-  return { move: createMove(deps), spawned };
+  return { move: createMove(deps), spawned, spawnCalls: () => spawnCalls };
 }
 
 test("a move spawns a thread on the target box at the same path with the hand-over message", async () => {
@@ -94,21 +100,32 @@ test("a thread with no title takes bb's fallback title", async () => {
   assert.match(args?.prompt ?? "", /continues thread "Fix login"/);
 });
 
+test("an empty title takes bb's fallback title", async () => {
+  const args = await spawnedFor({ title: "  ", titleFallback: "Fix login" });
+  assert.equal(args?.title, "Fix login");
+});
+
 test("a thread with neither a title nor a fallback is named by its id", async () => {
   const args = await spawnedFor({ title: null, titleFallback: null });
   assert.equal(args?.title, "t1");
   assert.match(args?.prompt ?? "", /continues thread "t1"/);
 });
 
-test("a thread with no workspace is refused as not on an Ona devbox", async () => {
+test("a thread with no workspace is refused as not on a managed devbox", async () => {
   const { move, spawned } = world({ environmentId: null });
-  await assert.rejects(move({ threadId: "t1", hostId: "h-dst" }), /Thread t1 does not run on an Ona devbox/);
+  await assert.rejects(
+    move({ threadId: "t1", hostId: "h-dst" }),
+    /Thread t1 is not on a devbox this plugin manages right now/,
+  );
   assert.deepEqual(spawned, []);
 });
 
 test("a thread on a host that is not an Ona devbox is refused", async () => {
   const { move, spawned } = world({ envHost: "h-mac" });
-  await assert.rejects(move({ threadId: "t1", hostId: "h-dst" }), /Thread t1 does not run on an Ona devbox/);
+  await assert.rejects(
+    move({ threadId: "t1", hostId: "h-dst" }),
+    /Thread t1 is not on a devbox this plugin manages right now/,
+  );
   assert.deepEqual(spawned, []);
 });
 
@@ -124,6 +141,20 @@ test("a move to the thread's own box is refused", async () => {
   assert.deepEqual(spawned, []);
 });
 
+test("a thread in a bb-managed worktree or the personal workspace is refused", async () => {
+  for (const [provisionType, name] of [
+    ["managed-worktree", "bb-managed worktree"],
+    ["personal", "personal workspace"],
+  ] as const) {
+    const { move, spawnCalls } = world({ provisionType });
+    await assert.rejects(
+      move({ threadId: "t1", hostId: "h-dst" }),
+      new RegExp(`runs in a ${name}, which does not move`),
+    );
+    assert.equal(spawnCalls(), 0);
+  }
+});
+
 test("a workspace with no path is refused", async () => {
   const { move, spawned } = world({ path: null });
   await assert.rejects(move({ threadId: "t1", hostId: "h-dst" }), /no path to open on dst-box/);
@@ -131,7 +162,11 @@ test("a workspace with no path is refused", async () => {
 });
 
 test("bb's refusal of the spawn reaches the user with its message", async () => {
-  const { move } = world({ spawnError: new Error("Path /workspaces/app does not exist") });
+  const { move } = world({
+    onSpawn: async () => {
+      throw new Error("Path /workspaces/app does not exist");
+    },
+  });
   await assert.rejects(
     move({ threadId: "t1", hostId: "h-dst" }),
     /could not start the thread on dst-box: Path \/workspaces\/app does not exist/,
@@ -140,14 +175,43 @@ test("bb's refusal of the spawn reaches the user with its message", async () => 
 
 test("a spawn that times out while bb starts the box says the thread is coming, not that the move failed", async () => {
   const timeout = Object.assign(new Error("request timed out after 75000ms"), { name: "BbRequestTimeoutError" });
-  const { move } = world({ spawnError: timeout });
-  await assert.rejects(
-    move({ threadId: "t1", hostId: "h-dst" }),
-    /^Error: bb is still starting dst-box; the new thread appears in the project once it is up\. Do not move it again\.$/,
-  );
+  const { move, spawnCalls } = world({
+    onSpawn: async () => {
+      throw timeout;
+    },
+  });
+  const starting =
+    /^Error: bb is still starting dst-box; the new thread should appear in the project once it is up\. Do not move it again\.$/;
+  await assert.rejects(move({ threadId: "t1", hostId: "h-dst" }), starting);
+  // bb is still creating that thread, so a second move is refused the same way and spawns nothing.
+  await assert.rejects(move({ threadId: "t1", hostId: "h-dst" }), starting);
+  assert.equal(spawnCalls(), 1);
 });
 
-test("the hand-over message keeps only the latest 100 outline items", () => {
+test("a second move while the first spawn is pending is refused, and spawn runs once", async () => {
+  let release = () => {};
+  const { move, spawnCalls } = world({ onSpawn: () => new Promise<void>((resolve) => (release = resolve)) });
+  const first = move({ threadId: "t1", hostId: "h-dst" });
+  await assert.rejects(move({ threadId: "t1", hostId: "h-dst" }), /a move of this thread is still in progress/i);
+  release();
+  assert.deepEqual(await first, { threadId: "t2" });
+  assert.equal(spawnCalls(), 1);
+});
+
+test("a spawn that fails with another error lets a retry spawn again", async () => {
+  let failures = 1;
+  const { move, spawned, spawnCalls } = world({
+    onSpawn: async () => {
+      if (failures-- > 0) throw new Error("host unavailable");
+    },
+  });
+  await assert.rejects(move({ threadId: "t1", hostId: "h-dst" }), /host unavailable/);
+  assert.deepEqual(await move({ threadId: "t1", hostId: "h-dst" }), { threadId: "t2" });
+  assert.equal(spawnCalls(), 2);
+  assert.equal(spawned.length, 1);
+});
+
+test("the hand-over message keeps the first outline item and the last 99, and says how many it left out", () => {
   const outline = Array.from({ length: 101 }, (_, i): OutlineItem => ({
     id: `m${i}`,
     role: "user",
@@ -155,9 +219,12 @@ test("the hand-over message keeps only the latest 100 outline items", () => {
     attachmentSummary: null,
   }));
   const text = handOverMessage({ title: "Login fix", source: "src-box", path: "/workspaces/app", outline });
-  assert.doesNotMatch(text, /- user: message 0\n/);
-  assert.match(text, /- user: message 1\n/);
-  assert.match(text, /- user: message 100$/);
+  const kept = Array.from({ length: 99 }, (_, i) => `- user: message ${i + 2}`);
+  assert.ok(
+    text.endsWith(["- user: message 0", "(1 earlier messages left out.)", ...kept].join("\n")),
+    "item 0, the note, then items 2 to 100",
+  );
+  assert.doesNotMatch(text, /message 1\n/);
 });
 
 test("the hand-over message names the source, says uncommitted changes stayed, and lists the outline", () => {
@@ -165,7 +232,7 @@ test("the hand-over message names the source, says uncommitted changes stayed, a
     handOverMessage({ title: "Login fix", source: "src-box", path: "/workspaces/app", outline: OUTLINE }),
     [
       'This thread continues thread "Login fix", moved from devbox src-box at /workspaces/app.',
-      "Uncommitted changes stayed on src-box; only what was committed and pushed is here.",
+      "Uncommitted changes stayed on src-box. This box has its own clone: commits from src-box are here only once pushed, after you fetch that branch.",
       "Check the branch and state of the checkout before you go on.",
       "",
       "The old thread's conversation, in outline:",

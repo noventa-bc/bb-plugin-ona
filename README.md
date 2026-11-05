@@ -235,10 +235,13 @@ the work over: where it came from, and the old conversation in outline. The old 
 is. From your Mac's terminal: `bb ona move <thread-id> <name>`.
 
 - Only a thread whose workspace is a checkout path on the box can move, and the path must exist on
-  the target box. It does for the Ona project checkout (`/workspaces/<repo>`). bb refuses a thread in
-  its personal project or in a bb-managed worktree, and the message says so.
-- A stopped target box is started by bb. The new thread appears once the box is up, which can take
-  minutes; the menu may first report that bb is still starting the box. Do not move the thread again.
+  the target box. It does for the Ona project checkout (`/workspaces/<repo>`). A thread in a
+  bb-managed worktree or bb's personal workspace is refused, and so is one in bb's personal project;
+  the message says so.
+- The move checks only the path, not that the target's checkout is the same repository.
+- A stopped target box is started by bb. The new thread should appear once the box is up, which can
+  take minutes; the menu may first report that bb is still starting the box. A second move of that
+  thread is refused until then.
 - Uncommitted changes stay on the old box: commit and push a branch first. The new thread starts a
   fresh agent session; it learns the rest from the hand-over message.
 

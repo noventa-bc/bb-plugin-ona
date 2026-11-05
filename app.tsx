@@ -195,8 +195,7 @@ type MoveData = ReturnType<typeof useMoveData>;
 /**
  * The thread menu's "Move to devbox" (src/move.ts): the devboxes, listed again with each new set of
  * threads so their bb status labels (connected, suspended, …) stay close to current, and each shown
- * thread's devbox, asked with each new set of threads until a call has returned one. `moving` holds the
- * threads with a move in flight.
+ * thread's devbox, asked once (`place` records a moved thread's target box without a call).
  */
 function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
   const rpc = useRpc<typeof rpcContract>();
@@ -209,15 +208,15 @@ function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
     );
     for (const threadId of threadIds.filter((id) => !(id in threads))) {
       void rpc.call("thread_devbox", { threadId }).then(
-        // A null reply is not kept: a thread a move just created has no workspace yet, and gets one on the box.
-        (reply) => reply.devbox && setThreads((known) => ({ ...known, [threadId]: reply.devbox })),
+        (reply) => setThreads((known) => ({ ...known, [threadId]: reply.devbox })),
         () => undefined,
       );
     }
     // `threads` is left out on purpose: a reply must not trigger another round of calls.
   }, [rpc, threadIds]);
-  const moving = useRef(new Set<string>()).current;
-  return { rpc, devboxes, threads, moving };
+  const place = (threadId: string, devbox: Devbox | undefined) =>
+    setThreads((known) => ({ ...known, [threadId]: devbox ?? null }));
+  return { rpc, devboxes, threads, place };
 }
 
 export default definePluginApp((app) => {
@@ -240,17 +239,19 @@ export default definePluginApp((app) => {
           items: others.map((box) => ({ id: box.hostId, label: `${box.envName} (${box.status})` })),
         },
         async run({ value }) {
-          // A second pick while bb is still starting the first move's box would make a second thread.
-          if (!value || data.moving.has(thread.id)) return;
-          data.moving.add(thread.id);
+          if (!value) return;
           // bb only logs a thread action's error, so the refusal is shown here.
-          await data.rpc
-            .call("thread_move", { threadId: thread.id, hostId: value })
-            .then(
-              (moved) => navigate.toThread(moved.threadId),
-              (error: unknown) => window.alert(error instanceof Error ? error.message : String(error)),
-            )
-            .finally(() => data.moving.delete(thread.id));
+          await data.rpc.call("thread_move", { threadId: thread.id, hostId: value }).then(
+            (moved) => {
+              // The new thread has no workspace yet, so asking bb now would read null.
+              data.place(
+                moved.threadId,
+                others.find((box) => box.hostId === value),
+              );
+              navigate.toThread(moved.threadId);
+            },
+            (error: unknown) => window.alert(error instanceof Error ? error.message : String(error)),
+          );
         },
       };
     },

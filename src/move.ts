@@ -20,43 +20,65 @@ export interface MoveDeps {
 
 export type OutlineItem = Awaited<ReturnType<Sdk["threads"]["conversationOutline"]>>["items"][number];
 
-/** bb caps each outline preview at 200 characters but not their count (docs/ona-notes.md). */
+// shortcut: the outline keeps its first item and the last 99 (bb caps each preview, not their count:
+// docs/ona-notes.md), upgrade if hand-overs need more of a long thread's middle.
 const OUTLINE_MAX_ITEMS = 100;
 
 /** The new thread's first message: where the work came from, and the old conversation's latest outline. */
 export function handOverMessage(args: { title: string; source: string; path: string; outline: OutlineItem[] }) {
   const lines = [
     `This thread continues thread "${args.title}", moved from devbox ${args.source} at ${args.path}.`,
-    `Uncommitted changes stayed on ${args.source}; only what was committed and pushed is here.`,
+    `Uncommitted changes stayed on ${args.source}. This box has its own clone: commits from ${args.source} are here only once pushed, after you fetch that branch.`,
     "Check the branch and state of the checkout before you go on.",
   ];
   if (args.outline.length > 0) {
     lines.push("", "The old thread's conversation, in outline:");
-    for (const item of args.outline.slice(-OUTLINE_MAX_ITEMS)) lines.push(`- ${item.role}: ${item.preview}`);
+    const leftOut = Math.max(0, args.outline.length - OUTLINE_MAX_ITEMS);
+    for (const [index, item] of args.outline.entries()) {
+      if (index === 1 && leftOut > 0) lines.push(`(${leftOut} earlier messages left out.)`);
+      if (index === 0 || index > leftOut) lines.push(`- ${item.role}: ${item.preview}`);
+    }
   }
   return lines.join("\n");
 }
 
+const IN_PROGRESS = "A move of this thread is still in progress; wait for the new thread to appear.";
+
 export function createMove({ sdk, machineOfHost }: MoveDeps) {
+  /** Threads with a move bb has not finished: thread id -> the refusal a second move gets. */
+  const inFlight = new Map<string, string>();
   return async function move({ threadId, hostId }: { threadId: string; hostId: string }) {
     const thread = await sdk.threads.get({ threadId });
     const environment = thread.environmentId
       ? await sdk.environments.get({ environmentId: thread.environmentId })
       : null;
     const source = environment ? await machineOfHost(environment.hostId) : null;
-    if (!environment || !source) throw new Error(`Thread ${threadId} does not run on an Ona devbox.`);
+    if (!environment || !source)
+      throw new Error(`Thread ${threadId} is not on a devbox this plugin manages right now.`);
     const target = await machineOfHost(hostId);
     if (!target) throw new Error(`Machine ${hostId} is not an Ona devbox.`);
     if (environment.hostId === hostId) throw new Error(`The thread already runs on ${target.resource.envName}.`);
+    // bb sets this only for its default providers; any other provider reads null, so null is not refused.
+    const kind = environment.workspaceProvisionType;
+    if (kind === "managed-worktree" || kind === "personal") {
+      throw new Error(
+        `The thread runs in a ${kind === "personal" ? "personal workspace" : "bb-managed worktree"}, which does not move; only a thread at a checkout path on the box can.`,
+      );
+    }
     const path = environment.path;
     if (!path) throw new Error(`The thread's workspace has no path to open on ${target.resource.envName}.`);
-    const title = thread.title ?? thread.titleFallback ?? threadId;
+    const title = thread.title?.trim() || thread.titleFallback?.trim() || threadId;
     // The outline only helps the agent; without one the hand-over names the title alone.
     const outline = await sdk.threads.conversationOutline({ threadId }).then(
       (result) => result.items,
       () => [],
     );
     const prompt = handOverMessage({ title, source: source.resource.envName, path, outline });
+    // Shared by the menu, `bb ona move`, other windows and reloads: a second spawn would make a second thread.
+    const refusal = inFlight.get(threadId);
+    if (refusal) throw new Error(refusal);
+    inFlight.set(threadId, IN_PROGRESS);
+    let timedOut = false;
     try {
       const created = await sdk.threads.spawn({
         projectId: thread.projectId,
@@ -68,13 +90,16 @@ export function createMove({ sdk, machineOfHost }: MoveDeps) {
       });
       return { threadId: created.id };
     } catch (error) {
-      // The SDK client gives up after 75 s while bb goes on resuming a stopped box and creates the thread later.
+      // The SDK client gives up while bb goes on with the request (docs/ona-notes.md), so bb still creates the thread.
       if (error instanceof Error && error.name === "BbRequestTimeoutError") {
-        throw new Error(
-          `bb is still starting ${target.resource.envName}; the new thread appears in the project once it is up. Do not move it again.`,
-        );
+        timedOut = true;
+        const starting = `bb is still starting ${target.resource.envName}; the new thread should appear in the project once it is up. Do not move it again.`;
+        inFlight.set(threadId, starting);
+        throw new Error(starting);
       }
       throw new Error(`bb could not start the thread on ${target.resource.envName}: ${errorText(error)}`);
+    } finally {
+      if (!timedOut) inFlight.delete(threadId);
     }
   };
 }

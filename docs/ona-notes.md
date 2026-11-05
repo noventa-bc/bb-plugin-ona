@@ -193,6 +193,16 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   unknown after interruption. Automatic cleanup is blocked; inspect the workspace before
   recovering it." `sweepProviderEnvironmentInSlot` records that error as a failed
   teardown (checked 2026-11-04).
+- bb 0.48.1's SDK for a plugin is built by `createNodeBbSdk` with a fetch that gives up after
+  `DEFAULT_BB_REQUEST_TIMEOUT_MS` (75 s) and throws an Error named `BbRequestTimeoutError`, while bb
+  goes on with the request (checked 2026-11-05 in `server/dist/start-server.js`).
+- bb 0.48.1 refuses a thread spawn into its personal project unless the workspace is a personal one
+  ("Personal project threads must use a personal workspace", `assertProjectWorkspaceCompatibility`).
+  An environment's `workspaceProvisionType` is set only for bb's default environment providers
+  (`resolveDeprecatedWorkspaceProvisionType`); a workspace from any other provider reads null
+  (checked 2026-11-05).
+- bb 0.48.1 returns `threads.conversationOutline` items oldest first: event rows sorted ascending,
+  items pushed in timeline order (checked 2026-11-05).
 - bb 0.48.1 refuses a fork onto another host: `assertForkSourceHost` throws 400
   "Fork environment must use the source thread's host" when the request's
   `originKind` is `fork` and the target host differs from the source thread's.
