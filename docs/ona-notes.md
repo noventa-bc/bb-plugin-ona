@@ -35,13 +35,9 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
     commit). Absent when the box has no git content (checked 2026-10-30 on a
     live listing).
   - `status.content.git`: `totalChangedFiles` (a number) and `changedFiles`
-    (one path per entry) for uncommitted changes. A stopped box in
-    `ona environment list -o json` showed the git block with `totalChangedFiles`
-    (checked 2026-11-05 by the orchestrator).
-  - A stopped box's `ona environment get <id> -o json` also shows
-    `status.content.git`, with `branch`, `changedFiles`, `cloneUrl`,
-    `latestCommit` and `totalChangedFiles` (20 on that box), checked 2026-11-05.
-  - A clean box has no `totalChangedFiles` at all, checked 2026-11-05.
+    (one path per entry) for uncommitted changes. A stopped box shows them in
+    both `ona environment list -o json` and `ona environment get <id> -o json`;
+    a clean box has no `totalChangedFiles` at all (checked 2026-11-05).
   - `status.devcontainer.phase`
   - `status.environmentUrls.*`
   - `metadata.lastStartedAt`: RFC 3339 with microseconds, on a running and a

@@ -304,8 +304,9 @@ bb machine remove ona:<name>   # created: deletes the box unless it has unpushed
   workspace whose message says it belongs to a different plugin or has no recorded
   owner (checked 2026-11-04); the plugin's line still shows after 60 s and an active
   box stays awake ([docs/ona-notes.md](docs/ona-notes.md)). To start over on an adopted
-  box (never a created one: there `bb machine remove` deletes the environment unless it has unpushed commits or uncommitted files), keep the
-  box running and run `bb machine remove <machine>`. If it succeeds, run `bb ona adopt <box>` (see the bullet
+  box (never a created one: there `bb machine remove` deletes the environment unless
+  it has unpushed commits or uncommitted files), keep the box running and run
+  `bb machine remove <machine>`. If it succeeds, run `bb ona adopt <box>` (see the bullet
   on adopting). On an adopted box, when its cleanup fails, keep the box running, stop every bb daemon on it,
   and anything running from a checkout in it, with
   `ssh "$(bb ona host <box>)" 'pkill -f "$(readlink -f ~/.bb-machines)/"'`, and run
