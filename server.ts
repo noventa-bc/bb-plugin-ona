@@ -404,7 +404,7 @@ export default async function plugin(bb: BbPluginApi) {
       return { devbox: await workspaceDevbox(environmentId) };
     },
     thread_cost: async ({ threadId }) => ({ cost: await costs.threadCost(threadId) }),
-    // A refusal carries the message to the menu; a plain throw would reach it as a crash.
+    // A refusal carries the message to the menu without bb recording a plugin crash, which a plain throw would be.
     thread_move: (input) =>
       move(input).catch((error: unknown) => {
         throw new experimental_PluginRpcRefusal({ code: "conflict", message: errorText(error) });
