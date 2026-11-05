@@ -5,7 +5,7 @@
 // rule: change both together.
 //
 // Safety rules every action here keeps:
-// 1. never wake compute: no start, no SSH unless Ona says RUNNING;
+// 1. never wake compute: no start, no SSH unless Ona says RUNNING, except the two starts docs/sync.md rule 1 names;
 // 2. never stop compute: observed suspends skip the provider's stop;
 // 3. never restart a live daemon: probe first (a restart kills running turns);
 // 4. unknown is not gone: a failed or empty listing changes nothing;
@@ -220,21 +220,14 @@ export interface HostRecord {
   /** No automatic action before this time. */
   quietUntil: number;
   /**
-   * A thread's pass, forced or not, failed on this box and its hold has not ended since. `HostGuard.run` sets it;
-   * `HostGuard.connected()`, a thread's pass succeeding and a forced run end it: the hold ends, and the count and the
-   * quiet period (cooldown or backoff) start again (docs/sync.md rule 3).
+   * A thread's pass that fails, forced or not, keeps or starts the hold. A success of a thread's pass or of a forced
+   * run ends it, and so does `HostGuard.connected()`; a forced run that fails then records count 1 and a backoff, and
+   * starts a new hold only when the forced pass was a thread's pass (docs/sync.md rule 3).
    */
   threadWaiting?: boolean;
 }
 
-/**
- * Rule 5: one action per machine at a time, a cooldown after each one,
- * exponential backoff after failures, and no more automatic retries after
- * GIVE_UP_AFTER failures in a row. A thread's pass can skip the cooldown, backoff and give-up
- * that other passes left. A hold keeps the count across successes. The hold ends, and the count and the quiet period
- * (cooldown or backoff) start again (docs/sync.md rule 3). Heavy actions (SSH probes, daemon restarts) run at most
- * `limit` at a time.
- */
+/** Safety rule 5: one action per machine at a time, with a cooldown, backoff and give-up (docs/sync.md rule 3). */
 export class HostGuard {
   private readonly busy = new Map<string, string>();
   /** The last action actually taken per machine; routine checks never overwrite it. */
@@ -267,8 +260,8 @@ export class HostGuard {
   }
 
   /**
-   * A machine bb shows connected with its tunnel up, on a box Ona shows running: the hold ends, and the count and the
-   * quiet period (cooldown or backoff) start again (docs/sync.md rule 3).
+   * A machine bb shows connected with its tunnel up, on a box Ona shows running: a held box's hold ends,
+   * and its count and quiet period are cleared (docs/sync.md rule 3).
    */
   connected(hostId: string): void {
     const record = this.records.get(hostId);

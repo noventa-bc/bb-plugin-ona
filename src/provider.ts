@@ -122,8 +122,7 @@ export const MOVE_MACHINE_ASIDE = [
   // A folder that holds other machines' data folders is never stopped or moved.
   '  for other in "$data"/*/host-id; do [ -f "$other" ] && continue 2; done',
   '  real=$(cd "$data" && pwd -P) || exit 1; export real given="$data"; n=0',
-  // The home folder, or a folder above it, is never a machine's data folder: it stays.
-  // An unresolvable HOME stops here too.
+  // The home folder, or a folder above it, is never a machine's data folder: it stays. An unresolvable HOME stops here too.
   '  home=$(cd "${HOME:?}" && pwd -P) || exit 5',
   '  case "$home/" in "${real%/}"/*) exit 5 ;; esac',
   // A newline in the path can't be matched within one listing line: the folder stays.
@@ -157,9 +156,7 @@ export function envNameForKey(key: string): string {
   return friendlyName(key);
 }
 
-/**
- * The refusal a remove or an orphan cleanup gives when a delete would lose work on the box; both paths say the same.
- */
+/** The refusal a remove or an orphan cleanup gives when a delete would lose work on the box; both paths say the same. */
 function notDeletingMessage(
   name: string,
   envId: string,

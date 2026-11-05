@@ -31,8 +31,9 @@ export default tseslint.config(
       "no-restricted-syntax": [
         "error",
         // bb can accept a lifecycle request without acting on it; use the host it returns. A lifecycle call is discarded
-        // when its statement is bare, awaited or void, possibly followed by a chain of calls: chains up to two calls deep
-        // are covered (`.catch(...)`, and `.catch(...).finally(...)`).
+        // when its statement is bare, awaited or void, possibly followed by a chain of calls such as `.catch(...)` or
+        // `.catch(...).finally(...)`.
+        // shortcut: chains up to two calls deep, add a parent form when a deeper chain appears
         ...[
           "ExpressionStatement > AwaitExpression",
           "ExpressionStatement > UnaryExpression[operator='void']",
