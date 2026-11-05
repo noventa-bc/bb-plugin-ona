@@ -49,7 +49,7 @@ test("R1: a brief disconnect waits out the grace period, unless a thread is wait
 test("R1: bb working on a workspace skips the grace period, but never resumes a stopped box", () => {
   const brief = machine({ lastSeenAt: NOW - GRACE_MS + 1_000, workspaceWaiting: true });
   assert.equal(decide(brief, ona("RUNNING"), NOW).action, "heal-daemon");
-  assert.match(decide(brief, ona("RUNNING"), NOW).reason, /workspace/);
+  assert.match(decide(brief, ona("RUNNING"), NOW).reason, /retrying or retiring a workspace/);
   assert.equal(decide(brief, ona("STOPPED"), NOW).resumeAfter, false);
 });
 
