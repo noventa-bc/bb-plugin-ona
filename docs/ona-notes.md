@@ -258,8 +258,9 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   session key changes: `J`, a JSON key over the project and the new-thread settings, no longer
   equals the state `nt` (the `nt!==J&&` branch, search `nt!==J`). The user's pick of a
   different environment or machine in that composer session sets the composer's `ot` flag
-  (`st(!0)` in the same file, line 1). The machine restore reads the flag in its `!ot&&`
-  condition; the same file has three `!ot&&` conditions (search `!ot&&`). Checked 2026-11-05.
+  (`st(!0)` in the same file, line 1). The machine restore reads the flag in its condition
+  `initialValue:!ot&&` (search `initialValue:!ot&&`, one match in the file); the same file has
+  three `!ot&&` conditions in all (search `!ot&&`). Checked 2026-11-05.
 - bb 0.48.1 gives a control's blocked reason to the composer's prompt as `disabledReason` and
   disables the prompt (search `disabledReason:n??void 0` in the same file, line 1). Checked
   2026-11-05.

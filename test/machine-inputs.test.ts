@@ -25,6 +25,9 @@ test("the name rule: 1 to 80 characters, a letter or digit first, then letters, 
   for (const name of ["a".repeat(81), "-rf", "_a", ".a", "a;b", "a b", "a/b", "a\nb"]) {
     assert.equal(projectInputsChange(name).status, "blocked", `expected blocked: ${name}`);
   }
+  for (const c of "$`|&()*?'\"\\#~=:@+,%!<>{}[] \t\r\u0000" + "é١") {
+    assert.equal(projectInputsChange(`a${c}b`).status, "blocked", `expected blocked: ${JSON.stringify(c)}`);
+  }
   // Two calls in a row on purpose: with a global flag, the pattern keeps lastIndex between calls.
   assert.equal(projectInputsChange("my-app").status, "ready");
   assert.equal(projectInputsChange("my-app1").status, "ready");
