@@ -15,10 +15,10 @@ export const box = (phase: string): OnaEnvironment => ({
 export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, key: "key-1" };
 
 /**
- * `phases`: what each Ona lookup returns in turn, the last one repeated: a phase, a box, null (a box Ona no
- * longer has) or an Error (the lookup throws). Without phases, every `getEnvironmentIfExists` lookup returns
- * `found`; `findEnvironment` returns it only when the ref is its name.
- * `lookupFails`: every Ona lookup throws.
+ * `phases`: what `getEnvironmentIfExists` returns for `found`'s id, in turn, the last one repeated: a phase, a box,
+ * null (a box Ona no longer has) or an Error (the lookup throws). Without phases it returns `found`; any other id
+ * gets null. `findEnvironment` finds `found` only by its name.
+ * `lookupFails`: `getEnvironmentIfExists` and `findEnvironment` throw.
  * `unpushed`: the box has unpushed commits, so a remove is refused.
  * `reopenDuringMove`: a tunnel opens while an adopted remove's move-aside script runs.
  * `rootExits`: the `~/.bb-machines` script's exit codes in turn, the last one repeated.
@@ -83,11 +83,18 @@ export function register({
   };
   const ona = {
     // By name, as cleanup finds a created box by its key-derived name; an adopted box keeps its own.
-    findEnvironment: async (ref: string) => (ref !== found.metadata.name ? null : found),
-    getEnvironmentIfExists: async (_id: string, signal: AbortSignal) => {
+    findEnvironment: async (ref: string) => {
+      if (lookupFails) throw new Error("Ona is unreachable");
+      return ref !== found.metadata.name ? null : found;
+    },
+    getEnvironmentIfExists: async (id: string, signal: AbortSignal) => {
+      if (id !== found.id) return null;
       // As the real CLI call would: a loop that probes past an abort fails instead of spinning.
       signal.throwIfAborted();
-      if (lookupFails) throw new Error("Ona is unreachable");
+      if (lookupFails) {
+        calls.push("get failed");
+        throw new Error("Ona is unreachable");
+      }
       if (unpushed) {
         const git = { totalUnpushedCommits: 2, branch: "feat" };
         return { ...box("RUNNING"), status: { phase: "ENVIRONMENT_PHASE_RUNNING", content: { git } } };
