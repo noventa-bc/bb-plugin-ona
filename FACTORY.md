@@ -109,8 +109,14 @@ those and the "skipped or not checked" lines ponytail ends with.
    orchestrator's own verdict), `code-review` (its recipe followed by hand:
    the Skill itself starts many agents) and `/ponytail-review branch`, each
    on the branch against `origin/main`, in its own agent, briefed with the
-   builder's worktree path (a fresh agent starts in the main checkout), and
-   sends blocking findings back to the builder. Code, here, is anything but
+   builder's worktree path (a fresh agent starts in the main checkout) and
+   told to work in a scratch folder of its own (`git archive <sha>` into a
+   new folder; link `node_modules` only when the folder has none: shared
+   folders collided and one link looped), and
+   sends blocking findings back to the builder. Before a round swaps or
+   retitles a test, run the old test against the mutant its title names: a
+   title can be right for a clause the round misread (R46 cost two rounds
+   that way). Code, here, is anything but
    comments, lint messages, Markdown, a lockfile, a `package.json` override
    and the version bump (step 7); the ten numbered Code Review Rules in
    `AGENTS.md` and the rules table in `docs/sync.md` count as code. A PR
@@ -250,3 +256,7 @@ Rules the owner gave that no section above states. Checked 2026-11-02.
 - The owner may stop the session when the weekly usage limit nears 99%. The
   orchestrator cannot see the limit; when the owner says to halt, finish the
   step in hand, write the handoffs and report, and open no new PR.
+- Every feature the CLI has gets a UI control too, unless the owner says it is
+  not needed; the orchestrator asks the owner where it goes (2026-11-05).
+- A commit subject or PR title is at most 100 characters (`.githooks/commit-msg`
+  refuses longer, after the pre-commit check has run): measure it first.
