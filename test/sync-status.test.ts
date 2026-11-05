@@ -73,34 +73,219 @@ test("a box Ona starts before the waiting thread's wake is connected, not starte
   assert.equal(record.error, undefined);
 });
 
-// Another action gave up on h1. The record is set directly: a real pass would wait out the cooldown on the system
-// clock. Its failures do not hold a thread's pass, so the wake runs.
-test("a waiting thread's pass runs past another action's give-up, so the wake runs (fails if the pass honours the give-up)", async () => {
-  const ona = registerOna({ found: { ...box("STOPPED"), id: "env-h1" }, phases: ["STOPPED", "RUNNING"] });
-  const waiting: ThreadRecord = {
-    id: "t1",
-    status: "active",
-    updatedAt: NOW,
-    runtime: { displayStatus: "waiting-for-host" },
-  };
-  const { sync, calls, guard } = world([idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waiting] })], {
-    refuse: REFUSED,
-    wake: ona.wake,
-  });
-  guard.records.set("h1", {
-    action: "heal-daemon",
-    reason: "the daemon wasn't connected",
-    at: NOW,
-    error: "restart failed",
-    failures: GIVE_UP_AFTER,
-    quietUntil: NOW + HOUR,
-  });
-  await sync.reconcile(new Set(["h1"]), { wait: true });
-  assert.deepEqual(calls, ["suspend h1"]);
-  assert.deepEqual(ona.calls.slice(-connectCalls.length), connectCalls);
-  const record = guard.records.get("h1")!;
-  assert.match(record.reason, /; started it for a waiting thread$/);
-  assert.equal(record.error, undefined);
+const waitingThread = (): ThreadRecord => ({
+  id: "t1",
+  status: "active",
+  updatedAt: NOW,
+  runtime: { displayStatus: "waiting-for-host" },
+});
+
+// The wake starts the box and its connect fails. The tunnel stays up, so the passes after it decide heal-daemon, and
+// their restarts fail too: the chain holds through them, and the thread's wakes stop at the give-up.
+test("a failed start holds its chain through the heal-daemon failures after it, so a thread's wakes end (fails if a later failure clears the chain)", async () => {
+  enableFakeClock();
+  try {
+    let wakes = 0;
+    const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+    const { sync } = world([host], {
+      refuse: REFUSED,
+      daemonAlive: false,
+      reconnectFails: "daemon restart failed",
+      wake: async () => {
+        wakes++;
+        host.ona = "RUNNING";
+        throw new Error("connect failed");
+      },
+    });
+    for (let cycle = 0; cycle < 5; cycle++) {
+      host.ona = "STOPPED";
+      await sync.reconcile(new Set(["h1"]), { wait: true });
+      for (let pass = 0; pass < 3; pass++) {
+        await tick(15 * 60_000);
+        await sync.reconcile(new Set(["h1"]), { wait: true });
+      }
+      await tick(15 * 60_000);
+    }
+    assert.ok(wakes <= GIVE_UP_AFTER, `${wakes} wakes`);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+// Passes alternate between a thread and no thread (its thread read fails); the chain keeps counting across both.
+test("a no-thread pass whose thread read failed does not reopen a thread's chain, so the wakes stop at the give-up (fails if the alternation makes more wakes)", async () => {
+  enableFakeClock();
+  try {
+    let wakes = 0;
+    const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+    const { sync, guard } = world([host], {
+      refuse: REFUSED,
+      wake: async () => {
+        wakes++;
+        throw new Error("Ona would not start the box");
+      },
+    });
+    for (let pass = 0; pass < 10; pass++) {
+      host.threads = pass % 2 === 0 ? [waitingThread()] : "fail";
+      await sync.reconcile(new Set(["h1"]), { wait: true });
+      await tick(6 * 60_000);
+    }
+    assert.ok(wakes <= GIVE_UP_AFTER, `${wakes} wakes`);
+    assert.equal(guard.records.get("h1")!.failures, GIVE_UP_AFTER);
+    const [row] = await sync.statusRows();
+    assert.match(row!.retry ?? "", /^gave up after 3 failures/);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+// A thread's own failure backs off: a pass 2 minutes later stays quiet until the cooldown ends.
+test("a thread's own failure backs off: a pass 2 minutes later makes no second suspend (fails if a thread's pass ignores the backoff)", async () => {
+  enableFakeClock();
+  try {
+    const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+    const { sync, calls } = world([host], {
+      refuse: REFUSED,
+      wake: async () => {
+        throw new Error("Ona would not start the box");
+      },
+    });
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    await tick(2 * 60_000);
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    assert.equal(calls.filter((call) => call === "suspend h1").length, 1);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+// A thread pass's success clears the flag, so the give-up that other passes leave after it does not hold the thread.
+// An other-action success keeps the flag, so the failures after it still hold the thread.
+test("a thread pass's success clears the flag, and an other-action success keeps it (fails if a success clears or keeps it the wrong way)", async () => {
+  enableFakeClock();
+  async function threadSuccessClears() {
+    let wakes = 0;
+    let wakeFails = true;
+    const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+    const { sync } = world([host], {
+      refuse: REFUSED,
+      wake: async () => {
+        wakes++;
+        if (wakeFails) throw new Error("Ona would not start the box");
+        return true;
+      },
+    });
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    await tick(6 * 60_000);
+    wakeFails = false;
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    host.threads = [];
+    for (let pass = 0; pass < 3; pass++) {
+      await tick(30 * 60_000);
+      await sync.reconcile(new Set(["h1"]), { wait: true });
+    }
+    host.threads = [waitingThread()];
+    await tick(30 * 60_000);
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    assert.equal(wakes, 3);
+  }
+  async function otherSuccessKeeps() {
+    let wakes = 0;
+    const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+    const options = {
+      refuse: REFUSED,
+      daemonAlive: true,
+      reconnectFails: "",
+      wake: async () => {
+        wakes++;
+        host.ona = "RUNNING";
+        throw new Error("connect failed");
+      },
+    };
+    const { sync } = world([host], options);
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    await tick(6 * 60_000);
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    options.daemonAlive = false;
+    options.reconnectFails = "daemon restart failed";
+    for (let pass = 0; pass < 3; pass++) {
+      await tick(20 * 60_000);
+      await sync.reconcile(new Set(["h1"]), { wait: true });
+    }
+    host.ona = "STOPPED";
+    await tick(20 * 60_000);
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    assert.equal(wakes, 1);
+  }
+  try {
+    await threadSuccessClears();
+    await otherSuccessKeeps();
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+// The wake's connect fails and closes the tunnel. The next RUNNING pass ensures it (an other-action success), and the
+// heal-daemon restarts after it fail to the give-up. The flag holds through all of it, so the thread's wakes stop.
+test("a failed start's flag holds through an ensure-tunnel success and the heal-daemon failures after it, so a thread's wakes end (fails if a success clears the flag)", async () => {
+  enableFakeClock();
+  try {
+    let wakes = 0;
+    const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+    const { sync } = world([host], {
+      refuse: REFUSED,
+      daemonAlive: false,
+      reconnectFails: "daemon restart failed",
+      wake: async () => {
+        wakes++;
+        host.ona = "RUNNING";
+        host.tunnel = "off";
+        throw new Error("connect failed");
+      },
+    });
+    for (let cycle = 0; cycle < 5; cycle++) {
+      host.ona = "STOPPED";
+      await sync.reconcile(new Set(["h1"]), { wait: true });
+      await tick(6 * 60_000);
+      await sync.reconcile(new Set(["h1"]), { wait: true });
+      host.tunnel = "up";
+      for (let pass = 0; pass < 3; pass++) {
+        await tick(20 * 60_000);
+        await sync.reconcile(new Set(["h1"]), { wait: true });
+      }
+      await tick(20 * 60_000);
+    }
+    assert.ok(wakes <= GIVE_UP_AFTER, `${wakes} wakes`);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+// A forced run starts a new chain: a `bb ona sync` that fails does not hold the next thread's wake.
+test("a forced run starts a new chain, so a `bb ona sync` that fails does not hold the next thread's wake (fails if a forced failure keeps the flag)", async () => {
+  enableFakeClock();
+  try {
+    let wakes = 0;
+    const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+    const { sync } = world([host], {
+      refuse: REFUSED,
+      daemonAlive: false,
+      reconnectFails: "daemon restart failed",
+      wake: async () => {
+        wakes++;
+        host.ona = "RUNNING";
+        throw new Error("connect failed");
+      },
+    });
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    await tick(6 * 60_000);
+    await sync.reconcile(new Set(["h1"]), { force: true, wait: true });
+    host.ona = "STOPPED";
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    assert.equal(wakes, 2);
+  } finally {
+    await resetFakeClock();
+  }
 });
 
 // Passes that keep finding a thread waiting, with bb refusing the suspend and the wake failing every time.
@@ -147,8 +332,8 @@ test("a stopped box with no thread waiting makes no suspend once a pass has give
   assert.ok(!calls.includes("suspend h1"), calls.join(", "));
 });
 
-// A give-up left by a pass with no thread waiting does not hold a thread that starts waiting after it.
-test("a thread that starts waiting after a no-thread pass gave up still gets its wake (fails if a failed observed stop holds the thread's pass)", async () => {
+// A no-thread suspend's give-up does not hold a thread that starts waiting after it.
+test("a thread that starts waiting after a no-thread suspend gave up still gets its wake (fails if a no-thread suspend failure holds the thread's pass)", async () => {
   const ona = registerOna({ found: { ...box("STOPPED"), id: "env-h1" }, phases: ["STOPPED", "RUNNING"] });
   const waiting: ThreadRecord = {
     id: "t1",

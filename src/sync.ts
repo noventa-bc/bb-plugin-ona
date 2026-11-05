@@ -366,7 +366,7 @@ export function createSync(deps: SyncDeps) {
     const { hostId, machine, resource } = row;
     const heavy = decision.action === "heal-daemon" || decision.action === "reconcile-stuck";
     const report = { step: (text: string) => bb.log.info(`${machine}: ${text}`), log: () => {} };
-    // A thread waiting on the box must not wait out a give-up another pass left (docs/sync.md rule 3).
+    // Forced and thread passes follow docs/sync.md rule 3.
     await guard
       .run(
         hostId,
