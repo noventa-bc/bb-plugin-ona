@@ -8,8 +8,10 @@ import {
   definePluginApp,
   experimental_Icon as Icon,
   experimental_THREAD_ACTION_GROUPS as GROUPS,
+  type PluginMachineProviderInputsProps,
   useRpc,
 } from "@get-bb/plugin-sdk/app";
+import { projectInputsChange, projectOfSavedInputs } from "./src/machine-inputs.ts";
 import { remember } from "./src/move.ts";
 import type { Devbox, rpcContract, ThreadCost } from "./src/rpc.ts";
 
@@ -235,6 +237,29 @@ function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
   return { rpc, devboxes, threads, place };
 }
 
+const projectInput =
+  "h-7 rounded-md border border-border bg-background px-2.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+/** The "Ona project" field under the composer's "New Ona devbox": blank means the defaultProject setting. */
+function OnaProjectField({ value, onChange }: PluginMachineProviderInputsProps) {
+  const [text, setText] = useState(() => projectOfSavedInputs(value));
+  useEffect(() => {
+    onChange(projectInputsChange(text));
+  }, [text, onChange]);
+  return (
+    <label className="flex flex-col gap-1 text-xs">
+      <span className="font-medium text-foreground">Ona project</span>
+      <input
+        value={text}
+        placeholder="Project name or id"
+        onChange={(event) => setText(event.target.value)}
+        className={projectInput}
+      />
+      <span className="text-subtle-foreground">Blank uses the plugin's defaultProject setting</span>
+    </label>
+  );
+}
+
 export default definePluginApp((app) => {
   app.slots.experimental_threadAction<MoveData>({
     id: "move-to-devbox",
@@ -279,4 +304,6 @@ export default definePluginApp((app) => {
     title: "Devbox editor",
     component: DevboxEditor,
   });
+  // "ona" is PROVIDER_ID in src/provider.ts; app.tsx cannot import that module (it pulls in server code).
+  app.slots.experimental_machineProviderInputs({ machineProviderId: "ona", component: OnaProjectField });
 });

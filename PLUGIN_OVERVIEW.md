@@ -8,7 +8,8 @@ and you drive them from bb as usual.
   (bb never deletes it), or **create** a new one from an Ona project. New
   devboxes get fun names like `nimble-badger-ca1b` and a 3h idle timeout.
 - A **New Ona devbox** option in the environment picker, for starting a thread
-  on a fresh devbox.
+  on a fresh devbox. Its **Ona project** field picks the project; blank uses
+  `defaultProject`.
 - **Suspend and resume**: bb's Pause/Play buttons stop and start the Ona
   environment. A devbox Ona stopped on its own shows as suspended, and a new
   thread or message on it starts it first.

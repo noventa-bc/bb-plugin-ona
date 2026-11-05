@@ -245,6 +245,12 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   schema, parses the inputs with the provider's schema (issues give 400
   `invalid_request`), and calls the plugin's `validate({inputs})` before `create`.
   Checked 2026-11-05.
+- bb 0.48.1's composer passes the saved `providerMachine.inputs` back to the control as its
+  `value` when the saved selection names the same environment selection and machine provider
+  (search `selectionValue` in `NewThreadComposer-DjqGA_pM.js`, line 1). Checked 2026-11-05.
+- bb 0.48.1 gives a control's blocked reason to the composer's prompt as `disabledReason` and
+  disables the prompt (search `disabledReason:n??void 0` in the same file, line 1). Checked
+  2026-11-05.
 - The SDK 0.6.109 types the control as `PluginMachineProviderInputsProps` (`value`,
   `onChange`) and its change as `{status: "ready", value}` or
   `{status: "blocked", reason}` (`bb-plugin-sdk-app.d.ts`, registered with
@@ -253,8 +259,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   - host entries: `experimental_defineHostEntry` (plugin code on the daemon,
     fs watch, signals) and the `experimental_host.deleted` event
   - UI: `settingsSection` and `navPanel`
-  - provider inputs: `experimental_machineProviderInputs` and
-    `experimental_environmentProviderInputs`
+  - provider inputs: `experimental_environmentProviderInputs`
   - `bb.agents.contributeInstructions`
   - `bb.realtime.publish`
   - declarative `defineCli`
