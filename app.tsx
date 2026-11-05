@@ -209,9 +209,8 @@ function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
     // once and does nothing) and drops its devboxes reply unless the list is still empty.
     let live = true;
     void rpc.call("devboxes_list", null).then(
-      // A reply from an older run fills an empty list only. shortcut: a newer reply with no devboxes is
-      // "empty" too, so a box removed between two listings can stay listed until the next set of threads
-      // (choosing it is refused); upgrade to a run counter if that shows up in practice.
+      // shortcut: an empty list counts as not loaded, so a reply from an older run can fill it; upgrade to
+      // a run counter if a stale list shows up in practice.
       (reply) => setDevboxes((current) => (live || current.length === 0 ? reply.devboxes : current)),
       () => undefined,
     );
