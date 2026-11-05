@@ -19,6 +19,7 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * longer has) or an Error (the lookup throws). Without phases, every lookup returns `found`.
  * `lookupFails`: every Ona lookup throws.
  * `unpushed`: the box has unpushed commits, so a remove is refused.
+ * `uncommitted`: the box has uncommitted files and no unpushed commits, so a remove is refused.
  * `reopenDuringMove`: a tunnel opens while an adopted remove's move-aside script runs.
  * `rootExits`: the `~/.bb-machines` script's exit codes in turn, the last one repeated.
  * `preflightExit`: the prerequisites check's exit code. Every other command exits 0.
@@ -32,6 +33,7 @@ export type Setup = {
   phases?: (string | OnaEnvironment | Error | null)[];
   lookupFails?: boolean;
   unpushed?: boolean;
+  uncommitted?: boolean;
   reopenDuringMove?: boolean;
   rootExits?: number[];
   rootOutput?: string;
@@ -57,6 +59,7 @@ export function register({
   phases = [],
   lookupFails,
   unpushed,
+  uncommitted,
   reopenDuringMove,
   rootExits = [],
   rootOutput = "",
@@ -82,8 +85,12 @@ export function register({
       // As the real CLI call would: a loop that probes past an abort fails instead of spinning.
       signal.throwIfAborted();
       if (lookupFails) throw new Error("Ona is unreachable");
-      if (unpushed) {
-        const git = { totalUnpushedCommits: 2, branch: "feat" };
+      if (unpushed || uncommitted) {
+        const git = {
+          totalUnpushedCommits: unpushed ? 2 : 0,
+          totalChangedFiles: uncommitted ? 1 : 0,
+          branch: "feat",
+        };
         return { ...box("RUNNING"), status: { phase: "ENVIRONMENT_PHASE_RUNNING", content: { git } } };
       }
       const answer = phases.length ? next(phases)! : found;
@@ -96,6 +103,7 @@ export function register({
       return env;
     },
     start: async () => void calls.push("start"),
+    delete: async (envId: string) => void calls.push(`delete ${envId}`),
   } as unknown as OnaCli;
   const executor: MachineExecutor = {
     async exec({ command, onOutput }) {

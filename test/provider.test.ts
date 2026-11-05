@@ -3,7 +3,7 @@
 // tests are instant.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { resourceSchema } from "../src/provider.ts";
+import { envNameForKey, resourceSchema } from "../src/provider.ts";
 import { tick, useFakeClock } from "./fake-clock.ts";
 import { adoptedResource, box, connectCalls, gated, lifecycle, register, resume, start } from "./provider-fake.ts";
 
@@ -172,6 +172,63 @@ test("a refused remove of a bb-created machine closes its tunnel and keeps its k
   assert.equal(removed.status, "failed");
   assert.deepEqual(tunnels, ["stop env-1"]);
   assert.deepEqual(forgotten, []);
+});
+
+test("a refused remove of a bb-created machine names its uncommitted files and keeps its keys", async () => {
+  const { provider, forgotten } = register({ found: box("RUNNING"), uncommitted: true });
+  const removed = await provider.remove({
+    report: lifecycle().report,
+    hostId: "host-1",
+    resource: { envId: "env-1", envName: "box", adopted: false, key: "key-1" },
+    signal: new AbortController().signal,
+  });
+  assert.equal(removed.status, "failed");
+  if (removed.status !== "failed") return;
+  assert.match(removed.message, /1 uncommitted file\(s\) on branch feat/);
+  assert.deepEqual(forgotten, []);
+});
+
+// The box an orphan cleanup finds by its key: named as envNameForKey gives it.
+const orphanBox = (git: { totalUnpushedCommits?: number; totalChangedFiles?: number }) => ({
+  ...box("RUNNING"),
+  metadata: { name: envNameForKey("key-1") },
+  status: { phase: "ENVIRONMENT_PHASE_RUNNING", content: { git: { branch: "feat", ...git } } },
+});
+
+test("an orphan cleanup keeps a created box with unpushed commits and uncommitted files", async () => {
+  const { provider, tunnels, calls } = register({
+    found: orphanBox({ totalUnpushedCommits: 2, totalChangedFiles: 1 }),
+    tunnel: "up",
+  });
+  const cleaned = await provider.reconcileCleanup({
+    key: "key-1",
+    report: lifecycle().report,
+    signal: new AbortController().signal,
+  });
+  assert.equal(cleaned.status, "failed");
+  if (cleaned.status !== "failed") return;
+  assert.match(cleaned.message, /2 unpushed commit\(s\) and 1 uncommitted file\(s\) on branch feat/);
+  assert.deepEqual(tunnels, ["stop env-1"]);
+  assert.deepEqual(
+    calls.filter((call) => call.startsWith("delete")),
+    [],
+  );
+});
+
+test("an orphan cleanup keeps a created box with uncommitted files and no unpushed commits", async () => {
+  const { provider, calls } = register({ found: orphanBox({ totalChangedFiles: 1 }) });
+  const cleaned = await provider.reconcileCleanup({
+    key: "key-1",
+    report: lifecycle().report,
+    signal: new AbortController().signal,
+  });
+  assert.equal(cleaned.status, "failed");
+  if (cleaned.status !== "failed") return;
+  assert.match(cleaned.message, /1 uncommitted file\(s\) on branch feat/);
+  assert.deepEqual(
+    calls.filter((call) => call.startsWith("delete")),
+    [],
+  );
 });
 
 // A relative legacy dataDir is kept: the scripts resolve it against $HOME on the box.
