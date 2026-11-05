@@ -200,6 +200,35 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 - In SDK 0.6.109 a provider resource is written by the provider's own lifecycle
   hooks (`create`, `suspend`, `resume`, through `checkpoint` or the returned
   `resource`) and read with `bb.experimental_machines.getResource` (checked 2026-11-03).
+- bb 0.48.1's Settings > Machines "Add a machine" dialog lists no machine provider.
+  Its only create call sends `machineProviderId` `manual` with `inputs` null
+  (`AddMachineDialog-B_sUphZB.js`, line 1), so a plugin's machine provider and its
+  inputs control never show there. Checked 2026-11-05 in the bb app's
+  `app.asar.unpacked/node_modules/bb-app/app/dist/assets/`.
+- bb 0.48.1 renders a machine provider's inputs control only in the new-thread
+  composer (`NewThreadComposer-DjqGA_pM.js`, line 1, search `machineProviderInputs`).
+  The composer takes the machine from the environment provider that names it
+  (`machineProviderId`, `machineInputs`, `machineAcceptsEmptyInputs`), finds the
+  control registered for that machine provider and plugin, and renders it in a
+  plugin slot with `value` and `onChange`. Checked 2026-11-05.
+- With no control registered, the composer's value is `{}` when the provider accepts
+  empty inputs. Otherwise it shows the blocked reason `<name> needs its plugin's control.`
+  or `Configure <name>.` (search `needs its plugin's control` in the same file).
+  bb sets `acceptsEmptyInputs` by validating `{}` against the provider's schema, and a
+  provider with no schema counts as accepting it (`server/dist/start-server.js`, line
+  101460, `acceptsEmptyInputs`). Checked 2026-11-05.
+- The composer sends `providerMachine` as `{type: "new", machineProviderId, inputs}`
+  with the control's value (`NewThreadComposer-DjqGA_pM.js`, line 1). bb's
+  `prepareMachineProviderSelection` (`server/dist/start-server.js`, line 101774, called
+  from `submitMachine` at line 101906 and `completeProviderSelection` at line 107158)
+  refuses an unknown or unavailable provider and any inputs for a provider with no
+  schema, parses the inputs with the provider's schema (issues give 400
+  `invalid_request`), and calls the plugin's `validate({inputs})` before `create`.
+  Checked 2026-11-05.
+- The SDK 0.6.109 types the control as `PluginMachineProviderInputsProps` (`value`,
+  `onChange`) and its change as `{status: "ready", value}` or
+  `{status: "blocked", reason}` (`bb-plugin-sdk-app.d.ts`, registered with
+  `experimental_machineProviderInputs`). Checked 2026-11-05.
 - SDK surfaces in 0.6.109 that the plugin doesn't use (checked 2026-11-03):
   - host entries: `experimental_defineHostEntry` (plugin code on the daemon,
     fs watch, signals) and the `experimental_host.deleted` event
