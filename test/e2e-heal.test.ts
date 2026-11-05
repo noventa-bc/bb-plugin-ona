@@ -133,19 +133,23 @@ test("resume while Ona is already starting the box waits for it instead of start
 });
 
 // Bug: a thread header listed every bb host to find the one its thread runs on.
-test("thread_devbox looks up only the thread's host: no hosts.list, one hosts.get", local, async () => {
-  const sdk = host.harness.inspection.sdk;
-  const lists = sdk.callsTo("hosts.list").length;
-  const gets = sdk.callsTo("hosts.get").length;
-  const threadReads = sdk.callsTo("threads.get").length;
-  const reply = (await host.harness.behavior.callRpc("thread_devbox", { threadId: "thread-1" })) as {
-    devbox: { hostId: string } | null;
-  };
-  assert.equal(reply.devbox?.hostId, "host-1");
-  assert.equal(sdk.callsTo("hosts.list").length - lists, 0);
-  assert.equal(sdk.callsTo("hosts.get").length - gets, 1);
-  assert.equal(sdk.callsTo("threads.get").length - threadReads, 1);
-});
+test(
+  "thread_devbox looks up only the thread's host: no hosts.list, one hosts.get, one thread read",
+  local,
+  async () => {
+    const sdk = host.harness.inspection.sdk;
+    const lists = sdk.callsTo("hosts.list").length;
+    const gets = sdk.callsTo("hosts.get").length;
+    const threadReads = sdk.callsTo("threads.get").length;
+    const reply = (await host.harness.behavior.callRpc("thread_devbox", { threadId: "thread-1" })) as {
+      devbox: { hostId: string } | null;
+    };
+    assert.equal(reply.devbox?.hostId, "host-1");
+    assert.equal(sdk.callsTo("hosts.list").length - lists, 0);
+    assert.equal(sdk.callsTo("hosts.get").length - gets, 1);
+    assert.equal(sdk.callsTo("threads.get").length - threadReads, 1);
+  },
+);
 
 test(
   "thread_devbox answers pending, from one thread read, for a thread bb has not given a workspace yet",

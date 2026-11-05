@@ -196,8 +196,8 @@ type MoveData = ReturnType<typeof useMoveData>;
 /**
  * The thread menu's "Move to devbox" (src/move.ts): the devboxes, listed again with each new set of
  * threads so their bb status labels (connected, suspended, …) stay close to current, and each shown
- * thread's devbox, asked with each new set of threads; a thread bb has not given a workspace yet is
- * asked again every 15 s while it stays shown (`remember` in src/move.ts; `place` records a moved
+ * thread's devbox, asked with each new set of threads until a reply is stored; a thread bb has not given
+ * a workspace yet is asked again every 15 s while it stays shown (`remember` in src/move.ts; `place` records a moved
  * thread's target box without a call).
  */
 function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
@@ -209,8 +209,7 @@ function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
       (reply) => setDevboxes(reply.devboxes),
       () => undefined,
     );
-    // This run's re-ask timers: the cleanup before the next run (or unmount) stops them.
-    const timers = new Set<ReturnType<typeof setTimeout>>();
+    // The cleanup before the next run (or unmount) ends this run's re-asks; a timer left over fires once and does nothing.
     let live = true;
     const ask = (threadId: string) =>
       void rpc.call("thread_devbox", { threadId }).then(
@@ -218,7 +217,7 @@ function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
           setThreads((known) => remember(known, threadId, reply));
           // shortcut: a thread that never gets a workspace (bb abandons one whose box creation the user
           // stopped) is asked every 15 s while it is shown, cap the re-asks if that shows up in practice.
-          if (live && reply.devbox === null && reply.pending) timers.add(setTimeout(() => ask(threadId), 15_000));
+          if (live && reply.devbox === null && reply.pending) setTimeout(() => live && ask(threadId), 15_000);
         },
         () => undefined,
       );
@@ -226,7 +225,6 @@ function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
     // `threads` is left out on purpose: a reply must not trigger another round of calls.
     return () => {
       live = false;
-      for (const timer of timers) clearTimeout(timer);
     };
   }, [rpc, threadIds]);
   const place = (threadId: string, devbox: Devbox | undefined) =>
