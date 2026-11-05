@@ -71,7 +71,7 @@ you asked for, so safety rule 1 does not gate it.
    listing (so does each reconnect after `ssh` exits), plus a check when Ona shows the box
    stopped. A refused tunnel tries again every 10s for a minute,
    then every minute (every minute while Ona can't be asked). A tunnel closes
-   when bb suspends or removes the machine, when a create or resume fails, when a wake that started its box fails (a wake of a running box keeps its tunnel), or
+   when bb suspends or removes the machine, when a create or resume fails, when a wake that started its box fails (a wake of a running box, or of a box Ona started during the wake's waits, keeps its tunnel), or
    the plugin stops; a check that sees the box stopped asks bb to suspend it
    once bb no longer shows the machine connected. Create, resume, the wake for a
    waiting thread and `bb ona resume` start the box you asked for (`ona environment create` for a new box, else
@@ -127,7 +127,7 @@ you asked for, so safety rule 1 does not gate it.
    is matched as given and resolved against `$HOME`), each as given and resolved
    through symlinks. A process listing that can't be trusted, a folder path with
    a newline in it, a failed SSH connection or a timeout counts as unknown, and
-   nothing is restarted. _Why: a restart kills running agent turns._ `bb ona sync` and `bb ona resume` force past cooldowns, backoff and the give-up only; `bb ona sync` still runs this check. `bb ona resume`, like `bb ona reconnect`, runs bb's start on the box and does not run the daemon check.
+   nothing is restarted. _Why: a restart kills running agent turns._ `bb ona sync`, `bb ona resume` and a waiting thread's pass on a stopped box force past cooldowns, backoff and the give-up only; `bb ona sync` still runs this check. `bb ona resume`, like `bb ona reconnect`, runs bb's start on the box and does not run the daemon check.
 4. **Unknown is not gone.** A failed or empty `ona environment list` changes
    nothing, and "missing" needs two listings in a row. A lookup by id
    (`ona environment get`) that fails is unknown too; only Ona saying the id
@@ -144,7 +144,7 @@ you asked for, so safety rule 1 does not gate it.
 - **When the plugin starts** (load, reload, bb restart). This check is what reopens the tunnels.
 - **Right away** when a thread is waiting for an Ona machine. A running box only, except
   a box Ona shows stopped that a waiting thread needs: bb resumes it, or starts it when bb's suspend was refused (the stopped rows
-  above; [decision 0002](decisions/0002-repairs-never-start-or-stop.md)).
+  above; [decision 0002](decisions/0002-repairs-never-start-or-stop.md)). That pass forces: it skips cooldowns, backoff and the give-up (rule 3).
 - **Workspace work** (bb sets up, tears down, retries or retires a workspace) is read by the
   check of its own machine (the check 46 s after a disconnect, or the realtime
   reconnect's pass 2 s later), and by the 2-minute pass at the latest. A failed teardown

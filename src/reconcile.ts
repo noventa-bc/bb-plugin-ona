@@ -222,8 +222,9 @@ export interface HostRecord {
 /**
  * Rule 5: one action per machine at a time, a cooldown after each one,
  * exponential backoff after failures, and no more automatic retries after
- * GIVE_UP_AFTER failures in a row (`bb ona sync` forces one). Heavy actions
- * (SSH probes, daemon restarts) run at most `limit` at a time.
+ * GIVE_UP_AFTER failures in a row (`bb ona sync`, and a waiting thread's pass
+ * on a stopped box, force one). Heavy actions (SSH probes, daemon restarts)
+ * run at most `limit` at a time.
  */
 export class HostGuard {
   private readonly busy = new Map<string, string>();

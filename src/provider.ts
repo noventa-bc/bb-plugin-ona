@@ -121,7 +121,8 @@ export const MOVE_MACHINE_ASIDE = [
   // A folder that holds other machines' data folders is never stopped or moved.
   '  for other in "$data"/*/host-id; do [ -f "$other" ] && continue 2; done',
   '  real=$(cd "$data" && pwd -P) || exit 1; export real given="$data"; n=0',
-  // The home folder, or a folder above it, is never a machine's data folder: it stays. An unresolvable HOME stops here too.
+  // The home folder, or a folder above it, is never a machine's data folder: it stays.
+  // An unresolvable HOME stops here too.
   '  home=$(cd "${HOME:?}" && pwd -P) || exit 5',
   '  case "$home/" in "${real%/}"/*) exit 5 ;; esac',
   // A newline in the path can't be matched within one listing line: the folder stays.
@@ -155,7 +156,9 @@ export function envNameForKey(key: string): string {
   return friendlyName(key);
 }
 
-/** The refusal a remove or an orphan cleanup gives when a delete would lose work on the box; both paths say the same. */
+/**
+ * The refusal a remove or an orphan cleanup gives when a delete would lose work on the box; both paths say the same.
+ */
 function notDeletingMessage(
   name: string,
   envId: string,
@@ -186,8 +189,9 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
 
   /**
    * Starts a stopped box, after Ona's own starts and stops finish. Resolves true when it called `ona.start`, and false
-   * when the box was running (already, or once its waits settled). The waits share one 25-minute deadline: the worst case
-   * on main, a start wait and a stop wait. A wait that runs out judges the box as the read that began the wait showed it.
+   * when no start was called (the box was running, or Ona started it during the waits). The waits share one 25-minute
+   * deadline: a 15-minute start wait plus a 10-minute stop wait. A wait that runs out judges the box as the read that
+   * began the wait showed it.
    */
   async function ensureRunning(env: OnaEnvironment, report: PluginMachineProviderProgress, signal: AbortSignal) {
     // Ona's own starts and stops finish first, one wait at a time, each judged on the read it settles on: a box that
@@ -214,7 +218,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     }
     if (isRunning(env)) return false;
     // Only a box the last read shows stopped or stopping is started (a stop wait that runs out still reaches the start,
-    // which Ona refuses, as on main). A deleting, deleted or failed box is refused (docs/sync.md rule 1).
+    // which Ona refuses). A deleting, deleted or failed box is refused (docs/sync.md rule 1).
     const phase = env.status?.phase ?? "";
     if (!STOPPED.has(phase)) {
       throw new Error(`Ona shows ${env.metadata.name ?? env.id} ${short(phase || "unknown")}, so it was not started.`);
@@ -303,8 +307,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
   }
 
   /**
-   * connect() for a machine bb doesn't show active yet (create, resume). A wake that starts its box is the one exception:
-   * bb shows the machine active, and a failed connect still closes the tunnel it opened.
+   * connect() for a machine bb doesn't show active yet (create, resume). A wake that starts its box is the one
+   * exception: bb shows the machine active, and a failed connect still closes the tunnel it opened.
    */
   async function connectOrClose(
     resource: OnaResource,
@@ -321,12 +325,12 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
   }
 
   /**
-   * Starts a box Ona shows stopped (or waits for one that is starting or stopping) and connects bb's daemon: a resume's start and
-   * connect, without bb's lifecycle. A waiting thread on an active machine asks for it (decision 0002), and so does
-   * `bb ona resume`; the caller checks bb's phase, since a suspended machine is bb's resume's to start. Ona's other
-   * phases (deleting, deleted, failed) are refused: the box is not started. Its no-stop flag goes first: bb shows the
-   * machine active here, so no suspend of bb's can still reach the provider's stop. Resolves true when it called
-   * `ona.start`, false when the box was running and only connected.
+   * Starts a box Ona shows stopped (or waits for one that is starting or stopping) and connects bb's daemon: a
+   * resume's start and connect, without bb's lifecycle. A waiting thread on an active machine asks for it (decision
+   * 0002), and so does `bb ona resume`; the caller checks bb's phase, since a suspended machine is bb's resume's to
+   * start. Ona's other phases (deleting, deleted, failed) are refused: the box is not started. Its no-stop flag goes
+   * first: bb shows the machine active here, so no suspend of bb's can still reach the provider's stop. Resolves true
+   * when it called `ona.start`, false when no start was called.
    */
   async function wake(resource: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal) {
     deps.releasing.delete(resource.envId);
@@ -334,7 +338,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     if (!env) throw new Error(`Ona environment "${resource.envId}" not found. Run \`ona environment list\`.`);
     const startCalled = await ensureRunning(env, report, signal);
     // Only a box this wake started closes its tunnel on a failed connect; a box that was running, or that Ona started
-    // during the waits, keeps the tunnel it had.
+    // during the waits, keeps the tunnel connect() left open.
     if (startCalled) await connectOrClose(resource, report, signal, true);
     else await connect(resource, resource.key, report, signal);
     return startCalled;
@@ -497,8 +501,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     },
     async remove({ resource, hostId, report, signal }) {
       const owned = resourceSchema.parse(resource);
-      // A removal can leave a no-stop flag behind (a suspend bb settled as removing never reaches the provider's suspend); bb
-      // awaits any suspend still running before it calls remove, so nothing can reach the stop step after this.
+      // A removal can leave a no-stop flag behind (a suspend bb settled as removing never reaches the provider's
+      // suspend). bb awaits a suspend still running before it calls remove, so none reaches the stop step after this.
       deps.releasing.delete(owned.envId);
       if (owned.adopted) {
         // A thrown lookup closes the tunnel before the error goes on; the keys stay for bb's retry.

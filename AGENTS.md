@@ -82,7 +82,7 @@ The safety rules behind 1–4 are in `docs/sync.md`. Cite `file:line` for each f
 
 1. No SSH, start or stop of a box unless an Ona listing from the same check says the box is RUNNING, except the two starts `docs/sync.md` rule 1 names (a waiting thread on an active machine, and `bb ona resume`). A failed listing means "unknown".
 2. Automatic suspends never stop a box.
-3. Forcing (`bb ona sync`, `bb ona resume`) only skips cooldowns, backoff and the give-up. It never skips a safety rule.
+3. Forcing (`bb ona sync`, `bb ona resume`, a waiting thread's pass on a stopped box) only skips cooldowns, backoff and the give-up. It never skips a safety rule.
 4. Removing a machine never deletes an adopted environment.
 5. Remote script text is a constant. Values are passed as arguments or through `shellQuote`.
 6. The tunnel goes only to the loopback proxy, its devbox end listens on loopback only, and the proxy forwards only to bb's loopback URL. A change to `src/proxy.ts` that lets more through (a listed route, the upgrade check, or a looser matcher, path, method or header check) needs allowed and denied cases in `test/proxy.test.ts` and keeps `docs/security.md` accurate.

@@ -366,6 +366,8 @@ export function createSync(deps: SyncDeps) {
     const { hostId, machine, resource } = row;
     const heavy = decision.action === "heal-daemon" || decision.action === "reconcile-stuck";
     const report = { step: (text: string) => bb.log.info(`${machine}: ${text}`), log: () => {} };
+    // A waiting thread's pass on a stopped box forces past cooldowns, backoff and the give-up, as `bb ona sync`
+    // does (docs/sync.md rule 3).
     await guard
       .run(
         hostId,
@@ -379,9 +381,10 @@ export function createSync(deps: SyncDeps) {
               const refusal = lifecycleRefusal(lifecycle, SUSPENDED);
               if (refusal) {
                 if (!decision.resumeAfter || lifecycle.phase !== "active") throw new Error(suspendFailure(refusal));
-                // bb's suspend failed (Ona stopped the box under a live turn) and left the machine active, where bb's resume does nothing: the plugin starts the box (decision 0002).
-                await provider.wake(resource, report, AbortSignal.timeout(15 * 60_000));
-                return "started it for a waiting thread";
+                // bb's suspend failed (Ona stopped the box under a live turn) and left the machine active, where bb's
+                // resume does nothing: the plugin wakes the box (decision 0002).
+                const startCalled = await provider.wake(resource, report, AbortSignal.timeout(15 * 60_000));
+                return startCalled ? "started it for a waiting thread" : "reconnected it for a waiting thread";
               }
               if (!decision.resumeAfter) return;
               // A thread is waiting on it: that's you using the box, so let bb start it.
@@ -426,7 +429,7 @@ export function createSync(deps: SyncDeps) {
             }
           }
         },
-        { force, heavy, cooldown: heavy },
+        { force: force || decision.resumeAfter, heavy, cooldown: heavy },
       )
       .catch((error: unknown) => {
         bb.log.warn(`${machine}: ${decision.action} failed: ${errorText(error)}`);

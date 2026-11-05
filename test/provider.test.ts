@@ -412,7 +412,8 @@ test("wake refuses a STOPPING box that Ona settles as deleting, and starts nothi
   assert.ok(!calls.includes("start"), calls.join(", "));
 });
 
-// A box Ona is stopping can be started by someone else after the stop finished, between two reads: wake must connect it, not refuse it.
+// A box Ona is stopping can be started by someone else after the stop finished, between two reads: wake must connect
+// it, not refuse it.
 test("wake connects a STOPPING box that Ona settles as running, and does not start it (fails if the stopped check runs before the running check)", async () => {
   const { wake, calls } = register({ found: box("STOPPING"), phases: ["STOPPING", "RUNNING"] });
   await wake(adoptedResource, lifecycle().report, new AbortController().signal);
@@ -425,4 +426,57 @@ test("wake waits for a STOPPING box that Ona settles as starting, then connects 
   await wake(adoptedResource, lifecycle().report, new AbortController().signal);
   assert.ok(!calls.includes("start"), calls.join(", "));
   assert.deepEqual(calls.slice(-connectCalls.length), connectCalls);
+});
+
+// Each wait alone could run 15 or 10 minutes; the shared 25-minute deadline has to end the loop instead.
+test("wake's waits share one 25-minute deadline, so a box Ona keeps starting and stopping is refused at 25 minutes (fails if each wait gets its own cap)", async () => {
+  const phases = [...Array<string>(180).fill("STARTING"), ...Array<string>(109).fill("STOPPING"), "STARTING"];
+  const { wake, calls } = register({ found: box("STARTING"), phases });
+  const began = Date.now();
+  let refusedAt = 0;
+  const attempt = wake(adoptedResource, lifecycle().report, new AbortController().signal);
+  attempt.catch(() => {
+    refusedAt = Date.now();
+  });
+  for (let i = 0; i < 1_000 && refusedAt === 0; i++) await tick(5_000);
+  await assert.rejects(attempt, /starting, so it was not started/);
+  assert.ok(!calls.includes("start"), calls.join(", "));
+  assert.ok(refusedAt - began <= 25 * 60_000, `refused after ${(refusedAt - began) / 60_000} minutes`);
+});
+
+test("wake closes the tunnel it opened for a stopped box it starts, when the connect fails (fails if the tunnel stays open)", async () => {
+  const { wake, tunnels } = register({ found: box("STOPPED"), phases: ["STOPPED", "RUNNING"], preflightExit: 3 });
+  await assert.rejects(
+    wake(adoptedResource, lifecycle().report, new AbortController().signal),
+    /missing bb prerequisites/,
+  );
+  assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"]);
+});
+
+test("wake keeps the tunnel when Ona settles a STARTING box as running and the connect fails (fails if wake closes a box it did not start)", async () => {
+  const { wake, calls, tunnels } = register({
+    found: box("STARTING"),
+    phases: ["STARTING", "RUNNING"],
+    preflightExit: 3,
+  });
+  await assert.rejects(
+    wake(adoptedResource, lifecycle().report, new AbortController().signal),
+    /missing bb prerequisites/,
+  );
+  assert.ok(!calls.includes("start"), calls.join(", "));
+  assert.deepEqual(tunnels, ["ensure env-1"]);
+});
+
+test("wake keeps the tunnel when Ona settles a STOPPING box as running and the connect fails (fails if wake closes a box it did not start)", async () => {
+  const { wake, calls, tunnels } = register({
+    found: box("STOPPING"),
+    phases: ["STOPPING", "RUNNING"],
+    preflightExit: 3,
+  });
+  await assert.rejects(
+    wake(adoptedResource, lifecycle().report, new AbortController().signal),
+    /missing bb prerequisites/,
+  );
+  assert.ok(!calls.includes("start"), calls.join(", "));
+  assert.deepEqual(tunnels, ["ensure env-1"]);
 });

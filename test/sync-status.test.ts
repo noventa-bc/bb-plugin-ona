@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ALL } from "../src/reconcile.ts";
+import { ALL, GIVE_UP_AFTER } from "../src/reconcile.ts";
 import type { ThreadRecord } from "../src/sync.ts";
 import { enableFakeClock, resetFakeClock } from "./fake-clock.ts";
 import { box, connectCalls, register as registerOna } from "./provider-fake.ts";
@@ -46,6 +46,57 @@ test("Ona stopped a box mid-turn: bb refuses the suspend, a thread waits, the pl
   await sync.reconcile(new Set(["h1"]), { wait: true });
   assert.deepEqual(calls, ["suspend h1"], "bb's resume is never asked for the active machine");
   assert.deepEqual(ona.calls, ["get STOPPED", "start", "get RUNNING", ...connectCalls]);
+  const record = guard.records.get("h1")!;
+  assert.match(record.reason, /; started it for a waiting thread$/);
+  assert.equal(record.error, undefined);
+});
+
+// The sync read the box stopped; Ona had started it again by the time the wake read it.
+test("a box Ona starts before the waiting thread's wake is connected, not started, and recorded as a reconnect (fails if the record says started)", async () => {
+  const ona = registerOna({ found: { ...box("RUNNING"), id: "env-h1" } });
+  const waiting: ThreadRecord = {
+    id: "t1",
+    status: "active",
+    updatedAt: NOW,
+    runtime: { displayStatus: "waiting-for-host" },
+  };
+  const { sync, calls, guard } = world([idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waiting] })], {
+    refuse: REFUSED,
+    wake: ona.wake,
+  });
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.deepEqual(calls, ["suspend h1"]);
+  assert.ok(!ona.calls.includes("start"), ona.calls.join(", "));
+  assert.deepEqual(ona.calls.slice(-connectCalls.length), connectCalls);
+  const record = guard.records.get("h1")!;
+  assert.match(record.reason, /; reconnected it for a waiting thread$/);
+  assert.equal(record.error, undefined);
+});
+
+// Three failed passes in a row: the guard has given up on h1, so only a forced pass wakes it for the thread.
+test("a waiting thread's pass on a stopped box runs past the give-up, so the wake runs (fails if the pass honours the give-up)", async () => {
+  const ona = registerOna({ found: { ...box("STOPPED"), id: "env-h1" }, phases: ["STOPPED", "RUNNING"] });
+  const waiting: ThreadRecord = {
+    id: "t1",
+    status: "active",
+    updatedAt: NOW,
+    runtime: { displayStatus: "waiting-for-host" },
+  };
+  const { sync, calls, guard } = world([idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waiting] })], {
+    refuse: REFUSED,
+    wake: ona.wake,
+  });
+  guard.records.set("h1", {
+    action: "suspend-observed",
+    reason: "Ona stopped the box",
+    at: NOW,
+    error: NOT_CONNECTED,
+    failures: GIVE_UP_AFTER,
+    quietUntil: NOW + HOUR,
+  });
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.deepEqual(calls, ["suspend h1"]);
+  assert.deepEqual(ona.calls.slice(-connectCalls.length), connectCalls);
   const record = guard.records.get("h1")!;
   assert.match(record.reason, /; started it for a waiting thread$/);
   assert.equal(record.error, undefined);
