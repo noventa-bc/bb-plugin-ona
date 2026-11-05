@@ -234,8 +234,11 @@ starts a new thread on that box at the same path, with the same title, whose fir
 the work over: where it came from, and the old conversation in outline. The old thread stays as it
 is. From your Mac's terminal: `bb ona move <thread-id> <name>`.
 
-- The path must exist on the target box. It does for the Ona project checkout (`/workspaces/<repo>`).
-- A stopped target box is started by bb before the new thread runs.
+- Only a thread whose workspace is a checkout path on the box can move, and the path must exist on
+  the target box. It does for the Ona project checkout (`/workspaces/<repo>`). bb refuses a thread in
+  its personal project or in a bb-managed worktree, and the message says so.
+- A stopped target box is started by bb. The new thread appears once the box is up, which can take
+  minutes; the menu may first report that bb is still starting the box. Do not move the thread again.
 - Uncommitted changes stay on the old box: commit and push a branch first. The new thread starts a
   fresh agent session; it learns the rest from the hand-over message.
 

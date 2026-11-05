@@ -117,6 +117,28 @@ test("bb's refusal of the spawn reaches the user with its message", async () => 
   );
 });
 
+test("a spawn that times out while bb starts the box says the thread is coming, not that the move failed", async () => {
+  const timeout = Object.assign(new Error("request timed out after 75000ms"), { name: "BbRequestTimeoutError" });
+  const { move } = world({ spawnError: timeout });
+  await assert.rejects(
+    move({ threadId: "t1", hostId: "h-dst" }),
+    /^Error: bb is still starting dst-box; the new thread appears in the project once it is up\. Do not move it again\.$/,
+  );
+});
+
+test("the hand-over message keeps only the latest 100 outline items", () => {
+  const outline = Array.from({ length: 101 }, (_, i): OutlineItem => ({
+    id: `m${i}`,
+    role: "user",
+    preview: `message ${i}`,
+    attachmentSummary: null,
+  }));
+  const text = handOverMessage({ title: "Login fix", source: "src-box", path: "/workspaces/app", outline });
+  assert.doesNotMatch(text, /- user: message 0\n/);
+  assert.match(text, /- user: message 1\n/);
+  assert.match(text, /- user: message 100$/);
+});
+
 test("the hand-over message names the source, says uncommitted changes stayed, and lists the outline", () => {
   assert.equal(
     handOverMessage({ title: "Login fix", source: "src-box", path: "/workspaces/app", outline: OUTLINE }),

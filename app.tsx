@@ -207,7 +207,8 @@ function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
     );
     for (const threadId of threadIds.filter((id) => !(id in threads))) {
       void rpc.call("thread_devbox", { threadId }).then(
-        (reply) => setThreads((known) => ({ ...known, [threadId]: reply.devbox })),
+        // A null reply is not kept: a thread a move just created has no workspace yet, and gets one on the box.
+        (reply) => reply.devbox && setThreads((known) => ({ ...known, [threadId]: reply.devbox })),
         () => undefined,
       );
     }

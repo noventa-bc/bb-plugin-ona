@@ -20,7 +20,10 @@ export interface MoveDeps {
 
 export type OutlineItem = Awaited<ReturnType<Sdk["threads"]["conversationOutline"]>>["items"][number];
 
-/** The new thread's first message: where the work came from, and the old conversation's outline. */
+/** bb caps each outline preview at 200 characters but not their count (docs/ona-notes.md). */
+const OUTLINE_MAX_ITEMS = 100;
+
+/** The new thread's first message: where the work came from, and the old conversation's latest outline. */
 export function handOverMessage(args: { title: string; source: string; path: string; outline: OutlineItem[] }) {
   const lines = [
     `This thread continues thread "${args.title}", moved from devbox ${args.source} at ${args.path}.`,
@@ -29,7 +32,7 @@ export function handOverMessage(args: { title: string; source: string; path: str
   ];
   if (args.outline.length > 0) {
     lines.push("", "The old thread's conversation, in outline:");
-    for (const item of args.outline) lines.push(`- ${item.role}: ${item.preview}`);
+    for (const item of args.outline.slice(-OUTLINE_MAX_ITEMS)) lines.push(`- ${item.role}: ${item.preview}`);
   }
   return lines.join("\n");
 }
@@ -65,6 +68,12 @@ export function createMove({ sdk, machineOfHost }: MoveDeps) {
       });
       return { threadId: created.id };
     } catch (error) {
+      // The SDK client gives up after 75 s while bb goes on resuming a stopped box and creates the thread later.
+      if (error instanceof Error && error.name === "BbRequestTimeoutError") {
+        throw new Error(
+          `bb is still starting ${target.resource.envName}; the new thread appears in the project once it is up. Do not move it again.`,
+        );
+      }
       throw new Error(`bb could not start the thread on ${target.resource.envName}: ${errorText(error)}`);
     }
   };
