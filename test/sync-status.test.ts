@@ -287,9 +287,10 @@ test("a failed start's count holds through the tunnel repair and the no-op daemo
   }
 });
 
-// bb shows the machine connected: the flag goes and the failure count starts again. Three no-thread passes then give up
-// on the box, and the thread's pass that follows is forced again.
-test("a flagged record on a machine bb shows connected loses its flag and its failures, so the next thread pass is forced again after another pass's give-up (fails if a connected pass keeps the flag)", async () => {
+// bb shows the machine connected: the flag, the failure count and the backoff start again. The record below carries an
+// hour of backoff, which the connected pass ends. Three no-thread passes then give up on the box, and the thread's pass
+// that follows is forced again.
+test("a flagged record on a machine bb shows connected loses its flag, its failures and its backoff, so the next thread pass is forced again after another pass's give-up (fails if a connected pass keeps the flag or the backoff)", async () => {
   enableFakeClock();
   try {
     let wakes = 0;
@@ -307,7 +308,7 @@ test("a flagged record on a machine bb shows connected loses its flag and its fa
       at: Date.now(),
       error: "connect failed",
       failures: 2,
-      quietUntil: Date.now(),
+      quietUntil: Date.now() + HOUR,
       threadWaiting: true,
     });
     await sync.reconcile(new Set(["h1"]), { wait: true });

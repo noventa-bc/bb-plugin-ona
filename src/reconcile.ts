@@ -61,7 +61,7 @@ export interface Decision {
   resumeAfter?: boolean;
 }
 
-export const RUNNING = "ENVIRONMENT_PHASE_RUNNING";
+const RUNNING = "ENVIRONMENT_PHASE_RUNNING";
 /** Ona shows the environment running; a failed listing is unknown (rule 4). */
 export const shownRunning = (ona: { kind: string; phase?: string }) => ona.kind === "env" && ona.phase === RUNNING;
 export const STOPPED = new Set(["ENVIRONMENT_PHASE_STOPPED", "ENVIRONMENT_PHASE_STOPPING"]);
@@ -81,7 +81,7 @@ export function decide(machine: MachineView, ona: OnaView, now: number): Decisio
   if (phase === "suspended") {
     return {
       action: "none",
-      reason: ona.kind === "env" && ona.phase === RUNNING ? "suspended in bb, running in Ona" : "suspended",
+      reason: shownRunning(ona) ? "suspended in bb, running in Ona" : "suspended",
     };
   }
   if (phase !== "active") return { action: "none", reason: `bb is ${phase}` };
@@ -215,20 +215,25 @@ export interface HostRecord {
   reason: string;
   at: number;
   error?: string;
-  /** Consecutive failures; GIVE_UP_AFTER of them stop automatic retries. */
+  /** Failures in a row, or across a hold (docs/sync.md rule 3); GIVE_UP_AFTER of them stop automatic retries. */
   failures: number;
   /** No automatic action before this time. */
   quietUntil: number;
-  /** A thread's pass, forced or not, failed on this box and the chain has not ended since (see `HostGuard.run`). */
+  /**
+   * A thread's pass, forced or not, failed on this box and its hold has not ended since. `HostGuard.run` sets it;
+   * `HostGuard.connected()`, a thread's pass succeeding and a forced run end it: the hold ends, and the count and the
+   * quiet period (cooldown or backoff) start again (docs/sync.md rule 3).
+   */
   threadWaiting?: boolean;
 }
 
 /**
  * Rule 5: one action per machine at a time, a cooldown after each one,
  * exponential backoff after failures, and no more automatic retries after
- * GIVE_UP_AFTER failures in a row. A thread's pass can skip the give-up that other passes
- * left, and a hold keeps the count across successes (docs/sync.md rule 3). Heavy actions
- * (SSH probes, daemon restarts) run at most `limit` at a time.
+ * GIVE_UP_AFTER failures in a row. A thread's pass can skip the cooldown, backoff and give-up
+ * that other passes left. A hold keeps the count across successes. The hold ends, and the count and the quiet period
+ * (cooldown or backoff) start again (docs/sync.md rule 3). Heavy actions (SSH probes, daemon restarts) run at most
+ * `limit` at a time.
  */
 export class HostGuard {
   private readonly busy = new Map<string, string>();
@@ -261,7 +266,10 @@ export class HostGuard {
     return record.failures < GIVE_UP_AFTER && this.clock.now() >= record.quietUntil;
   }
 
-  /** A machine bb shows connected with its tunnel up, on a box Ona shows running: a flagged chain ends, and its count and backoff start again (docs/sync.md rule 3). */
+  /**
+   * A machine bb shows connected with its tunnel up, on a box Ona shows running: the hold ends, and the count and the
+   * quiet period (cooldown or backoff) start again (docs/sync.md rule 3).
+   */
   connected(hostId: string): void {
     const record = this.records.get(hostId);
     if (record?.threadWaiting) {
