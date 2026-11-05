@@ -174,6 +174,37 @@ test("a refused remove of a bb-created machine closes its tunnel and keeps its k
   assert.deepEqual(forgotten, []);
 });
 
+test("a refused remove of a bb-created machine names its uncommitted files and keeps its keys", async () => {
+  const { provider, forgotten } = register({ found: box("RUNNING"), uncommitted: true });
+  const removed = await provider.remove({
+    report: lifecycle().report,
+    hostId: "host-1",
+    resource: { envId: "env-1", envName: "box", adopted: false, key: "key-1" },
+    signal: new AbortController().signal,
+  });
+  assert.equal(removed.status, "failed");
+  if (removed.status !== "failed") return;
+  assert.match(removed.message, /1 uncommitted file\(s\) on branch feat/);
+  assert.deepEqual(forgotten, []);
+});
+
+test("an orphan cleanup keeps a created box that holds uncommitted files, and closes its tunnel", async () => {
+  const found = {
+    ...box("RUNNING"),
+    status: { phase: "ENVIRONMENT_PHASE_RUNNING", content: { git: { branch: "feat", totalChangedFiles: 1 } } },
+  };
+  const { provider, tunnels } = register({ found, tunnel: "up" });
+  const cleaned = await provider.reconcileCleanup({
+    key: "key-1",
+    report: lifecycle().report,
+    signal: new AbortController().signal,
+  });
+  assert.equal(cleaned.status, "failed");
+  if (cleaned.status !== "failed") return;
+  assert.match(cleaned.message, /1 uncommitted file\(s\) on branch feat/);
+  assert.deepEqual(tunnels, ["stop env-1"]);
+});
+
 // A relative legacy dataDir is kept: the scripts resolve it against $HOME on the box.
 test("a relative legacy dataDir is kept and a trailing slash is stripped", () => {
   const resource = { envId: "env-1", envName: "box", adopted: true, key: "key-1" };

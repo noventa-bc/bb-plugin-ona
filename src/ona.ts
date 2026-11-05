@@ -41,6 +41,8 @@ const environmentSchema = z.object({
             .object({
               branch: z.string().optional(),
               totalUnpushedCommits: z.union([z.number(), z.string()]).optional(),
+              /** An odd value reads as absent, so one box can't fail the whole listing. */
+              totalChangedFiles: z.union([z.number(), z.string()]).optional().catch(undefined),
             })
             .loose()
             .optional(),
@@ -265,14 +267,15 @@ export function isDeleted(env: OnaEnvironment): boolean {
 }
 
 /**
- * Commits on the box that were never pushed, or null when there are none or
- * Ona doesn't say (older Ona, no git content): unknown must not block a remove.
+ * Work on the box that a delete would lose: `count` unpushed commits and `files` uncommitted files.
+ * Null when both are zero or Ona doesn't say (older Ona, no git content): unknown must not block a delete.
  */
-export function unpushedWork(env: OnaEnvironment): { branch?: string; count: number } | null {
+export function unpushedWork(env: OnaEnvironment): { branch?: string; count: number; files: number } | null {
   const git = env.status?.content?.git;
   const count = Number(git?.totalUnpushedCommits ?? 0);
-  if (!(count > 0)) return null;
-  return git?.branch ? { branch: git.branch, count } : { count };
+  const files = Number(git?.totalChangedFiles ?? 0);
+  if (!(count > 0 || files > 0)) return null;
+  return git?.branch ? { branch: git.branch, count, files } : { count, files };
 }
 
 /**
