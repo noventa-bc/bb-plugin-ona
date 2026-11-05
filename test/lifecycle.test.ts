@@ -131,6 +131,21 @@ test("a failed teardown outside the teardown phase counts as nothing: bb derives
   assert.deepEqual(workspaceWork([workspace("ready", "active", "failed")], NOW), { busy: false, needsRecovery: 0 });
 });
 
+// Bug: a workspace in bb's retiring phase was skipped, so an idle box could be let go during bb's retire grace.
+test("workspaceWork: a workspace in its retire grace is busy", () => {
+  assert.deepEqual(workspaceWork([workspace("ready", "retiring", null, NOW + MIN)], NOW), {
+    busy: true,
+    needsRecovery: 0,
+  });
+});
+
+test("workspaceWork: a retiring workspace past its retireAt is still busy, bb has not started the teardown", () => {
+  assert.deepEqual(workspaceWork([workspace("ready", "retiring", null, NOW - MIN)], NOW), {
+    busy: true,
+    needsRecovery: 0,
+  });
+});
+
 test("an idle machine whose workspaces bb is working on, or that need recovery, is not let go", () => {
   const idle = [machine("a"), machine("b", { workspacesBlock: true }), machine("c", { workspacesBlock: false })];
   assert.deepEqual(machinesToRelease(idle, NOW, 30 * MIN), ["a", "c"]);

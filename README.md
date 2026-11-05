@@ -39,7 +39,7 @@ and nothing goes through getbb.app or any other third-party relay. Tunnels only
 work while your Mac is awake and bb is running. An open tunnel counts as
 activity to Ona, so the plugin only keeps it open while you use the box. After
 `idleDisconnect` (1h by default) without thread activity, unless bb is setting up,
-tearing down or retrying one of the machine's workspaces, or one needs recovery, or
+tearing down, retrying or retiring one of the machine's workspaces (retiring is bb's grace before a teardown), or one needs recovery, or
 bb's workspace or thread list can't be read, or the Ona listing fails or comes back
 empty (see [How bb and Ona stay in sync](docs/sync.md)),
 it closes the tunnel and marks the bb machine suspended, but it doesn't stop the

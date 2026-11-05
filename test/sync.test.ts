@@ -62,12 +62,13 @@ test("bb accepting a suspend without acting on it is a failure, not a release", 
   assert.ok(GIVE_UP_AFTER > 1);
 });
 
-test("an idle box isn't released while bb tears down or retries a workspace, or one needs recovery", async () => {
+test("an idle box is kept while bb tears down, retries or retires a workspace, or one needs recovery", async () => {
   const teardown = (status: string | null, retireAt: number | null = null): WorkspaceView => ({
     status: "ready",
     lifecycle: { phase: "teardown", retireAt, teardown: status ? { status } : null },
   });
   const workspaces = [teardown("running"), teardown(null), teardown("failed"), teardown("failed", Date.now() + 60_000)];
+  workspaces.push({ status: "ready", lifecycle: { phase: "retiring", retireAt: NOW, teardown: null } });
   for (const workspace of workspaces) {
     const { sync, calls } = world([idle("h1", { workspaces: [workspace] })]);
     await sync.reconcile(new Set([ALL]), { wait: true });
@@ -125,19 +126,19 @@ test("a disconnected box whose workspace lookup fails gets no daemon check at on
 });
 
 // Bug: a teardown bb was still retrying counted as needing recovery, so a disconnected box waited out the grace instead of reconnecting for bb's retry.
-test("a disconnected box reconnects at once for a teardown bb is still retrying", async () => {
+test("a disconnected box reconnects at once while bb retries or retires a workspace", async () => {
   const retrying: WorkspaceView = {
     status: "error",
     lifecycle: { phase: "teardown", retireAt: Date.now() + 60_000, teardown: { status: "failed" } },
   };
-  const { sync, calls } = world(
-    [idle("h1", { status: "disconnected", lastSeenAt: Date.now() - 5_000, workspaces: [retrying] })],
-    { daemonAlive: false },
-  );
-  await sync.reconcile(new Set([ALL]), { wait: true });
-  assert.deepEqual(calls, ["probe", "restart daemon"]);
-  const [row] = await sync.statusRows();
-  assert.equal(row!.needsRecovery, 0, "bb is still retrying it, so status doesn't call it needing recovery");
+  const retiring: WorkspaceView = { status: "ready", lifecycle: { phase: "retiring", retireAt: NOW, teardown: null } };
+  for (const workspace of [retrying, retiring]) {
+    const box = idle("h1", { status: "disconnected", lastSeenAt: Date.now() - 5_000, workspaces: [workspace] });
+    const { sync, calls } = world([box], { daemonAlive: false });
+    await sync.reconcile(new Set([ALL]), { wait: true });
+    assert.deepEqual(calls, ["probe", "restart daemon"], JSON.stringify(workspace));
+    assert.equal((await sync.statusRows())[0]!.needsRecovery, 0, JSON.stringify(workspace));
+  }
 });
 
 test("a disconnected box waits out the grace for a teardown whose retry is over a minute overdue", async () => {

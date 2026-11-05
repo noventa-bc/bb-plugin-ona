@@ -11,13 +11,14 @@ export interface MachineActivity {
   threadStatuses: readonly string[];
   /** Latest thread activity or (re)connect, epoch ms. */
   lastActivityAt: number;
-  /** bb is setting up or tearing down a workspace on it, retrying a failed teardown, or one needs recovery, or its lookup failed. */
+  /** bb is setting up or tearing down a workspace on it, retiring one, retrying a failed teardown, or one needs recovery, or its lookup failed. */
   workspacesBlock?: boolean;
 }
 
 /**
  * The parts of a bb environment (a thread's workspace) this file reads. `retireAt` is
- * bb's retry time for a failed teardown; docs/ona-notes.md has bb's retry timing.
+ * bb's retry time for a failed teardown, or the end of a retiring workspace's grace;
+ * docs/ona-notes.md has bb's timing.
  */
 export interface WorkspaceView {
   status: string;
@@ -29,8 +30,9 @@ const OVERDUE_MS = 60_000;
 
 /**
  * What bb is doing with a machine's workspaces. `busy`: a setup or teardown is
- * under way, or bb is retrying a failed teardown; letting the box go now
- * would interrupt or block it. `needsRecovery`: failed teardowns bb has given up on, or
+ * under way, bb is retrying a failed teardown, or a workspace is retiring (bb's grace
+ * before its teardown); letting the box go now would interrupt or block it.
+ * `needsRecovery`: failed teardowns bb has given up on, or
  * whose retry is more than OVERDUE_MS overdue; the plugin won't let an active machine go
  * idle until they clear.
  */
@@ -42,6 +44,8 @@ export function workspaceWork(
   let needsRecovery = 0;
   for (const workspace of workspaces) {
     if (workspace.status === "creating" || workspace.status === "provisioning") busy = true;
+    // The grace ends in a teardown, which needs the machine active in bb (docs/ona-notes.md).
+    if (workspace.lifecycle.phase === "retiring") busy = true;
     if (workspace.lifecycle.phase !== "teardown") continue;
     const { retireAt, teardown } = workspace.lifecycle;
     if (teardown?.status === "failed" && (retireAt === null || retireAt < now - OVERDUE_MS)) needsRecovery++;
