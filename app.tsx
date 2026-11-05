@@ -197,21 +197,20 @@ type MoveData = ReturnType<typeof useMoveData>;
  * The thread menu's "Move to devbox" (src/move.ts): the devboxes, listed again with each new set
  * of threads so their bb status labels (connected, suspended, …) stay close to current, and each
  * shown thread's devbox, asked with each new set of threads until a reply is stored; a thread bb
- * has not given a workspace yet is asked again within 15 s while it stays shown (`remember` in
- * src/move.ts; `place` records a moved thread's target box without a call).
+ * has not given a workspace yet is asked again 15 s after each such reply while it stays shown
+ * (`remember` in src/move.ts; `place` records a moved thread's target box without a call).
  */
 function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
   const rpc = useRpc<typeof rpcContract>();
   const [devboxes, setDevboxes] = useState<Devbox[]>([]);
   const [threads, setThreads] = useState<Record<string, Devbox | null>>({});
   useEffect(() => {
-    // The cleanup before the next run (or unmount) ends this run's replies and re-asks;
+    // The cleanup before the next run (or unmount) ends this run's devboxes reply and its re-asks;
     // a timer left over fires once and does nothing.
     let live = true;
     void rpc.call("devboxes_list", null).then(
-      (reply) => {
-        if (live) setDevboxes(reply.devboxes);
-      },
+      // A reply from an older run fills an empty list and never replaces a newer one.
+      (reply) => setDevboxes((current) => (live || current.length === 0 ? reply.devboxes : current)),
       () => undefined,
     );
     const ask = (threadId: string) =>
