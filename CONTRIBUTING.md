@@ -40,7 +40,8 @@ npm run check        # Node pin, typecheck, lint, format check, tests
    messages are Conventional Commits, `type(scope): subject` (the hook from
    "Set up" checks them; `scripts/conventional.sh` has the rule).
 2. Fix a bug with a failing test first. Put logic in `src/` as pure functions
-   with tests; a change to a sync pass gets a scenario in `test/sync.test.ts`.
+   with tests; a change to a sync pass gets a scenario in `test/sync.test.ts`
+   or, since that file sits at the 500-line lint cap, `test/sync-status.test.ts`.
    Offline end-to-end: `test/e2e.test.ts` loads the real `server.ts` in the
    SDK's fake bb host with the fake `ona` (`test/fake-ona.mjs`, stateful) and
    fake `ssh`, and drives the provider's create, suspend, resume and remove;
