@@ -383,7 +383,6 @@ export function createSync(deps: SyncDeps) {
                 if (!decision.resumeAfter || lifecycle.phase !== "active") throw new Error(suspendFailure(refusal));
                 // bb's suspend failed (Ona stopped the box under a live turn) and left the machine active, where bb's
                 // resume does nothing: the plugin wakes the box (decision 0002).
-                // The signal caps the whole wake at 15 minutes.
                 const startCalled = await provider.wake(resource, report, AbortSignal.timeout(15 * 60_000));
                 return startCalled ? "started it for a waiting thread" : "reconnected it for a waiting thread";
               }
@@ -477,7 +476,7 @@ export function createSync(deps: SyncDeps) {
         const skipped = !autoRepair && !["none", "suspend-observed", "ensure-tunnel"].includes(decision.action);
         const reason = skipped ? `${decision.reason} (would ${decision.action}; autoRepair is off)` : decision.reason;
         guard.note(row.hostId, reason);
-        // The hold ends when bb shows the machine connected with its tunnel up, on a box Ona shows running (docs/sync.md rule 3).
+        // A connection the pass can trust ends a hold (docs/sync.md rule 3).
         if (view.status === "connected" && view.tunnel === "up" && shownRunning(onaState)) guard.connected(row.hostId);
         if (decision.action === "none" || skipped) continue;
         actions.push(act(row, decision, options.force ?? false));
