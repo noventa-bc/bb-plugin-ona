@@ -478,7 +478,7 @@ export function onaCommands(deps: OnaCommandDeps) {
         }
         case "keep-alive": {
           if (!ref) break;
-          return keepAliveCommand({ snapshot, findMachine, resolveEnvId, keepAlives }, ref, newName);
+          return await keepAliveCommand({ snapshot, findMachine, resolveEnvId, keepAlives }, ref, newName);
         }
         case "shell": {
           if (!ref) break;

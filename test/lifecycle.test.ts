@@ -185,3 +185,27 @@ test("a read that rejects is asked again, and the next settled phase counts (fai
   assert.equal(lifecycle.phase, "active");
   assert.equal(reads, 2);
 });
+
+test("a settle whose every read fails names the read error at its deadline (fails if the error is the bare still-suspending message)", async () => {
+  await assert.rejects(
+    settledLifecycle(
+      async () => {
+        throw new Error("bb is down");
+      },
+      { intervalMs: 1, deadlineMs: 5 },
+    ),
+    /bb is still suspending the machine, or could not be read: bb is down/,
+  );
+});
+
+test("a read that throws when called surfaces at once, not after the deadline (fails if the throw is retried until the deadline)", async () => {
+  await assert.rejects(
+    settledLifecycle(
+      () => {
+        throw new TypeError("hosts.get is not a function");
+      },
+      { intervalMs: 1, deadlineMs: 60_000 },
+    ),
+    /hosts\.get is not a function/,
+  );
+});

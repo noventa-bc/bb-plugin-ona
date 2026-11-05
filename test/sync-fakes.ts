@@ -132,7 +132,10 @@ export function world(
             const host = hosts.get(hostId);
             // bb answers 404 for a host it doesn't know, and for one it has destroyed.
             if (!host) throw Object.assign(new Error("Host not found"), { status: 404 });
-            if (options.holdSettle?.hostId === hostId && !calls.includes(options.holdSettle.until) && holdReads++ < 3) {
+            // The held host answers suspending until its `until` call has been posted, for three reads at most.
+            const holding = options.holdSettle?.hostId === hostId && !calls.includes(options.holdSettle.until);
+            if (holding && holdReads < 3) {
+              holdReads++;
               return { ...host, lifecycle: { ...host.lifecycle, phase: "suspending" } };
             }
             // bb runs the provider's suspend as it settles an accepted suspend: a box whose no-stop flag is gone is stopped then.

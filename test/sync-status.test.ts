@@ -59,8 +59,7 @@ test("a refused suspend on a stopped box is reported as bb needing the box back 
   assert.equal(row!.last!.error, NOT_CONNECTED);
 });
 
-// Bug: an idle box's release was awaited before the next box's, so a box whose suspend bb was still settling held the
-// next box's release, and the next box's "right away" pass waited with it.
+// Releases start together: a box whose suspend bb is still settling must not hold the next box's release, or the pass.
 test("idle boxes are released together: the second's suspend is posted before the first settles (fails if a release waits for the one before it)", async () => {
   const { sync, calls } = world([idle("h1"), idle("h2")], { holdSettle: { hostId: "h1", until: "suspend h2" } });
   await sync.reconcile(new Set([ALL]), { wait: true });
@@ -68,7 +67,7 @@ test("idle boxes are released together: the second's suspend is posted before th
   assert.ok(calls.indexOf("suspend h2") < calls.indexOf("settled h1"), calls.join(", "));
 });
 
-// Bug: a refused suspend that bb settles as `removing` (the machine is being removed) let a waiting thread wake the box.
+// A refused suspend that bb settles as `removing` (the machine is being removed) must not let a waiting thread wake the box.
 test("a suspend bb settles as removing wakes nothing and keeps the no-stop flag, even with a thread waiting (fails if the active check before the wake is dropped)", async () => {
   const ona = registerOna({ found: { ...box("STOPPED"), id: "env-h1" }, phases: ["STOPPED", "RUNNING"] });
   const waiting: ThreadRecord = {

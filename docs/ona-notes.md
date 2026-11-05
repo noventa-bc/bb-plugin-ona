@@ -125,9 +125,12 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   (`startMachineSuspension`, `startMachineResume`; checked 2026-11-05). The host reads
   `suspending` or `resuming` until bb settles it. Inside the lock the 202 carries the
   host as it is, `active` with the old message: the lock's 409 `machine_maintenance`
-  is raised inside the background operation and only logged. Only
-  `requireActiveSuspendableMachine`'s 409 `machine_not_active` reaches the client, so
-  a suspend that bb later fails looks accepted when it is answered.
+  is raised inside the background operation and only logged. What reaches the client at
+  once are the synchronous checks' answers: 404 `host_not_found`, 409
+  `machine_provider_unavailable` and `machine_suspend_unsupported` (from
+  `requireSuspendableMachine`), and 409 `machine_not_active` and `machine_busy` (from
+  `requireActiveSuspendableMachine`). A suspend that bb later fails looks accepted when
+  it is answered.
 - `resumeMachine` waits for an in-flight suspend, then `resumeMachineWithIntent`
   returns at once unless the phase is suspended, suspending or resuming. A resume of
   an active machine does nothing (checked 2026-11-05).

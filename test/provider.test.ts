@@ -383,3 +383,31 @@ test("a relative legacy dataDir is kept and a trailing slash is stripped", () =>
   assert.equal(resourceSchema.parse({ ...resource, dataDir: "data/" }).dataDir, "data");
   assert.equal(resourceSchema.parse({ ...resource, dataDir: "/srv/bb/" }).dataDir, "/srv/bb");
 });
+
+test("a remove clears a no-stop flag a suspend left, so the box's next suspend stops it (fails if remove leaves the flag)", async () => {
+  const { provider, releasing } = register({ found: box("STOPPED") });
+  releasing.add("env-1");
+  await provider.remove!({
+    ...lifecycle(),
+    hostId: "host-1",
+    resource: adoptedResource,
+    signal: new AbortController().signal,
+  });
+  assert.equal(releasing.has("env-1"), false);
+});
+
+test("a wake clears a no-stop flag a failed suspend left, so the next Pause stops the box (fails if wake leaves the flag)", async () => {
+  const { wake, releasing } = register({ found: box("RUNNING") });
+  releasing.add("env-1");
+  await wake(adoptedResource, lifecycle().report, new AbortController().signal);
+  assert.equal(releasing.has("env-1"), false);
+});
+
+test("wake refuses a STOPPING box that Ona settles as deleting, and starts nothing (fails if ensureRunning starts it)", async () => {
+  const { wake, calls } = register({ found: box("STOPPING"), phases: ["STOPPING", "DELETING"] });
+  await assert.rejects(
+    wake(adoptedResource, lifecycle().report, new AbortController().signal),
+    /deleting, so it was not started/,
+  );
+  assert.ok(!calls.includes("start"), calls.join(", "));
+});

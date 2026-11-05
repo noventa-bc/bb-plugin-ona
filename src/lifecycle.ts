@@ -109,10 +109,20 @@ export async function settledLifecycle(
   read: () => Promise<{ lifecycle: { phase: string; message: string | null } }>,
   options: { intervalMs?: number; deadlineMs?: number } = {},
 ): Promise<{ phase: string; message: string | null }> {
+  // The message of the last read, when that read failed: a read that answers clears it.
+  const failure: { message?: string } = {};
   const settled = await pollUntil(
     async () => {
-      const host = await read().catch(() => undefined);
-      return host && host.lifecycle.phase !== "suspending" ? host : undefined;
+      // A read that throws when called is a bug, not bb being down, so it surfaces here; a read that rejects is asked again.
+      const pending = read();
+      try {
+        const host = await pending;
+        failure.message = undefined;
+        return host.lifecycle.phase !== "suspending" ? host : undefined;
+      } catch (error: unknown) {
+        failure.message = error instanceof Error ? error.message : String(error);
+        return undefined;
+      }
     },
     {
       deadlineMs: options.deadlineMs ?? SETTLE_MS,
@@ -121,7 +131,13 @@ export async function settledLifecycle(
       signal: new AbortController().signal,
     },
   );
-  if (!settled) throw new Error("bb is still suspending the machine");
+  if (!settled) {
+    throw new Error(
+      failure.message === undefined
+        ? "bb is still suspending the machine"
+        : `bb is still suspending the machine, or could not be read: ${failure.message}`,
+    );
+  }
   return settled.lifecycle;
 }
 

@@ -117,10 +117,26 @@ test("bb ona resume refuses a box whose machine another action holds, and starts
   assert.deepEqual(calls, []);
 });
 
-test("bb ona resume exits 1 with the refusal when Ona shows the box deleting (fails if the refusal is lost and the box is started)", async () => {
+test("bb ona resume's refused wake exits 1, not a rejection (fails when the resume case returns the wake without await, which skipped the dispatcher's catch)", async () => {
   const { deps, calls } = fixture(box("DELETING"), ["DELETING"]);
   const result = await dispatch(deps)("box");
   assert.equal(result.exitCode, 1);
   assert.match(result.stderr ?? "", /box deleting, so it was not started/);
   assert.deepEqual(calls, ["get DELETING"]);
+});
+
+test("bb ona resume on a STARTING box waits for Ona to finish and does not start it (fails if it starts the box while Ona is starting it)", async () => {
+  const { deps, calls } = fixture(box("STARTING"), ["STARTING", "RUNNING"]);
+  const result = await dispatch(deps)("box");
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout ?? "", /^Waited for box to start and reconnected it$/m);
+  assert.ok(!calls.includes("start"), calls.join(", "));
+});
+
+test("bb ona resume on a STOPPING box starts it only after the stop has settled (fails if it starts before the stop has settled)", async () => {
+  const { deps, calls } = fixture(box("STOPPING"), ["STOPPING", "STOPPED", "RUNNING"]);
+  const result = await dispatch(deps)("box");
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout ?? "", /^Started box and reconnected it$/m);
+  assert.ok(calls.indexOf("start") > calls.indexOf("get STOPPED"), calls.join(", "));
 });

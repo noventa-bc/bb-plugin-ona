@@ -277,7 +277,7 @@ export function createSync(deps: SyncDeps) {
     for (const hostId of machinesToRelease(activity, now, idleMs)) {
       const row = candidates.find((r) => r.hostId === hostId)!;
       const reason = `idle for ${idleDisconnect}; Ona's own timeout will stop the box`;
-      // Started, not awaited: one box's settle must not hold the next box's suspend or the pass (reconcile awaits `actions`).
+      // Started, not awaited: one box's settle must not hold the next box's suspend or the pass (reconcile waits for `actions` only under `wait`).
       actions.push(
         guard
           .run(

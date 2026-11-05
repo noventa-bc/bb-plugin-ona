@@ -25,18 +25,24 @@ export default tseslint.config(
       "@typescript-eslint/prefer-promise-reject-errors": "error",
       "@typescript-eslint/only-throw-error": "error",
       "@typescript-eslint/switch-exhaustiveness-check": "error",
+      // A `return promise` inside try skips its catch: the round-2 resume case did that. Awaited inside a try, not elsewhere.
+      "@typescript-eslint/return-await": ["error", "in-try-catch"],
       "max-lines": ["error", { max: 500, skipBlankLines: true, skipComments: true }],
       "no-restricted-syntax": [
         "error",
-        // bb can accept a lifecycle request without acting on it; use the host it returns.
+        // bb can accept a lifecycle request without acting on it; use the host it returns. A lifecycle call is discarded
+        // when its statement is bare, awaited or void, possibly followed by a chain of calls: chains up to two calls deep
+        // are covered (`.catch(...)`, and `.catch(...).finally(...)`).
         ...[
           "ExpressionStatement > AwaitExpression",
           "ExpressionStatement > UnaryExpression[operator='void']",
           "ExpressionStatement",
-          // The same statement forms around a chained call, such as `.catch(...)` on the lifecycle call.
           "ExpressionStatement > AwaitExpression > CallExpression > MemberExpression",
           "ExpressionStatement > UnaryExpression[operator='void'] > CallExpression > MemberExpression",
           "ExpressionStatement > CallExpression > MemberExpression",
+          "ExpressionStatement > AwaitExpression > CallExpression > MemberExpression > CallExpression > MemberExpression",
+          "ExpressionStatement > UnaryExpression[operator='void'] > CallExpression > MemberExpression > CallExpression > MemberExpression",
+          "ExpressionStatement > CallExpression > MemberExpression > CallExpression > MemberExpression",
         ].map((parent) => ({
           selector: `${parent} > CallExpression[callee.property.name=/^experimental_(suspend|resume|reconcile)$/]`,
           message: "bb can accept this without acting on it: check the returned host's lifecycle (lifecycleRefusal).",
