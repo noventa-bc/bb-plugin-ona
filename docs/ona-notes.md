@@ -157,7 +157,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   on the workspace and no teardown status is set, and returns while the workspace has an
   owner thread id and no teardown status. Once `retireAt` has passed it asks for the
   removal (`requestEnvironmentRemoval`). `retireGraceMs` defaults to 300000 (5 min) in
-  `environmentProviderPolicySchema`, and the plugin sets no policy (checked 2026-11-04).
+  `environmentProviderPolicySchema`, and the plugin's provider keeps that default (checked 2026-11-04).
 - bb's periodic sweep runs every 10 s (`setInterval` with `1e4` in
   `server/dist/start-server.js`). A tick is skipped while the previous run of the
   job is still going (`runPeriodicSweepJob`). A run waits for each workspace it
