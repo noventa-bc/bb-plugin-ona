@@ -3,7 +3,7 @@
 // Each bb machine is one Ona environment. bb's daemon runs inside the devbox
 // and reaches this server through an SSH reverse tunnel, so the server stays
 // on loopback and nothing goes through a third-party relay.
-import type { BbPluginApi } from "@get-bb/plugin-sdk";
+import { experimental_PluginRpcRefusal, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { KeepAlives } from "./src/keepalive.ts";
 import { errorText, isRunning, isStopped, OnaCli, OnaSnapshot, sshHost } from "./src/ona.ts";
@@ -22,6 +22,7 @@ import { commands, onaCommands } from "./src/commands.ts";
 import { connectedAtKey, createSync, forgetBox, matchesRef, watchRealtime, type Row } from "./src/sync.ts";
 import { ALL, HostGuard, PassScheduler } from "./src/reconcile.ts";
 import { createThreadCost } from "./src/cost-service.ts";
+import { createMove } from "./src/move.ts";
 import { rpcContract, type Devbox } from "./src/rpc.ts";
 import { threadTerminalPlan, type ShellBackend, type ShellTarget } from "./src/shells.ts";
 import { TunnelManager } from "./src/ssh.ts";
@@ -346,13 +347,17 @@ export default async function plugin(bb: BbPluginApi) {
     };
   }
 
-  /** The Ona devbox a thread runs on, if any. */
-  async function threadDevbox(threadId: string): Promise<Devbox | null> {
-    const thread = await bb.sdk.threads.get({ threadId });
-    if (!thread.environmentId) return null;
-    const environment = await bb.sdk.environments.get({ environmentId: thread.environmentId });
+  /** The Ona devbox a workspace is on, if any. */
+  async function workspaceDevbox(environmentId: string): Promise<Devbox | null> {
+    const environment = await bb.sdk.environments.get({ environmentId });
     const row = await machineOfHost(environment.hostId);
     return row ? devboxOf(row) : null;
+  }
+
+  /** The Ona devbox a thread runs on, if any. */
+  async function threadDevbox(threadId: string): Promise<Devbox | null> {
+    const { environmentId } = await bb.sdk.threads.get({ threadId });
+    return environmentId ? workspaceDevbox(environmentId) : null;
   }
 
   const costs = createThreadCost({ bb, runCollector: provider.runCollector, threadDevbox, snapshot });
@@ -388,10 +393,22 @@ export default async function plugin(bb: BbPluginApi) {
     return { terminalId: terminal.id, via: plan.via };
   }
 
+  const move = createMove({ sdk: bb.sdk, machineOfHost });
+
   bb.rpc.register(rpcContract, {
     devboxes_list: async () => ({ devboxes: await devboxes() }),
-    thread_devbox: async ({ threadId }) => ({ devbox: await threadDevbox(threadId) }),
+    thread_devbox: async ({ threadId }) => {
+      // bb creates a thread before its workspace; the app asks again every 15 s while the thread is shown.
+      const { environmentId } = await bb.sdk.threads.get({ threadId });
+      if (!environmentId) return { devbox: null, pending: true };
+      return { devbox: await workspaceDevbox(environmentId) };
+    },
     thread_cost: async ({ threadId }) => ({ cost: await costs.threadCost(threadId) }),
+    // A refusal carries the message to the menu without bb recording a plugin crash, which a plain throw would be.
+    thread_move: (input) =>
+      move(input).catch((error: unknown) => {
+        throw new experimental_PluginRpcRefusal({ code: "conflict", message: errorText(error) });
+      }),
     devbox_open_editor: async ({ hostId }) => {
       const row = await findMachine(hostId);
       if (!row) return { opened: false };
@@ -449,6 +466,7 @@ export default async function plugin(bb: BbPluginApi) {
       defaultProject,
       findMachine,
       resolveEnvId,
+      move,
       shellTarget,
       openThreadTerminal,
       setup,
