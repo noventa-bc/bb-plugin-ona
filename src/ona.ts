@@ -41,7 +41,7 @@ const environmentSchema = z.object({
             .object({
               branch: z.string().optional(),
               totalUnpushedCommits: z.union([z.number(), z.string()]).optional(),
-              /** An odd value reads as absent, so one box can't fail the whole listing. */
+              /** A bad value must not fail the whole listing. */
               totalChangedFiles: z.union([z.number(), z.string()]).optional().catch(undefined),
             })
             .loose()
@@ -272,8 +272,9 @@ export function isDeleted(env: OnaEnvironment): boolean {
  */
 export function unpushedWork(env: OnaEnvironment): { branch?: string; count: number; files: number } | null {
   const git = env.status?.content?.git;
-  const count = Number(git?.totalUnpushedCommits ?? 0);
-  const files = Number(git?.totalChangedFiles ?? 0);
+  // boxFacts shows the count, so a negative or non-numeric value reads as zero.
+  const count = Math.max(0, Number(git?.totalUnpushedCommits ?? 0)) || 0;
+  const files = Math.max(0, Number(git?.totalChangedFiles ?? 0)) || 0;
   if (!(count > 0 || files > 0)) return null;
   return git?.branch ? { branch: git.branch, count, files } : { count, files };
 }

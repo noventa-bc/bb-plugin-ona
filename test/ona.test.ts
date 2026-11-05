@@ -524,11 +524,9 @@ test("boxFacts: an odd start, timeout or activity reads as null, and a count tha
     null,
     "an activity with no source",
   );
-  assert.equal(
-    boxFacts(env({ status: { content: { git: { totalUnpushedCommits: -1 } } } })).unpushed,
-    0,
-    "a negative count",
-  );
+  for (const git of [{ totalUnpushedCommits: -1 }, { totalUnpushedCommits: -1, totalChangedFiles: 1 }]) {
+    assert.equal(boxFacts(env({ status: { content: { git } } })).unpushed, 0, JSON.stringify(git));
+  }
   for (const totalUnpushedCommits of ["Infinity", 2.5, "9007199254740993"]) {
     const git = { totalUnpushedCommits };
     assert.equal(boxFacts(env({ status: { content: { git } } })).unpushed, 0, String(totalUnpushedCommits));
