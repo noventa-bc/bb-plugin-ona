@@ -52,7 +52,7 @@ Change these together, in the same edit.
 - Write the least code that solves the whole task (the ponytail ruleset, installed as a Claude Code plugin; see `docs/owner.md`). A shortcut with a known limit gets a comment `shortcut: <the limit>, <when to upgrade>`; `/ponytail-debt` lists them. A shortcut comment never describes an unfixed weakness; that goes to the private roadmap.
 - Fix a bug with a failing test first, where a test is possible. A `// Bug:` line names only a bug that was on `main`, not a design tried and dropped inside the PR (git history has it).
 - When you find a bug, a source of noise or anything that can damage the repo, add the guard that stops it recurring in the same change (a finding already on `main` that the branch does not make reachable or worse takes its guard in its roadmap item, `FACTORY.md` step 6): a test, a lint rule, a CI step, a `.gitignore` line or a written rule here. Say in the handoff which guard you added.
-- A change to what a sync pass does gets a scenario in `test/sync.test.ts` (fake bb calls, fake Ona listing).
+- A change to what a sync pass does gets a scenario in `test/sync.test.ts` or, since that file sits at the 500-line lint cap, `test/sync-status.test.ts` (fake bb calls and Ona listing from `test/sync-fakes.ts`).
 - For `server.ts` code without tests, list owner check steps in the handoff instead.
 - Put logic in `src/` as pure functions with tests.
 - Every SSH or `ona` call must name the safety rule that covers it, in `docs/sync.md`.

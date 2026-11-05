@@ -74,7 +74,9 @@ those and the "skipped or not checked" lines ponytail ends with.
    candidate rules on the code, count the hits, propose only what pays, and
    let the owner pick. A task that touches bb's machine lifecycle (create,
    resume, suspend, remove, reconnect, the daemon) has its brief name the bb
-   server function the builder reads first. The source path is in
+   server function the builder reads first; a task that calls bb's API names
+   the server-side validation of that call too (the SDK typings do not show
+   it: a fork onto another host is refused only there). The source path is in
    `docs/ona-notes.md` (bb SDK section). Read it with bounded grep (`grep -n`,
    piped to `head`). Its round-1 adversarial reviewer is briefed to read that
    source too, so it runs on Opus (see the model paragraph under Roles).
@@ -94,7 +96,9 @@ those and the "skipped or not checked" lines ponytail ends with.
    `npm ci --ignore-scripts`, then `npm run prepare`, writes
    a failing test first where possible (each test names, in its title or the
    handoff, the bug it fails on; a test that still passes with the rule
-   deleted is not done), keeps `npm run check` green, writes
+   deleted is not done; stage the fix before a mutant you restore with
+   `git checkout`, or the restore brings back the unfixed file), keeps
+   `npm run check` green, writes
    `.agent/HANDOFF.md`, and leaves the work staged for the orchestrator.
 6. **Review.** The orchestrator commits the builder's staged work on its
    branch (after the check passes on its own), reads the handoff and the diff,
