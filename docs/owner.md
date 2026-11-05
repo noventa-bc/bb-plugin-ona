@@ -56,8 +56,9 @@ Constraints: <decisions or rules that matter here>
 Before dispatching, check the task against the accepted records in
 `docs/decisions/`. If it conflicts, decide first and say so in the brief, since
 an unattended agent skips a conflicting item. A brief for a lifecycle call
-names the shape of bb's answer (bb answers suspend and resume with 202 before
-the operation runs, `docs/ona-notes.md`), so the builder designs a phase check
+names the shape of bb's answer (an accepted suspend or resume answers 202
+before the operation runs, and a refusal comes back at once as a 4xx;
+`docs/ona-notes.md`, checked 2026-11-05), so the builder designs a phase check
 on the settled host, not on the answer.
 
 ## Review a handoff outside the orchestrated flow
