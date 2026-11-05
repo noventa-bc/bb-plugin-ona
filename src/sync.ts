@@ -230,12 +230,14 @@ export function createSync(deps: SyncDeps) {
       provider.releasing.delete(row.resource.envId);
       throw error;
     });
-    // A timeout while bb runs the suspend keeps the flag: bb may still reach the provider's suspend, which stops the box without it.
     const lifecycle =
       posted.lifecycle.phase === "suspending"
         ? await settledLifecycle(() => bb.sdk.hosts.get({ hostId: row.hostId }))
         : posted.lifecycle;
-    provider.releasing.delete(row.resource.envId);
+    // The provider's suspend consumes the flag when bb reaches it, and a suspended machine has been through it. A failed
+    // suspend (active) never reaches it, so the flag goes back here. The flag stays for every other outcome: a settle that
+    // timed out or failed (it throws above), and any other phase, since bb may still run the provider's suspend (removing).
+    if (lifecycle.phase === "active") provider.releasing.delete(row.resource.envId);
     return lifecycle;
   }
 
@@ -247,7 +249,7 @@ export function createSync(deps: SyncDeps) {
    * reconnects or restarts it when a thread needs it.
    */
   const idleMs = parseDuration(idleDisconnect);
-  async function releaseIdleMachines(rows: Row[]): Promise<void> {
+  async function releaseIdleMachines(rows: Row[], actions: Promise<void>[]): Promise<void> {
     if (idleMs <= 0) return;
     const now = Date.now();
     const candidates = rows.filter((row) => row.phase === "active" && guard.mayAct(row.hostId));
@@ -275,21 +277,27 @@ export function createSync(deps: SyncDeps) {
     for (const hostId of machinesToRelease(activity, now, idleMs)) {
       const row = candidates.find((r) => r.hostId === hostId)!;
       const reason = `idle for ${idleDisconnect}; Ona's own timeout will stop the box`;
-      await guard
-        .run(
-          hostId,
-          "release-idle",
-          reason,
-          async () => {
-            bb.log.info(`${row.machine}: ${reason}; closing the tunnel`);
-            const refusal = lifecycleRefusal(await suspendWithoutStop(row), SUSPENDED);
-            if (refusal) throw new Error(refusal);
-          },
-          { cooldown: false },
-        )
-        .catch((error: unknown) => {
-          bb.log.warn(`${row.machine}: could not let go: ${errorText(error)}`);
-        });
+      // Started, not awaited: one box's settle must not hold the next box's suspend or the pass (reconcile awaits `actions`).
+      actions.push(
+        guard
+          .run(
+            hostId,
+            "release-idle",
+            reason,
+            async () => {
+              bb.log.info(`${row.machine}: ${reason}; closing the tunnel`);
+              const refusal = lifecycleRefusal(await suspendWithoutStop(row), SUSPENDED);
+              if (refusal) throw new Error(refusal);
+            },
+            { cooldown: false },
+          )
+          .then(
+            () => undefined,
+            (error: unknown) => {
+              bb.log.warn(`${row.machine}: could not let go: ${errorText(error)}`);
+            },
+          ),
+      );
     }
   }
 
@@ -470,7 +478,8 @@ export function createSync(deps: SyncDeps) {
         actions.push(act(row, decision, options.force ?? false));
       }
       // A failed or empty listing is unknown (docs/sync.md rule 4): no idle release that pass.
-      if (keys.has(ALL) && listing?.envs.length && snapshot.lastError === null) await releaseIdleMachines(rows);
+      if (keys.has(ALL) && listing?.envs.length && snapshot.lastError === null)
+        await releaseIdleMachines(rows, actions);
       if (options.wait) await Promise.all(actions);
     } catch (error) {
       bb.log.warn(`reconcile failed: ${errorText(error)}`);

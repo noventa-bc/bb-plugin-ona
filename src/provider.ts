@@ -13,7 +13,7 @@ import {
   type OnaCli,
   type OnaEnvironment,
 } from "./ona.ts";
-import { DAEMON_PROBE } from "./reconcile.ts";
+import { DAEMON_PROBE, short, STOPPED } from "./reconcile.ts";
 import type { PluginMachineProviderAvailability } from "./setup.ts";
 import { daemonEnv, pollSsh, shellQuote, sshCapture, sshCheck, sshExecutor, type TunnelManager } from "./ssh.ts";
 import { pollUntil } from "./time.ts";
@@ -315,17 +315,21 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
   /**
    * Starts a box Ona shows stopped (or waits for one that is starting) and connects bb's daemon: a resume's start and
    * connect, without bb's lifecycle. A waiting thread on an active machine asks for it (decision 0002), and so does
-   * `bb ona resume`; the caller checks bb's phase, since a suspended machine is bb's resume's to start.
+   * `bb ona resume`; the caller checks bb's phase, since a suspended machine is bb's resume's to start. Ona's other
+   * phases (deleting, deleted, failed) are refused: the box is not started.
    */
-  async function wake(
-    resource: OnaResource,
-    report: PluginMachineProviderProgress,
-    signal: AbortSignal,
-  ): Promise<void> {
+  async function wake(resource: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal) {
     const env = await ona.getEnvironmentIfExists(resource.envId, signal);
     if (!env) throw new Error(`Ona environment "${resource.envId}" not found. Run \`ona environment list\`.`);
+    const phase = env.status?.phase ?? "";
+    if (!isRunning(env) && !isStarting(env) && !STOPPED.has(phase)) {
+      throw new Error(`Ona shows ${env.metadata.name ?? env.id} ${short(phase || "unknown")}, so it was not started.`);
+    }
+    const started = !isRunning(env);
     await ensureRunning(env, report, signal);
-    await connectOrClose(resource, report, signal, !isRunning(env));
+    // Only a box this started closes its tunnel on a failed connect; a running box keeps the tunnel it had.
+    if (started) await connectOrClose(resource, report, signal, true);
+    else await connect(resource, resource.key, report, signal);
   }
 
   async function ensureLocalMachineRoot(

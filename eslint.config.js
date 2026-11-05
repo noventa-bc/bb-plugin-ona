@@ -33,6 +33,10 @@ export default tseslint.config(
           "ExpressionStatement > AwaitExpression",
           "ExpressionStatement > UnaryExpression[operator='void']",
           "ExpressionStatement",
+          // The same statement forms around a chained call, such as `.catch(...)` on the lifecycle call.
+          "ExpressionStatement > AwaitExpression > CallExpression > MemberExpression",
+          "ExpressionStatement > UnaryExpression[operator='void'] > CallExpression > MemberExpression",
+          "ExpressionStatement > CallExpression > MemberExpression",
         ].map((parent) => ({
           selector: `${parent} > CallExpression[callee.property.name=/^experimental_(suspend|resume|reconcile)$/]`,
           message: "bb can accept this without acting on it: check the returned host's lifecycle (lifecycleRefusal).",

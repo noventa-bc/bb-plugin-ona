@@ -113,15 +113,21 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   under the bb app's bundled `bb-app` package, function `startMachineResume`).
 - bb 0.48.1's suspend (`maintainMachine` in `server/dist/start-server.js`, checked
   2026-11-05) cancels unfinished environment hooks and stops active threads through
-  the daemon before the provider's suspend runs. With the daemon gone it fails with
-  "Host is not connected" once its drain gives up (5 minutes at most): bb sets the
-  phase back to `active`, sets the host's `lifecycle.message` to "Machine suspension
-  failed: <message>", and sets `suspendRetryAt` to now plus `RETRY_MS` (10 s). That
-  is a lock, not a retry: while it holds, a suspend fails with 409 `machine_maintenance`.
+  the daemon before the provider's suspend runs. With the daemon gone, that stop
+  fails at once with "Host is not connected" (502 `host_unavailable`). bb then sets
+  the phase back to `active`, sets the host's `lifecycle.message` to "Machine
+  suspension failed: <message>", and sets `suspendRetryAt` to now plus `RETRY_MS`
+  (10 s). A drain that runs past its 5-minute deadline fails with "Machine drain
+  exceeded its deadline; old compute is retained" instead. `suspendRetryAt` is a
+  lock, not a retry: while it holds, bb's suspend fails inside the background
+  operation (the next bullet).
 - bb answers the suspend and resume routes with 202 before the operation runs
-  (`startMachineSuspension`, `startMachineResume`). The host reads `suspending` or
-  `resuming` until bb settles it, or `active` inside the lock, so a suspend that bb
-  later fails looks accepted when it is answered.
+  (`startMachineSuspension`, `startMachineResume`; checked 2026-11-05). The host reads
+  `suspending` or `resuming` until bb settles it. Inside the lock the 202 carries the
+  host as it is, `active` with the old message: the lock's 409 `machine_maintenance`
+  is raised inside the background operation and only logged. Only
+  `requireActiveSuspendableMachine`'s 409 `machine_not_active` reaches the client, so
+  a suspend that bb later fails looks accepted when it is answered.
 - `resumeMachine` waits for an in-flight suspend, then `resumeMachineWithIntent`
   returns at once unless the phase is suspended, suspending or resuming. A resume of
   an active machine does nothing (checked 2026-11-05).

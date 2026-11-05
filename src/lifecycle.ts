@@ -102,18 +102,24 @@ export function suspendFailure(refusal: string): string {
 
 /**
  * bb answers a suspend before it runs (202, phase `suspending`), and a failed drain leaves the machine active: `read` is
- * polled until bb settles the suspend, and the lifecycle it settles on is returned.
+ * polled until bb settles the suspend, and the lifecycle it settles on is returned. A read that rejects is asked again;
+ * only a deadline with no settled phase fails the poll.
  */
 export async function settledLifecycle(
   read: () => Promise<{ lifecycle: { phase: string; message: string | null } }>,
-  options: { intervalMs?: number } = {},
+  options: { intervalMs?: number; deadlineMs?: number } = {},
 ): Promise<{ phase: string; message: string | null }> {
   const settled = await pollUntil(
     async () => {
-      const host = await read();
-      return host.lifecycle.phase === "suspending" ? undefined : host;
+      const host = await read().catch(() => undefined);
+      return host && host.lifecycle.phase !== "suspending" ? host : undefined;
     },
-    { deadlineMs: SETTLE_MS, intervalMs: options.intervalMs ?? 1_000, signal: AbortSignal.timeout(SETTLE_MS) },
+    {
+      deadlineMs: options.deadlineMs ?? SETTLE_MS,
+      intervalMs: options.intervalMs ?? 1_000,
+      // Never aborts: the deadline ends the poll, and the caller reads that as a suspend still running.
+      signal: new AbortController().signal,
+    },
   );
   if (!settled) throw new Error("bb is still suspending the machine");
   return settled.lifecycle;

@@ -1,5 +1,5 @@
-// Starting a stopped box on your request: `bb ona resume <ref>`, and the refusals it shares with `bb ona reconnect`
-// (moved here from src/commands.ts, which sits at the line cap). The start and connect are the provider's wake.
+// `bb ona resume <ref>` (decision 0002): asks the provider to start a stopped box and connect bb's daemon, for an active
+// machine; a running box is only reconnected. It also holds the reconnect refusals that `bb ona reconnect` shares with it.
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import type { CliResult } from "./commands.ts";
 import { isRunning, isStarting, reasonOf, type OnaEnvironment, type OnaListing } from "./ona.ts";
@@ -90,6 +90,10 @@ export async function resumeCommand(deps: ResumeDeps, ref: string, signal: Abort
       stderr: `${row.machine} is busy (${guard.busyWith(row.hostId) ?? "another action"}); try again shortly or see \`bb ona status\`.`,
     };
   }
-  const done = isRunning(env) ? `Reconnected ${row.machine}` : `Started ${row.machine} and reconnected it`;
+  const done = isRunning(env)
+    ? `Reconnected ${row.machine}`
+    : isStarting(env)
+      ? `Waited for ${row.machine} to start and reconnected it`
+      : `Started ${row.machine} and reconnected it`;
   return { exitCode: 0, stdout: [...steps, done].join("\n") };
 }

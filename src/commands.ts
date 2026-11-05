@@ -440,7 +440,8 @@ export function onaCommands(deps: OnaCommandDeps) {
         }
         case "resume": {
           if (!ref) break;
-          return resumeCommand(
+          // Awaited, so a refused or failed start reaches the catch below and exits 1 (as `reconnect` does).
+          return await resumeCommand(
             { snapshot, findMachine, guard, provider },
             ref,
             ctx.signal ?? new AbortController().signal,

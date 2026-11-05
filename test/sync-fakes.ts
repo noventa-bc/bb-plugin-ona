@@ -55,6 +55,10 @@ export function world(
     autoRepair?: boolean;
     /** The provider's wake (start and connect), as a waiting thread on an active machine asks for; the default records it. */
     wake?: SyncDeps["provider"]["wake"];
+    /** What an accepted suspend settles on, instead of suspended: bb can settle a suspend as `removing`, for one. */
+    suspendSettles?: { phase: string; message: string | null };
+    /** The held host's suspend reads as suspending until `until` (a call such as "suspend h2") has been posted, or three reads pass. */
+    holdSettle?: { hostId: string; until: string };
   } = {},
 ) {
   const calls: string[] = [];
@@ -77,19 +81,25 @@ export function world(
     ]),
   );
   const byHost = new Map(boxes.map((box) => [box.hostId, box]));
+  /** Suspends bb accepted and has not settled; the provider's suspend runs when bb settles one (hosts.get). */
+  const pendingSuspends = new Set<string>();
+  /** Settle reads of the held host so far (`holdSettle`). */
+  let holdReads = 0;
   const lifecycleCall =
     (name: string, phase: string) =>
     async ({ hostId }: { hostId: string }) => {
       calls.push(`${name} ${hostId}`);
       const host = hosts.get(hostId)!;
-      host.lifecycle = options.refuse
-        ? { ...host.lifecycle, message: options.refuse }
-        : { ...host.lifecycle, phase, message: null };
+      if (name === "suspend" && options.suspendSettles) {
+        host.lifecycle = { ...host.lifecycle, ...options.suspendSettles };
+      } else {
+        host.lifecycle = options.refuse
+          ? { ...host.lifecycle, message: options.refuse }
+          : { ...host.lifecycle, phase, message: null };
+      }
       if (!options.refuse) host.updatedAt = Date.now();
-      // Like the provider's suspend: a box without the no-stop flag gets stopped.
-      const envId = byHost.get(hostId)!.envId;
-      if (name === "suspend" && !options.refuse && !releasing.delete(envId)) calls.push(`stop ${envId}`);
-      // bb answers a suspend before it runs (still suspending) and settles it afterwards; hosts.get shows the settled phase.
+      if (name === "suspend" && !options.refuse) pendingSuspends.add(hostId);
+      // bb answers a suspend before it runs (still suspending); hosts.get shows the phase it settles on.
       return name === "suspend" ? { ...host, lifecycle: { ...host.lifecycle, phase: "suspending" } } : host;
     };
   const envs = (): OnaEnvironment[] =>
@@ -122,6 +132,15 @@ export function world(
             const host = hosts.get(hostId);
             // bb answers 404 for a host it doesn't know, and for one it has destroyed.
             if (!host) throw Object.assign(new Error("Host not found"), { status: 404 });
+            if (options.holdSettle?.hostId === hostId && !calls.includes(options.holdSettle.until) && holdReads++ < 3) {
+              return { ...host, lifecycle: { ...host.lifecycle, phase: "suspending" } };
+            }
+            // bb runs the provider's suspend as it settles an accepted suspend: a box whose no-stop flag is gone is stopped then.
+            if (pendingSuspends.delete(hostId) && host.lifecycle.phase === "suspended") {
+              const envId = byHost.get(hostId)!.envId;
+              if (!releasing.delete(envId)) calls.push(`stop ${envId}`);
+            }
+            if (options.holdSettle?.hostId === hostId) calls.push(`settled ${hostId}`);
             return host;
           },
           experimental_suspend: lifecycleCall("suspend", "suspended"),

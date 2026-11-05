@@ -5,6 +5,7 @@ import { test } from "node:test";
 import type { OnaEnvironment } from "../src/ona.ts";
 import { HostGuard } from "../src/reconcile.ts";
 import type { Row } from "../src/sync.ts";
+import { onaCommands, type OnaCommandDeps } from "../src/commands.ts";
 import { resumeCommand, type ResumeDeps } from "../src/wake.ts";
 import { adoptedResource, box, connectCalls, register } from "./provider-fake.ts";
 
@@ -14,7 +15,7 @@ const signal = () => new AbortController().signal;
 function fixture(
   found: OnaEnvironment,
   phases: string[],
-  options: { phase?: string; listed?: boolean; listingFails?: boolean } = {},
+  options: { phase?: string; listed?: boolean; listingFails?: boolean; guard?: HostGuard } = {},
 ) {
   const fake = register({ found, phases });
   const row: Row = {
@@ -35,7 +36,7 @@ function fixture(
       },
       lastError: options.listingFails ? "not logged in" : null,
     },
-    guard: new HostGuard(),
+    guard: options.guard ?? new HostGuard(),
     provider: { wake: fake.wake },
   };
   return { deps, calls: fake.calls };
@@ -79,4 +80,47 @@ test("bb ona resume on a running box connects it without starting it (fails if i
   assert.equal(result.exitCode, 0);
   assert.deepEqual(calls, ["get RUNNING", "get RUNNING", ...connectCalls]);
   assert.match(result.stdout ?? "", /^Reconnected box$/m);
+});
+
+/** `bb ona`'s run handler over the resume deps; the other subcommands' deps are not reached by these tests. */
+function dispatch(deps: ResumeDeps) {
+  const run = onaCommands({ ...deps } as unknown as OnaCommandDeps);
+  return (ref: string) => run(["resume", ref], {});
+}
+
+test("bb ona resume through the command dispatch starts a stopped box (fails if the resume case is not dispatched)", async () => {
+  const { deps, calls } = fixture(box("STOPPED"), ["STOPPED", "RUNNING"]);
+  const result = await dispatch(deps)("box");
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout ?? "", /^Started box and reconnected it$/m);
+  assert.deepEqual(calls, ["get STOPPED", "start", "get RUNNING", ...connectCalls]);
+});
+
+test("bb ona resume refuses a box whose machine another action holds, and starts nothing (fails if it starts a busy box)", async () => {
+  const guard = new HostGuard();
+  let finish: () => void = () => {};
+  const held = guard.run(
+    "h1",
+    "sync",
+    "held by the test",
+    () =>
+      new Promise<void>((resolve) => {
+        finish = () => resolve();
+      }),
+  );
+  const { deps, calls } = fixture(box("STOPPED"), ["STOPPED", "RUNNING"], { guard });
+  const result = await resumeCommand(deps, "box", signal());
+  finish();
+  await held;
+  assert.equal(result.exitCode, 1);
+  assert.match(result.stderr ?? "", /^box is busy \(sync\)/);
+  assert.deepEqual(calls, []);
+});
+
+test("bb ona resume exits 1 with the refusal when Ona shows the box deleting (fails if the refusal is lost and the box is started)", async () => {
+  const { deps, calls } = fixture(box("DELETING"), ["DELETING"]);
+  const result = await dispatch(deps)("box");
+  assert.equal(result.exitCode, 1);
+  assert.match(result.stderr ?? "", /box deleting, so it was not started/);
+  assert.deepEqual(calls, ["get DELETING"]);
 });

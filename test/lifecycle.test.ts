@@ -161,3 +161,27 @@ test("a suspend bb still runs is read again until bb settles it (fails if the fi
   assert.equal(lifecycle.phase, "active");
   assert.equal(reads, 2);
 });
+
+test("a suspend bb is still running at its deadline is an error, not a settled phase (fails if the poll never ends)", async () => {
+  await assert.rejects(
+    settledLifecycle(async () => ({ lifecycle: { phase: "suspending", message: null } }), {
+      intervalMs: 1,
+      deadlineMs: 5,
+    }),
+    /bb is still suspending the machine/,
+  );
+});
+
+test("a read that rejects is asked again, and the next settled phase counts (fails if the first rejection ends the wait)", async () => {
+  let reads = 0;
+  const lifecycle = await settledLifecycle(
+    async () => {
+      reads++;
+      if (reads === 1) throw new Error("bb is down");
+      return { lifecycle: { phase: "active", message: "Machine suspension failed: Host is not connected" } };
+    },
+    { intervalMs: 1 },
+  );
+  assert.equal(lifecycle.phase, "active");
+  assert.equal(reads, 2);
+});

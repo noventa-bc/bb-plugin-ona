@@ -100,8 +100,6 @@ test("a resume that fails with the box's tunnel already open, connecting or up, 
   }
 });
 
-// sync sets the no-stop flag before bb's suspend. If that suspend leaves it set, the user's next suspend
-// must still stop the box.
 // Bug: a waiting thread on an active machine whose box Ona stopped had bb's resume asked, which does nothing there.
 test("wake starts a stopped box and connects it (fails if wake skips the start)", async () => {
   const { wake, calls } = register({ found: box("STOPPED"), phases: ["STOPPED", "RUNNING"] });
@@ -115,6 +113,35 @@ test("wake on a running box connects it without starting it (fails if wake start
   assert.deepEqual(calls, ["get RUNNING", "get RUNNING", ...connectCalls]);
 });
 
+test("wake refuses a box Ona is deleting, and starts nothing (fails if wake starts a deleting box)", async () => {
+  const { wake, calls } = register({ found: box("DELETING") });
+  await assert.rejects(
+    wake(adoptedResource, lifecycle().report, new AbortController().signal),
+    /box deleting, so it was not started/,
+  );
+  assert.deepEqual(calls, ["get DELETING"]);
+});
+
+test("wake names the environment Ona can't find, and starts nothing (fails if a missing box is started anyway)", async () => {
+  const { wake, calls } = register({ found: { ...box("STOPPED"), id: "env-other" } });
+  await assert.rejects(
+    wake(adoptedResource, lifecycle().report, new AbortController().signal),
+    /Ona environment "env-1" not found/,
+  );
+  assert.deepEqual(calls, []);
+});
+
+test("wake on a running box keeps its tunnel when the connect fails (fails if a failed connect closes it)", async () => {
+  const { wake, tunnels } = register({ found: box("RUNNING"), tunnel: "up", preflightExit: 3 });
+  await assert.rejects(
+    wake(adoptedResource, lifecycle().report, new AbortController().signal),
+    /missing bb prerequisites/,
+  );
+  assert.deepEqual(tunnels, ["ensure env-1"]);
+});
+
+// sync sets the no-stop flag before bb's suspend. If that suspend leaves it set, the user's next suspend
+// must still stop the box.
 test("a resume clears a no-stop flag a suspend left, so the next suspend stops the box (fails if the flag outlives the resume)", async () => {
   const { provider, releasing, calls } = register({ found: box("RUNNING") });
   releasing.add("env-1");
