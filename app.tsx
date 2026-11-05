@@ -243,25 +243,24 @@ const projectInput =
 /** The "Ona project" field under the composer's "New Ona devbox": blank means the defaultProject setting. */
 function OnaProjectField({ value, onChange }: PluginMachineProviderInputsProps) {
   const [text, setText] = useState(() => projectOfSavedInputs(value));
-  const fieldId = useId();
-  const helpId = useId();
+  const id = useId();
   useEffect(() => {
     onChange(projectInputsChange(text));
   }, [text, onChange]);
   return (
     <div className="flex flex-col gap-1 text-xs">
-      <label htmlFor={fieldId} className="font-medium text-foreground">
+      <label htmlFor={id} className="font-medium text-foreground">
         Ona project
       </label>
       <input
-        id={fieldId}
+        id={id}
         value={text}
         placeholder="Project name or id"
-        aria-describedby={helpId}
+        aria-describedby={`${id}-help`}
         onChange={(event) => setText(event.target.value)}
         className={projectInput}
       />
-      <span id={helpId} className="text-subtle-foreground">
+      <span id={`${id}-help`} className="text-subtle-foreground">
         Blank uses the plugin's defaultProject setting
       </span>
     </div>

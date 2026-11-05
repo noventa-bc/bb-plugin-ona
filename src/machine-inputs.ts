@@ -2,12 +2,8 @@
 // imports this file, so it imports types only (no node modules in the app bundle).
 import type { PluginMachineProviderInputsChange } from "@get-bb/plugin-sdk/app";
 
-// The machine provider the field belongs to. test/machine-inputs.test.ts keeps it equal to
-// PROVIDER_ID in src/provider.ts.
+// src/provider.ts builds onaRef and PROVIDER_ID from these.
 export const ONA_MACHINE_PROVIDER_ID = "ona";
-
-// The rule of `onaRef` in src/provider.ts, the server's check on a project name. The test in
-// test/machine-inputs.test.ts keeps the two equal.
 export const ONA_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
 export const ONA_NAME_MESSAGE = "use letters, digits, '.', '_' or '-'";
 
