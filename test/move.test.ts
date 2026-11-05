@@ -19,6 +19,8 @@ function world(
     spawnError?: Error;
     noOutline?: boolean;
     envHost?: string;
+    title?: string | null;
+    titleFallback?: string | null;
   } = {},
 ) {
   const spawned: unknown[] = [];
@@ -29,8 +31,8 @@ function world(
         get: async () => ({
           projectId: "p1",
           providerId: "codex",
-          title: "Login fix",
-          titleFallback: null,
+          title: options.title === undefined ? "Login fix" : options.title,
+          titleFallback: options.titleFallback ?? null,
           environmentId: options.environmentId === undefined ? "e1" : options.environmentId,
         }),
         conversationOutline: async () => {
@@ -77,6 +79,25 @@ test("a thread whose outline bb can't give is still moved, with the title alone"
     args?.prompt,
     handOverMessage({ title: "Login fix", source: "src-box", path: "/workspaces/app", outline: [] }),
   );
+});
+
+/** Moves t1 to dst-box and returns the spawned title and prompt. */
+async function spawnedFor(options: Parameters<typeof world>[0]) {
+  const { move, spawned } = world(options);
+  await move({ threadId: "t1", hostId: "h-dst" });
+  return (spawned as Array<{ title: string; prompt: string }>)[0];
+}
+
+test("a thread with no title takes bb's fallback title", async () => {
+  const args = await spawnedFor({ title: null, titleFallback: "Fix login" });
+  assert.equal(args?.title, "Fix login");
+  assert.match(args?.prompt ?? "", /continues thread "Fix login"/);
+});
+
+test("a thread with neither a title nor a fallback is named by its id", async () => {
+  const args = await spawnedFor({ title: null, titleFallback: null });
+  assert.equal(args?.title, "t1");
+  assert.match(args?.prompt ?? "", /continues thread "t1"/);
 });
 
 test("a thread with no workspace is refused as not on an Ona devbox", async () => {

@@ -194,7 +194,9 @@ type MoveData = ReturnType<typeof useMoveData>;
 
 /**
  * The thread menu's "Move to devbox" (src/move.ts): the devboxes, listed again with each new set of
- * threads so the running/stopped labels stay close to current, and each shown thread's devbox, asked once.
+ * threads so their bb status labels (connected, suspended, …) stay close to current, and each shown
+ * thread's devbox, asked with each new set of threads until a call has returned one. `moving` holds the
+ * threads with a move in flight.
  */
 function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
   const rpc = useRpc<typeof rpcContract>();
@@ -214,7 +216,8 @@ function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
     }
     // `threads` is left out on purpose: a reply must not trigger another round of calls.
   }, [rpc, threadIds]);
-  return { rpc, devboxes, threads };
+  const moving = useRef(new Set<string>()).current;
+  return { rpc, devboxes, threads, moving };
 }
 
 export default definePluginApp((app) => {
@@ -237,12 +240,17 @@ export default definePluginApp((app) => {
           items: others.map((box) => ({ id: box.hostId, label: `${box.envName} (${box.status})` })),
         },
         async run({ value }) {
-          if (!value) return;
+          // A second pick while bb is still starting the first move's box would make a second thread.
+          if (!value || data.moving.has(thread.id)) return;
+          data.moving.add(thread.id);
           // bb only logs a thread action's error, so the refusal is shown here.
-          await data.rpc.call("thread_move", { threadId: thread.id, hostId: value }).then(
-            (moved) => navigate.toThread(moved.threadId),
-            (error: unknown) => window.alert(error instanceof Error ? error.message : String(error)),
-          );
+          await data.rpc
+            .call("thread_move", { threadId: thread.id, hostId: value })
+            .then(
+              (moved) => navigate.toThread(moved.threadId),
+              (error: unknown) => window.alert(error instanceof Error ? error.message : String(error)),
+            )
+            .finally(() => data.moving.delete(thread.id));
         },
       };
     },
