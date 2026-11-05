@@ -17,7 +17,7 @@ and you drive them from bb as usual.
 - **Shell access**: `ssh "$(bb ona host <name>)"`, `bb ona open <name>` for
   your Ona editor, and bb's terminal panel on the devbox.
 - `bb ona adopt <environment>` and `bb ona new [project]` to add devboxes, and
-  `bb ona list`, `rename` and `reconnect` for day-to-day management.
+  `bb ona list`, `rename`, `reconnect` and `resume` for day-to-day management.
 - `bb ona keep-alive <name> <duration>` keeps a running devbox from Ona's idle
   timeout for up to 12h, for a long job nobody watches; `off` ends it.
 

@@ -11,7 +11,9 @@ import {
   machinesToRelease,
   parseDuration,
   RESUMED,
+  settledLifecycle,
   SUSPENDED,
+  suspendFailure,
   workspaceWork,
   type MachineActivity,
   type WorkspaceView,
@@ -102,6 +104,12 @@ export interface SyncDeps {
       report: { step(text: string): void; log(text: string): void },
       signal: AbortSignal,
     ): Promise<unknown>;
+    /** Starts a stopped box and connects bb's daemon (`provider.wake`); a waiting thread on an active machine asks for it. */
+    wake(
+      resource: OnaResource,
+      report: { step(text: string): void; log(text: string): void },
+      signal: AbortSignal,
+    ): Promise<void>;
   };
   keepAliveUntil(envId: string): number | null;
   /** Ona env id -> bb host id, refreshed on every pass; shared with the tunnels and events. */
@@ -212,19 +220,23 @@ export function createSync(deps: SyncDeps) {
   /**
    * Mark a machine suspended in bb without stopping its box (the provider's
    * suspend sees the flag in `releasing`). Used when Ona already stopped or
-   * lost the box, and when an idle box is let go for Ona's own timeout.
+   * lost the box, and when an idle box is let go for Ona's own timeout. Resolves
+   * with bb's lifecycle once bb has settled the suspend.
    */
-  async function suspendWithoutStop(row: Row): Promise<void> {
+  async function suspendWithoutStop(row: Row): Promise<HostLifecycle> {
     provider.releasing.add(row.resource.envId);
-    try {
-      const host = await bb.sdk.hosts.experimental_suspend({ hostId: row.hostId });
-      const refusal = lifecycleRefusal(host.lifecycle, SUSPENDED);
-      if (refusal) throw new Error(refusal);
-    } catch (error) {
+    const posted = await bb.sdk.hosts.experimental_suspend({ hostId: row.hostId }).catch((error: unknown) => {
       // Don't leave the flag behind for a later user suspend, which should stop the box.
       provider.releasing.delete(row.resource.envId);
       throw error;
-    }
+    });
+    // A timeout while bb runs the suspend keeps the flag: bb may still reach the provider's suspend, which stops the box without it.
+    const lifecycle =
+      posted.lifecycle.phase === "suspending"
+        ? await settledLifecycle(() => bb.sdk.hosts.get({ hostId: row.hostId }))
+        : posted.lifecycle;
+    provider.releasing.delete(row.resource.envId);
+    return lifecycle;
   }
 
   /**
@@ -270,7 +282,8 @@ export function createSync(deps: SyncDeps) {
           reason,
           async () => {
             bb.log.info(`${row.machine}: ${reason}; closing the tunnel`);
-            await suspendWithoutStop(row);
+            const refusal = lifecycleRefusal(await suspendWithoutStop(row), SUSPENDED);
+            if (refusal) throw new Error(refusal);
           },
           { cooldown: false },
         )
@@ -344,6 +357,7 @@ export function createSync(deps: SyncDeps) {
   async function act(row: Row, decision: Decision, force: boolean): Promise<void> {
     const { hostId, machine, resource } = row;
     const heavy = decision.action === "heal-daemon" || decision.action === "reconcile-stuck";
+    const report = { step: (text: string) => bb.log.info(`${machine}: ${text}`), log: () => {} };
     await guard
       .run(
         hostId,
@@ -352,19 +366,27 @@ export function createSync(deps: SyncDeps) {
         async () => {
           bb.log.info(`${machine}: ${decision.action} (${decision.reason})`);
           switch (decision.action) {
-            case "suspend-observed":
-              await suspendWithoutStop(row);
+            case "suspend-observed": {
+              const lifecycle = await suspendWithoutStop(row);
+              const refusal = lifecycleRefusal(lifecycle, SUSPENDED);
+              if (refusal) {
+                if (!decision.resumeAfter || lifecycle.phase !== "active") throw new Error(suspendFailure(refusal));
+                // bb's suspend failed (Ona stopped the box under a live turn) and left the machine active, where bb's resume does nothing: the plugin starts the box (decision 0002).
+                await provider.wake(resource, report, AbortSignal.timeout(15 * 60_000));
+                return "started it for a waiting thread";
+              }
               if (!decision.resumeAfter) return;
               // A thread is waiting on it: that's you using the box, so let bb start it.
               try {
                 const host = await bb.sdk.hosts.experimental_resume({ hostId });
-                const refusal = lifecycleRefusal(host.lifecycle, RESUMED);
-                return refusal
-                  ? `couldn't resume it for a waiting thread (${refusal})`
+                const resumeRefusal = lifecycleRefusal(host.lifecycle, RESUMED);
+                return resumeRefusal
+                  ? `couldn't resume it for a waiting thread (${resumeRefusal})`
                   : "resumed for a waiting thread";
               } catch (error) {
                 return `bb will resume it on your next message (${errorText(error)})`;
               }
+            }
             case "ensure-tunnel":
               tunnels.ensure(resource.envId);
               return;
@@ -381,7 +403,6 @@ export function createSync(deps: SyncDeps) {
                 return "couldn't tell whether the daemon runs (SSH or the process check on the box failed); not restarting";
               // The check can take 30 s, long enough for the box to be stopped in Ona.
               if (!(await runningNow())) return gone;
-              const report = { step: (text: string) => bb.log.info(`${machine}: ${text}`), log: () => {} };
               await provider.reconnect(resource, report, AbortSignal.timeout(15 * 60_000));
               return "daemon was down; restarted it";
             }

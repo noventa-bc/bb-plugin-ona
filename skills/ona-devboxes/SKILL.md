@@ -40,7 +40,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
 - `bb machine suspend <m>` stops the Ona environment; `bb machine resume <m>`
   starts it, reopens the tunnel and restarts the daemon. Devboxes Ona stopped
   on its own are marked suspended automatically, and starting a thread on one
-  wakes it (takes a few minutes).
+  wakes it (takes a few minutes). If a turn was still running when Ona stopped the box, bb can't suspend the machine, so the plugin starts the box for the waiting thread instead.
 - Check agent CLIs: `bb machine provider-cli status <m>`.
 - Point a project at the devbox checkout:
   `bb project source add <projectId> --machine <m> --path /workspaces/<repo>`.
@@ -57,6 +57,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
 - `bb ona open <ref>` — open in your Ona editor.
 - `bb ona reconnect <ref>` — reopen the tunnel and restart the daemon. A changed setting applies after `bb plugin reload ona`; `waitForSharedHome`, `codexSqliteHome` and `machineDataDir` reach a box on its next connect (`bb ona reconnect`, a resume or the daemon's restart).
   Refused unless bb shows the machine active and Ona shows its box running; `bb machine resume <m>` resumes a suspended one.
+- `bb ona resume <ref>` — start a stopped box and reconnect bb's daemon (your action; a running box is only reconnected). Refused unless bb shows the machine active; `bb machine resume <m>` resumes a suspended one.
 - `bb ona status [ref]` — bb's view of each devbox next to Ona's, the box's start, idle timeout, activity, branch and unpushed commits, and what the plugin last did and why (`--json` carries `needsRecovery` and `stuckThreads` as null when bb's workspace or thread list couldn't be read).
   Use it first when bb and Ona disagree (box changed outside bb); `bb ona sync [ref]` re-checks and repairs now.
 - `bb ona keep-alive <ref> <duration>` — keep a running devbox from Ona's inactivity timeout

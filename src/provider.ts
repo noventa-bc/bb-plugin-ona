@@ -312,6 +312,22 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     }
   }
 
+  /**
+   * Starts a box Ona shows stopped (or waits for one that is starting) and connects bb's daemon: a resume's start and
+   * connect, without bb's lifecycle. A waiting thread on an active machine asks for it (decision 0002), and so does
+   * `bb ona resume`; the caller checks bb's phase, since a suspended machine is bb's resume's to start.
+   */
+  async function wake(
+    resource: OnaResource,
+    report: PluginMachineProviderProgress,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const env = await ona.getEnvironmentIfExists(resource.envId, signal);
+    if (!env) throw new Error(`Ona environment "${resource.envId}" not found. Run \`ona environment list\`.`);
+    await ensureRunning(env, report, signal);
+    await connectOrClose(resource, report, signal, !isRunning(env));
+  }
+
   async function ensureLocalMachineRoot(
     executor: MachineExecutor,
     target: string,
@@ -605,7 +621,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     return JSON.parse(line);
   }
 
-  return { reconnect, daemonAlive, runCollector, releasing: deps.releasing };
+  return { reconnect, daemonAlive, runCollector, releasing: deps.releasing, wake };
 }
 
 export function registerOnaComposition(bb: BbPluginApi) {

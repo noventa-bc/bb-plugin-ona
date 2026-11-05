@@ -2,6 +2,10 @@
 // box nobody uses is let go and Ona's own inactivity timeout stops it. Syncing
 // changes made outside bb lives in reconcile.ts.
 import { hostIsBusy } from "./updates.ts";
+import { pollUntil } from "./time.ts";
+
+/** bb's suspend drain gives up after 5 minutes (docs/ona-notes.md), so a suspend is settled well within this. */
+const SETTLE_MS = 6 * 60_000;
 
 export interface MachineActivity {
   hostId: string;
@@ -84,6 +88,35 @@ export function lifecycleRefusal(
 ): string | null {
   if (!lifecycle || expected.includes(lifecycle.phase)) return null;
   return `bb kept the machine ${lifecycle.phase}${lifecycle.message ? `: ${lifecycle.message}` : ""}`;
+}
+
+/**
+ * What a failed suspend says to the user. bb's "Host is not connected" means its suspend could not drain the daemon,
+ * which Ona's stop took away: a turn is still open on the box, so bb needs the box back to settle it.
+ */
+export function suspendFailure(refusal: string): string {
+  return refusal.includes("Host is not connected")
+    ? "bb can't suspend it while a turn is still active on the box; it needs the box back to settle the turn"
+    : refusal;
+}
+
+/**
+ * bb answers a suspend before it runs (202, phase `suspending`), and a failed drain leaves the machine active: `read` is
+ * polled until bb settles the suspend, and the lifecycle it settles on is returned.
+ */
+export async function settledLifecycle(
+  read: () => Promise<{ lifecycle: { phase: string; message: string | null } }>,
+  options: { intervalMs?: number } = {},
+): Promise<{ phase: string; message: string | null }> {
+  const settled = await pollUntil(
+    async () => {
+      const host = await read();
+      return host.lifecycle.phase === "suspending" ? undefined : host;
+    },
+    { deadlineMs: SETTLE_MS, intervalMs: options.intervalMs ?? 1_000, signal: AbortSignal.timeout(SETTLE_MS) },
+  );
+  if (!settled) throw new Error("bb is still suspending the machine");
+  return settled.lifecycle;
 }
 
 export const SUSPENDED = ["suspending", "suspended"] as const;

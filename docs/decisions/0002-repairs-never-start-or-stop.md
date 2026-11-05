@@ -2,9 +2,11 @@
 
 Status: accepted
 
+Amended 2026-11-05 (the owner accepted it): the plugin starts a box for a waiting thread when bb's resume would be a no-op, and `bb ona resume` starts one on your request. The Rule and the Consequences say so.
+
 ## Rule
 
-Automatic repairs never start or stop a box. bb starts a box only on your action in bb: creating a machine (adopting a box included), resuming it (Resume, `bb machine resume`, or a message or thread waiting on it), or a command you run that rule 1 in `docs/sync.md` lists as not gated. Automatic suspends mark the machine suspended without calling the provider's stop. SSH to a box is used only when a fresh Ona listing says the box is `RUNNING`.
+Automatic repairs never start or stop a box. bb, or the plugin when bb's resume would be a no-op, starts a box only on your action in bb: creating a machine (adopting a box included), resuming it (Resume, `bb machine resume`, or a message or thread waiting on it), `bb ona resume`, or a command you run that rule 1 in `docs/sync.md` lists as not gated. Automatic suspends mark the machine suspended without calling the provider's stop. SSH to a box is used only when a fresh Ona listing says the box is `RUNNING`.
 
 ## Why
 
@@ -18,4 +20,4 @@ Automatic repairs never start or stop a box. bb starts a box only on your action
 - Tunnels and daemon checks re-check Ona right before connecting. If Ona can't be asked, tunnels wait rather than connect.
 - The daemon is restarted only when the probe finds no daemon process. If SSH fails or times out, nothing is restarted.
 - A box counts as gone only after two good listings in a row without it.
-- Repairs that find a stopped box only change bb's state, so the box stays in whatever state Ona gave it.
+- Repairs that find a stopped box only change bb's state, except the start for a waiting thread (see the Rule), so the box stays in whatever state Ona gave it.

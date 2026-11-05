@@ -1,7 +1,7 @@
 import { OnaSnapshot, type OnaEnvironment } from "../src/ona.ts";
 import type { WorkspaceView } from "../src/lifecycle.ts";
 import { HostGuard } from "../src/reconcile.ts";
-import { createSync, type BbHost, type ThreadRecord } from "../src/sync.ts";
+import { createSync, type BbHost, type SyncDeps, type ThreadRecord } from "../src/sync.ts";
 import { tick as tickClock } from "./fake-clock.ts";
 
 export const HOUR = 3_600_000;
@@ -53,6 +53,8 @@ export function world(
     /** bb's host lookup fails: with a plain error, or with only the SDK's `not_found` code (no status). */
     hostGet?: "fail" | "not_found";
     autoRepair?: boolean;
+    /** The provider's wake (start and connect), as a waiting thread on an active machine asks for; the default records it. */
+    wake?: SyncDeps["provider"]["wake"];
   } = {},
 ) {
   const calls: string[] = [];
@@ -87,7 +89,8 @@ export function world(
       // Like the provider's suspend: a box without the no-stop flag gets stopped.
       const envId = byHost.get(hostId)!.envId;
       if (name === "suspend" && !options.refuse && !releasing.delete(envId)) calls.push(`stop ${envId}`);
-      return host;
+      // bb answers a suspend before it runs (still suspending) and settles it afterwards; hosts.get shows the settled phase.
+      return name === "suspend" ? { ...host, lifecycle: { ...host.lifecycle, phase: "suspending" } } : host;
     };
   const envs = (): OnaEnvironment[] =>
     options.listing === "empty"
@@ -121,7 +124,7 @@ export function world(
             if (!host) throw Object.assign(new Error("Host not found"), { status: 404 });
             return host;
           },
-          experimental_suspend: lifecycleCall("suspend", "suspending"),
+          experimental_suspend: lifecycleCall("suspend", "suspended"),
           experimental_resume: lifecycleCall("resume", "resuming"),
           experimental_reconcile: lifecycleCall("reconcile", "active"),
         },
@@ -195,6 +198,7 @@ export function world(
         calls.push("restart daemon");
         if (options.reconnectFails) throw new Error(options.reconnectFails);
       },
+      wake: options.wake ?? (async (resource) => void calls.push(`wake ${resource.envId}`)),
     },
     keepAliveUntil: () => null,
     hostByEnv: new Map(),

@@ -111,6 +111,23 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   `suspended`, `suspending` or `resuming`, and answers 409 for `creating`,
   `removing` and `destroyed` (checked 2026-11-03 in `server/dist/start-server.js`
   under the bb app's bundled `bb-app` package, function `startMachineResume`).
+- bb 0.48.1's suspend (`maintainMachine` in `server/dist/start-server.js`, checked
+  2026-11-05) cancels unfinished environment hooks and stops active threads through
+  the daemon before the provider's suspend runs. With the daemon gone it fails with
+  "Host is not connected" once its drain gives up (5 minutes at most): bb sets the
+  phase back to `active`, sets the host's `lifecycle.message` to "Machine suspension
+  failed: <message>", and sets `suspendRetryAt` to now plus `RETRY_MS` (10 s). That
+  is a lock, not a retry: while it holds, a suspend fails with 409 `machine_maintenance`.
+- bb answers the suspend and resume routes with 202 before the operation runs
+  (`startMachineSuspension`, `startMachineResume`). The host reads `suspending` or
+  `resuming` until bb settles it, or `active` inside the lock, so a suspend that bb
+  later fails looks accepted when it is answered.
+- `resumeMachine` waits for an in-flight suspend, then `resumeMachineWithIntent`
+  returns at once unless the phase is suspended, suspending or resuming. A resume of
+  an active machine does nothing (checked 2026-11-05).
+- The host's status is only `connected` or `disconnected` (`toHostWithStatus`). The
+  new-thread composer labels a selected host whose status is not connected "Host is
+  offline" (`NewThreadComposer` in bb's app bundle, checked 2026-11-05).
 - bb 0.48.1's `threads.list` leaves out hidden threads (workflow steps, side
   chats) unless asked with `includeHidden: true`, drops archived ones on the
   server with `archived: false`, and applies no limit when none is passed.

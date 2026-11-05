@@ -102,6 +102,19 @@ test("a resume that fails with the box's tunnel already open, connecting or up, 
 
 // sync sets the no-stop flag before bb's suspend. If that suspend leaves it set, the user's next suspend
 // must still stop the box.
+// Bug: a waiting thread on an active machine whose box Ona stopped had bb's resume asked, which does nothing there.
+test("wake starts a stopped box and connects it (fails if wake skips the start)", async () => {
+  const { wake, calls } = register({ found: box("STOPPED"), phases: ["STOPPED", "RUNNING"] });
+  await wake(adoptedResource, lifecycle().report, new AbortController().signal);
+  assert.deepEqual(calls, ["get STOPPED", "start", "get RUNNING", ...connectCalls]);
+});
+
+test("wake on a running box connects it without starting it (fails if wake starts a running box)", async () => {
+  const { wake, calls } = register({ found: box("RUNNING") });
+  await wake(adoptedResource, lifecycle().report, new AbortController().signal);
+  assert.deepEqual(calls, ["get RUNNING", "get RUNNING", ...connectCalls]);
+});
+
 test("a resume clears a no-stop flag a suspend left, so the next suspend stops the box (fails if the flag outlives the resume)", async () => {
   const { provider, releasing, calls } = register({ found: box("RUNNING") });
   releasing.add("env-1");

@@ -6,6 +6,7 @@ import {
   parseDuration,
   workspaceWork,
   RESUMED,
+  settledLifecycle,
   SUSPENDED,
   type MachineActivity,
 } from "../src/lifecycle.ts";
@@ -149,4 +150,14 @@ test("workspaceWork: a retiring workspace past its retireAt is still busy, bb ha
 test("an idle machine whose workspaces bb is working on, or that need recovery, is not let go", () => {
   const idle = [machine("a"), machine("b", { workspacesBlock: true }), machine("c", { workspacesBlock: false })];
   assert.deepEqual(machinesToRelease(idle, NOW, 30 * MIN), ["a", "c"]);
+});
+
+test("a suspend bb still runs is read again until bb settles it (fails if the first answer is trusted)", async () => {
+  const answers = ["suspending", "active", "suspended"];
+  let reads = 0;
+  const lifecycle = await settledLifecycle(async () => ({ lifecycle: { phase: answers[reads++]!, message: null } }), {
+    intervalMs: 1,
+  });
+  assert.equal(lifecycle.phase, "active");
+  assert.equal(reads, 2);
 });

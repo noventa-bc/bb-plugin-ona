@@ -341,6 +341,9 @@ export function firstLine(text: string): string | undefined {
     .find(Boolean);
 }
 
+/** The first non-blank line of Ona's error, trimmed, or "no listing". */
+export const reasonOf = (error: string | null) => firstLine(error ?? "") ?? "no listing";
+
 /** A desired phase that means Ona is taking the box down; any other value (RUNNING, the proto default) doesn't. */
 const isStopIntent = (desired: string | null | undefined) =>
   desired === "ENVIRONMENT_PHASE_STOPPED" || desired === "ENVIRONMENT_PHASE_DELETED";
