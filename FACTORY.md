@@ -104,18 +104,20 @@ those and the "skipped or not checked" lines ponytail ends with.
 6. **Review.** The orchestrator commits the builder's staged work on its
    branch (after the check passes on its own), reads the handoff and the diff,
    runs the
-   adversarial reviewer (brief: the diff, the files it touches, the specific
-   ways it could fail, never the orchestrator's own verdict), `code-review`
-   (its recipe followed by hand: the Skill itself starts many agents) and
-   `/ponytail-review branch`, each on the branch against `origin/main`, in
-   its own agent, briefed with the builder's worktree path (a fresh agent
-   starts in the main checkout), and sends blocking findings
-   back to the builder. Code, here, is anything but comments, lint messages,
-   Markdown, a lockfile and a `package.json` override; the Code Review Rules
-   in `AGENTS.md` and the rules table in `docs/sync.md` count as code. A PR
+   passes the gate below gives the PR: the adversarial reviewer (brief: the
+   diff, the files it touches, the specific ways it could fail, never the
+   orchestrator's own verdict), `code-review` (its recipe followed by hand:
+   the Skill itself starts many agents) and `/ponytail-review branch`, each
+   on the branch against `origin/main`, in its own agent, briefed with the
+   builder's worktree path (a fresh agent starts in the main checkout), and
+   sends blocking findings back to the builder. Code, here, is anything but
+   comments, lint messages, Markdown, a lockfile, a `package.json` override
+   and the version bump (step 7); the ten numbered Code Review Rules in
+   `AGENTS.md` and the rules table in `docs/sync.md` count as code. A PR
    that changes code gets all three passes on its first round, however
    small the change; a PR that changes no code gets the `code-review` pass
-   alone (owner, 2026-11-05: three passes on a two-line override overlap).
+   alone (owner, checked 2026-11-05: three passes on a two-line override
+   overlap).
    After that, `code-review` runs every round; the adversarial pass and
    `/ponytail-review` run on every round whose diff changed code since they
    last ran. A PR opens after a round with no blocking finding, and only
