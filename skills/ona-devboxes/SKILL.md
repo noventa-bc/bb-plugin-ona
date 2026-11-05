@@ -45,6 +45,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
 - Point a project at the devbox checkout:
   `bb project source add <projectId> --machine <m> --path /workspaces/<repo>`.
 - Thread in a fresh devbox: `bb thread spawn --project <id> --environment-provider ona-devbox --prompt "..."`.
+- `bb ona move <thread-id> <ref>` — continue a thread in a new thread on another devbox at the same path (the path must exist there; uncommitted changes stay behind; the old thread stays).
 
 ## Shell access
 

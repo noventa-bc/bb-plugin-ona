@@ -227,6 +227,23 @@ Check that the agent CLIs are installed and logged in:
 bb machine provider-cli status ona:<name>
 ```
 
+### Move a thread to another devbox
+
+**Move to devbox** in a devbox thread's menu (next to Archive) lists the other devboxes. Picking one
+starts a new thread on that box at the same path, with the same title, whose first message hands
+the work over: where it came from, and the old conversation in outline. The old thread stays as it
+is. From your Mac's terminal: `bb ona move <thread-id> <ref>`.
+
+- Only a thread whose workspace is a checkout path on the box can move, and the path must exist on
+  the target box. It does for the Ona project checkout (`/workspaces/<repo>`). A thread in a
+  bb-managed worktree or bb's personal workspace is refused, and so is one in bb's personal project;
+  the message says so.
+- A stopped target box is started by bb. The new thread should appear once the box is up, which can
+  take minutes. If bb is still starting the box when you move, the menu says so and asks you not to
+  move the thread again.
+- Uncommitted changes stay on the old box: commit and push a branch first. The new thread starts a
+  fresh agent session; it learns the rest from the hand-over message.
+
 ### Shell access
 
 **In a thread:** a thread that runs on a devbox shows an **Editor** button in its header, which
@@ -271,6 +288,7 @@ bb ona status [name]           # bb's view next to Ona's, the box's start, idle 
 bb ona sync [name]             # re-check Ona now and repair out-of-step machines
 bb ona keep-alive <name> 2h    # keep a running box from Ona's idle timeout (at most 12h)
 bb ona keep-alive <name> off   # end it early
+bb ona move <thread-id> <ref>  # continue a thread in a new thread on another devbox, at the same path
 bb ona rename <name> [new]     # rename env + bb machine (random fun name if omitted)
 bb ona reconnect <name>        # active machines: reopen the tunnel and restart the bb daemon; refused unless bb shows the machine active and Ona shows its box running
 bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
@@ -374,7 +392,7 @@ provider), `src/proxy.ts` (daemon-only proxy), `src/ssh.ts` (executor,
 tunnels), `src/setup.ts` (prerequisite checks), `src/ona.ts` (ona CLI wrapper,
 shared listing), `src/reconcile.ts` (sync rules), `src/sync.ts` (sync passes
 and status), `src/commands.ts` (`bb ona` commands), `src/lifecycle.ts` (idle
-release), `src/keepalive.ts` (keep-alive), `src/names.ts` (fun names),
+release), `src/keepalive.ts` (keep-alive), `src/move.ts` (thread move), `src/names.ts` (fun names),
 `skills/ona-devboxes/SKILL.md` (agent docs).
 
 Working on the plugin, including with coding agents: see [AGENTS.md](AGENTS.md).
