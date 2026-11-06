@@ -6,13 +6,13 @@ Amended 2026-11-06 (the owner accepted it): bb's recovery after a restart is one
 
 ## Rule
 
-Ona decides whether a devbox exists and whether it runs. bb decides intent: a machine is `active` or `suspended`. The plugin reconciles bb to Ona and never starts or stops a box on its own.
+Ona decides whether a devbox exists and whether it runs. bb decides intent: a machine is `active` or `suspended`. The plugin reconciles bb to Ona, and its automatic repairs never start or stop a box.
 
 ## Why
 
 - Boxes change outside bb (Ona's UI, the `ona` CLI, Ona's inactivity timeout), so Ona's listing is the only reliable record of whether compute exists.
 - Compute costs money while it runs, and a wrong start or stop interrupts work in progress.
-- bb keeps the user's intent, which is what the user set with Resume and Pause, so the plugin only repairs bb's side.
+- bb keeps the user's intent, which is what the user set with Resume and Pause (except a suspend a bb restart cut short, which bb resumes: 0002), so the plugin only repairs bb's side.
 
 ## Consequences
 

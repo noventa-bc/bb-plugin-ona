@@ -9,7 +9,7 @@ is recorded in [docs/decisions](decisions/README.md).
 **Who decides what.** Ona decides whether a box exists and is running. bb holds
 your intent: a machine is _active_ (you're using it) or _suspended_ (you're
 not). The plugin compares the two and repairs bb's side. Its automatic repairs
-never start or stop a box; bb does that on your action in bb, and starts one when it recovers a machine a bb restart left `resuming` or `suspending`, and the plugin starts one only for a waiting thread when bb's resume would do nothing, or on `bb ona resume` (rule 1; decision 0002 lists them).
+never start or stop a box; bb does that on your action in bb, and starts a stopped one when it recovers a machine a bb restart left `resuming` or `suspending`, and the plugin starts one only for a waiting thread when bb's resume would do nothing, or on `bb ona resume` (rule 1; decision 0002 lists them).
 
 **What the plugin does** (`decide()` in `src/reconcile.ts`):
 
@@ -57,7 +57,7 @@ you asked for, so safety rule 1 does not gate it.
 
 **Safety rules.** Every automatic action keeps these:
 
-1. **Never wake a box, except the starts you or bb's recovery ask for.** Those are a waiting thread on an active machine whose box Ona stopped (the table's row for a refused suspend, when bb's resume would do nothing), `bb ona resume`, and bb's own resume (yours, or its recovery after a bb restart, decision 0002), which reaches the provider's resume; each starts the box only when Ona says it is stopped or stopping (a starting box is waited for), then connects. Ona's SSH starts a stopped box, so the plugin uses SSH
+1. **Never wake a box, except the starts you ask for and bb's restart recovery.** Those are a waiting thread on an active machine whose box Ona stopped (the table's row for a refused suspend, when bb's resume would do nothing), `bb ona resume`, and bb's own resume (yours, a message or thread waiting on the machine, or its recovery after a bb restart, decision 0002), which reaches the provider's resume; each starts the box only when Ona says it is stopped or stopping (a starting box is waited for), then connects. Ona's SSH starts a stopped box, so the plugin uses SSH
    (tunnel connect and reconnect, `bb ona reconnect`, daemon check, cost collector, and the cleanup
    when you remove an adopted box's machine) only when Ona, asked right before it, says
    the box is running: an `ona environment list` for tunnels, the daemon check

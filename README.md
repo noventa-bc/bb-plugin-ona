@@ -37,7 +37,7 @@ SSH, and the tunnel lands on a small proxy that only lets bb's daemon traffic
 through (see [Security model](docs/security.md)). The server stays on loopback,
 and nothing goes through getbb.app or any other third-party relay. Tunnels only
 work while your Mac is awake and bb is running. An open tunnel counts as
-activity to Ona, so the plugin keeps it open only while you use the box, or after bb's recovery from a restart resumes it. After
+activity to Ona, so the plugin keeps it open only while you use the box, or after bb's restart recovery resumes the machine. After
 `idleDisconnect` (1h by default) without thread activity, unless bb is setting up,
 tearing down, retrying or retiring one of the machine's workspaces (retiring is bb's grace before a teardown), or one needs recovery, or
 bb's workspace or thread list can't be read, or the Ona listing fails or comes back
