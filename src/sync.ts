@@ -388,15 +388,16 @@ export function createSync(deps: SyncDeps) {
               }
               if (!decision.resumeAfter) return;
               // A thread is waiting on it: that's you using the box, so let bb start it.
+              let resumed;
               try {
-                const host = await bb.sdk.hosts.experimental_resume({ hostId });
-                const resumeRefusal = lifecycleRefusal(host.lifecycle, RESUMED);
-                return resumeRefusal
-                  ? `couldn't resume it for a waiting thread (${resumeRefusal})`
-                  : "resumed for a waiting thread";
+                resumed = await bb.sdk.hosts.experimental_resume({ hostId });
               } catch (error) {
                 return `bb will resume it on your next message (${errorText(error)})`;
               }
+              // Thrown: a returned string is a success, and a success clears the thread's hold (docs/sync.md rule 3).
+              const resumeRefusal = lifecycleRefusal(resumed.lifecycle, RESUMED);
+              if (resumeRefusal) throw new Error(`couldn't resume it for a waiting thread (${resumeRefusal})`);
+              return "resumed for a waiting thread";
             }
             case "ensure-tunnel":
               tunnels.ensure(resource.envId);

@@ -259,12 +259,13 @@ export class HostGuard {
   }
 
   /**
-   * A machine bb shows connected with its tunnel up, on a box Ona shows running: a held box's hold ends,
-   * and its count and quiet period are cleared (docs/sync.md rule 3).
+   * A machine bb shows connected with its tunnel up, on a box Ona shows running: a failing box's count and quiet
+   * period are cleared, held or not, and a held box's hold ends (docs/sync.md rule 3).
    */
   connected(hostId: string): void {
     const record = this.records.get(hostId);
-    if (record?.threadWaiting) {
+    // Only a count or a hold is cleared: a success's cooldown (docs/sync.md rule 5) stays.
+    if (record && (record.failures > 0 || record.threadWaiting)) {
       this.records.set(hostId, { ...record, failures: 0, quietUntil: this.clock.now(), threadWaiting: undefined });
     }
   }
