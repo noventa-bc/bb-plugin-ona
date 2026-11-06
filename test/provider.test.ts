@@ -142,6 +142,15 @@ test("wake on a running box keeps its tunnel when the connect fails (fails if a 
 
 // sync sets the no-stop flag before bb's suspend. If that suspend leaves it set, the user's next suspend
 // must still stop the box.
+test("a create with no project and no defaultProject is refused, naming the setting and the reload (fails if the reload is dropped)", async () => {
+  const { provider } = register({ found: box("RUNNING") });
+  const verdict = await provider.validate!({ inputs: { mode: "create" } } as Parameters<
+    NonNullable<typeof provider.validate>
+  >[0]);
+  assert.equal(verdict.action, "refuse");
+  assert.match("message" in verdict ? verdict.message : "", /defaultProject setting; .*`bb plugin reload ona`/);
+});
+
 test("a resume clears a no-stop flag a suspend left, so the next suspend stops the box (fails if the flag outlives the resume)", async () => {
   const { provider, releasing, calls } = register({ found: box("RUNNING") });
   releasing.add("env-1");

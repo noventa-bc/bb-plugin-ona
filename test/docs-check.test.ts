@@ -124,7 +124,7 @@ test("an angle-bracket link target with spaces or parentheses is checked: a miss
 });
 
 // A `plugin config ona set` hint tells the user to change a setting. A changed setting applies only after
-// `bb plugin reload ona` (server.ts reads its settings once, at load), so the hint's sentence or the next one names it.
+// `bb plugin reload ona` (server.ts reads its settings once, at load), so the hint's sentence names it.
 const settingHintFiles = [
   "README.md",
   "skills/ona-devboxes/SKILL.md",
@@ -133,16 +133,26 @@ const settingHintFiles = [
   "docs/sync.md",
 ];
 
-/** Each `plugin config ona set` in `file` whose sentence and the next one never name `plugin reload ona`. */
-function hintsWithoutReload(file: string): string[] {
-  const flat = readFileSync(join(repo, file), "utf8").replace(/\s+/g, " ");
+/** The sentence of each `plugin config ona set` hint in `text` that never names `plugin reload ona`. */
+function hintsWithoutReload(text: string): string[] {
+  const flat = text.replace(/\s+/g, " ");
   return [...flat.matchAll(/plugin config ona set/g)].flatMap((hint) => {
     const rest = flat.slice(hint.index);
-    const end = [...rest.matchAll(/[.!?](?= |$)/g)][1]?.index ?? rest.length;
-    return rest.slice(0, end).includes("plugin reload ona") ? [] : [`${file}: ${rest.slice(0, 100)}...`];
+    const end = rest.search(/[.!?](?=[ "']|$)/);
+    const sentence = end < 0 ? rest : rest.slice(0, end);
+    return sentence.includes("plugin reload ona") ? [] : [sentence];
   });
 }
 
-test("a `plugin config ona set` hint with no `plugin reload ona` in its sentence or the next one fails", () => {
-  assert.deepEqual(settingHintFiles.flatMap(hintsWithoutReload), []);
+test("a `plugin config ona set` hint in the docs or the CLI's text with no `plugin reload ona` in its sentence fails", () => {
+  const offenders = settingHintFiles.flatMap((file) =>
+    hintsWithoutReload(readFileSync(join(repo, file), "utf8")).map((sentence) => `${file}: ${sentence}`),
+  );
+  assert.deepEqual(offenders, []);
+});
+
+test("the reload check flags a hint whose own sentence lacks the reload (fails if a later sentence counts, or a hint without it passes)", () => {
+  assert.equal(hintsWithoutReload("Run `bb plugin config ona set x 1`, then `bb plugin reload ona`.").length, 0);
+  assert.equal(hintsWithoutReload("Run `bb plugin config ona set x 1`. Then run `bb plugin reload ona`.").length, 1);
+  assert.equal(hintsWithoutReload("Run `bb plugin config ona set x 1`.").length, 1);
 });

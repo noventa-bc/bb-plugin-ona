@@ -107,7 +107,7 @@ export type PluginMachineProviderAvailability =
   { status: "available" } | { status: "setup-required"; message: string } | { status: "unavailable"; message: string };
 
 export const ONA_INSTALL_HINT =
-  "Install the Ona CLI and log in (`ona login`), or set its path with `bb plugin config ona set onaPath <path>`, then `bb plugin reload ona`. Then run `bb ona setup`.";
+  "Install the Ona CLI and log in (`ona login`), or set its path with `bb plugin config ona set onaPath <path>` and run `bb plugin reload ona`. Then run `bb ona setup`.";
 
 export interface GeneralSettings {
   defaultMachineAccess: string | null;
