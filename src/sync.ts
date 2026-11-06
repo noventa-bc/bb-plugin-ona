@@ -383,11 +383,16 @@ export function createSync(deps: SyncDeps) {
               return;
             case "heal-daemon": {
               // Rule 1: SSH starts stopped boxes, so ask Ona before the daemon check and again right before a restart.
-              // Rule 4: a listing that fails or leaves the box out is unknown (null); before the daemon check nothing ran (NOTHING_DONE).
+              // Rule 4: a listing that fails or is empty is unknown (null); before the daemon check nothing ran (NOTHING_DONE).
+              // A box the listing leaves out is looked up by id (decision 0005): only an id Ona says doesn't exist is gone.
               const runningNow = async () => {
                 try {
-                  const env = (await snapshot.refresh()).envs.find((e) => e.id === resource.envId);
-                  return env ? isRunning(env) : null;
+                  const { envs } = await snapshot.refresh();
+                  if (envs.length === 0) return null;
+                  const env =
+                    envs.find((e) => e.id === resource.envId) ??
+                    (await ona.getEnvironmentIfExists(resource.envId, AbortSignal.timeout(30_000)));
+                  return env !== null && !isArchived(env) && isRunning(env);
                 } catch (error) {
                   bb.log.warn(`${machine}: Ona couldn't be asked (${errorText(error)})`);
                   return null;
