@@ -9,7 +9,7 @@ is recorded in [docs/decisions](decisions/README.md).
 **Who decides what.** Ona decides whether a box exists and is running. bb holds
 your intent: a machine is _active_ (you're using it) or _suspended_ (you're
 not). The plugin compares the two and repairs bb's side. Its automatic repairs
-never start or stop a box; bb does that on your action in bb, or when it recovers a machine a bb restart left `resuming` or `suspending`, and the plugin starts one only for a waiting thread when bb's resume would do nothing, or on `bb ona resume` (rule 1; decisions 0001 and 0002 list them).
+never start or stop a box; bb does that on your action in bb, and starts one when it recovers a machine a bb restart left `resuming` or `suspending`, and the plugin starts one only for a waiting thread when bb's resume would do nothing, or on `bb ona resume` (rule 1; decisions 0001 and 0002 list them).
 
 **What the plugin does** (`decide()` in `src/reconcile.ts`):
 
@@ -57,7 +57,7 @@ you asked for, so safety rule 1 does not gate it.
 
 **Safety rules.** Every automatic action keeps these:
 
-1. **Never wake a box, except the two starts you ask for.** Those are a waiting thread on an active machine whose box Ona stopped (the table's row for a refused suspend, when bb's resume would do nothing) and `bb ona resume`; each starts the box only when Ona says it is stopped or stopping (a starting box is waited for), then connects. bb's own resume (yours, or its recovery after a bb restart, decision 0002) reaches the provider's resume, which starts a stopped box the same way. Ona's SSH starts a stopped box, so the plugin uses SSH
+1. **Never wake a box, except the two starts you ask for.** Those are a waiting thread on an active machine whose box Ona stopped (the table's row for a refused suspend, when bb's resume would do nothing) and `bb ona resume`; each starts the box only when Ona says it is stopped or stopping (a starting box is waited for), then connects. bb's own resume (yours, or its recovery after a bb restart, decision 0002) reaches the provider's resume, which starts a stopped box the same way; that recovery is bb's action, not one of the plugin's automatic actions this rule covers. Ona's SSH starts a stopped box, so the plugin uses SSH
    (tunnel connect and reconnect, `bb ona reconnect`, daemon check, cost collector, and the cleanup
    when you remove an adopted box's machine) only when Ona, asked right before it, says
    the box is running: an `ona environment list` for tunnels, the daemon check
@@ -74,7 +74,7 @@ you asked for, so safety rule 1 does not gate it.
    when bb suspends or removes the machine, when a create or resume fails, when a wake that started its box fails (a wake of a running box, or of a box Ona started during the wake's waits, keeps its tunnel), or
    the plugin stops; a check that sees the box stopped asks bb to suspend it
    once bb no longer shows the machine connected. Create, resume, the wake for a
-   waiting thread and `bb ona resume` start the box you asked for (`ona environment create` for a new box, else
+   waiting thread and `bb ona resume` start the box you asked for, and bb's recovery after a restart starts one you did not (decision 0002) (`ona environment create` for a new box, else
    `ona environment start` when Ona shows it stopped or stopping, a starting box being waited for; any other phase is refused), then
    connect. Every connect (create, resume, the wake, `bb ona reconnect`, a daemon restart)
    first asks `ona environment get` every 5s, for up to 15 minutes, until it says
@@ -190,7 +190,7 @@ If the automatic repairs get in your way, turn them off with
 `bb plugin config ona set autoRepair false`. With them off, stopped or deleted boxes are
 still marked suspended, tunnels still reopen, idle boxes are still let go after
 `idleDisconnect`, and a waiting thread still resumes or starts a stopped box; `bb ona status`
-shows what would have been done.
+shows what would have been done. bb's own recovery after a restart does not read this setting (decision 0002).
 
 **For contributors.** The logic lives in `src/reconcile.ts`:
 

@@ -10,7 +10,7 @@ A box that runs in Ona while bb shows it suspended stays suspended in bb. It is 
 
 - Starting a box in Ona, for example to open its editor, is not a request to use it through bb.
 - Attaching a box opens a tunnel, and an open tunnel counts as activity to Ona, so an automatic attach would keep the box awake.
-- The suspended state is the user's intent, and automatic repairs must not override it.
+- The suspended state is the user's intent, and the plugin's automatic repairs must not override it. bb's own recovery after a restart that cut a Pause short resumes the machine (decision 0002).
 
 ## Consequences
 
