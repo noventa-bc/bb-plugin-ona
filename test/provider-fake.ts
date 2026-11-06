@@ -22,6 +22,7 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * `unpushed`: the box has unpushed commits, so a remove is refused.
  * `uncommitted`: the box has uncommitted files and no unpushed commits, so a remove is refused.
  * `reopenDuringMove`: a tunnel opens while an adopted remove's move-aside script runs.
+ * `moveAside`: the move-aside script exits with this code, or throws this error (default 0).
  * `rootExits`: the `~/.bb-machines` script's exit codes in turn, the last one repeated.
  * `preflightExit`: the prerequisites check's exit code. Every other command exits 0 unless an option here says
  * otherwise.
@@ -37,6 +38,7 @@ export type Setup = {
   unpushed?: boolean;
   uncommitted?: boolean;
   reopenDuringMove?: boolean;
+  moveAside?: number | Error;
   rootExits?: number[];
   rootOutput?: string;
   preflightExit?: number;
@@ -56,8 +58,8 @@ export const connectCalls = gated("ssh", "curl", "preflight", "bootstrap");
 const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
 
 /**
- * The provider in a fake host. `calls` logs the `get` lookups by id that reach Ona, starts, stops, deletes and every
- * SSH command connect runs; `tunnels`, the ensure and stop calls.
+ * The provider in a fake host. `calls` logs the `get` lookups by id that reach Ona, starts, stops, deletes, the
+ * remove's move-aside and every SSH command connect runs; `tunnels`, the ensure and stop calls; `logs`, the host's log.
  */
 export function register({
   found,
@@ -66,6 +68,7 @@ export function register({
   unpushed,
   uncommitted,
   reopenDuringMove,
+  moveAside = 0,
   rootExits = [],
   rootOutput = "",
   preflightExit = 0,
@@ -144,7 +147,12 @@ export function register({
         return { exitCode: preflightExit };
       }
       // The remove's move-aside script: a sync pass can open the tunnel while it runs.
-      if (command[3] === "bb-ona-remove" && reopenDuringMove) ensure(found.id);
+      if (command[3] === "bb-ona-remove") {
+        calls.push("move-aside");
+        if (reopenDuringMove) ensure(found.id);
+        if (moveAside instanceof Error) throw moveAside;
+        return { exitCode: moveAside };
+      }
       if (command[3] !== "bb-ona-root") return { exitCode: 0 };
       calls.push("root");
       onOutput(rootOutput);
@@ -186,7 +194,7 @@ export function register({
     executorFor: () => executor,
   });
   const provider = host.harness.registrations.machineProviders.get("ona")!;
-  return { provider, reconnect, wake, calls, tunnels, open, forgotten, releasing };
+  return { provider, reconnect, wake, calls, tunnels, open, forgotten, releasing, logs: host.harness.logEntries };
 }
 
 /** `steps` collects the progress lines the user sees. */

@@ -5,6 +5,7 @@ import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
 import { HOUR, idle, waitingThread, world } from "./sync-fakes.ts";
 
 const REFUSED = "Machine suspension failed: Host is not connected";
+const RESUME_REJECTED = "HTTP 409: Only an active or suspended machine can be resumed";
 
 // The mocked clock never fires AbortSignal.timeout: this stand-in fires on it, so a test sees a cap abort.
 function abortTimeoutsOnFakeClock(t: TestContext): void {
@@ -108,6 +109,26 @@ test("a machine bb shows connected with its tunnel up clears a give-up that no t
   } finally {
     await resetFakeClock();
   }
+});
+
+// Bug: a record outlived its quiet period, so `bb ona status` kept printing "retrying after" a time long past. A give-up's
+// line has no quiet period: docs/sync.md rule 5 lists what ends a give-up.
+test("status shows a retry line only while the quiet period is ahead (fails if a passed quiet period still prints retrying after), and the give-up line either way (fails if it waits on the quiet period)", async () => {
+  const { sync, guard } = world([idle("h1")]);
+  const retryWith = async (failures: number, quietUntil: number) => {
+    guard.records.set("h1", {
+      action: "reconnect",
+      reason: "requested with bb ona reconnect",
+      at: Date.now(),
+      failures,
+      quietUntil,
+    });
+    const [row] = await sync.statusRows();
+    return row!.retry;
+  };
+  assert.equal(await retryWith(1, Date.now() - HOUR), null, "the quiet period is over, and no retry is coming");
+  assert.match((await retryWith(1, Date.now() + HOUR)) ?? "", /^retrying after /);
+  assert.match((await retryWith(GIVE_UP_AFTER, Date.now() - HOUR)) ?? "", /^gave up after /);
 });
 
 // A forced run ends the give-up, so its failure starts a new count and backoff (docs/sync.md rule 3).
@@ -226,6 +247,18 @@ test("a connected report with Ona still showing the box stopped does not end a t
   } finally {
     await resetFakeClock();
   }
+});
+
+// Bug: bb's rejected resume for a waiting thread was returned as a message, so the guard recorded a success: no failure,
+// no backoff, and the thread's hold cleared.
+test("a resume bb rejects for a waiting thread is a failure that starts the thread's hold (fails if the rejection is returned as a success)", async () => {
+  const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+  const { sync, guard } = world([host], { resumeThrows: RESUME_REJECTED });
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  const record = guard.records.get("h1")!;
+  assert.equal(record.failures, 1);
+  assert.equal(record.error, `couldn't confirm the resume for a waiting thread (${RESUME_REJECTED})`);
+  assert.equal(record.threadWaiting, true, "the thread's hold is set");
 });
 
 // Rule 4: a listing that fails inside the daemon repair asks nothing, so the guard keeps the record's count,
