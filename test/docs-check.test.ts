@@ -122,3 +122,27 @@ test("an angle-bracket link target with spaces or parentheses is checked: a miss
   const ok = docsCheck({ ...clean, "my gone.md": "# Gone\n", "gone(1).md": "# Gone\n", "README.md": readme });
   assert.equal(ok.status, 0, ok.output);
 });
+
+// A `plugin config ona set` hint tells the user to change a setting. A changed setting applies only after
+// `bb plugin reload ona` (server.ts reads its settings once, at load), so the hint's sentence or the next one names it.
+const settingHintFiles = [
+  "README.md",
+  "skills/ona-devboxes/SKILL.md",
+  "src/setup.ts",
+  "src/commands.ts",
+  "docs/sync.md",
+];
+
+/** Each `plugin config ona set` in `file` whose sentence and the next one never name `plugin reload ona`. */
+function hintsWithoutReload(file: string): string[] {
+  const flat = readFileSync(join(repo, file), "utf8").replace(/\s+/g, " ");
+  return [...flat.matchAll(/plugin config ona set/g)].flatMap((hint) => {
+    const rest = flat.slice(hint.index);
+    const end = [...rest.matchAll(/[.!?](?= |$)/g)][1]?.index ?? rest.length;
+    return rest.slice(0, end).includes("plugin reload ona") ? [] : [`${file}: ${rest.slice(0, 100)}...`];
+  });
+}
+
+test("a `plugin config ona set` hint with no `plugin reload ona` in its sentence or the next one fails", () => {
+  assert.deepEqual(settingHintFiles.flatMap(hintsWithoutReload), []);
+});

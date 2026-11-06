@@ -24,7 +24,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
 - `bb ona setup` lists what is missing; `bb ona setup --yes` applies the Ona SSH
   config and bb's machine access settings. Ask the user before running it with
   `--yes`: it changes their SSH config and bb settings.
-- Optional: `bb plugin config ona set defaultProject my-app`.
+- Optional: `bb plugin config ona set defaultProject my-app`, then `bb plugin reload ona`.
 
 ## Machines
 
@@ -36,7 +36,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
   files on it):
   `bb machine create --provider ona --inputs '{"mode":"create","project":"my-app"}'`
   (optional `"classId"` from `ona environment list-classes`). New devboxes get
-  the plugin's `inactivityTimeout` (default `3h`; `bb plugin config ona set inactivityTimeout 6h`).
+  the plugin's `inactivityTimeout` (default `3h`; `bb plugin config ona set inactivityTimeout 6h`, then `bb plugin reload ona`).
 - `bb machine suspend <m>` stops the Ona environment; `bb machine resume <m>`
   starts it, reopens the tunnel and restarts the daemon. Devboxes Ona stopped
   on its own are marked suspended automatically, and starting a thread on one

@@ -139,7 +139,7 @@ Run `bb ona setup` again at any time to check that everything is still in place.
 
 ## Plugin settings
 
-View them with `bb plugin config ona`, and change one with `bb plugin config ona set <key> <value>`.
+View them with `bb plugin config ona`, and change one with `bb plugin config ona set <key> <value>`, then `bb plugin reload ona`.
 
 | Setting             | Default                        | What it does                                                                                                                                                                                                                                                                                                                                                                                   |
 | ------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -152,8 +152,6 @@ View them with `bb plugin config ona`, and change one with `bb plugin config ona
 | `waitForSharedHome` | `true`                         | After a devbox starts, wait until its NFS home is mounted before starting bb's daemon and agents. Starting earlier lets Codex write threads into the container's own home, where the mount hides them ("no rollout found"). Turn off if your environments don't share a home.                                                                                                                  |
 | `codexSqliteHome`   | `/workspaces/.codex-sqlite-bb` | Where Codex launched by bb keeps its SQLite state on the devbox's local disk.                                                                                                                                                                                                                                                                                                                  |
 | `machineDataDir`    | `/workspaces/.bb-machines`     | Local folder that `~/.bb-machines` is symlinked to on every devbox. Empty leaves `~/.bb-machines` alone.                                                                                                                                                                                                                                                                                       |
-
-A changed setting applies after `bb plugin reload ona`.
 
 `waitForSharedHome`, `codexSqliteHome` and `machineDataDir` reach a box on its next connect (`bb ona reconnect`, a resume or the daemon's restart); `inactivityTimeout` applies to boxes created after the change.
 
