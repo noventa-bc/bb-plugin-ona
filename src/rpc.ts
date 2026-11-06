@@ -66,11 +66,16 @@ export const rpcContract = defineRpcContract({
         command: devboxCommandSchema,
         // No leading "-": the CLI reads "--" as a flag or as the end of its arguments, and then `sync` acts on every box.
         hostId: z.string().regex(/^[^-]/, "a bb host id").optional(),
-        // The new name (`rename`) or the duration (`keep-alive`). No leading "-" either, and only with a host id: the
-        // CLI reads the first value after the command as the devbox.
+        // The new name (`rename`) or the duration (`keep-alive`): no leading "-" either. The refine below allows it only
+        // for those two and only after a host id, since the CLI reads the first value after the command as the devbox.
         arg: z.string().regex(/^[^-]/, "a name or a duration").optional(),
       })
-      .refine((input) => input.arg === undefined || input.hostId !== undefined, "arg needs a hostId"),
+      .refine(
+        (input) =>
+          input.arg === undefined ||
+          (input.hostId !== undefined && (input.command === "rename" || input.command === "keep-alive")),
+        "arg needs a hostId, and only rename and keep-alive take one",
+      ),
     output: devboxCommandReplySchema,
   },
 });

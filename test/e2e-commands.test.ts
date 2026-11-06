@@ -429,6 +429,40 @@ test(
 );
 
 test(
+  "devbox_command rename with no name picks a random name and renames the box to it (fails if the name is blank, the old name stays or no update is sent)",
+  local,
+  async () => {
+    const envId = extraBoxes["host-2"]!.envId;
+    onaCalls();
+    const reply = (await host.harness.behavior.callRpc("devbox_command", {
+      command: "rename",
+      hostId: "host-2",
+    })) as { exitCode: number; stdout?: string; stderr?: string };
+    assert.equal(reply.exitCode, 0, reply.stderr);
+    const name = /^Renamed host-2 -> (\S+) \(bb machine ona:\1\)$/.exec(reply.stdout ?? "")?.[1];
+    // A friendly name: `adjective-noun-hex4`, where the adjective list has one hyphenated word ("yo-yo").
+    assert.match(name ?? "", /^[a-z-]+-[0-9a-f]{4}$/, reply.stdout);
+    assert.ok(onaCalls().includes(`environment update ${envId} --name ${name}`));
+  },
+);
+
+test(
+  "devbox_command keep-alive with no duration refuses with the CLI's usage text (fails if a missing duration is read as one or the text changes)",
+  local,
+  async () => {
+    const reply = (await host.harness.behavior.callRpc("devbox_command", {
+      command: "keep-alive",
+      hostId: "host-2",
+    })) as { exitCode: number; stdout?: string; stderr?: string };
+    assert.equal(reply.exitCode, 1);
+    assert.equal(
+      reply.stderr,
+      "Give a duration (e.g. `2h`, `90m`, at most `12h`) or `off`.\nUsage: bb ona keep-alive <ref> <duration|off>",
+    );
+  },
+);
+
+test(
   "devbox_command keep-alive holds that running box until `off` (fails if the duration is dropped or Ona is not asked)",
   local,
   async () => {

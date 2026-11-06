@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { commandArg } from "../src/command-arg.ts";
 import { commands } from "../src/commands.ts";
 import { devboxCommandSchema, rpcContract } from "../src/rpc.ts";
 
@@ -38,5 +39,18 @@ test("a new name or duration the settings section sends is never read as a CLI f
 
 test("an arg without a host id is refused, since the CLI would read it as the devbox (fails if it is accepted)", () => {
   const { input } = rpcContract.devbox_command;
-  assert.equal(input.safeParse({ command: "sync", arg: "new-name" }).success, false);
+  assert.equal(input.safeParse({ command: "rename", arg: "new-name" }).success, false);
+});
+
+test("only rename and keep-alive take an arg (fails if status, sync, reconnect or resume accepts one)", () => {
+  const { input } = rpcContract.devbox_command;
+  for (const command of ["status", "sync", "reconnect", "resume"]) {
+    assert.equal(input.safeParse({ command, hostId: "host_1", arg: "x" }).success, false, command);
+  }
+});
+
+test("a field's text is the argument: blank or spaces-only gives none, and the ends are trimmed (fails if a blank field sends a value or the spaces stay)", () => {
+  assert.equal(commandArg(""), undefined);
+  assert.equal(commandArg("   "), undefined);
+  assert.equal(commandArg(" foo "), "foo");
 });

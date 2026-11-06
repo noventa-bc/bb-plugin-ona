@@ -55,6 +55,12 @@ Keep-alives are not restored after a reload. `bb ona status` shows
 `bb ona open`; no sync pass calls it. It may wake a stopped box, which is what
 you asked for, so safety rule 1 does not gate it.
 
+`bb ona rename` runs `ona environment update <env> --name <name>`. It changes only
+the box's name (bb passes no setting but `--name`) and neither starts nor stops the
+box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `update`
+"Updates an environment's metadata or settings", with `--name` and
+`--inactivity-timeout` and no start or stop).
+
 **Safety rules.** Every automatic action keeps these:
 
 1. **Never wake a box, except the two starts you ask for.** Those are a waiting thread on an active machine whose box Ona stopped (the table's row for a refused suspend, when bb's resume would do nothing) and `bb ona resume`; each starts the box only when Ona says it is stopped or stopping (a starting box is waited for), then connects. Ona's SSH starts a stopped box, so the plugin uses SSH

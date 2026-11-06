@@ -11,6 +11,7 @@ import {
   type PluginMachineProviderInputsProps,
   useRpc,
 } from "@get-bb/plugin-sdk/app";
+import { commandArg } from "./src/command-arg.ts";
 import { ONA_MACHINE_PROVIDER_ID, projectInputsChange, projectOfSavedInputs } from "./src/machine-inputs.ts";
 import { remember } from "./src/move.ts";
 import type { Devbox, DevboxCommand, DevboxCommandReply, rpcContract, ThreadCost } from "./src/rpc.ts";
@@ -274,6 +275,12 @@ const DEVBOX_BUTTONS: { command: DevboxCommand; label: string }[] = [
   { command: "resume", label: "Resume" },
 ];
 
+/** A text box and the button that sends its text as the command's argument (see commandArg). */
+const DEVBOX_FIELDS: { command: DevboxCommand; label: string; placeholder: string }[] = [
+  { command: "rename", label: "Rename", placeholder: "New name (blank: random)" },
+  { command: "keep-alive", label: "Keep awake", placeholder: "2h or off" },
+];
+
 const sectionButton = `${editorButton} disabled:pointer-events-none disabled:opacity-50`;
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -281,8 +288,8 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 /** The text a `bb ona` reply shows: its stdout, or its stderr when it failed. */
 const replyText = (reply: DevboxCommandReply) => (reply.exitCode === 0 ? reply.stdout : reply.stderr) ?? "";
 
-/** A row's field, trimmed: an empty field is undefined, so no argument is sent. */
-const fieldText = (form: HTMLFormElement) => String(new FormData(form).get("arg") ?? "").trim() || undefined;
+/** The argument a row's field sends: its text through commandArg. */
+const fieldArg = (form: HTMLFormElement) => commandArg(String(new FormData(form).get("arg") ?? ""));
 
 /**
  * Settings → Ona devboxes: `bb ona status` as the CLI prints it, each devbox's bb status, and buttons and fields
@@ -375,35 +382,26 @@ function DevboxesSection() {
                   {label}
                 </button>
               ))}
-              <form
-                className="flex items-center gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  run("rename", box.hostId, fieldText(event.currentTarget));
-                }}
-              >
-                <input
-                  name="arg"
-                  placeholder="New name (blank: random)"
-                  aria-label="New name"
-                  className={projectInput}
-                />
-                <button type="submit" className={sectionButton} disabled={busy}>
-                  Rename
-                </button>
-              </form>
-              <form
-                className="flex items-center gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  run("keep-alive", box.hostId, fieldText(event.currentTarget));
-                }}
-              >
-                <input name="arg" placeholder="2h or off" aria-label="Keep awake for" className={projectInput} />
-                <button type="submit" className={sectionButton} disabled={busy}>
-                  Keep awake
-                </button>
-              </form>
+              {DEVBOX_FIELDS.map(({ command, label, placeholder }) => (
+                <form
+                  key={command}
+                  className="flex items-center gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    run(command, box.hostId, fieldArg(event.currentTarget));
+                  }}
+                >
+                  <input
+                    name="arg"
+                    placeholder={placeholder}
+                    aria-label={`${label} for ${box.machine}`}
+                    className={projectInput}
+                  />
+                  <button type="submit" className={sectionButton} disabled={busy}>
+                    {label}
+                  </button>
+                </form>
+              ))}
             </div>
             {notes[box.hostId] && <p className="whitespace-pre-wrap text-muted-foreground">{notes[box.hostId]}</p>}
           </div>
