@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Row } from "../src/sync.ts";
+import { rowForRef, type Row } from "../src/sync.ts";
 import {
   createUpdateClis,
   hostIsBusy,
@@ -107,6 +107,7 @@ function updater(
     },
     machines: async () => rows,
     autoUpdateProviders: "codex",
+    rowForRef,
   });
   return { updateClis, installs };
 }

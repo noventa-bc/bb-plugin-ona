@@ -399,7 +399,7 @@ export default async function plugin(bb: BbPluginApi) {
 
   const move = createMove({ sdk: bb.sdk, machineOfHost });
 
-  const updateClis = createUpdateClis({ bb, machines, autoUpdateProviders });
+  const updateClis = createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef });
   if (autoUpdateClis) {
     bb.background.schedule("cli-updates", "0 9 * * 1-5", async () => {
       for (const line of await updateClis()) bb.log.info(`cli update: ${line}`);
@@ -469,7 +469,7 @@ export default async function plugin(bb: BbPluginApi) {
         throw new experimental_PluginRpcRefusal({ code: "conflict", message: errorText(error) });
       }),
     devbox_open_editor: async ({ hostId }) => {
-      const row = await findMachine(hostId);
+      const row = (await machines()).find((r) => r.hostId === hostId);
       if (!row) return { opened: false };
       openEditor(row.resource.envId);
       return { opened: true };

@@ -2,7 +2,7 @@
 // updates bb already detects, never install a CLI that isn't there.
 // server.ts schedules updateClis; tests drive it with a fake of the bb calls below.
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
-import { rowForRef, type Row } from "./sync.ts";
+import type { Row } from "./sync.ts";
 
 export interface CliStatus {
   installed: boolean;
@@ -92,9 +92,11 @@ export interface UpdatesDeps {
   machines(): Promise<Row[]>;
   /** The `autoUpdateProviders` setting. */
   autoUpdateProviders: string;
+  /** src/sync.ts; passed in because sync.ts imports this module. */
+  rowForRef(rows: readonly Row[], ref: string): Row | undefined;
 }
 
-export function createUpdateClis({ bb, machines, autoUpdateProviders }: UpdatesDeps) {
+export function createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef }: UpdatesDeps) {
   /**
    * Apply pending agent-CLI updates on connected Ona devboxes. Returns one
    * line per box for the CLI and the plugin log.

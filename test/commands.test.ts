@@ -10,6 +10,7 @@ import {
 } from "../src/commands.ts";
 import type { OnaEnvironment } from "../src/ona.ts";
 import { HostGuard } from "../src/reconcile.ts";
+import { AmbiguousRefError } from "../src/sync.ts";
 
 test("parseArgs: positionals, flags, --json, --thread <id> and a shell command after --", () => {
   assert.deepEqual(parseArgs(["status", "box", "--json"]), {
@@ -111,6 +112,14 @@ test("keep-alive off ends it by machine, Ona name or a box Ona no longer lists",
   assert.match((await keepAliveCommand(deps, "brave-otter", "off")).stdout ?? "", /Ended the keep-alive/);
   assert.match((await keepAliveCommand(deps, "env-9", "off")).stdout ?? "", /had no keep-alive/);
   assert.deepEqual(stopped, ["env-1", "env-9"]);
+});
+
+// Bug: keep-alive off on a name two boxes share answered "had no keep-alive" and left the keep-alive running.
+test("keep-alive off on a name two devboxes share is refused, and stops nothing (fails if the ambiguity is swallowed)", async () => {
+  const { deps, stopped } = keepAlive(null);
+  const shared = { ...deps, resolveEnvId: async () => Promise.reject(new AmbiguousRefError("shared matches 2")) };
+  await assert.rejects(keepAliveCommand(shared, "shared", "off"), AmbiguousRefError);
+  assert.deepEqual(stopped, []);
 });
 
 // Dispatch only; list, sync, status and keep-alive also run end to end in

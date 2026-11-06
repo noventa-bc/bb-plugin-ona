@@ -137,6 +137,9 @@ export interface Row {
 export const matchesRef = (row: Row, ref: string) =>
   [row.hostId, row.machine, row.resource.envId, row.resource.envName].includes(ref);
 
+/** rowForRef's refusal of a name two boxes share. */
+export class AmbiguousRefError extends Error {}
+
 /**
  * Host id first: another box's Ona env name can equal a host id (`bb ona rename` takes any valid name). Other
  * names must pick one box: two boxes sharing a name throw, listing them, so the caller refuses the command.
@@ -146,7 +149,7 @@ export const rowForRef = (rows: readonly Row[], ref: string): Row | undefined =>
   if (byHost) return byHost;
   const matches = rows.filter((r) => matchesRef(r, ref));
   if (matches.length > 1)
-    throw new Error(
+    throw new AmbiguousRefError(
       `"${ref}" matches ${matches.length} devboxes: ${matches.map((r) => `${r.machine} (${r.hostId})`).join(", ")}. Use a host id.`,
     );
   return matches[0];
