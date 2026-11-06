@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ONA_NAME_MESSAGE, projectInputsChange, projectOfSavedInputs } from "../src/machine-inputs.ts";
+import {
+  commandArg,
+  devboxCommandInput,
+  ONA_NAME_MESSAGE,
+  projectInputsChange,
+  projectOfSavedInputs,
+} from "../src/machine-inputs.ts";
 
 test("a blank field is ready with mode create only, so the defaultProject setting applies", () => {
   assert.deepEqual(projectInputsChange(""), { status: "ready", value: { mode: "create" } });
@@ -40,4 +46,20 @@ test("a saved project is read back for the field, and anything else reads as bla
   assert.equal(projectOfSavedInputs(["my-app"]), "");
   assert.equal(projectOfSavedInputs("my-app"), "");
   assert.equal(projectOfSavedInputs(null), "");
+});
+
+test("a field's text is the argument: blank or spaces-only gives none, and the ends are trimmed (fails if a blank field sends a value or the spaces stay)", () => {
+  assert.equal(commandArg(""), undefined);
+  assert.equal(commandArg("   "), undefined);
+  assert.equal(commandArg(" foo "), "foo");
+});
+
+test("a devbox_command input leaves out unset keys, which bb's RPC client refuses (fails if Sync all or a button sends an undefined key)", () => {
+  assert.deepStrictEqual(devboxCommandInput("sync", undefined, undefined), { command: "sync" });
+  assert.deepStrictEqual(devboxCommandInput("resume", "host-1", undefined), { command: "resume", hostId: "host-1" });
+  assert.deepStrictEqual(devboxCommandInput("rename", "host-1", "box"), {
+    command: "rename",
+    hostId: "host-1",
+    arg: "box",
+  });
 });

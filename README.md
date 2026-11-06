@@ -173,7 +173,7 @@ buttons, plus **Rename** (a new name; empty gives a random one) and **Keep awake
 `bb ona rename` or `bb ona keep-alive` as the terminal, for that devbox (**Sync all** runs `bb ona sync` for every
 devbox). A row's controls show their reply or refusal under that row; **Sync all** has no row, so it shows none, and
 the status is read again after it. **Keep awake** holds a box for at most `12h`, as the CLI does, and ends on a plugin
-reload, since keep-alives are not restored after one.
+reload, and is not restored after one.
 A **Resume** or **Reconnect** started here keeps running after the page closes and ends on a plugin reload.
 The status and the devbox list are read again every 30 seconds while the page is open.
 

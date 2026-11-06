@@ -1,6 +1,7 @@
 // The "Ona project" field of the new-thread composer's "New Ona devbox" option. app.tsx
 // imports this file, so it imports types only (no node modules in the app bundle).
 import type { PluginMachineProviderInputsChange } from "@get-bb/plugin-sdk/app";
+import type { DevboxCommand } from "./rpc.ts";
 
 // src/provider.ts builds onaRef and PROVIDER_ID from these.
 export const ONA_MACHINE_PROVIDER_ID = "ona";
@@ -21,4 +22,15 @@ export function projectInputsChange(text: string): PluginMachineProviderInputsCh
 export function projectOfSavedInputs(value: unknown): string {
   const project = (value as { project?: unknown } | null)?.project;
   return typeof project === "string" ? project : "";
+}
+
+/** A settings field's text as a devbox command's argument, trimmed. Blank sends none: rename then picks a random
+ * name, and keep-alive replies with its usage. */
+export function commandArg(text: string): string | undefined {
+  return text.trim() || undefined;
+}
+
+/** The devbox_command input without its unset keys: bb's RPC client refuses a key whose value is undefined. */
+export function devboxCommandInput(command: DevboxCommand, hostId?: string, arg?: string) {
+  return { command, ...(hostId === undefined ? {} : { hostId }), ...(arg === undefined ? {} : { arg }) };
 }

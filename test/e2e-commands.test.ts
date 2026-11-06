@@ -440,7 +440,7 @@ test(
     })) as { exitCode: number; stdout?: string; stderr?: string };
     assert.equal(reply.exitCode, 0, reply.stderr);
     const name = /^Renamed host-2 -> (\S+) \(bb machine ona:\1\)$/.exec(reply.stdout ?? "")?.[1];
-    // A friendly name: `adjective-noun-hex4`, where the adjective list has one hyphenated word ("yo-yo").
+    // A friendly name: `adjective-noun-hex4`, where the noun list has one hyphenated word ("yo-yo").
     assert.match(name ?? "", /^[a-z-]+-[0-9a-f]{4}$/, reply.stdout);
     assert.ok(onaCalls().includes(`environment update ${envId} --name ${name}`));
   },

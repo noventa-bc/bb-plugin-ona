@@ -99,6 +99,10 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 ## bb SDK
 
 - The plugin pins `@get-bb/plugin-sdk` 0.6.109 (checked 2026-11-03).
+- bb 0.48.1's app RPC client (`useRpc`) refuses an input with a key whose value is
+  `undefined` ("rpc input at $input.<key> is not a JSON value") before it sends, as
+  the SDK's test harness does (checked 2026-11-06). `app.tsx` builds the
+  `devbox_command` input without its unset keys (`devboxCommandInput`).
 - SDK 0.6.109's public types do not declare an `experimental_threadHeaderAction`
   slot (checked 2026-11-03). Its app collector accepts the slot, so `app.tsx`
   takes `LegacyThreadHeaderActionRegistration` from the SDK's

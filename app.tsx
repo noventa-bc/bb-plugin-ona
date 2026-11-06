@@ -11,8 +11,13 @@ import {
   type PluginMachineProviderInputsProps,
   useRpc,
 } from "@get-bb/plugin-sdk/app";
-import { commandArg } from "./src/command-arg.ts";
-import { ONA_MACHINE_PROVIDER_ID, projectInputsChange, projectOfSavedInputs } from "./src/machine-inputs.ts";
+import {
+  commandArg,
+  devboxCommandInput,
+  ONA_MACHINE_PROVIDER_ID,
+  projectInputsChange,
+  projectOfSavedInputs,
+} from "./src/machine-inputs.ts";
 import { remember } from "./src/move.ts";
 import type { Devbox, DevboxCommand, DevboxCommandReply, rpcContract, ThreadCost } from "./src/rpc.ts";
 
@@ -345,7 +350,7 @@ function DevboxesSection() {
     };
     setRunning((current) => [...current, key]);
     void rpc
-      .call("devbox_command", { command, hostId, arg })
+      .call("devbox_command", devboxCommandInput(command, hostId, arg))
       .then(show, (error: unknown) => show({ exitCode: 1, stderr: messageOf(error) }))
       .finally(() => {
         setRunning((current) => current.filter((k) => k !== key));
