@@ -32,6 +32,8 @@ export function world(
   boxes: Box[],
   options: {
     refuse?: string;
+    /** bb refuses only the resume: it answers with this message and the machine's phase unchanged. */
+    resumeRefuses?: string;
     daemonAlive?: boolean | null;
     pluginStartedAt?: number;
     /** The daemon restart (the provider's reconnect) rejects with this message. */
@@ -93,8 +95,9 @@ export function world(
       if (name === "suspend" && options.suspendSettles) {
         host.lifecycle = { ...host.lifecycle, ...options.suspendSettles };
       } else {
-        host.lifecycle = options.refuse
-          ? { ...host.lifecycle, message: options.refuse }
+        const refusal = (name === "resume" && options.resumeRefuses) || options.refuse;
+        host.lifecycle = refusal
+          ? { ...host.lifecycle, message: refusal }
           : { ...host.lifecycle, phase, message: null };
       }
       if (!options.refuse) host.updatedAt = Date.now();
