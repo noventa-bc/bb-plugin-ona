@@ -39,14 +39,14 @@ a turn in flight also holds the box, hidden ones (workflow steps, side chats) in
 but an archived thread counts for neither busyness nor activity, whatever status bb
 still shows for it.
 
-`bb ona keep-alive <name> <duration>` is the one way to hold a box past Ona's
+`bb ona keep-alive <ref> <duration>` is the one way to hold a box past Ona's
 inactivity timeout, and only on your request; the plugin never starts one by
 itself. It runs `ona environment keep-alive --environment-id <id> -q -- sleep
 <seconds>` on the bb server machine, which sends Ona activity signals while the
 sleep runs. It needs no SSH. Safety rule 1 applies: it starts only when a fresh
 `ona environment list` says the box is running, and is refused otherwise
 (stopped, starting, or Ona can't be asked). It ends after the duration (at most
-`12h`), on `bb ona keep-alive <name> off`, when a new duration replaces it, when
+`12h`), on `bb ona keep-alive <ref> off`, when a new duration replaces it, when
 a listing shows the box not running, and when the plugin reloads or bb quits.
 Keep-alives are not restored after a reload. `bb ona status` shows
 `keep-alive until HH:MM` for a box that has one.
@@ -60,6 +60,10 @@ the box's name (bb passes no box setting but `--name`) and neither starts nor st
 box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `update`
 "Updates an environment's metadata or settings", with `--name` and
 `--inactivity-timeout` and no start or stop).
+
+`bb ona new` resolves its project name with `ona project list -o json` (`resolveProjectId` in `src/ona.ts`). It is read-only and touches no box, so safety rule 1 does not gate it.
+
+`ona environment stop <id>` runs in the provider's `suspend()` (`src/provider.ts`) when Ona does not already show the box stopped; a suspend the plugin makes itself skips it (safety rule 2). `ona environment delete <id>` runs in `remove()` and `reconcileCleanup()` only for a box bb created, and only when `unpushedWork()` finds no unpushed commits or uncommitted files; an adopted box is never deleted.
 
 **Safety rules.** Every automatic action keeps these:
 
@@ -186,8 +190,8 @@ the cache (rule 1); callers that ask while a list is running share the next one.
 **Seeing and fixing it yourself.**
 
 ```sh
-bb ona status [name] [--json]  # bb's view, tunnel, Ona's view, the box's facts, and what the plugin last did and why
-bb ona sync [name]             # re-check Ona now and repair (skips cooldowns, backoff and the give-up, never the safety rules)
+bb ona status [ref] [--json]   # bb's view, tunnel, Ona's view, the box's facts, and what the plugin last did and why
+bb ona sync [ref]              # re-check Ona now and repair (skips cooldowns, backoff and the give-up, never the safety rules)
 ```
 
 Example `bb ona status` output. `now` is what the latest check concluded, and

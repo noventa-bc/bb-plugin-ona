@@ -20,12 +20,16 @@ and you drive them from bb as usual.
 - **Ona devboxes** in the plugin's settings: each devbox's status (`bb ona status`), with a Sync all button,
   and per devbox Sync, Reconnect and Resume buttons plus Rename and Keep awake controls, all running the same
   `bb ona` commands.
-- **Shell access**: `ssh "$(bb ona host <name>)"`, `bb ona open <name>` for
-  your Ona editor, and bb's terminal panel on the devbox.
+- **Shell access**: `ssh "$(bb ona host <ref>)"` (or `bb ona ssh <ref>`, which prints the command),
+  `bb ona shell <ref> -- <command>` to run one command in the checkout, `bb ona open <ref>` for your
+  Ona editor, and bb's terminal panel on the devbox.
 - `bb ona adopt <environment>` and `bb ona new [project]` to add devboxes, and
-  `bb ona list`, `rename`, `reconnect` and `resume` for day-to-day management.
-- `bb ona keep-alive <name> <duration>` keeps a running devbox from Ona's idle
+  `bb ona list`, `bb ona rename <ref>`, `bb ona reconnect <ref>`, `bb ona resume <ref>` and `bb ona sync [ref]`
+  for day-to-day management.
+- `bb ona keep-alive <ref> <duration>` keeps a running devbox from Ona's idle
   timeout for up to 12h, for a long job nobody watches; `off` ends it.
+- `bb ona update [ref] [--force]` applies pending agent-CLI updates (Claude Code and Codex by default, from
+  `autoUpdateProviders`) to connected devboxes; the same runs weekdays at 09:00 when `autoUpdateClis` is on.
 
 ## How it works
 

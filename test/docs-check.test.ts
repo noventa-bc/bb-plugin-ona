@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { commands } from "../src/commands.ts";
 import { git, scrubbed, tempDir } from "./sandbox.ts";
 
 const repo = join(import.meta.dirname, "..");
@@ -165,4 +166,70 @@ test("SKILL.md's connect-time settings line names the reload (fails if its claus
 test("server.ts's waitForSharedHome description names the reload (fails if its sentence is dropped)", () => {
   const server = readFileSync(join(repo, "server.ts"), "utf8");
   assert.match(server, /share a home folder\. A changed setting applies after `bb plugin reload ona`\./);
+});
+
+// The `bb ona` and settings guards read the docs and the source as text, so a doc drifts only by a failing check.
+const read = (file: string) => readFileSync(join(repo, file), "utf8");
+
+const commandDocs = ["README.md", "skills/ona-devboxes/SKILL.md", "PLUGIN_OVERVIEW.md"];
+
+test("every `bb ona` command in src/commands.ts is written `bb ona <name>` in README, SKILL.md and PLUGIN_OVERVIEW.md (fails if a command lacks its docs)", () => {
+  assert.ok(
+    commands.some((c) => c.name === "update"),
+    "src/commands.ts lists no commands",
+  );
+  const missing = commandDocs.flatMap((file) =>
+    commands
+      .filter((c) => !new RegExp(`bb ona ${c.name}(?![\\w-])`).test(read(file)))
+      .map((c) => `${file}: bb ona ${c.name}`),
+  );
+  assert.deepEqual(missing, []);
+});
+
+/** The setting keys in server.ts's `bb.settings.define({...})` block, one per `    key: {` line. */
+function declaredSettings(server: string): string[] {
+  const block = server.slice(server.indexOf("bb.settings.define({"), server.indexOf("\n  });"));
+  const keys = [...block.matchAll(/^ {4}(\w+): \{/gm)].map((m) => m[1]!);
+  // Each setting has one `type:`; a key written another way would be skipped: fail instead.
+  assert.equal(keys.length, block.match(/^ {6}type: /gm)?.length ?? 0, `parser found ${keys.join(", ")}`);
+  return keys;
+}
+
+test("every setting server.ts declares has a row in README's settings table (fails if a setting lacks its row)", () => {
+  const readme = read("README.md");
+  const keys = declaredSettings(read("server.ts"));
+  assert.ok(keys.includes("onaPath") && keys.includes("autoUpdateProviders"), `parser found ${keys.join(", ")}`);
+  const missing = keys.filter((key) => !new RegExp(`^\\| \`${key}\``, "m").test(readme));
+  assert.deepEqual(missing, []);
+});
+
+test("no `bb ona <word> <name>` or `[name]` in the docs: a devbox argument is `<ref>` (fails if `<name>` comes back)", () => {
+  const offenders = ["README.md", "PLUGIN_OVERVIEW.md", "docs/sync.md", "skills/ona-devboxes/SKILL.md"].flatMap(
+    (file) =>
+      (read(file).match(/bb ona [\w-]+ (?:(?:<[\w-]+> )*<name>|\[name\])/g) ?? []).map((line) => `${file}: ${line}`),
+  );
+  assert.deepEqual(offenders, []);
+});
+
+/** The `ona` subcommand pairs (`environment list`, ...) src/ona.ts runs, as `this.run([...])` or a `const argv = [...]` it runs. */
+function runPairs(ona: string): string[] {
+  // A call this parser can't read (another variable, a computed word) would go unchecked: fail instead.
+  assert.deepEqual(
+    [
+      ...(ona.match(/this\.run\((?!\s*\[\s*"\w+",\s*"\w+"|argv\b)/g) ?? []),
+      ...(ona.match(/const argv = (?!\[\s*"\w+",\s*"\w+")/g) ?? []),
+    ],
+    [],
+    "a this.run( call or const argv in src/ona.ts does not start with two literal words",
+  );
+  const pairs = [...ona.matchAll(/(?:this\.run\(\s*|const argv = )\[\s*"(\w+)",\s*"(\w+)"/g)];
+  return [...new Set(pairs.map((m) => `${m[1]} ${m[2]}`))];
+}
+
+test("every `ona` subcommand pair src/ona.ts runs is written `ona <a> <b>` in docs/sync.md (fails if a call lacks its safety line)", () => {
+  const sync = read("docs/sync.md");
+  const pairs = runPairs(read("src/ona.ts"));
+  assert.ok(pairs.includes("environment list") && pairs.includes("project list"), `parser found ${pairs.join(", ")}`);
+  const missing = pairs.filter((pair) => !new RegExp(`ona ${pair}(?![\\w-])`).test(sync));
+  assert.deepEqual(missing, []);
 });
