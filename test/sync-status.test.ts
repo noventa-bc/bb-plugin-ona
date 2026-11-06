@@ -527,17 +527,19 @@ test("a refused resume for a waiting thread is a failure, not a success (fails i
 
 // Bug: the retry line hid only a suspended machine, but decide() acts only on an active one, so a machine that was
 // creating, removing, resuming or suspending showed a retry it never got.
-test("the retry line shows only for an active machine (fails if it shows for a machine that is creating, removing, resuming or suspending)", async () => {
-  const record = { action: "heal-daemon", reason: "daemon down", at: NOW, failures: 1, quietUntil: NOW + HOUR };
-  const retryIn = async (phase: string) => {
+test("the retry and give-up lines show only for an active machine (fails if either shows for a machine that is creating, removing, resuming or suspending)", async () => {
+  const retryIn = async (phase: string, failures: number) => {
     const { sync, guard } = world([idle("h1", { phase })]);
+    const record = { action: "heal-daemon", reason: "daemon down", at: NOW, failures, quietUntil: NOW + HOUR };
     guard.records.set("h1", record);
     const [row] = await sync.statusRows();
     return row!.retry;
   };
-  for (const phase of ["creating", "removing", "resuming", "suspending", "suspended"]) {
-    assert.equal(await retryIn(phase), null, `bb shows the machine ${phase}, and decide() doesn't act on it`);
+  for (const failures of [1, GIVE_UP_AFTER]) {
+    for (const phase of ["creating", "removing", "resuming", "suspending", "suspended"]) {
+      assert.equal(await retryIn(phase, failures), null, `bb shows the machine ${phase}; decide() won't act`);
+    }
   }
-  const active = await retryIn("active");
-  assert.match(active ?? "", /^retrying after /);
+  assert.match((await retryIn("active", 1)) ?? "", /^retrying after /);
+  assert.match((await retryIn("active", GIVE_UP_AFTER)) ?? "", /^gave up after /);
 });
