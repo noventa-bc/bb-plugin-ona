@@ -118,6 +118,8 @@ export interface SyncDeps {
   autoRepair: boolean;
   idleDisconnect: string;
   pluginStartedAt: number;
+  /** The plugin's lifetime (server.ts): a reload aborts it, which ends a wake or restart in flight. */
+  signal: AbortSignal;
 }
 
 export interface Row {
@@ -138,7 +140,7 @@ export const matchesRef = (row: Row, ref: string) =>
 export type Sync = ReturnType<typeof createSync>;
 
 export function createSync(deps: SyncDeps) {
-  const { bb, snapshot, ona, guard, tunnels, provider, hostByEnv, autoRepair, idleDisconnect } = deps;
+  const { bb, snapshot, ona, guard, tunnels, provider, hostByEnv, autoRepair, idleDisconnect, signal } = deps;
   const pluginStartedAt = deps.pluginStartedAt;
 
   /** The row for one bb host: null unless it is an Ona machine whose stored resource parses. */
@@ -359,8 +361,8 @@ export function createSync(deps: SyncDeps) {
                 if (!decision.resumeAfter || lifecycle.phase !== "active") throw new Error(suspendFailure(refusal));
                 // bb's suspend failed (Ona stopped the box under a live turn) and left the machine active, where bb's
                 // resume does nothing: the plugin wakes the box (decision 0002).
-                // bounded by the waits' own deadlines (docs/sync.md rule 1)
-                const startCalled = await provider.wake(resource, report, new AbortController().signal);
+                // No cap: the waits' own deadlines bound it, and a plugin reload ends it (docs/sync.md rule 1).
+                const startCalled = await provider.wake(resource, report, signal);
                 return startCalled ? "started it for a waiting thread" : "reconnected it for a waiting thread";
               }
               if (!decision.resumeAfter) return;
@@ -381,12 +383,12 @@ export function createSync(deps: SyncDeps) {
               return;
             case "heal-daemon": {
               // Rule 1: SSH starts stopped boxes, so ask Ona before the daemon check and again right before a restart.
-              // Rule 4: a listing that fails asks nothing (null), so the guard keeps its record (NOTHING_DONE).
+              // Rule 4: a listing that fails is unknown (null); before the daemon check nothing ran (NOTHING_DONE).
               const runningNow = async () => {
                 try {
                   return isRunning((await snapshot.refresh()).envs.find((e) => e.id === resource.envId));
                 } catch (error) {
-                  bb.log.info(`${machine}: Ona couldn't be asked; nothing done (${errorText(error)})`);
+                  bb.log.info(`${machine}: Ona couldn't be asked (${errorText(error)})`);
                   return null;
                 }
               };
@@ -401,10 +403,11 @@ export function createSync(deps: SyncDeps) {
                 return "couldn't tell whether the daemon runs (SSH or the process check on the box failed); not restarting";
               // The check can take 30 s, long enough for the box to be stopped in Ona.
               const stillRunning = await runningNow();
-              if (stillRunning === null) return NOTHING_DONE;
+              // The check's SSH ran: record the pass, so its cooldown applies (rule 5).
+              if (stillRunning === null) return "Ona couldn't be asked before the restart; not restarting";
               if (!stillRunning) return gone;
-              // bounded by the waits' own deadlines (docs/sync.md rule 1)
-              await provider.reconnect(resource, report, new AbortController().signal);
+              // No cap: the waits' own deadlines bound it, and a plugin reload ends it (docs/sync.md rule 1).
+              await provider.reconnect(resource, report, signal);
               return "daemon was down; restarted it";
             }
             case "none":

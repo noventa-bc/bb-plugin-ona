@@ -38,6 +38,10 @@ export function world(
     pluginStartedAt?: number;
     /** The daemon restart (the provider's reconnect) rejects with this message. */
     reconnectFails?: string;
+    /** The provider's reconnect (the daemon restart); the default records it and honours `reconnectFails`. */
+    reconnect?: SyncDeps["provider"]["reconnect"];
+    /** The plugin's lifetime signal (server.ts `lifetime`), aborted when the plugin reloads. */
+    signal?: AbortSignal;
     /** Ona lists every box STOPPED once the daemon check has run. */
     stopDuringProbe?: boolean;
     /** Keep a listing 15s fresh, so only `refresh()` sees a change; the clock is the mocked Date when enabled. */
@@ -227,10 +231,12 @@ export function world(
         if (options.stopDuringProbe) for (const box of boxes) box.ona = "STOPPED";
         return options.daemonAlive ?? true;
       },
-      reconnect: async () => {
-        calls.push("restart daemon");
-        if (options.reconnectFails) throw new Error(options.reconnectFails);
-      },
+      reconnect:
+        options.reconnect ??
+        (async () => {
+          calls.push("restart daemon");
+          if (options.reconnectFails) throw new Error(options.reconnectFails);
+        }),
       wake:
         options.wake ??
         (async (resource) => {
@@ -243,6 +249,7 @@ export function world(
     autoRepair: options.autoRepair ?? true,
     idleDisconnect: "1h",
     pluginStartedAt: options.pluginStartedAt ?? NOW - 2 * HOUR,
+    signal: options.signal ?? new AbortController().signal,
   });
   return { sync, calls, guard, kv, hosts, releasing, hostReads };
 }

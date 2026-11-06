@@ -116,11 +116,13 @@ you asked for, so safety rule 1 does not gate it.
    in `server.ts` asks a fresh listing.
 
    A wake for a waiting thread (`provider.wake`) and a daemon restart
-   (`reconnect`) have no timeout of their own: each wait inside them has one
-   (the deadlines are in `src/provider.ts`, `src/ona.ts` and `src/ssh.ts`). At
-   the defaults the waits add up to 109 minutes for a wake and 52 for a restart
-   before bb's bootstrap, which bb bounds at 12 minutes (`docs/ona-notes.md`,
-   bb SDK section; checked 2026-11-06).
+   (`reconnect`) have no timeout of their own. Each wait inside them has its
+   own deadline: the stop, start and SSH waits in `src/provider.ts`, each
+   `ona` call in `run` in `src/ona.ts`, each SSH command in `src/ssh.ts`, and
+   bb's bootstrap (`docs/ona-notes.md`, bb SDK section). A poll (`pollUntil`
+   in `src/time.ts`) runs its last try past its deadline, and each SSH
+   command can first be held for Ona as above. Both run on the plugin's
+   lifetime signal (`lifetime` in `server.ts`), so a plugin reload ends them.
 
    These commands you run yourself are not gated and may wake a box:
    `ona environment open` and `bb ona ssh --thread`.
@@ -138,8 +140,10 @@ you asked for, so safety rule 1 does not gate it.
 4. **Unknown is not gone.** A failed or empty `ona environment list` changes
    nothing, and "missing" needs two listings in a row. A lookup by id
    (`ona environment get`) that fails is unknown too; only Ona saying the id
-   doesn't exist counts as gone. A failed listing inside a repair leaves the
-   guard's record untouched (count, quiet period, hold).
+   doesn't exist counts as gone. A daemon repair whose listing fails before
+   its daemon check leaves the guard's record untouched (count, quiet period,
+   hold). One that fails after the check, before the restart, records the
+   pass with no restart, so the check's cooldown applies (rule 5).
 5. **One action per machine at a time.** A daemon check or restart makes the machine wait 5 minutes after a success before its next one; suspends, tunnel
    reopens and idle releases do not wait after a success. A failure backs off for every
    action (5, then 10 min; the third failure, in a row or across a hold (rule 3), stops automatic tries until

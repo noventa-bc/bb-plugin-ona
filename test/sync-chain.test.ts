@@ -1,10 +1,19 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 import { ALL, COOLDOWN_MS, GIVE_UP_AFTER, HostGuard } from "../src/reconcile.ts";
 import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
 import { HOUR, idle, waitingThread, world } from "./sync-fakes.ts";
 
 const REFUSED = "Machine suspension failed: Host is not connected";
+
+// The mocked clock never fires AbortSignal.timeout: this stand-in fires on it, so a test sees a cap abort.
+function abortTimeoutsOnFakeClock(t: TestContext): void {
+  t.mock.method(AbortSignal, "timeout", (ms: number) => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), ms);
+    return controller.signal;
+  });
+}
 
 // bb ona sync runs a repair on the box that succeeds: the forced run ends the chain, so the box's next stop wakes the thread
 // even though the repair's cooldown has not passed.
@@ -259,15 +268,11 @@ test("a failed Ona listing inside the daemon repair leaves the count alone (fail
 });
 
 // A wake has no 15-minute cap of its own (docs/sync.md rule 1): a stop and a start that take 17 minutes
-// end in a connect. The mocked clock never fires AbortSignal.timeout, so the test stands in for one that does.
+// end in a connect.
 test("a slow stop and start still connect the waiting thread's box (fails if a 15-minute cap aborts the wake)", async (t) => {
   enableFakeClock();
   try {
-    t.mock.method(AbortSignal, "timeout", (ms: number) => {
-      const controller = new AbortController();
-      setTimeout(() => controller.abort(), ms);
-      return controller.signal;
-    });
+    abortTimeoutsOnFakeClock(t);
     const host = idle("h1", { ona: "STOPPING", status: "disconnected", threads: [waitingThread()] });
     const { sync, guard, hosts } = world([host], {
       refuse: REFUSED,
@@ -291,4 +296,62 @@ test("a slow stop and start still connect the waiting thread's box (fails if a 1
   } finally {
     await resetFakeClock();
   }
+});
+
+// A daemon restart has no 15-minute cap of its own either (docs/sync.md rule 1): a 17-minute reconnect completes.
+test("a slow daemon restart still completes (fails if a 15-minute cap aborts the reconnect)", async (t) => {
+  enableFakeClock();
+  try {
+    abortTimeoutsOnFakeClock(t);
+    const { sync, guard } = world([idle("h1", { status: "disconnected", lastSeenAt: Date.now() - HOUR })], {
+      daemonAlive: false,
+      reconnect: async (_resource, _report, signal) => {
+        await tick(17 * 60_000);
+        signal.throwIfAborted();
+      },
+    });
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    const record = guard.records.get("h1")!;
+    assert.equal(record.error, undefined);
+    assert.match(record.reason, /daemon was down; restarted it/);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+// The daemon check has SSHed into the box when the read before the restart fails: the pass is recorded, so its cooldown
+// keeps the next pass from SSHing again (docs/sync.md rule 5).
+test("a failed Ona read after the daemon check records the pass, so the next pass does not SSH again (fails if that read records nothing)", async () => {
+  const { sync, calls, guard } = world([idle("h1", { status: "disconnected", lastSeenAt: Date.now() - HOUR })], {
+    daemonAlive: false,
+    refreshFails: () => calls.includes("probe"),
+  });
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  const record = guard.records.get("h1");
+  assert.ok(record, "the pass is recorded");
+  assert.equal(record.error, undefined);
+  assert.match(record.reason, /Ona couldn't be asked before the restart; not restarting/);
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.deepEqual(calls, ["probe"]);
+});
+
+// A plugin reload aborts the plugin's lifetime signal: a wake still running then ends, and the guard records the abort as
+// the pass's failure (docs/sync.md rule 1).
+test("a plugin reload ends a wake in flight (fails if the wake ignores the plugin's lifetime signal)", async () => {
+  const lifetime = new AbortController();
+  const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+  const { sync, guard } = world([host], {
+    refuse: REFUSED,
+    daemonAlive: true,
+    signal: lifetime.signal,
+    wake: async (_resource, _report, signal) => {
+      lifetime.abort();
+      signal.throwIfAborted();
+      return true;
+    },
+  });
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  const record = guard.records.get("h1")!;
+  assert.match(record.error ?? "", /aborted/);
+  assert.equal(record.failures, 1);
 });
