@@ -34,6 +34,8 @@ export function world(
     refuse?: string;
     /** bb refuses only the resume: it answers with this message and the machine's phase unchanged. */
     resumeRefuses?: string;
+    /** bb's resume call rejects with this message: an error, not a refusal on the host. */
+    resumeThrows?: string;
     daemonAlive?: boolean | null;
     pluginStartedAt?: number;
     /** The daemon restart (the provider's reconnect) rejects with this message. */
@@ -99,6 +101,7 @@ export function world(
     (name: string, phase: string) =>
     async ({ hostId }: { hostId: string }) => {
       calls.push(`${name} ${hostId}`);
+      if (name === "resume" && options.resumeThrows) throw new Error(options.resumeThrows);
       const host = hosts.get(hostId)!;
       if (name === "suspend" && options.suspendSettles) {
         host.lifecycle = { ...host.lifecycle, ...options.suspendSettles };

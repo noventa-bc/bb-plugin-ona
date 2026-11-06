@@ -371,7 +371,7 @@ export function createSync(deps: SyncDeps) {
               try {
                 resumed = await bb.sdk.hosts.experimental_resume({ hostId });
               } catch (error) {
-                return `bb will resume it on your next message (${errorText(error)})`;
+                throw new Error(`couldn't resume it for a waiting thread (${errorText(error)})`);
               }
               // Thrown: a returned string is a success, and a success clears the thread's hold (docs/sync.md rule 3).
               const resumeRefusal = lifecycleRefusal(resumed.lifecycle, RESUMED);
