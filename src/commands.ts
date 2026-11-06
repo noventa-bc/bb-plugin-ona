@@ -315,7 +315,8 @@ export function onaCommands(deps: OnaCommandDeps) {
   return async function run(rawArgv: string[], ctx: PluginCliContext) {
     const { command, ref, newName, json, threadFlag, threadId, flags, commandArgv } = parseArgs(rawArgv);
     const subcommand = command ?? "help";
-    // The switch is exhaustive over the listed names: a command added to one place and not the other fails the typecheck.
+    // The switch is exhaustive over the listed names: a name without a case fails the lint (`switch-exhaustiveness-check`;
+    // tsc accepts the gap), a case without a name fails the typecheck.
     if (subcommand !== "help" && !commands.some((c) => c.name === subcommand)) return { exitCode: 1, stderr: usage };
     try {
       switch (subcommand as CommandName | "help") {
