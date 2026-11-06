@@ -3,6 +3,7 @@
 // reconnect, rename, update, sync by the Ona name, the settings section's devbox_command and the thread
 // event. One story in file order: run the whole file.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { after, before, test } from "node:test";
 import { makeThreadResponse } from "@get-bb/plugin-sdk/testing";
@@ -35,11 +36,10 @@ const extraBoxes: Record<string, OnaResource> = {};
 const suspends = () => host.harness.inspection.sdk.callsTo("hosts.experimental_suspend");
 /** `environment list` calls in the fake Ona's log so far; the tunnel loop lists too, so compare with `>`. */
 const listings = () => readFileSync(log, "utf8").match(/^environment list/gm)?.length ?? 0;
-/** Whether a process with this pid is still there (signal 0 only probes it). */
+/** Whether this pid is still a fake tunnel (test/fake-ssh.sh execs `sleep 100000`), so a reused pid never counts. */
 const alive = (pid: number) => {
   try {
-    process.kill(pid, 0);
-    return true;
+    return execFileSync("ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8" }).trim() === "sleep 100000";
   } catch {
     return false;
   }
@@ -431,6 +431,8 @@ test(
     // After its first ask the wait asks again at once, then every 5 s: let those asks land before the dispose.
     await sleep(1_000);
     onaCalls();
+    // The next case checks this dispose ends every tunnel: at least one must be up, or it checks nothing.
+    assert.ok(tunnelPids().some(alive), "no tunnel was up when the plugin was disposed");
     await host.harness.lifecycle.dispose();
     await sleep(6_000); // longer than the 5 s poll interval
     const asks = onaCalls().filter((call) => call === `environment get ${envId}`).length;
@@ -452,7 +454,6 @@ test(
     });
     assert.ok(pids.length > 0, "no tunnel was opened, so there is nothing to check");
     // The SIGTERM from the dispose takes a moment to land.
-    // shortcut: a reused pid reads as a live tunnel, a false failure; match the command in ps when one shows up
     for (let tick = 0; tick < 50 && pids.some(alive); tick++) await sleep(100);
     assert.deepEqual(pids.filter(alive), [], "tunnels still running after the plugin was disposed");
   },
