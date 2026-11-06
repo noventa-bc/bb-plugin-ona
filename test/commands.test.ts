@@ -147,7 +147,9 @@ function fakeRun(
           },
         ];
   const deps = {
-    machines: () => Promise.resolve([machine]),
+    // Like bb's list: a creating machine is left out unless asked for.
+    machines: (options?: { includeCreating?: boolean }) =>
+      Promise.resolve(machine.phase === "creating" && !options?.includeCreating ? [] : [machine]),
     // A fresh row per lookup, as bb gives, so a row the command holds doesn't change under it.
     findMachine: (ref: string) => Promise.resolve(ref === "box" ? { ...machine } : null),
     guard,
@@ -238,7 +240,10 @@ test("reconnect on a machine bb doesn't show active exits 1, never reconnects, a
 test("rename refuses a machine bb doesn't show active, before any Ona rename", async () => {
   for (const [phase, hint] of [
     ["creating", "Try again once bb shows it active."],
+    ["resuming", "Try again once bb shows it active."],
     ["suspended", "Resume it with `bb machine resume ona:box`."],
+    ["removing", "It is gone or being removed."],
+    ["destroyed", "It is gone or being removed."],
   ]) {
     const { run, calls } = fakeRun(phase);
     assert.deepEqual(

@@ -109,7 +109,7 @@ export const usage = [
   "  bb ona ssh <ref> --thread <id>  Open another terminal to the devbox in that thread's terminal panel",
   "  bb ona open <ref>             Open the devbox in your Ona editor",
   "  bb ona shell <ref> -- <cmd…>  Run one command in the devbox checkout and print its output",
-  "  bb ona rename <ref> [name]    Rename the Ona environment (random fun name if omitted) and its bb machine",
+  "  bb ona rename <ref> [name]    Rename the Ona environment (random fun name if omitted) and its bb machine; refused until bb shows the machine active",
   "  bb ona reconnect <ref>        Reopen an active machine's tunnel and restart its bb daemon",
   "                                Refused unless bb shows the machine active and Ona shows its box running.",
   "  bb ona resume <ref>           Start a stopped box and reconnect bb's daemon (your action; a running box is only reconnected)",
@@ -145,7 +145,7 @@ export const commands = [
   },
   {
     name: "rename",
-    summary: "Rename a devbox (random fun name if omitted)",
+    summary: "Rename a devbox (random fun name if omitted); refused until bb shows the machine active",
     usage: "bb ona rename <ref> [name]",
   },
   {
@@ -295,8 +295,8 @@ export function onaCommands(deps: OnaCommandDeps) {
           const valid = onaRef.safeParse(name);
           if (!valid.success)
             return { exitCode: 1, stderr: `Invalid name "${name}": ${valid.error.issues[0]?.message}` };
-          // Read before the rename: a box bb is still creating is found by its name, so renaming it lets a retry create another.
-          const before = (await machines()).find((r) => r.resource.envId === envId);
+          // Read before the rename, creating hosts included: a retry finds a creating box by its name, so renaming it lets the retry create another.
+          const before = (await machines({ includeCreating: true })).find((r) => r.resource.envId === envId);
           if (before && before.phase !== "active") return notActiveRefusal(before, "renamed");
           await ona.rename(envId, name);
           await snapshot.refresh().catch(() => undefined);

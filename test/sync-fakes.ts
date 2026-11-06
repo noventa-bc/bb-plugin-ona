@@ -149,13 +149,15 @@ export function world(
     const result = await refreshListing();
     return options.refreshEmpty?.() ? { ...result, envs: [] } : result;
   };
+  const hostByEnv = new Map<string, string>();
   const sync = createSync({
     bb: {
       sdk: {
         hosts: {
-          list: async () => {
+          // Like bb's list: a creating host is left out unless `includeCreating` is set.
+          list: async (args?: { includeCreating?: boolean }) => {
             hostReads.push("list");
-            return [...hosts.values()];
+            return [...hosts.values()].filter((host) => args?.includeCreating || host.lifecycle.phase !== "creating");
           },
           get: async ({ hostId }) => {
             hostReads.push(`get ${hostId}`);
@@ -251,13 +253,13 @@ export function world(
         }),
     },
     keepAliveUntil: () => null,
-    hostByEnv: new Map(),
+    hostByEnv,
     autoRepair: options.autoRepair ?? true,
     idleDisconnect: "1h",
     pluginStartedAt: options.pluginStartedAt ?? NOW - 2 * HOUR,
     signal: options.signal ?? new AbortController().signal,
   });
-  return { sync, calls, guard, kv, hosts, releasing, hostReads };
+  return { sync, calls, guard, kv, hosts, releasing, hostReads, hostByEnv };
 }
 
 export const idle = (hostId: string, extra: Partial<Box> = {}): Box => ({ hostId, envId: `env-${hostId}`, ...extra });

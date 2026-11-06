@@ -67,7 +67,7 @@ export interface ThreadRecord extends ThreadState {
 export interface SyncBb {
   sdk: {
     hosts: {
-      list(): Promise<readonly BbHost[]>;
+      list(args?: { includeCreating?: boolean }): Promise<readonly BbHost[]>;
       get(args: { hostId: string }): Promise<BbHost>;
       experimental_suspend(args: { hostId: string }): Promise<BbHost>;
       experimental_resume(args: { hostId: string }): Promise<BbHost>;
@@ -167,8 +167,9 @@ export function createSync(deps: SyncDeps) {
     };
   }
 
-  async function machines(): Promise<Row[]> {
-    const hosts = await bb.sdk.hosts.list();
+  /** `includeCreating` adds the hosts bb is still creating; that call leaves `hostByEnv` as it was. */
+  async function machines(options?: { includeCreating?: boolean }): Promise<Row[]> {
+    const hosts = await bb.sdk.hosts.list(options?.includeCreating ? { includeCreating: true } : undefined);
     // The stored resource keeps the name the box was created or adopted with; the last listing has the current one.
     const listing = snapshot.latest;
     const rows: Row[] = [];
@@ -176,8 +177,10 @@ export function createSync(deps: SyncDeps) {
       const row = await rowOf(host, listing);
       if (row) rows.push(row);
     }
-    hostByEnv.clear();
-    for (const row of rows) hostByEnv.set(row.resource.envId, row.hostId);
+    if (!options?.includeCreating) {
+      hostByEnv.clear();
+      for (const row of rows) hostByEnv.set(row.resource.envId, row.hostId);
+    }
     return rows;
   }
 

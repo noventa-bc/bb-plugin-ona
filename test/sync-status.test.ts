@@ -533,7 +533,8 @@ test("the retry and give-up lines show only for an active machine (fails if eith
     const record = { action: "heal-daemon", reason: "daemon down", at: NOW, failures, quietUntil: NOW + HOUR };
     guard.records.set("h1", record);
     const [row] = await sync.statusRows();
-    return row!.retry;
+    // bb's list leaves a creating host out, so it has no row and shows no retry line.
+    return row?.retry ?? null;
   };
   for (const failures of [1, GIVE_UP_AFTER]) {
     for (const phase of ["creating", "removing", "resuming", "suspending", "suspended"]) {
