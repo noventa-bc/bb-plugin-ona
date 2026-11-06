@@ -25,7 +25,7 @@ export const threadCostSchema = z.object({
 });
 export type ThreadCost = z.infer<typeof threadCostSchema>;
 
-export const devboxCommandSchema = z.enum(["status", "sync", "reconnect", "resume"]);
+export const devboxCommandSchema = z.enum(["status", "sync", "reconnect", "resume", "rename", "keep-alive"]);
 export type DevboxCommand = z.infer<typeof devboxCommandSchema>;
 
 const devboxCommandReplySchema = z.object({
@@ -61,11 +61,21 @@ export const rpcContract = defineRpcContract({
   },
   /** The settings section's buttons: a `bb ona` command, as the CLI runs it (src/commands.ts), for one devbox or all. */
   devbox_command: {
-    input: z.object({
-      command: devboxCommandSchema,
-      // No leading "-": the CLI reads "--" as a flag or as the end of its arguments, and then `sync` acts on every box.
-      hostId: z.string().regex(/^[^-]/, "a bb host id").optional(),
-    }),
+    input: z
+      .object({
+        command: devboxCommandSchema,
+        // No leading "-": the CLI reads "--" as a flag or as the end of its arguments, and then `sync` acts on every box.
+        hostId: z.string().regex(/^[^-]/, "a bb host id").optional(),
+        // The new name (`rename`) or the duration (`keep-alive`): no leading "-" either. The refine below allows it only
+        // for those two and only after a host id, since the CLI reads the first value after the command as the devbox.
+        arg: z.string().regex(/^[^-]/, "a name or a duration").optional(),
+      })
+      .refine(
+        (input) =>
+          input.arg === undefined ||
+          (input.hostId !== undefined && (input.command === "rename" || input.command === "keep-alive")),
+        "arg needs a hostId, and only rename and keep-alive take one",
+      ),
     output: devboxCommandReplySchema,
   },
 });

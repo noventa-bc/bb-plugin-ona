@@ -475,8 +475,11 @@ export default async function plugin(bb: BbPluginApi) {
     },
     // Ends with the plugin, not the page: the signal reaches the resume and reconnect cases (src/commands.ts), so a
     // Resume or Reconnect keeps running after the window closes and stops on a reload.
-    devbox_command: ({ command, hostId }) =>
-      runOna(hostId ? [command, hostId] : [command], { signal: lifetime.signal }),
+    devbox_command: ({ command, hostId, arg }) =>
+      runOna(
+        [command, hostId, arg].filter((part) => part !== undefined),
+        { signal: lifetime.signal },
+      ),
   });
 
   bb.cli.register({

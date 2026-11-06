@@ -167,9 +167,13 @@ as a real folder, setup stops and asks you to move it aside
 (`mv ~/.bb-machines ~/.bb-machines.shared`).
 
 **In settings:** the plugin's settings page has an **Ona devboxes** section. It shows `bb ona status` and
-each devbox's bb status, with **Sync all** above the list and **Sync**, **Reconnect** and **Resume** buttons
-per devbox. Each button runs the same `bb ona sync`, `bb ona reconnect` or `bb ona resume` as the terminal,
-for that devbox (**Sync all** runs `bb ona sync` for every devbox), and a refusal shows the same message under the devbox's row.
+each devbox's bb status, with **Sync all** above the list and, per devbox, **Sync**, **Reconnect** and **Resume**
+buttons, plus **Rename** (a new name; empty gives a random one) and **Keep awake** (a duration such as `2h` or `90m`, a bare number being minutes, or
+`off`), each with its own field. Each control runs the same `bb ona sync`, `bb ona reconnect`, `bb ona resume`,
+`bb ona rename` or `bb ona keep-alive` as the terminal, for that devbox (**Sync all** runs `bb ona sync` for every
+devbox). A row's controls show their reply or refusal under that row; **Sync all** has no row, so it shows none, and
+the status is read again after it. **Keep awake** holds a box for at most `12h`, as the CLI does, and ends on a plugin
+reload, and is not restored after one.
 A **Resume** or **Reconnect** started here keeps running after the page closes and ends on a plugin reload.
 The status and the devbox list are read again every 30 seconds while the page is open.
 
@@ -297,7 +301,7 @@ bb ona sync [name]             # re-check Ona now and repair out-of-step machine
 bb ona keep-alive <name> 2h    # keep a running box from Ona's idle timeout (at most 12h)
 bb ona keep-alive <name> off   # end it early
 bb ona move <thread-id> <ref>  # continue a thread in a new thread on another devbox, at the same path
-bb ona rename <name> [new]     # rename env + bb machine (random fun name if omitted)
+bb ona rename <ref> [name]     # rename env + bb machine (random fun name if omitted)
 bb ona reconnect <name>        # active machines: reopen the tunnel and restart the bb daemon; refused unless bb shows the machine active and Ona shows its box running
 bb ona resume <name>           # a stopped active machine: starts its box and reconnects the bb daemon (your action); a running box is only reconnected; refused unless bb shows the machine active
 bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
