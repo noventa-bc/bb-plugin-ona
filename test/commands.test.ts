@@ -114,7 +114,7 @@ test("keep-alive off ends it by machine, Ona name or a box Ona no longer lists",
   assert.deepEqual(stopped, ["env-1", "env-9"]);
 });
 
-// Bug: keep-alive off on a name two boxes share answered "had no keep-alive" and left the keep-alive running.
+// Guard: keep-alive off on a shared name must refuse, not answer "had no keep-alive" and leave the keep-alive running.
 test("keep-alive off on a name two devboxes share is refused, and stops nothing (fails if the ambiguity is swallowed)", async () => {
   const { deps, stopped } = keepAlive(null);
   const shared = { ...deps, resolveEnvId: async () => Promise.reject(new AmbiguousRefError("shared matches 2")) };
