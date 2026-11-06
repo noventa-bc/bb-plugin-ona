@@ -471,8 +471,8 @@ export default async function plugin(bb: BbPluginApi) {
       openEditor(row.resource.envId);
       return { opened: true };
     },
-    // Ends with the plugin, not the page: a Resume or Reconnect the user asked for finishes after the window closes, and
-    // stops on a reload. Sync passes no signal on (src/commands.ts): it runs to its end.
+    // Ends with the plugin, not the page: the signal reaches the resume and reconnect cases (src/commands.ts), so a
+    // Resume or Reconnect keeps running after the window closes and stops on a reload.
     devbox_command: ({ command, hostId }) =>
       runOna(hostId ? [command, hostId] : [command], { signal: lifetime.signal }),
   });
@@ -485,7 +485,7 @@ export default async function plugin(bb: BbPluginApi) {
   });
 
   bb.onDispose(() => tunnels.stopAll());
-  // Hooks run last-in first-out: this abort runs before the tunnels stop, so a waiting resume or reconnect cannot
-  // open a tunnel after stopAll.
+  // Hooks run last-in first-out: this abort runs before the tunnels stop, so a Resume or Reconnect from the page
+  // cannot open a tunnel after stopAll.
   bb.onDispose(() => lifetime.abort());
 }
