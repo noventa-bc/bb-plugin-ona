@@ -101,8 +101,9 @@ those and the "skipped or not checked" lines ponytail ends with.
    deleted is not done; stage the fix before a mutant you restore with
    `git -C <worktree> checkout -- <file>`, or the restore brings back the
    unfixed file), keeps
-   `npm run check` green (Semgrep and `shellcheck` run in CI, not in the check,
-   and need an install the builder cannot run: the handoff names the skip), writes
+   `npm run check` green (Semgrep and `shellcheck` run in CI, not in the check;
+   Semgrep needs an install the builder cannot run, and the handoff names any
+   check it skips), writes
    `.agent/HANDOFF.md`, and leaves the work staged for the orchestrator.
 6. **Review.** The orchestrator commits the builder's staged work on its
    branch (after the check passes on its own), reads the handoff and the diff,
