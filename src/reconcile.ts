@@ -216,6 +216,9 @@ export interface HostRecord {
   threadWaiting?: boolean;
 }
 
+/** What an action returns when it asked nothing (a listing that failed, rule 4): `run` records nothing for it. */
+export const NOTHING_DONE = "nothing done";
+
 /** Safety rule 5: one action per machine at a time, with a cooldown, backoff and give-up (docs/sync.md rules 3 and 5). */
 export class HostGuard {
   private readonly busy = new Map<string, string>();
@@ -263,8 +266,9 @@ export class HostGuard {
 
   /**
    * Run `fn` as the machine's one action; a string it returns is appended to
-   * the recorded reason. Returns false (without running it) when the machine is busy,
-   * or cooling down or given up unless forced (docs/sync.md rule 3).
+   * the recorded reason, and NOTHING_DONE records nothing. Returns false (without
+   * running it) when the machine is busy, or cooling down or given up unless forced
+   * (docs/sync.md rule 3).
    */
   async run(
     hostId: string,
@@ -285,6 +289,7 @@ export class HostGuard {
       } finally {
         if (options.heavy) this.release();
       }
+      if (outcome === NOTHING_DONE) return true;
       const now = this.clock.now();
       const current = this.records.get(hostId);
       const held = !force && !options.threadWaiting && current?.threadWaiting === true;

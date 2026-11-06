@@ -115,6 +115,13 @@ you asked for, so safety rule 1 does not gate it.
    reverse tunnel's `ssh` is not gated by these waits; its own `shouldConnect`
    in `server.ts` asks a fresh listing.
 
+   A wake for a waiting thread (`provider.wake`) and a daemon restart
+   (`reconnect`) have no timeout of their own: each wait inside them has one
+   (the deadlines are in `src/provider.ts`, `src/ona.ts` and `src/ssh.ts`). At
+   the defaults the waits add up to 109 minutes for a wake and 52 for a restart
+   before bb's bootstrap, which bb bounds at 12 minutes (`docs/ona-notes.md`,
+   bb SDK section; checked 2026-11-06).
+
    These commands you run yourself are not gated and may wake a box:
    `ona environment open` and `bb ona ssh --thread`.
    _Why: an accidental start costs money and keeps the box up._
@@ -131,7 +138,8 @@ you asked for, so safety rule 1 does not gate it.
 4. **Unknown is not gone.** A failed or empty `ona environment list` changes
    nothing, and "missing" needs two listings in a row. A lookup by id
    (`ona environment get`) that fails is unknown too; only Ona saying the id
-   doesn't exist counts as gone.
+   doesn't exist counts as gone. A failed listing inside a repair leaves the
+   guard's record untouched (count, quiet period, hold).
 5. **One action per machine at a time.** A daemon check or restart makes the machine wait 5 minutes after a success before its next one; suspends, tunnel
    reopens and idle releases do not wait after a success. A failure backs off for every
    action (5, then 10 min; the third failure, in a row or across a hold (rule 3), stops automatic tries until

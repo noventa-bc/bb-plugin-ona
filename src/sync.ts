@@ -22,6 +22,7 @@ import {
   ALL,
   decide,
   GRACE_MS,
+  NOTHING_DONE,
   type Decision,
   type HostGuard,
   type MachineView,
@@ -358,7 +359,8 @@ export function createSync(deps: SyncDeps) {
                 if (!decision.resumeAfter || lifecycle.phase !== "active") throw new Error(suspendFailure(refusal));
                 // bb's suspend failed (Ona stopped the box under a live turn) and left the machine active, where bb's
                 // resume does nothing: the plugin wakes the box (decision 0002).
-                const startCalled = await provider.wake(resource, report, AbortSignal.timeout(15 * 60_000));
+                // bounded by the waits' own deadlines (docs/sync.md rule 1)
+                const startCalled = await provider.wake(resource, report, new AbortController().signal);
                 return startCalled ? "started it for a waiting thread" : "reconnected it for a waiting thread";
               }
               if (!decision.resumeAfter) return;
@@ -379,18 +381,30 @@ export function createSync(deps: SyncDeps) {
               return;
             case "heal-daemon": {
               // Rule 1: SSH starts stopped boxes, so ask Ona before the daemon check and again right before a restart.
-              const runningNow = async () =>
-                isRunning((await snapshot.refresh()).envs.find((e) => e.id === resource.envId));
+              // Rule 4: a listing that fails asks nothing (null), so the guard keeps its record (NOTHING_DONE).
+              const runningNow = async () => {
+                try {
+                  return isRunning((await snapshot.refresh()).envs.find((e) => e.id === resource.envId));
+                } catch (error) {
+                  bb.log.info(`${machine}: Ona couldn't be asked; nothing done (${errorText(error)})`);
+                  return null;
+                }
+              };
               const gone = "Ona no longer reports it running; nothing done";
-              if (!(await runningNow())) return gone;
+              const running = await runningNow();
+              if (running === null) return NOTHING_DONE;
+              if (!running) return gone;
               // Rule 3: restarting a live daemon would kill running turns.
               const alive = await provider.daemonAlive(resource, AbortSignal.timeout(30_000));
               if (alive === true) return "daemon is running; not restarting";
               if (alive === null)
                 return "couldn't tell whether the daemon runs (SSH or the process check on the box failed); not restarting";
               // The check can take 30 s, long enough for the box to be stopped in Ona.
-              if (!(await runningNow())) return gone;
-              await provider.reconnect(resource, report, AbortSignal.timeout(15 * 60_000));
+              const stillRunning = await runningNow();
+              if (stillRunning === null) return NOTHING_DONE;
+              if (!stillRunning) return gone;
+              // bounded by the waits' own deadlines (docs/sync.md rule 1)
+              await provider.reconnect(resource, report, new AbortController().signal);
               return "daemon was down; restarted it";
             }
             case "none":

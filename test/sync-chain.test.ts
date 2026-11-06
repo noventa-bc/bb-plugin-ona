@@ -218,3 +218,77 @@ test("a connected report with Ona still showing the box stopped does not end a t
     await resetFakeClock();
   }
 });
+
+// Rule 4: a listing that fails inside the daemon repair asks nothing, so the guard keeps the record's count,
+// quiet period and hold. The repair's read fails on two passes, with a good pass between them.
+test("a failed Ona listing inside the daemon repair leaves the count alone (fails if the read failure counts as a repair failure)", async () => {
+  enableFakeClock();
+  try {
+    let repairReadFails = false;
+    const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+    const { sync, guard } = world([host], {
+      refuse: REFUSED,
+      daemonAlive: true,
+      refreshFails: () => repairReadFails,
+      wake: async () => {
+        host.ona = "RUNNING";
+        throw new Error("connect failed");
+      },
+    });
+    // The thread's wake fails once: the count is 1 and the hold is set.
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    assert.equal(guard.records.get("h1")!.failures, 1);
+    await tick(6 * 60_000);
+    const { quietUntil } = guard.records.get("h1")!;
+    repairReadFails = true;
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    assert.equal(guard.records.get("h1")!.failures, 1);
+    assert.equal(guard.records.get("h1")!.quietUntil, quietUntil);
+    await tick(6 * 60_000);
+    repairReadFails = false;
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    await tick(6 * 60_000);
+    repairReadFails = true;
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    assert.equal(guard.records.get("h1")!.failures, 1);
+    const [row] = await sync.statusRows();
+    assert.doesNotMatch(row!.retry ?? "", /gave up/);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+// A wake has no 15-minute cap of its own (docs/sync.md rule 1): a stop and a start that take 17 minutes
+// end in a connect. The mocked clock never fires AbortSignal.timeout, so the test stands in for one that does.
+test("a slow stop and start still connect the waiting thread's box (fails if a 15-minute cap aborts the wake)", async (t) => {
+  enableFakeClock();
+  try {
+    t.mock.method(AbortSignal, "timeout", (ms: number) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), ms);
+      return controller.signal;
+    });
+    const host = idle("h1", { ona: "STOPPING", status: "disconnected", threads: [waitingThread()] });
+    const { sync, guard, hosts } = world([host], {
+      refuse: REFUSED,
+      daemonAlive: true,
+      wake: async (_resource, _report, signal) => {
+        // Ona reports the box stopped 5 minutes on, and running 12 minutes after that.
+        await tick(5 * 60_000);
+        signal.throwIfAborted();
+        await tick(12 * 60_000);
+        signal.throwIfAborted();
+        host.ona = "RUNNING";
+        hosts.get("h1")!.status = "connected";
+        return true;
+      },
+    });
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    const record = guard.records.get("h1")!;
+    assert.equal(record.error, undefined);
+    assert.equal(record.failures, 0);
+    assert.match(record.reason, /started it for a waiting thread/);
+  } finally {
+    await resetFakeClock();
+  }
+});
