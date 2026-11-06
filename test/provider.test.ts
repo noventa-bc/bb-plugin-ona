@@ -174,6 +174,27 @@ test("a flagged suspend only closes the tunnel and consumes the flag (fails if i
   assert.equal(releasing.size, 0);
 });
 
+// The user's suspend (Pause, `bb machine suspend`) stops any box Ona does not show stopped or deleted (docs/sync.md rule 2).
+for (const [phase, after] of [
+  ["STARTING", ["get STARTING", "stop env-1"]],
+  ["STOPPING", ["get STOPPING", "stop env-1"]],
+  ["STOPPED", ["get STOPPED"]],
+  [null, ["get null"]],
+] as const) {
+  const stops = after.length > 1;
+  const fails = stops ? "only a RUNNING box is stopped" : "it stops a stopped or missing box";
+  test(`a user suspend of a ${phase ?? "missing"} box ${stops ? "stops" : "leaves"} it (fails if ${fails})`, async () => {
+    const { provider, calls } = register({ found: box("RUNNING"), phases: [phase] });
+    await provider.suspend!({
+      ...lifecycle(),
+      hostId: "host-1",
+      resource: adoptedResource,
+      signal: new AbortController().signal,
+    });
+    assert.deepEqual(calls, after);
+  });
+}
+
 test("a resume clears only its own box's flag (fails if another box's flag is wiped)", async () => {
   const { provider, releasing } = register({ found: box("RUNNING") });
   releasing.add("env-1");

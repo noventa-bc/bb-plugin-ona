@@ -139,8 +139,9 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    `ona environment open` and `bb ona ssh --thread`.
    _Why: an accidental start costs money and keeps the box up._
 
-2. **Never stop a box.** Suspends the plugin makes because of what it saw in Ona
-   skip the provider's stop. _Why: a wrong or stale listing must not stop a box with your work on it._
+2. **Never stop a box on what Ona shows.** Suspends the plugin makes because of what it saw in Ona
+   skip the provider's stop. A suspend you ask for (Pause or `bb machine suspend`) stops the box unless Ona
+   already shows it stopped or deleted, a STARTING or STOPPING box included. _Why: a wrong or stale listing must not stop a box with your work on it._
 3. **Restart a daemon only when the check finds none.** The check looks for a
    process whose command line names a folder under `~/.bb-machines`, the machine
    data folder (`machineDataDir`) or the box's legacy data folder (a relative one
