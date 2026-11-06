@@ -4,7 +4,7 @@ Status: accepted
 
 Amended 2026-11-05 (the owner accepted it): the plugin starts a box for a waiting thread when bb's resume would be a no-op, and `bb ona resume` starts one on your request. The Rule and the Consequences say so.
 
-Amended 2026-11-07 (the owner accepted it): bb's own recovery after a bb restart also starts a box. The Rule says so.
+Amended 2026-11-06 (the owner accepted it): bb's own recovery after a bb restart also starts a box. The Rule says so.
 
 ## Rule
 
