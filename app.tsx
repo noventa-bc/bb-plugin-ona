@@ -1,6 +1,6 @@
-// Thread header for threads that run on an Ona devbox: what the thread has
-// spent so far, and an Editor button that opens the box in the Ona editor.
-// bb's own terminal panel already covers shells.
+// The Ona devbox UI in bb: a devbox thread's header (what the thread has spent so far, and an Editor
+// button), the thread menu's Move to devbox, the composer's Ona project field, and the settings section
+// that lists each devbox. bb's own terminal panel already covers shells.
 import { useEffect, useId, useRef, useState } from "react";
 import type { ComponentProps } from "react";
 import type { LegacyThreadHeaderActionRegistration } from "@get-bb/plugin-sdk/internal/plugin-app-collector";
@@ -13,7 +13,7 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import { ONA_MACHINE_PROVIDER_ID, projectInputsChange, projectOfSavedInputs } from "./src/machine-inputs.ts";
 import { remember } from "./src/move.ts";
-import type { Devbox, rpcContract, ThreadCost } from "./src/rpc.ts";
+import type { Devbox, DevboxCommand, DevboxCommandReply, rpcContract, ThreadCost } from "./src/rpc.ts";
 
 /**
  * `@get-bb/plugin-sdk` 0.6.109 does not declare
@@ -268,6 +268,116 @@ function OnaProjectField({ value, onChange }: PluginMachineProviderInputsProps) 
   );
 }
 
+const DEVBOX_BUTTONS: { command: DevboxCommand; label: string }[] = [
+  { command: "sync", label: "Sync" },
+  { command: "reconnect", label: "Reconnect" },
+  { command: "resume", label: "Resume" },
+];
+
+const sectionButton = `${editorButton} disabled:pointer-events-none disabled:opacity-50`;
+
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/** The text a `bb ona` reply shows: its stdout, or its stderr when it failed. */
+const replyText = (reply: DevboxCommandReply) => (reply.exitCode === 0 ? reply.stdout : reply.stderr) ?? "";
+
+/**
+ * Settings → Ona devboxes: `bb ona status` as the CLI prints it, each devbox's bb status, and buttons that run
+ * the same `bb ona` commands (src/commands.ts). Read on mount, every 30 s and after each action; a row's buttons
+ * are disabled while its own call runs.
+ */
+function DevboxesSection() {
+  const rpc = useRpc<typeof rpcContract>();
+  const [devboxes, setDevboxes] = useState<Devbox[]>([]);
+  const [status, setStatus] = useState<DevboxCommandReply | null>(null);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [running, setRunning] = useState<string[]>([]);
+  // Bumped after each action, so the reads run again at once.
+  const [round, setRound] = useState(0);
+
+  useEffect(() => {
+    // The cleanup drops this round's replies and ends its timer; the next round starts both again.
+    let live = true;
+    const read = () => {
+      void rpc.call("devbox_command", { command: "status" }).then(
+        (reply) => {
+          if (live) setStatus(reply);
+        },
+        (error: unknown) => {
+          if (live) setStatus({ exitCode: 1, stderr: messageOf(error) });
+        },
+      );
+      void rpc.call("devboxes_list", null).then(
+        (reply) => {
+          if (live) setDevboxes(reply.devboxes);
+        },
+        () => undefined,
+      );
+    };
+    read();
+    const timer = setInterval(read, 30_000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [rpc, round]);
+
+  /** Runs one `bb ona` command for a devbox (its host id), or for every devbox when `hostId` is left out. */
+  const run = (command: DevboxCommand, hostId?: string) => {
+    const key = hostId ?? "all";
+    // A devbox's reply goes under its row. Sync all has no row, so its reply is dropped;
+    // the status re-read shows the result.
+    const show = (reply: DevboxCommandReply) => {
+      if (hostId) setNotes((known) => ({ ...known, [hostId]: replyText(reply) }));
+    };
+    setRunning((current) => [...current, key]);
+    void rpc
+      .call("devbox_command", hostId ? { command, hostId } : { command })
+      .then(show, (error: unknown) => show({ exitCode: 1, stderr: messageOf(error) }))
+      .finally(() => {
+        setRunning((current) => current.filter((k) => k !== key));
+        setRound((n) => n + 1);
+      });
+  };
+
+  return (
+    <div className="flex flex-col gap-3 text-xs">
+      <div>
+        <button type="button" className={sectionButton} disabled={running.includes("all")} onClick={() => run("sync")}>
+          Sync all
+        </button>
+      </div>
+      <pre className="whitespace-pre-wrap font-mono text-muted-foreground">
+        {status ? replyText(status) : "Loading..."}
+      </pre>
+      {devboxes.map((box) => {
+        const busy = running.includes(box.hostId);
+        return (
+          <div key={box.hostId} className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium text-foreground">{box.machine}</span>
+              <span className="text-muted-foreground">{box.envName}</span>
+              <span className="text-muted-foreground">{box.status}</span>
+              {DEVBOX_BUTTONS.map(({ command, label }) => (
+                <button
+                  key={command}
+                  type="button"
+                  className={sectionButton}
+                  disabled={busy}
+                  onClick={() => run(command, box.hostId)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {notes[box.hostId] && <p className="whitespace-pre-wrap text-muted-foreground">{notes[box.hostId]}</p>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default definePluginApp((app) => {
   app.slots.experimental_threadAction<MoveData>({
     id: "move-to-devbox",
@@ -316,5 +426,11 @@ export default definePluginApp((app) => {
   app.slots.experimental_machineProviderInputs({
     machineProviderId: ONA_MACHINE_PROVIDER_ID,
     component: OnaProjectField,
+  });
+  app.slots.settingsSection({
+    id: "devboxes",
+    title: "Ona devboxes",
+    description: "What the plugin sees and does for each devbox (bb ona status)",
+    component: DevboxesSection,
   });
 });

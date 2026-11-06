@@ -52,7 +52,7 @@ Change these together, in the same edit.
 - Write the least code that solves the whole task (the ponytail ruleset, installed as a Claude Code plugin; see `docs/owner.md`). A shortcut with a known limit gets a comment `shortcut: <the limit>, <when to upgrade>`; `/ponytail-debt` lists them. A shortcut comment never describes an unfixed weakness; that goes to the private roadmap.
 - Fix a bug with a failing test first, where a test is possible. A `// Bug:` line names only a bug that was on `main`, not a design tried and dropped inside the PR (git history has it).
 - When you find a bug, a source of noise or anything that can damage the repo, add the guard that stops it recurring in the same change (a finding already on `main` that the branch does not make reachable or worse takes its guard in its roadmap item, `FACTORY.md` step 6): a test, a lint rule, a CI step, a `.gitignore` line or a written rule here. Say in the handoff which guard you added.
-- A change to what a sync pass does gets a scenario in `test/sync.test.ts` or, since that file sits at the 500-line lint cap, `test/sync-status.test.ts` or `test/sync-chain.test.ts` (fake bb calls and Ona listing from `test/sync-fakes.ts`).
+- A change to what a sync pass does gets a scenario in `test/sync-status.test.ts` or `test/sync-chain.test.ts` (fake bb calls and Ona listing from `test/sync-fakes.ts`); `test/sync.test.ts` sits at the 500-line lint cap (`test/reconcile.test.ts` at 495; the `max-lines` count, blank and comment lines skipped).
 - For `server.ts` code without tests, list owner check steps in the handoff instead.
 - Put logic in `src/` as pure functions with tests.
 - Every SSH or `ona` call must name the safety rule that covers it, in `docs/sync.md`.
@@ -82,7 +82,7 @@ The safety rules behind 1–4 are in `docs/sync.md`. Cite `file:line` for each f
 
 1. No SSH, start or stop of a box unless an Ona listing from the same check says the box is RUNNING, except the two starts `docs/sync.md` rule 1 names (a waiting thread on an active machine, and `bb ona resume`). A failed listing means "unknown".
 2. Automatic suspends never stop a box.
-3. Forcing (`bb ona sync`, `bb ona reconnect`, `bb ona resume`, and any pass that finds a thread waiting on a box Ona shows stopped or stopping) only skips cooldowns, backoff and the give-up; the hold a thread's failed pass leaves, and the events that end it, are in docs/sync.md rule 3. It never skips a safety rule.
+3. Forcing (`bb ona sync`, `bb ona reconnect`, `bb ona resume`, and, while no hold is set, a pass that finds a thread waiting on a box Ona shows stopped or stopping) only skips cooldowns, backoff and the give-up; the hold a thread's failed pass leaves, and the events that end it, are in docs/sync.md rule 3. It never skips a safety rule.
 4. Removing a machine never deletes an adopted environment.
 5. Remote script text is a constant. Values are passed as arguments or through `shellQuote`.
 6. The tunnel goes only to the loopback proxy, its devbox end listens on loopback only, and the proxy forwards only to bb's loopback URL. A change to `src/proxy.ts` that lets more through (a listed route, the upgrade check, or a looser matcher, path, method or header check) needs allowed and denied cases in `test/proxy.test.ts` and keeps `docs/security.md` accurate.

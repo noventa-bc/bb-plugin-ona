@@ -133,6 +133,7 @@ export default async function plugin(bb: BbPluginApi) {
     (envId, detail) => bb.log.warn(`keep-alive for ${envId} ended early: ${detail}`),
   );
   bb.onDispose(() => keepAlives.stopAll());
+  const lifetime = new AbortController();
   // Fire and forget, as the editor may take a while; a failure goes to the log.
   const openEditor = (envId: string) =>
     void ona.openEditor(envId).catch((error: unknown) => bb.log.warn(`opening ${envId} failed: ${errorText(error)}`));
@@ -395,28 +396,6 @@ export default async function plugin(bb: BbPluginApi) {
 
   const move = createMove({ sdk: bb.sdk, machineOfHost });
 
-  bb.rpc.register(rpcContract, {
-    devboxes_list: async () => ({ devboxes: await devboxes() }),
-    thread_devbox: async ({ threadId }) => {
-      // bb creates a thread before its workspace; the app asks again every 15 s while the thread is shown.
-      const { environmentId } = await bb.sdk.threads.get({ threadId });
-      if (!environmentId) return { devbox: null, pending: true };
-      return { devbox: await workspaceDevbox(environmentId) };
-    },
-    thread_cost: async ({ threadId }) => ({ cost: await costs.threadCost(threadId) }),
-    // A refusal carries the message to the menu without bb recording a plugin crash, which a plain throw would be.
-    thread_move: (input) =>
-      move(input).catch((error: unknown) => {
-        throw new experimental_PluginRpcRefusal({ code: "conflict", message: errorText(error) });
-      }),
-    devbox_open_editor: async ({ hostId }) => {
-      const row = await findMachine(hostId);
-      if (!row) return { opened: false };
-      openEditor(row.resource.envId);
-      return { opened: true };
-    },
-  });
-
   const updateClis = createUpdateClis({ bb, machines, autoUpdateProviders });
   if (autoUpdateClis) {
     bb.background.schedule("cli-updates", "0 9 * * 1-5", async () => {
@@ -447,35 +426,66 @@ export default async function plugin(bb: BbPluginApi) {
     autoRepair,
   });
 
+  // The `bb ona` CLI and the settings section's buttons (devbox_command) share this handler.
+  const runOna = onaCommands({
+    bb,
+    ona,
+    snapshot,
+    tunnels,
+    guard,
+    keepAlives,
+    provider,
+    shellBackend,
+    machines,
+    reconcile,
+    statusRows,
+    defaultProject,
+    findMachine,
+    resolveEnvId,
+    move,
+    shellTarget,
+    openThreadTerminal,
+    setup,
+    addMachine,
+    updateClis,
+    openEditor,
+    onaHealth,
+  });
+  bb.rpc.register(rpcContract, {
+    devboxes_list: async () => ({ devboxes: await devboxes() }),
+    thread_devbox: async ({ threadId }) => {
+      // bb creates a thread before its workspace; the app asks again every 15 s while the thread is shown.
+      const { environmentId } = await bb.sdk.threads.get({ threadId });
+      if (!environmentId) return { devbox: null, pending: true };
+      return { devbox: await workspaceDevbox(environmentId) };
+    },
+    thread_cost: async ({ threadId }) => ({ cost: await costs.threadCost(threadId) }),
+    // A refusal carries the message to the menu without bb recording a plugin crash, which a plain throw would be.
+    thread_move: (input) =>
+      move(input).catch((error: unknown) => {
+        throw new experimental_PluginRpcRefusal({ code: "conflict", message: errorText(error) });
+      }),
+    devbox_open_editor: async ({ hostId }) => {
+      const row = await findMachine(hostId);
+      if (!row) return { opened: false };
+      openEditor(row.resource.envId);
+      return { opened: true };
+    },
+    // Ends with the plugin, not the page: the signal reaches the resume and reconnect cases (src/commands.ts), so a
+    // Resume or Reconnect keeps running after the window closes and stops on a reload.
+    devbox_command: ({ command, hostId }) =>
+      runOna(hostId ? [command, hostId] : [command], { signal: lifetime.signal }),
+  });
+
   bb.cli.register({
     name: "ona",
     summary: "Ona devboxes as bb machines",
     commands: [...commands],
-    run: onaCommands({
-      bb,
-      ona,
-      snapshot,
-      tunnels,
-      guard,
-      keepAlives,
-      provider,
-      shellBackend,
-      machines,
-      reconcile,
-      statusRows,
-      defaultProject,
-      findMachine,
-      resolveEnvId,
-      move,
-      shellTarget,
-      openThreadTerminal,
-      setup,
-      addMachine,
-      updateClis,
-      openEditor,
-      onaHealth,
-    }),
+    run: runOna,
   });
 
   bb.onDispose(() => tunnels.stopAll());
+  // Hooks run last-in first-out: this abort runs before the tunnels stop, so a Resume or Reconnect from the page
+  // cannot open a tunnel after stopAll.
+  bb.onDispose(() => lifetime.abort());
 }
