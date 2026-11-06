@@ -164,7 +164,9 @@ export function createStatusRows(deps: StatusRowsDeps) {
               ? null
               : record.failures >= GIVE_UP_AFTER
                 ? `gave up after ${record.failures} failures; run \`bb ona sync ${row.machine}\``
-                : `retrying after ${new Date(record.quietUntil).toLocaleTimeString()}`,
+                : record.quietUntil > now
+                  ? `retrying after ${new Date(record.quietUntil).toLocaleTimeString()}`
+                  : null,
           keepAliveUntil: keepAliveUntil(row.resource.envId),
           needsRecovery: work?.needsRecovery ?? null,
           stuckThreads: threads === null ? null : stuckThreads(threads, now),

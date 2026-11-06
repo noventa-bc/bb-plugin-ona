@@ -111,6 +111,26 @@ test("a machine bb shows connected with its tunnel up clears a give-up that no t
   }
 });
 
+// Bug: a record outlived its quiet period, so `bb ona status` kept printing "retrying after" an hour past it. A give-up
+// stays until a forced run acts (docs/sync.md rule 5), so its line does not depend on the quiet period.
+test("status shows a retry line only while the quiet period is ahead (fails if a passed quiet period still prints retrying after), and the give-up line either way (fails if it waits on the quiet period)", async () => {
+  const { sync, guard } = world([idle("h1")]);
+  const retryWith = async (failures: number, quietUntil: number) => {
+    guard.records.set("h1", {
+      action: "reconnect",
+      reason: "requested with bb ona reconnect",
+      at: Date.now(),
+      failures,
+      quietUntil,
+    });
+    const [row] = await sync.statusRows();
+    return row!.retry;
+  };
+  assert.equal(await retryWith(1, Date.now() - HOUR), null, "the quiet period is over, and no retry is coming");
+  assert.match((await retryWith(1, Date.now() + HOUR)) ?? "", /^retrying after /);
+  assert.match((await retryWith(GIVE_UP_AFTER, Date.now() - HOUR)) ?? "", /^gave up after /);
+});
+
 // A forced run ends the give-up, so its failure starts a new count and backoff (docs/sync.md rule 3).
 test("a forced failure after a give-up starts a fresh count (fails if a forced failure keeps counting past the give-up)", async () => {
   let now = 0;
