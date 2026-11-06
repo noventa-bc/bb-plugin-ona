@@ -201,8 +201,7 @@ shows what would have been done.
 
 A pass (which machines, carrying out each decision, idle release) is `createSync()` in
 `src/sync.ts`, and the status rows it returns are `createStatusRows()` in `src/status.ts`.
-`test/sync.test.ts` drives it against
-a fake of the bb calls it makes (in `test/sync-fakes.ts`). The events are `watchRealtime()` in
+`test/sync.test.ts` drives it against a fake of the bb calls it makes (in `test/sync-fakes.ts`). The events are `watchRealtime()` in
 `src/sync.ts`; `server.ts` wires them and the backstop to the `lifecycle-sync`
 service. The `bb ona` commands are in `src/commands.ts`.
 The shared listing is `OnaSnapshot` in `src/ona.ts`. Removing an Ona machine

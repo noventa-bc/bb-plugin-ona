@@ -100,7 +100,7 @@ export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()
 }
 
 /** What statusRows reads from its sync pass; the values come in as deps because sync.ts imports this module. */
-export interface StatusRowsDeps {
+interface StatusRowsDeps {
   bb: { sdk: Pick<SyncBb["sdk"], "threads">; log: SyncBb["log"] };
   snapshot: SyncDeps["snapshot"];
   machines(): Promise<Row[]>;
@@ -108,13 +108,13 @@ export interface StatusRowsDeps {
   missing: ReadonlyMap<string, { phase?: string; archived?: boolean }>;
   guard: HostGuard;
   tunnels: SyncDeps["tunnels"];
-  workspaces(hostId: string, now: number): Promise<{ busy: boolean; needsRecovery: number } | null>;
+  workspaces(hostId: string, now: number): Promise<{ needsRecovery: number } | null>;
   keepAliveUntil: SyncDeps["keepAliveUntil"];
 }
 
 /** The `statusRows(ref?)` of a sync pass: one row per Ona-backed machine, or only the machine `ref` names. */
 export function createStatusRows(deps: StatusRowsDeps) {
-  const { bb, snapshot, machines, matchesRef, missing, guard, tunnels, workspaces } = deps;
+  const { bb, snapshot, machines, matchesRef, missing, guard, tunnels, workspaces, keepAliveUntil } = deps;
 
   async function statusRows(ref?: string): Promise<StatusRow[]> {
     const listing = await snapshot.get().catch(() => snapshot.latest);
@@ -165,7 +165,7 @@ export function createStatusRows(deps: StatusRowsDeps) {
               : record.failures >= GIVE_UP_AFTER
                 ? `gave up after ${record.failures} failures; run \`bb ona sync ${row.machine}\``
                 : `retrying after ${new Date(record.quietUntil).toLocaleTimeString()}`,
-          keepAliveUntil: deps.keepAliveUntil(row.resource.envId),
+          keepAliveUntil: keepAliveUntil(row.resource.envId),
           needsRecovery: work?.needsRecovery ?? null,
           stuckThreads: threads === null ? null : stuckThreads(threads, now),
         };
