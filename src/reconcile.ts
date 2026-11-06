@@ -12,7 +12,6 @@
 // 5. one action per machine at a time, with cooldown, backoff and give-up.
 
 export const GRACE_MS = 45_000;
-export const STUCK_MS = 10 * 60_000;
 export const COOLDOWN_MS = 5 * 60_000;
 export const MAX_BACKOFF_MS = 60 * 60_000;
 export const GIVE_UP_AFTER = 3;
@@ -25,8 +24,6 @@ export interface MachineView {
   status: string;
   /** When bb last heard from the daemon, epoch ms (null: never). */
   lastSeenAt: number | null;
-  /** When the machine entered its current phase, epoch ms. */
-  phaseSince: number;
   tunnel: "up" | "connecting" | "off";
   /** A thread is waiting for this machine right now. */
   threadWaiting: boolean;
@@ -50,9 +47,7 @@ export type Action =
   | "suspend-observed"
   /** Probe the daemon over SSH and restart it only if it's dead (rule 3). */
   | "heal-daemon"
-  | "ensure-tunnel"
-  /** Ask bb to re-run its own lifecycle step for a machine stuck mid-transition. */
-  | "reconcile-stuck";
+  | "ensure-tunnel";
 
 export interface Decision {
   action: Action;
@@ -72,11 +67,6 @@ export const short = (phase: string) => phase.replace(/^ENVIRONMENT_PHASE_/, "")
 /** The one repair (if any) for a machine, given bb's and Ona's views. */
 export function decide(machine: MachineView, ona: OnaView, now: number): Decision {
   const { phase } = machine;
-  if (phase === "resuming" || phase === "suspending") {
-    return now - machine.phaseSince >= STUCK_MS
-      ? { action: "reconcile-stuck", reason: `${phase} for over ${Math.round(STUCK_MS / 60_000)} minutes` }
-      : { action: "none", reason: `bb is ${phase}` };
-  }
   // Suspended stays suspended until you use it, even if Ona runs the box.
   if (phase === "suspended") {
     return {

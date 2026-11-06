@@ -348,7 +348,7 @@ test("the first pass after a reload reopens the tunnel of a running box bb still
   }
 });
 
-test("autoRepair off still suspends a stopped or idle box, resumes a stopped box for a waiting thread, and only reports a disconnected or stuck one", async () => {
+test("autoRepair off still suspends a stopped or idle box, resumes a stopped box for a waiting thread, and only reports a disconnected or resuming one", async () => {
   const waiting: ThreadRecord = {
     id: "t1",
     status: "idle",
@@ -375,7 +375,7 @@ test("autoRepair off still suspends a stopped or idle box, resumes a stopped box
   await stuck.sync.reconcile(new Set([ALL]), { wait: true });
   assert.deepEqual(stuck.calls, []);
   const [stuckRow] = await stuck.sync.statusRows();
-  assert.match(stuckRow!.now!.reason, /autoRepair is off/);
+  assert.equal(stuckRow!.now!.reason, "bb is resuming");
 });
 
 test("a failed or empty Ona listing changes nothing", async () => {

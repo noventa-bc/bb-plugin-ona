@@ -70,7 +70,7 @@ export default async function plugin(bb: BbPluginApi) {
       type: "boolean",
       label: "Repair devboxes changed outside bb",
       description:
-        "When a box is started, stopped, restarted or deleted outside bb (Ona UI, ona CLI), bring bb back in step: restart bb's daemon on a box that came back, and get unstuck machines moving. Off: stopped or deleted boxes are still marked suspended, tunnels still reopen, idle boxes are still let go after `idleDisconnect`, and a waiting thread still resumes a stopped box; everything else is only reported by `bb ona status`.",
+        "When a box is started, stopped, restarted or deleted outside bb (Ona UI, ona CLI), bring bb back in step: restart bb's daemon on a box that came back. Off: stopped or deleted boxes are still marked suspended, tunnels still reopen, idle boxes are still let go after `idleDisconnect`, and a waiting thread still resumes or starts a stopped box; everything else is only reported by `bb ona status`.",
       default: true,
     },
     codexSqliteHome: {
