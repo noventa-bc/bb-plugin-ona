@@ -180,6 +180,7 @@ for (const [phase, after] of [
   ["STARTING", ["get STARTING", "stop env-1"]],
   ["STOPPING", ["get STOPPING", "stop env-1"]],
   ["STOPPED", ["get STOPPED"]],
+  ["DELETING", ["get DELETING", "stop env-1"]],
   ["DELETED", ["get DELETED"]],
   [null, ["get null"]],
 ] as const) {
