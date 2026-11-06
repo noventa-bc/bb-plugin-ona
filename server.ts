@@ -134,7 +134,6 @@ export default async function plugin(bb: BbPluginApi) {
   );
   bb.onDispose(() => keepAlives.stopAll());
   const lifetime = new AbortController();
-  bb.onDispose(() => lifetime.abort());
   // Fire and forget, as the editor may take a while; a failure goes to the log.
   const openEditor = (envId: string) =>
     void ona.openEditor(envId).catch((error: unknown) => bb.log.warn(`opening ${envId} failed: ${errorText(error)}`));
@@ -485,4 +484,6 @@ export default async function plugin(bb: BbPluginApi) {
   });
 
   bb.onDispose(() => tunnels.stopAll());
+  // Hooks run last-in first-out: this abort runs before the tunnels stop.
+  bb.onDispose(() => lifetime.abort());
 }

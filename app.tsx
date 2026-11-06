@@ -325,8 +325,8 @@ function DevboxesSection() {
   /** Runs one `bb ona` command for a devbox (its host id), or for every devbox when `hostId` is left out. */
   const run = (command: DevboxCommand, hostId?: string) => {
     const key = hostId ?? "all";
-    // A devbox's reply goes under its row. Sync all has no row; the status re-read shows what the pass did,
-    // and a failure is logged by the pass.
+    // A devbox's reply goes under its row. Sync all has no row, so its reply is dropped;
+    // the status re-read shows the result.
     const show = (reply: DevboxCommandReply) => {
       if (hostId) setNotes((known) => ({ ...known, [hostId]: replyText(reply) }));
     };

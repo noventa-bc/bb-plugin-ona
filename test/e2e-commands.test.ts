@@ -58,6 +58,19 @@ async function addDevbox(key: string, hostId: string, project: string) {
   onaCalls();
 }
 
+/** Puts host-2 back to active with its box starting, so a resume of it waits on Ona; drops the log so far. */
+function setUpHostTwoResume(): string {
+  const envId = extraBoxes["host-2"]!.envId;
+  const boxTwo = hosts.find((h) => h.id === "host-2")!;
+  Object.assign(boxTwo, {
+    status: "connected",
+    lifecycle: { phase: "active", message: null, suspendedAt: null },
+  });
+  patchBox(envId, { phase: STARTING });
+  onaCalls(); // only the asks from here on count
+  return envId;
+}
+
 /** Resolves once the fake Ona's log holds `text`; throws after 10 s. */
 async function waitForLog(text: string): Promise<void> {
   for (let tick = 0; tick < 200; tick++) {
@@ -348,7 +361,7 @@ test(
 );
 
 test(
-  "Sync all from the settings section syncs every devbox (fails if the no-id branch runs another command)",
+  "Sync all from the settings section syncs a devbox given no host id (fails if the no-id branch runs another command)",
   local,
   async () => {
     // Ona has stopped host-2 while bb still shows it active: the setup the sync case above gives host-1.
@@ -368,20 +381,38 @@ test(
   },
 );
 
+test(
+  "a resume from the settings button keeps running after its caller stops waiting (fails if the command takes the page's signal)",
+  local,
+  async () => {
+    const envId = setUpHostTwoResume();
+    const caller = new AbortController();
+    const settled = host.harness.behavior
+      .callRpc("devbox_command", { command: "resume", hostId: "host-2" }, { signal: caller.signal })
+      .then(
+        () => undefined,
+        () => undefined,
+      );
+    await waitForLog(`environment get ${envId}`);
+    // After its first ask the wait asks again at once, then every 5 s: let those asks land before the abort.
+    await sleep(1_000);
+    onaCalls();
+    caller.abort();
+    await sleep(6_000); // longer than the 5 s poll interval
+    const asks = onaCalls().filter((call) => call === `environment get ${envId}`).length;
+    // The box comes up, which ends the wait, so the resume finishes before the next case starts.
+    patchBox(envId, { phase: RUNNING });
+    await settled;
+    assert.ok(asks > 0, `Ona was asked ${asks} time(s) after the caller stopped waiting: the resume was cut short`);
+  },
+);
+
 // Last in the file: it disposes the host, and the after hook's close() disposes it again (dispose is idempotent).
 test(
   "a resume from the settings button stops polling Ona when the plugin is disposed (fails if the signal is dropped)",
   local,
   async () => {
-    const envId = extraBoxes["host-2"]!.envId;
-    // The Sync all case left host-2 suspending; a resume needs it active.
-    const boxTwo = hosts.find((h) => h.id === "host-2")!;
-    Object.assign(boxTwo, {
-      status: "connected",
-      lifecycle: { phase: "active", message: null, suspendedAt: null },
-    });
-    patchBox(envId, { phase: STARTING });
-    onaCalls(); // only the asks from here on count
+    const envId = setUpHostTwoResume();
     // The reply is not read: the resume ends with the plugin.
     void host.harness.behavior
       .callRpc("devbox_command", { command: "resume", hostId: "host-2" })
