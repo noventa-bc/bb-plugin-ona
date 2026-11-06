@@ -163,11 +163,6 @@ test("SKILL.md's connect-time settings line names the reload (fails if its claus
   assert.match(skill, /reach a box on its next connect after `bb plugin reload ona`/);
 });
 
-test("server.ts's waitForSharedHome description names the reload (fails if its sentence is dropped)", () => {
-  const server = readFileSync(join(repo, "server.ts"), "utf8");
-  assert.match(server, /share a home folder\. A changed setting applies after `bb plugin reload ona`\./);
-});
-
 // The `bb ona` and settings guards read the docs and the source as text, so a doc drifts only by a failing check.
 const read = (file: string) => readFileSync(join(repo, file), "utf8");
 
@@ -186,14 +181,36 @@ test("every `bb ona` command in src/commands.ts is written `bb ona <name>` in RE
   assert.deepEqual(missing, []);
 });
 
+/** The text of server.ts's `bb.settings.define({...})` block. */
+function settingsBlock(server: string): string {
+  return server.slice(server.indexOf("bb.settings.define({"), server.indexOf("\n  });"));
+}
+
 /** The setting keys in server.ts's `bb.settings.define({...})` block, one per `    key: {` line. */
 function declaredSettings(server: string): string[] {
-  const block = server.slice(server.indexOf("bb.settings.define({"), server.indexOf("\n  });"));
+  const block = settingsBlock(server);
   const keys = [...block.matchAll(/^ {4}(\w+): \{/gm)].map((m) => m[1]!);
   // Each setting has one `type:`; a key written another way would be skipped: fail instead.
   assert.equal(keys.length, block.match(/^ {6}type: /gm)?.length ?? 0, `parser found ${keys.join(", ")}`);
   return keys;
 }
+
+/** The source text of each setting's `description:` value in server.ts's settings block, a string or `+` joined strings. */
+function settingDescriptions(server: string): string[] {
+  return [...settingsBlock(server).matchAll(/^ {6}description:([\s\S]*?),\n/gm)].map((m) => m[1]!.trim());
+}
+
+// Bug: setting descriptions did not say a change needs a reload.
+test("every setting's description in server.ts names the reload (fails if one lacks the sentence)", () => {
+  const server = read("server.ts");
+  const descriptions = settingDescriptions(server);
+  // Every setting needs a description, or the check below would pass on the ones without one.
+  assert.equal(descriptions.length, declaredSettings(server).length, "a setting has no description");
+  const missing = descriptions.filter(
+    (text) => !text.includes("A changed setting applies after `bb plugin reload ona`."),
+  );
+  assert.deepEqual(missing, []);
+});
 
 test("every setting server.ts declares has a row in README's settings table (fails if a setting lacks its row)", () => {
   const readme = read("README.md");
