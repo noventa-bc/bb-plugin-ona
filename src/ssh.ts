@@ -132,6 +132,8 @@ export async function sshCapture(
  */
 export class TunnelManager {
   private readonly tunnels = new Map<string, { controller: AbortController; connectedAt: number | null }>();
+  /** Set once by stopAll and never reset: a reload builds a new manager. */
+  private stopped = false;
 
   private readonly sshBinary: string;
   private readonly remotePort: () => number;
@@ -165,7 +167,7 @@ export class TunnelManager {
   }
 
   ensure(envId: string): void {
-    if (this.tunnels.has(envId)) return;
+    if (this.stopped || this.tunnels.has(envId)) return;
     const state = { controller: new AbortController(), connectedAt: null as number | null };
     this.tunnels.set(envId, state);
     void this.loop(envId, state);
@@ -176,7 +178,9 @@ export class TunnelManager {
     this.tunnels.delete(envId);
   }
 
+  /** Ends every tunnel; a later `ensure` starts none (the plugin is being disposed). */
   stopAll(): void {
+    this.stopped = true;
     for (const envId of [...this.tunnels.keys()]) this.stop(envId);
   }
 
