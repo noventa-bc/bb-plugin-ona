@@ -142,10 +142,10 @@ you asked for, so safety rule 1 does not gate it.
    nothing (except a daemon repair's read after its check, below), and
    "missing" needs two listings in a row. A lookup by id
    (`ona environment get`) that fails is unknown too; only Ona saying the id
-   doesn't exist counts as gone. A daemon repair whose listing fails or is
-   empty before its daemon check leaves the guard's record untouched (count, quiet period,
-   hold). One that fails or is empty after the check,
-   before the restart, is a failed
+   doesn't exist counts as gone. A daemon repair whose listing fails or leaves
+   the box out before its daemon check leaves the guard's record untouched (count, quiet period,
+   hold). One that fails or leaves the box out after the
+   check, before the restart, is a failed
    repair with no restart: it counts toward the backoff and give-up (rule 5).
 5. **One action per machine at a time.** A daemon check or restart makes the machine wait 5 minutes after a success before its next one; suspends, tunnel
    reopens and idle releases do not wait after a success. A failure backs off for every

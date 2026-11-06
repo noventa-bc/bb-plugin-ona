@@ -337,9 +337,9 @@ test("a failed Ona read after the daemon check fails the pass, so the next pass 
   assert.deepEqual(calls, ["probe"]);
 });
 
-// Rule 4: an empty repair read is unknown, as a failed one is, never "gone": before the daemon
+// Rule 4: a repair read without the box (an empty list) is unknown, as a failed one is, never "gone": before the daemon
 // check it leaves the record alone; after the check the pass fails and backs off.
-test("an empty repair listing is unknown, not gone (fails if it records a success that resets the count)", async () => {
+test("a repair listing without the box is unknown, not gone (fails if it records a success that resets the count)", async () => {
   enableFakeClock();
   try {
     let emptyRead = 0; // which repair read of the pass comes back empty: 1 before the daemon check, 2 after it
@@ -367,17 +367,6 @@ test("an empty repair listing is unknown, not gone (fails if it records a succes
   } finally {
     await resetFakeClock();
   }
-});
-
-// Decision 0005: the repair looks up by id a box the listing leaves out, as the pass does, so a box only that lookup
-// finds is repaired.
-test("the daemon repair looks up by id a box the listing leaves out (fails if the repair stops at the listing)", async () => {
-  const { sync, calls } = world(
-    [idle("h1", { status: "disconnected", lastSeenAt: Date.now() - HOUR, ona: null }), idle("h2")],
-    { daemonAlive: false, archived: false },
-  );
-  for (let pass = 0; pass < 2; pass++) await sync.reconcile(new Set(["h1"]), { wait: true });
-  assert.ok(calls.includes("restart daemon"), calls.join(", "));
 });
 
 // That read's failure counts toward the give-up like a failed restart (docs/sync.md rule 5): two failed restarts, then a
