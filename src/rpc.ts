@@ -1,4 +1,4 @@
-// RPCs behind the thread header's Editor button and spend chip, and the thread menu's Move to devbox. app.tsx imports only the contract's type.
+// RPCs behind the thread header's Editor button and spend chip, the thread menu's Move to devbox, and the settings section's devbox buttons. app.tsx imports only the contract's type.
 import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 
@@ -25,6 +25,16 @@ export const threadCostSchema = z.object({
 });
 export type ThreadCost = z.infer<typeof threadCostSchema>;
 
+export const devboxCommandSchema = z.enum(["status", "sync", "reconnect", "resume"]);
+export type DevboxCommand = z.infer<typeof devboxCommandSchema>;
+
+const devboxCommandReplySchema = z.object({
+  exitCode: z.number(),
+  stdout: z.string().optional(),
+  stderr: z.string().optional(),
+});
+export type DevboxCommandReply = z.infer<typeof devboxCommandReplySchema>;
+
 export const rpcContract = defineRpcContract({
   devboxes_list: {
     input: z.null(),
@@ -48,5 +58,14 @@ export const rpcContract = defineRpcContract({
   devbox_open_editor: {
     input: z.object({ hostId: z.string().min(1) }),
     output: z.object({ opened: z.boolean() }),
+  },
+  /** The settings section's buttons: a `bb ona` command, as the CLI runs it (src/commands.ts), for one devbox or all. */
+  devbox_command: {
+    input: z.object({
+      command: devboxCommandSchema,
+      // No leading "-": the CLI reads "--" as a flag or as the end of its arguments, and then `sync` acts on every box.
+      hostId: z.string().regex(/^[^-]/, "a bb host id").optional(),
+    }),
+    output: devboxCommandReplySchema,
   },
 });
