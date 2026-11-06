@@ -183,7 +183,10 @@ test("every `bb ona` command in src/commands.ts is written `bb ona <name>` in RE
 
 /** The text of server.ts's `bb.settings.define({...})` block. */
 function settingsBlock(server: string): string {
-  return server.slice(server.indexOf("bb.settings.define({"), server.indexOf("\n  });"));
+  const start = server.indexOf("bb.settings.define({");
+  // Without the block every settings guard would read nothing and pass.
+  assert.ok(start >= 0, "server.ts has no bb.settings.define({ block");
+  return server.slice(start, server.indexOf("\n  });", start));
 }
 
 /** The setting keys in server.ts's `bb.settings.define({...})` block, one per `    key: {` line. */
