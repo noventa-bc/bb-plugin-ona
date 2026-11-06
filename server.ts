@@ -20,7 +20,7 @@ import {
 import { PROVIDER_ID, registerOnaComposition, registerOnaProvider } from "./src/provider.ts";
 import { startDaemonProxy } from "./src/proxy.ts";
 import { commands, onaCommands } from "./src/commands.ts";
-import { connectedAtKey, createSync, forgetBox, matchesRef, watchRealtime, type Row } from "./src/sync.ts";
+import { connectedAtKey, createSync, forgetBox, rowForRef, watchRealtime, type Row } from "./src/sync.ts";
 import { ALL, HostGuard, PassScheduler } from "./src/reconcile.ts";
 import { createThreadCost } from "./src/cost-service.ts";
 import { createMove } from "./src/move.ts";
@@ -291,7 +291,7 @@ export default async function plugin(bb: BbPluginApi) {
   }
 
   async function findMachine(ref: string): Promise<Row | null> {
-    return (await machines()).find((r) => matchesRef(r, ref)) ?? null;
+    return rowForRef(await machines(), ref) ?? null;
   }
 
   function devboxOf(row: Row): Devbox {
@@ -374,7 +374,7 @@ export default async function plugin(bb: BbPluginApi) {
    */
   async function openThreadTerminal(threadId: string, ref: string, size: { cols: number; rows: number }) {
     const machineRows = await machines();
-    const row = machineRows.find((r) => matchesRef(r, ref));
+    const row = rowForRef(machineRows, ref);
     if (!row) throw new Error(`No Ona-backed bb machine matches "${ref}". See \`bb ona list\`.`);
     const thread = await bb.sdk.threads.get({ threadId });
     if (!thread.environmentId) throw new Error("This thread has no environment yet; try again once it has started.");

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import { ALL, COOLDOWN_MS, GIVE_UP_AFTER, HostGuard } from "../src/reconcile.ts";
+import { rowForRef, type Row } from "../src/sync.ts";
 import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
 import { HOUR, idle, waitingThread, world } from "./sync-fakes.ts";
 
@@ -464,4 +465,12 @@ test("a plugin reload ends a daemon restart in flight (fails if the restart igno
   const record = guard.records.get("h1")!;
   assert.match(record.error ?? "", /aborted/);
   assert.equal(record.failures, 1);
+});
+
+// Bug: a ref took the first row that matched it, so another box's env name could win over the host id the ref names.
+test("a ref picks the box whose host id it is, not an earlier box that has it as an env name, and an env name still picks its box (fails if the first matching row wins, or if only host ids match)", () => {
+  const earlier = { hostId: "h-a", machine: "box-a", resource: { envId: "env-a", envName: "h-b" } } as Row;
+  const named = { hostId: "h-b", machine: "box-b", resource: { envId: "env-b", envName: "box-b-env" } } as Row;
+  assert.equal(rowForRef([earlier, named], "h-b"), named);
+  assert.equal(rowForRef([earlier, named], "box-b-env"), named);
 });
