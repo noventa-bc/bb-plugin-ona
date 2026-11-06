@@ -259,13 +259,14 @@ export class HostGuard {
   }
 
   /**
-   * A machine bb shows connected with its tunnel up, on a box Ona shows running: a failing box's count and quiet
-   * period are cleared, held or not, and a held box's hold ends (docs/sync.md rule 3).
+   * A machine bb shows connected with its tunnel up, on a box Ona shows running: connected() ends a hold, clearing its
+   * count and quiet period, and clears a failing daemon repair's count and quiet period. A box with no count and no
+   * hold keeps its success cooldown (docs/sync.md rules 3 and 5).
    */
   connected(hostId: string): void {
     const record = this.records.get(hostId);
-    // Only a count or a hold is cleared: a success's cooldown (docs/sync.md rule 5) stays.
-    if (record && (record.failures > 0 || record.threadWaiting)) {
+    // decide() runs a daemon repair only while bb shows the box disconnected, so a connected box has outgrown its count.
+    if (record && (record.threadWaiting || (record.failures > 0 && record.action === "heal-daemon"))) {
       this.records.set(hostId, { ...record, failures: 0, quietUntil: this.clock.now(), threadWaiting: undefined });
     }
   }

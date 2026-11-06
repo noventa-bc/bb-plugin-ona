@@ -111,6 +111,41 @@ test("a forced failure after a give-up starts a fresh count (fails if a forced f
   assert.equal(guard.records.get("h1")!.quietUntil, now + COOLDOWN_MS);
 });
 
+// The connected check must leave a refused release's count alone (docs/sync.md rule 5): 30 passes make 3 attempts, not 30.
+test("a refused idle suspend on a connected box still gives up after three tries (fails if the connected check clears a release's count)", async () => {
+  enableFakeClock();
+  try {
+    const { sync, calls } = world([idle("h1")], { refuse: REFUSED, pluginStartedAt: Date.now() - 2 * HOUR });
+    for (let pass = 0; pass < 30; pass++) {
+      await sync.reconcile(new Set([ALL]), { wait: true });
+      await tick(60_000);
+    }
+    assert.equal(calls.filter((call) => call === "suspend h1").length, GIVE_UP_AFTER);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+// A restart's cooldown is a success's: the box reading connected does not end it (docs/sync.md rule 5), so a disconnect
+// 2 minutes later waits for it.
+test("a success's cooldown survives the connected check (fails if connected() clears every record)", async () => {
+  enableFakeClock();
+  try {
+    const host = idle("h1", { status: "disconnected", lastSeenAt: Date.now() - HOUR });
+    const { sync, calls, hosts } = world([host], { daemonAlive: false });
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    hosts.get("h1")!.status = "connected";
+    await tick(60_000);
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    await tick(60_000);
+    hosts.get("h1")!.status = "disconnected";
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    assert.equal(calls.filter((call) => call === "restart daemon").length, 1);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
 // bb reports the machine connected at the pass after a failed wake, but its tunnel is closed: the hold stays, so the wakes
 // stay bounded. bb reports disconnected again before Ona stops the box.
 test("a connected report with the tunnel closed does not end a thread's hold, so the wakes stay bounded (fails if the gate is dropped)", async () => {

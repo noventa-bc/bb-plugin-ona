@@ -521,4 +521,6 @@ test("a refused resume for a waiting thread is a failure, not a success (fails i
     `couldn't resume it for a waiting thread (bb kept the machine suspended: ${RESUME_REFUSED})`,
   );
   assert.equal(record.threadWaiting, true, "the thread's hold is kept");
+  const [row] = await sync.statusRows();
+  assert.equal(row!.retry, null, "bb shows the machine suspended, and nothing retries it");
 });
