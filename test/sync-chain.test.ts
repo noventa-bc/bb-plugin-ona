@@ -111,8 +111,8 @@ test("a machine bb shows connected with its tunnel up clears a give-up that no t
   }
 });
 
-// Bug: a record outlived its quiet period, so `bb ona status` kept printing "retrying after" an hour past it. A give-up
-// stays until a forced run acts (docs/sync.md rule 5), so its line does not depend on the quiet period.
+// Bug: a record outlived its quiet period, so `bb ona status` kept printing "retrying after" a time long past. A give-up's
+// line has no quiet period: docs/sync.md rule 5 lists what ends a give-up.
 test("status shows a retry line only while the quiet period is ahead (fails if a passed quiet period still prints retrying after), and the give-up line either way (fails if it waits on the quiet period)", async () => {
   const { sync, guard } = world([idle("h1")]);
   const retryWith = async (failures: number, quietUntil: number) => {
