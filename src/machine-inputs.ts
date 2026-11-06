@@ -1,5 +1,6 @@
-// The inputs app.tsx sends: the "Ona project" field of the new-thread composer's "New Ona devbox" option, and the
-// settings section's devbox_command input. app.tsx imports this file, so it imports types only (no node modules in the app bundle).
+// The inputs app.tsx sends: the "Ona project" field of the new-thread composer's "New Ona devbox" option, and
+// the settings section's devbox_command input (commandArg, devboxCommandInput). app.tsx imports this file, so it
+// imports types only (no node modules in the app bundle).
 import type { PluginMachineProviderInputsChange } from "@get-bb/plugin-sdk/app";
 import type { DevboxCommand } from "./rpc.ts";
 

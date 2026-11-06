@@ -65,9 +65,10 @@ test("a devbox_command input leaves out unset keys, which bb's RPC client refuse
   });
 });
 
-test("the settings section sends every devbox_command input through devboxCommandInput (fails if app.tsx builds one by hand)", () => {
+test("the settings section sends every devbox_command input through devboxCommandInput (fails if app.tsx builds one by hand, also in a call prettier splits)", () => {
   const app = readFileSync(new URL("../app.tsx", import.meta.url), "utf8");
-  const calls = app.match(/\.call\("devbox_command",[^\n]*/g) ?? [];
+  const calls = app.match(/\.call\(\s*["'`]devbox_command["'`]/g) ?? [];
+  const viaHelper = app.match(/\.call\(\s*["'`]devbox_command["'`],\s*devboxCommandInput\(/g) ?? [];
   assert.ok(calls.length > 0, "app.tsx has no devbox_command call");
-  for (const call of calls) assert.match(call, /\.call\("devbox_command", devboxCommandInput\(/);
+  assert.equal(viaHelper.length, calls.length, "a devbox_command call in app.tsx does not pass devboxCommandInput(");
 });
