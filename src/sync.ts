@@ -22,6 +22,7 @@ import {
   ALL,
   decide,
   GRACE_MS,
+  NOTHING_DONE,
   type Decision,
   type HostGuard,
   type MachineView,
@@ -117,6 +118,8 @@ export interface SyncDeps {
   autoRepair: boolean;
   idleDisconnect: string;
   pluginStartedAt: number;
+  /** The plugin's lifetime (server.ts): a reload aborts it, which ends a wake or restart in flight. */
+  signal: AbortSignal;
 }
 
 export interface Row {
@@ -137,7 +140,7 @@ export const matchesRef = (row: Row, ref: string) =>
 export type Sync = ReturnType<typeof createSync>;
 
 export function createSync(deps: SyncDeps) {
-  const { bb, snapshot, ona, guard, tunnels, provider, hostByEnv, autoRepair, idleDisconnect } = deps;
+  const { bb, snapshot, ona, guard, tunnels, provider, hostByEnv, autoRepair, idleDisconnect, signal } = deps;
   const pluginStartedAt = deps.pluginStartedAt;
 
   /** The row for one bb host: null unless it is an Ona machine whose stored resource parses. */
@@ -358,7 +361,8 @@ export function createSync(deps: SyncDeps) {
                 if (!decision.resumeAfter || lifecycle.phase !== "active") throw new Error(suspendFailure(refusal));
                 // bb's suspend failed (Ona stopped the box under a live turn) and left the machine active, where bb's
                 // resume does nothing: the plugin wakes the box (decision 0002).
-                const startCalled = await provider.wake(resource, report, AbortSignal.timeout(15 * 60_000));
+                // The waits inside this call bound it; a plugin reload ends it (docs/sync.md rule 1).
+                const startCalled = await provider.wake(resource, report, signal);
                 return startCalled ? "started it for a waiting thread" : "reconnected it for a waiting thread";
               }
               if (!decision.resumeAfter) return;
@@ -379,18 +383,33 @@ export function createSync(deps: SyncDeps) {
               return;
             case "heal-daemon": {
               // Rule 1: SSH starts stopped boxes, so ask Ona before the daemon check and again right before a restart.
-              const runningNow = async () =>
-                isRunning((await snapshot.refresh()).envs.find((e) => e.id === resource.envId));
+              // Rule 4: a listing that fails or leaves the box out is unknown (null); before the daemon check nothing ran (NOTHING_DONE).
+              const runningNow = async () => {
+                try {
+                  const env = (await snapshot.refresh()).envs.find((e) => e.id === resource.envId);
+                  return env ? isRunning(env) : null;
+                } catch (error) {
+                  bb.log.warn(`${machine}: Ona couldn't be asked (${errorText(error)})`);
+                  return null;
+                }
+              };
               const gone = "Ona no longer reports it running; nothing done";
-              if (!(await runningNow())) return gone;
+              const running = await runningNow();
+              if (running === null) return NOTHING_DONE;
+              if (!running) return gone;
               // Rule 3: restarting a live daemon would kill running turns.
               const alive = await provider.daemonAlive(resource, AbortSignal.timeout(30_000));
               if (alive === true) return "daemon is running; not restarting";
               if (alive === null)
                 return "couldn't tell whether the daemon runs (SSH or the process check on the box failed); not restarting";
               // The check can take 30 s, long enough for the box to be stopped in Ona.
-              if (!(await runningNow())) return gone;
-              await provider.reconnect(resource, report, AbortSignal.timeout(15 * 60_000));
+              const stillRunning = await runningNow();
+              // The check's SSH ran: a failed pass, so its backoff and the give-up apply (rule 5).
+              if (stillRunning === null)
+                throw new Error("Ona couldn't confirm the box running before the restart; not restarting");
+              if (!stillRunning) return gone;
+              // The waits inside this call bound it; a plugin reload ends it (docs/sync.md rule 1).
+              await provider.reconnect(resource, report, signal);
               return "daemon was down; restarted it";
             }
             case "none":

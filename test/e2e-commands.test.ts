@@ -419,7 +419,91 @@ test(
   },
 );
 
-// Keep this last: it disposes the host, and close() in the after hook disposes again.
+test(
+  "devbox_command rename renames that devbox in Ona and its bb machine (fails if the name is dropped or the rename is refused)",
+  local,
+  async () => {
+    const envId = extraBoxes["host-2"]!.envId;
+    onaCalls();
+    const reply = (await host.harness.behavior.callRpc("devbox_command", {
+      command: "rename",
+      hostId: "host-2",
+      arg: "renamed-box",
+    })) as { exitCode: number; stdout?: string; stderr?: string };
+    assert.equal(reply.exitCode, 0, reply.stderr);
+    assert.equal(reply.stdout, "Renamed host-2 -> renamed-box (bb machine ona:renamed-box)");
+    assert.ok(onaCalls().includes(`environment update ${envId} --name renamed-box`));
+    assert.equal(envs().find((e) => e.id === envId)!.metadata.name, "renamed-box");
+    assert.deepEqual(host.harness.inspection.sdk.callsTo("hosts.update").at(-1), [
+      { hostId: "host-2", name: "ona:renamed-box" },
+    ]);
+  },
+);
+
+test(
+  "devbox_command rename with no name picks a random name and renames the box to it (fails if the name is blank, the old name stays or no update is sent)",
+  local,
+  async () => {
+    const envId = extraBoxes["host-2"]!.envId;
+    onaCalls();
+    const reply = (await host.harness.behavior.callRpc("devbox_command", {
+      command: "rename",
+      hostId: "host-2",
+    })) as { exitCode: number; stdout?: string; stderr?: string };
+    assert.equal(reply.exitCode, 0, reply.stderr);
+    const name = /^Renamed host-2 -> (\S+) \(bb machine ona:\1\)$/.exec(reply.stdout ?? "")?.[1];
+    // A friendly name: `adjective-noun-hex4`, where the noun list has one hyphenated word ("yo-yo").
+    assert.match(name ?? "", /^[a-z-]+-[0-9a-f]{4}$/, reply.stdout);
+    assert.ok(onaCalls().includes(`environment update ${envId} --name ${name}`));
+  },
+);
+
+test(
+  "devbox_command keep-alive with no duration refuses with the CLI's usage text (fails if a missing duration is read as one or the text changes)",
+  local,
+  async () => {
+    const reply = (await host.harness.behavior.callRpc("devbox_command", {
+      command: "keep-alive",
+      hostId: "host-2",
+    })) as { exitCode: number; stdout?: string; stderr?: string };
+    assert.equal(reply.exitCode, 1);
+    assert.equal(
+      reply.stderr,
+      "Give a duration (e.g. `2h`, `90m`, at most `12h`) or `off`.\nUsage: bb ona keep-alive <ref> <duration|off>",
+    );
+  },
+);
+
+test(
+  "devbox_command keep-alive holds that running box until `off` (fails if the duration is dropped or Ona is not asked)",
+  local,
+  async () => {
+    const envId = extraBoxes["host-2"]!.envId;
+    patchBox(envId, { phase: RUNNING });
+    onaCalls();
+    const started = (await host.harness.behavior.callRpc("devbox_command", {
+      command: "keep-alive",
+      hostId: "host-2",
+      arg: "1m",
+    })) as { exitCode: number; stdout?: string; stderr?: string };
+    assert.equal(started.exitCode, 0, started.stderr);
+    assert.match(started.stdout ?? "", /^Keeping host-2 alive until \d\d:\d\d\./);
+    await waitForLog(`environment keep-alive --environment-id ${envId}`);
+    const status = (await host.harness.behavior.callRpc("devbox_command", {
+      command: "status",
+      hostId: "host-2",
+    })) as { stdout?: string };
+    assert.match(status.stdout ?? "", /^  keep-alive until \d\d:\d\d$/m);
+    const ended = (await host.harness.behavior.callRpc("devbox_command", {
+      command: "keep-alive",
+      hostId: "host-2",
+      arg: "off",
+    })) as { stdout?: string };
+    assert.equal(ended.stdout, "Ended the keep-alive for host-2.");
+  },
+);
+
+// Last in the file: it disposes the host, and the after hook's close() disposes it again (dispose is idempotent).
 test(
   "disposing the plugin stops a settings-button resume polling Ona and ends every tunnel (fails if the signal is dropped or the tunnels are not stopped)",
   local,

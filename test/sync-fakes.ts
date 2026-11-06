@@ -38,6 +38,10 @@ export function world(
     pluginStartedAt?: number;
     /** The daemon restart (the provider's reconnect) rejects with this message. */
     reconnectFails?: string;
+    /** The provider's reconnect (the daemon restart); the default records it and honours `reconnectFails`. */
+    reconnect?: SyncDeps["provider"]["reconnect"];
+    /** The plugin's lifetime signal (server.ts `lifetime`), aborted when the plugin reloads. */
+    signal?: AbortSignal;
     /** Ona lists every box STOPPED once the daemon check has run. */
     stopDuringProbe?: boolean;
     /** Keep a listing 15s fresh, so only `refresh()` sees a change; the clock is the mocked Date when enabled. */
@@ -50,6 +54,10 @@ export function world(
     listingMs?: number;
     /** The message a failing listing throws; "" counts as a failure too. */
     listingError?: string;
+    /** The repair's own listing read (`refresh()`) throws while this returns true; the pass's read still works. */
+    refreshFails?: () => boolean;
+    /** The repair's own read comes back without any box. */
+    refreshEmpty?: () => boolean;
     /** The host whose workspace list throws. */
     workspacesFail?: string;
     /** bb's host lookup fails: with a plain error, or with only the SDK's `not_found` code (no status). */
@@ -119,6 +127,25 @@ export function world(
   const guard = new HostGuard();
   let tick = 0;
   let listingsServed = 0;
+  // No cache and a ticking clock (unless `cached`): every pass gets its own listing.
+  const listing = new OnaSnapshot(
+    async () => {
+      if (options.listing === "fail" || listingsServed >= (options.listingFailsAfter ?? Infinity))
+        throw new Error(options.listingError ?? "not logged in");
+      if (options.listingMs) await tickClock(options.listingMs);
+      listingsServed++;
+      return envs();
+    },
+    options.cached ? 15_000 : 0,
+    options.cached ? () => Date.now() : () => (tick += 60_000),
+  );
+  // The repair's own read (`refresh`) can fail while the pass's read works (docs/sync.md rule 4).
+  const refreshListing = listing.refresh.bind(listing);
+  listing.refresh = async () => {
+    if (options.refreshFails?.()) throw new Error("not logged in");
+    const result = await refreshListing();
+    return options.refreshEmpty?.() ? { ...result, envs: [] } : result;
+  };
   const sync = createSync({
     bb: {
       sdk: {
@@ -182,18 +209,7 @@ export function world(
       },
       log: { info: () => {}, warn: () => {} },
     },
-    // No cache and a ticking clock (unless `cached`): every pass gets its own listing.
-    snapshot: new OnaSnapshot(
-      async () => {
-        if (options.listing === "fail" || listingsServed >= (options.listingFailsAfter ?? Infinity))
-          throw new Error(options.listingError ?? "not logged in");
-        if (options.listingMs) await tickClock(options.listingMs);
-        listingsServed++;
-        return envs();
-      },
-      options.cached ? 15_000 : 0,
-      options.cached ? () => Date.now() : () => (tick += 60_000),
-    ),
+    snapshot: listing,
     ona: {
       getEnvironmentIfExists: async (envId) => {
         calls.push(`ona get ${envId}`);
@@ -218,10 +234,12 @@ export function world(
         if (options.stopDuringProbe) for (const box of boxes) box.ona = "STOPPED";
         return options.daemonAlive ?? true;
       },
-      reconnect: async () => {
-        calls.push("restart daemon");
-        if (options.reconnectFails) throw new Error(options.reconnectFails);
-      },
+      reconnect:
+        options.reconnect ??
+        (async () => {
+          calls.push("restart daemon");
+          if (options.reconnectFails) throw new Error(options.reconnectFails);
+        }),
       wake:
         options.wake ??
         (async (resource) => {
@@ -234,6 +252,7 @@ export function world(
     autoRepair: options.autoRepair ?? true,
     idleDisconnect: "1h",
     pluginStartedAt: options.pluginStartedAt ?? NOW - 2 * HOUR,
+    signal: options.signal ?? new AbortController().signal,
   });
   return { sync, calls, guard, kv, hosts, releasing, hostReads };
 }

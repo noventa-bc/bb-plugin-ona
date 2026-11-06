@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { ONA_NAME_MESSAGE, projectInputsChange, projectOfSavedInputs } from "../src/machine-inputs.ts";
+import {
+  commandArg,
+  devboxCommandInput,
+  ONA_NAME_MESSAGE,
+  projectInputsChange,
+  projectOfSavedInputs,
+} from "../src/machine-inputs.ts";
 
 test("a blank field is ready with mode create only, so the defaultProject setting applies", () => {
   assert.deepEqual(projectInputsChange(""), { status: "ready", value: { mode: "create" } });
@@ -40,4 +47,34 @@ test("a saved project is read back for the field, and anything else reads as bla
   assert.equal(projectOfSavedInputs(["my-app"]), "");
   assert.equal(projectOfSavedInputs("my-app"), "");
   assert.equal(projectOfSavedInputs(null), "");
+});
+
+test("a field's text is the argument: blank or spaces-only gives none, and the ends are trimmed (fails if a blank field sends a value or the spaces stay)", () => {
+  assert.equal(commandArg(""), undefined);
+  assert.equal(commandArg("   "), undefined);
+  assert.equal(commandArg(" foo "), "foo");
+});
+
+test("a devbox_command input leaves out unset keys, which bb's RPC client refuses (fails if the helper keeps an undefined key)", () => {
+  assert.deepStrictEqual(devboxCommandInput("sync", undefined, undefined), { command: "sync" });
+  assert.deepStrictEqual(devboxCommandInput("resume", "host-1", undefined), { command: "resume", hostId: "host-1" });
+  assert.deepStrictEqual(devboxCommandInput("rename", "host-1", "box"), {
+    command: "rename",
+    hostId: "host-1",
+    arg: "box",
+  });
+});
+
+// shortcut: matches the name as written in the source, so a name escaped, split or built from a template, or imported from
+// another file, slips past; walk app.tsx with the TypeScript parser if a call ever writes it so.
+test("every devbox_command name in app.tsx is followed by devboxCommandInput( (fails if a call builds its input by hand, on one line, split by prettier, or through a variable holding the name)", () => {
+  const app = readFileSync(new URL("../app.tsx", import.meta.url), "utf8");
+  const names = app.match(/["'`]devbox_command["'`]/g) ?? [];
+  const viaHelper = app.match(/["'`]devbox_command["'`],\s*devboxCommandInput\(/g) ?? [];
+  assert.ok(names.length > 0, "app.tsx has no devbox_command name");
+  assert.equal(
+    viaHelper.length,
+    names.length,
+    "a devbox_command name in app.tsx is not followed by devboxCommandInput(",
+  );
 });

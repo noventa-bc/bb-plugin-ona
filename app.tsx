@@ -11,7 +11,13 @@ import {
   type PluginMachineProviderInputsProps,
   useRpc,
 } from "@get-bb/plugin-sdk/app";
-import { ONA_MACHINE_PROVIDER_ID, projectInputsChange, projectOfSavedInputs } from "./src/machine-inputs.ts";
+import {
+  commandArg,
+  devboxCommandInput,
+  ONA_MACHINE_PROVIDER_ID,
+  projectInputsChange,
+  projectOfSavedInputs,
+} from "./src/machine-inputs.ts";
 import { remember } from "./src/move.ts";
 import type { Devbox, DevboxCommand, DevboxCommandReply, rpcContract, ThreadCost } from "./src/rpc.ts";
 
@@ -274,6 +280,12 @@ const DEVBOX_BUTTONS: { command: DevboxCommand; label: string }[] = [
   { command: "resume", label: "Resume" },
 ];
 
+/** A text box and the button that sends its text as the command's argument (see commandArg). */
+const DEVBOX_FIELDS: { command: DevboxCommand; label: string; placeholder: string }[] = [
+  { command: "rename", label: "Rename", placeholder: "New name (blank: random)" },
+  { command: "keep-alive", label: "Keep awake", placeholder: "2h, 90m or off" },
+];
+
 const sectionButton = `${editorButton} disabled:pointer-events-none disabled:opacity-50`;
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -281,10 +293,13 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 /** The text a `bb ona` reply shows: its stdout, or its stderr when it failed. */
 const replyText = (reply: DevboxCommandReply) => (reply.exitCode === 0 ? reply.stdout : reply.stderr) ?? "";
 
+/** The argument a row's field sends: its text through commandArg. */
+const fieldArg = (form: HTMLFormElement) => commandArg(String(new FormData(form).get("arg") ?? ""));
+
 /**
- * Settings → Ona devboxes: `bb ona status` as the CLI prints it, each devbox's bb status, and buttons that run
- * the same `bb ona` commands (src/commands.ts). Read on mount, every 30 s and after each action; a row's buttons
- * are disabled while its own call runs.
+ * Settings → Ona devboxes: `bb ona status` as the CLI prints it, each devbox's bb status, and buttons and fields
+ * that run the same `bb ona` commands (src/commands.ts). Read on mount, every 30 s and after each action; a row's
+ * buttons are disabled while its own call runs.
  */
 function DevboxesSection() {
   const rpc = useRpc<typeof rpcContract>();
@@ -299,7 +314,7 @@ function DevboxesSection() {
     // The cleanup drops this round's replies and ends its timer; the next round starts both again.
     let live = true;
     const read = () => {
-      void rpc.call("devbox_command", { command: "status" }).then(
+      void rpc.call("devbox_command", devboxCommandInput("status")).then(
         (reply) => {
           if (live) setStatus(reply);
         },
@@ -322,8 +337,11 @@ function DevboxesSection() {
     };
   }, [rpc, round]);
 
-  /** Runs one `bb ona` command for a devbox (its host id), or for every devbox when `hostId` is left out. */
-  const run = (command: DevboxCommand, hostId?: string) => {
+  /**
+   * Runs one `bb ona` command for a devbox (its host id), or for every devbox when `hostId` is left out. `arg` is
+   * the new name (`rename`) or the duration (`keep-alive`).
+   */
+  const run = (command: DevboxCommand, hostId?: string, arg?: string) => {
     const key = hostId ?? "all";
     // A devbox's reply goes under its row. Sync all has no row, so its reply is dropped;
     // the status re-read shows the result.
@@ -332,7 +350,7 @@ function DevboxesSection() {
     };
     setRunning((current) => [...current, key]);
     void rpc
-      .call("devbox_command", hostId ? { command, hostId } : { command })
+      .call("devbox_command", devboxCommandInput(command, hostId, arg))
       .then(show, (error: unknown) => show({ exitCode: 1, stderr: messageOf(error) }))
       .finally(() => {
         setRunning((current) => current.filter((k) => k !== key));
@@ -368,6 +386,26 @@ function DevboxesSection() {
                 >
                   {label}
                 </button>
+              ))}
+              {DEVBOX_FIELDS.map(({ command, label, placeholder }) => (
+                <form
+                  key={command}
+                  className="flex items-center gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    run(command, box.hostId, fieldArg(event.currentTarget));
+                  }}
+                >
+                  <input
+                    name="arg"
+                    placeholder={placeholder}
+                    aria-label={`${label} for ${box.machine}`}
+                    className={projectInput}
+                  />
+                  <button type="submit" className={sectionButton} disabled={busy}>
+                    {label}
+                  </button>
+                </form>
               ))}
             </div>
             {notes[box.hostId] && <p className="whitespace-pre-wrap text-muted-foreground">{notes[box.hostId]}</p>}
