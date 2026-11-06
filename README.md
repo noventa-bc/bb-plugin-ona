@@ -283,6 +283,8 @@ last figure, and reading it never wakes the box; a paused Codex thread whose onl
   `src/cost.ts`; update them when Anthropic changes prices. A model missing from that table shows
   as `≥$…` (the total leaves it out).
 
+`<ref>` is a bb machine name/id or an Ona environment name/id; a name two devboxes share is refused by commands that act on one box (use a host id); `bb ona status` lists them all.
+
 **From your Mac's terminal:**
 
 ```sh

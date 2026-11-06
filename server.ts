@@ -39,32 +39,35 @@ export default async function plugin(bb: BbPluginApi) {
     onaPath: {
       type: "string",
       label: "ona CLI path",
-      description: "Absolute path to the authenticated ona CLI.",
+      description:
+        "Absolute path to the authenticated ona CLI. A changed setting applies after `bb plugin reload ona`.",
       default: "/opt/homebrew/bin/ona",
     },
     sshPath: {
       type: "string",
       label: "ssh path",
+      description: "Path to the ssh binary. A changed setting applies after `bb plugin reload ona`.",
       default: "/usr/bin/ssh",
     },
     defaultProject: {
       type: "string",
       label: "Default Ona project",
-      description: "Ona project name or id used when creating a devbox without one (e.g. my-app).",
+      description:
+        "Ona project name or id used when creating a devbox without one (e.g. my-app). A changed setting applies after `bb plugin reload ona`.",
       default: "",
     },
     inactivityTimeout: {
       type: "string",
       label: "Inactivity timeout for new devboxes",
       description:
-        "Auto-stop timeout passed to `ona environment create` (e.g. 3h). Adopted environments keep their own.",
+        "Auto-stop timeout passed to `ona environment create` (e.g. 3h). Adopted environments keep their own. A changed setting applies after `bb plugin reload ona`.",
       default: "3h",
     },
     idleDisconnect: {
       type: "string",
       label: "Let idle devboxes sleep after",
       description:
-        "With no thread activity for this long (e.g. 30m, 1h, or 90 for minutes), bb closes its tunnel to the box and marks the machine suspended, so Ona's own inactivity timeout can stop it (exceptions in the README's How it works). The next message wakes it. Empty or 0 keeps every box connected.",
+        "With no thread activity for this long (e.g. 30m, 1h, or 90 for minutes), bb closes its tunnel to the box and marks the machine suspended, so Ona's own inactivity timeout can stop it (exceptions in the README's How it works). The next message wakes it. Empty or 0 keeps every box connected. A changed setting applies after `bb plugin reload ona`.",
       default: "1h",
       experimental_schema: idleDisconnectSchema,
     },
@@ -72,14 +75,14 @@ export default async function plugin(bb: BbPluginApi) {
       type: "boolean",
       label: "Repair devboxes changed outside bb",
       description:
-        "When a box is started, stopped, restarted or deleted outside bb (Ona UI, ona CLI), bring bb back in step: restart bb's daemon on a box that came back. Off: stopped or deleted boxes are still marked suspended, tunnels still reopen, idle boxes are still let go after `idleDisconnect`, and a waiting thread still resumes or starts a stopped box, as does bb's recovery after a restart; everything else is only reported by `bb ona status`.",
+        "When a box is started, stopped, restarted or deleted outside bb (Ona UI, ona CLI), bring bb back in step: restart bb's daemon on a box that came back. Off: stopped or deleted boxes are still marked suspended, tunnels still reopen, idle boxes are still let go after `idleDisconnect`, and a waiting thread still resumes or starts a stopped box, as does bb's recovery after a restart; everything else is only reported by `bb ona status`. A changed setting applies after `bb plugin reload ona`.",
       default: true,
     },
     codexSqliteHome: {
       type: "string",
       label: "Codex SQLite home on devboxes",
       description:
-        "CODEX_SQLITE_HOME for Codex launched by bb, on the devbox's local disk (a shared NFS ~/.codex corrupts SQLite WAL). Empty keeps Codex's default. A changed setting applies after `bb plugin reload ona`, and reaches a box on its next connect (`bb ona reconnect`, a resume or the daemon's restart).",
+        "CODEX_SQLITE_HOME for Codex launched by bb, on the devbox's local disk (a shared NFS ~/.codex corrupts SQLite WAL). Empty keeps Codex's default. A changed setting applies after `bb plugin reload ona`. It reaches a box on its next connect (`bb ona reconnect`, a resume or the daemon's restart).",
       default: "/workspaces/.codex-sqlite-bb",
       experimental_schema: devboxPath,
     },
@@ -87,7 +90,7 @@ export default async function plugin(bb: BbPluginApi) {
       type: "string",
       label: "Local folder for ~/.bb-machines on devboxes",
       description:
-        "~/.bb-machines is symlinked here so each devbox keeps bb's machine data on its own disk even when the home is shared over NFS. Empty leaves ~/.bb-machines alone.",
+        "~/.bb-machines is symlinked here so each devbox keeps bb's machine data on its own disk even when the home is shared over NFS. Empty leaves ~/.bb-machines alone. A changed setting applies after `bb plugin reload ona`.",
       default: "/workspaces/.bb-machines",
       experimental_schema: devboxPath,
     },
@@ -102,13 +105,14 @@ export default async function plugin(bb: BbPluginApi) {
       type: "boolean",
       label: "Auto-update agent CLIs on devboxes",
       description:
-        "Weekdays at 09:00 (this Mac's time), apply pending updates for the CLIs below on connected Ona devboxes. Boxes with a running agent turn are skipped until the next run.",
+        "Weekdays at 09:00 (this Mac's time), apply pending updates for the CLIs below on connected Ona devboxes. Boxes with a running agent turn are skipped until the next run. A changed setting applies after `bb plugin reload ona`.",
       default: true,
     },
     autoUpdateProviders: {
       type: "string",
       label: "CLIs to auto-update",
-      description: "bb provider ids, comma-separated. Only installed CLIs are updated; nothing new is installed.",
+      description:
+        "bb provider ids, comma-separated. Only installed CLIs are updated; nothing new is installed. A changed setting applies after `bb plugin reload ona`.",
       default: "claude-code,codex",
     },
   });
@@ -399,7 +403,7 @@ export default async function plugin(bb: BbPluginApi) {
 
   const move = createMove({ sdk: bb.sdk, machineOfHost });
 
-  const updateClis = createUpdateClis({ bb, machines, autoUpdateProviders });
+  const updateClis = createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef });
   if (autoUpdateClis) {
     bb.background.schedule("cli-updates", "0 9 * * 1-5", async () => {
       for (const line of await updateClis()) bb.log.info(`cli update: ${line}`);
@@ -469,7 +473,7 @@ export default async function plugin(bb: BbPluginApi) {
         throw new experimental_PluginRpcRefusal({ code: "conflict", message: errorText(error) });
       }),
     devbox_open_editor: async ({ hostId }) => {
-      const row = await findMachine(hostId);
+      const row = (await machines()).find((r) => r.hostId === hostId);
       if (!row) return { opened: false };
       openEditor(row.resource.envId);
       return { opened: true };

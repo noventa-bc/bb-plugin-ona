@@ -517,3 +517,20 @@ test("machines() keeps a creating host out of hostByEnv, and an includeCreating 
   assert.deepEqual(await ids({ includeCreating: true }), ["h1", "h2"]);
   assert.deepEqual([...hostByEnv], [["env-h1", "h1"]]);
 });
+
+// Bug: a ref two boxes share by env name picked the first one listed, so bb acted on a box the user did not name.
+test("a ref two boxes share by name is refused and names both boxes (fails if the first match wins)", () => {
+  const first = { hostId: "h-1", machine: "api", resource: { envId: "env-1", envName: "api" } } as Row;
+  const second = { hostId: "h-2", machine: "api", resource: { envId: "env-2", envName: "api" } } as Row;
+  assert.throws(() => rowForRef([first, second], "api"), {
+    message: '"api" matches 2 devboxes: api (h-1), api (h-2). Use a host id.',
+  });
+  assert.equal(rowForRef([first, second], "h-2"), second);
+});
+
+test("a host id wins over two boxes that share an env name equal to it (fails if the name match is checked first)", () => {
+  const named = { hostId: "h-x", machine: "box-x", resource: { envId: "env-x", envName: "h-1" } } as Row;
+  const first = { hostId: "h-1", machine: "api", resource: { envId: "env-1", envName: "api" } } as Row;
+  const second = { hostId: "h-2", machine: "api", resource: { envId: "env-2", envName: "h-1" } } as Row;
+  assert.equal(rowForRef([named, first, second], "h-1"), first);
+});

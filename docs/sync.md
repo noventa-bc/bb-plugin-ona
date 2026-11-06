@@ -63,7 +63,7 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
 
 `bb ona new` resolves its project name with `ona project list -o json` (`resolveProjectId` in `src/ona.ts`). It is read-only and touches no box, so safety rule 1 does not gate it.
 
-`ona environment stop <id>` runs in the provider's `suspend()` (`src/provider.ts`) when Ona does not already show the box stopped; a suspend the plugin makes itself skips it (safety rule 2). `ona environment delete <id>` runs in `remove()` and `reconcileCleanup()` only for a box bb created, and only when `unpushedWork()` finds no unpushed commits or uncommitted files; an adopted box is never deleted.
+`ona environment stop <id>` runs in the provider's `suspend()` (`src/provider.ts`) when Ona still has the box and does not show it stopped or deleted; a suspend the plugin makes itself skips it (safety rule 2). `ona environment delete <id>` runs in `remove()` and `reconcileCleanup()` only for a box bb created, and only when `unpushedWork()` finds no unpushed commits or uncommitted files; an adopted box is never deleted.
 
 **Safety rules.** Every automatic action keeps these:
 
@@ -139,8 +139,10 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    `ona environment open` and `bb ona ssh --thread`.
    _Why: an accidental start costs money and keeps the box up._
 
-2. **Never stop a box.** Suspends the plugin makes because of what it saw in Ona
-   skip the provider's stop. _Why: a wrong or stale listing must not stop a box with your work on it._
+2. **The plugin's own suspends never stop a box.** Every suspend the plugin makes
+   skips the provider's stop. A suspend you ask for (Pause, `bb machine suspend`, or `bb machine reconcile` of a suspended
+   machine) stops the box unless Ona shows it stopped or deleted (not deleting) or no longer has it, a STARTING or
+   STOPPING box included. _Why: a wrong or stale listing must not stop a box with your work on it._
 3. **Restart a daemon only when the check finds none.** The check looks for a
    process whose command line names a folder under `~/.bb-machines`, the machine
    data folder (`machineDataDir`) or the box's legacy data folder (a relative one
