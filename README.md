@@ -310,7 +310,7 @@ bb machine remove ona:<name>   # created: deletes the box unless it has unpushed
 ## Troubleshooting
 
 - **Provider shows "setup required":** the message says what's missing: install
-  the `ona` CLI (or set `onaPath`, then `bb plugin reload ona`), run `ona login`, or run `ona environment ssh-config`.
+  the `ona` CLI (or run `bb plugin config ona set onaPath <path>`, then `bb plugin reload ona`), run `ona login`, or run `ona environment ssh-config`.
 - **"~/.bb-machines is a real folder on the shared home":** move it aside with
   `mv ~/.bb-machines ~/.bb-machines.shared`, then add the machine again.
 - **Creation times out or fails:** check `bb plugin logs ona` and `bb machine show <id>`.

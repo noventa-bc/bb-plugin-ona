@@ -142,9 +142,7 @@ test("wake on a running box keeps its tunnel when the connect fails (fails if a 
 
 test("a create with no project and no defaultProject is refused, naming the setting and the reload (fails if the reload is dropped)", async () => {
   const { provider } = register({ found: box("RUNNING") });
-  const verdict = await provider.validate!({ inputs: { mode: "create" } } as Parameters<
-    NonNullable<typeof provider.validate>
-  >[0]);
+  const verdict = await provider.validate!({ inputs: { mode: "create" } });
   assert.equal(verdict.action, "refuse");
   assert.match("message" in verdict ? verdict.message : "", /`defaultProject` setting; .*`bb plugin reload ona`/);
 });

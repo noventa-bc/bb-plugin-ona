@@ -161,3 +161,8 @@ test("SKILL.md's connect-time settings line names the reload (fails if its claus
   const skill = readFileSync(join(repo, "skills/ona-devboxes/SKILL.md"), "utf8");
   assert.match(skill, /reach a box on its next connect after `bb plugin reload ona`/);
 });
+
+test("server.ts's waitForSharedHome description names the reload (fails if its sentence is dropped)", () => {
+  const server = readFileSync(join(repo, "server.ts"), "utf8");
+  assert.match(server, /share a home folder\. A changed setting applies after `bb plugin reload ona`\./);
+});
