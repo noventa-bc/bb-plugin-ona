@@ -81,7 +81,7 @@ Change these together, in the same edit.
 
 The safety rules behind 1–4 are in `docs/sync.md`. Cite `file:line` for each finding. Report at most 5 nits. Run `/ponytail-review branch` in its own agent when FACTORY.md step 6 gives the PR that pass.
 
-1. No SSH, start or stop of a box unless an Ona listing from the same check says the box is RUNNING, except the starts `docs/sync.md` rule 1 names (a waiting thread on an active machine, `bb ona resume`, and bb's own resume, its recovery after a restart included) and the stop in the provider's suspend (your Pause or `bb machine suspend`, or bb's own suspend), which stops a box in any phase Ona shows but stopped or deleted (`docs/sync.md` rule 2). A failed listing means "unknown".
+1. No SSH, start or stop of a box unless an Ona listing from the same check says the box is RUNNING, except the starts `docs/sync.md` rule 1 names (a waiting thread on an active machine, `bb ona resume`, and bb's own resume, its recovery after a restart included) and the stop in the provider's suspend (Pause, `bb machine suspend`, or `bb machine reconcile` of a suspended machine), which stops a box unless Ona shows it stopped or deleted (not deleting) or no longer has it (`docs/sync.md` rule 2). A failed listing means "unknown".
 2. Automatic suspends never stop a box.
 3. Forcing (`bb ona sync`, `bb ona reconnect`, `bb ona resume`, and, while no hold is set, a pass that finds a thread waiting on a box Ona shows stopped or stopping) only skips cooldowns, backoff and the give-up; the hold a thread's failed pass leaves, and the events that end it, are in docs/sync.md rule 3. It never skips a safety rule.
 4. Removing a machine never deletes an adopted environment.
