@@ -137,9 +137,20 @@ export interface Row {
 export const matchesRef = (row: Row, ref: string) =>
   [row.hostId, row.machine, row.resource.envId, row.resource.envName].includes(ref);
 
-/** Host id first: another box's Ona env name can equal a host id (`bb ona rename` takes any valid name). */
-export const rowForRef = (rows: readonly Row[], ref: string) =>
-  rows.find((r) => r.hostId === ref) ?? rows.find((r) => matchesRef(r, ref));
+/**
+ * Host id first: another box's Ona env name can equal a host id (`bb ona rename` takes any valid name). Other
+ * names must pick one box: two boxes sharing a name throw, listing them, so the caller refuses the command.
+ */
+export const rowForRef = (rows: readonly Row[], ref: string): Row | undefined => {
+  const byHost = rows.find((r) => r.hostId === ref);
+  if (byHost) return byHost;
+  const matches = rows.filter((r) => matchesRef(r, ref));
+  if (matches.length > 1)
+    throw new Error(
+      `"${ref}" matches ${matches.length} devboxes: ${matches.map((r) => `${r.machine} (${r.hostId})`).join(", ")}. Use a host id.`,
+    );
+  return matches[0];
+};
 
 export type Sync = ReturnType<typeof createSync>;
 

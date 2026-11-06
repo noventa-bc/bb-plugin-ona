@@ -64,6 +64,8 @@ type InstallEvents = Awaited<ReturnType<UpdatesBb["sdk"]["hosts"]["installProvid
 function updater(
   boxes: Array<{
     hostId: string;
+    /** The Ona env name; defaults to `box-<hostId>`. */
+    envName?: string;
     status?: string;
     threads?: ThreadState[];
     /** Listed only when asked for hidden threads, like bb's workflow workers and side chats. */
@@ -79,7 +81,7 @@ function updater(
         hostId: box.hostId,
         machine: `m-${box.hostId}`,
         status: box.status ?? "connected",
-        resource: { envId: `env-${box.hostId}`, envName: `box-${box.hostId}` },
+        resource: { envId: `env-${box.hostId}`, envName: box.envName ?? `box-${box.hostId}` },
       }) as Row,
   );
   const byHost = new Map(boxes.map((box) => [box.hostId, box]));
@@ -158,4 +160,14 @@ test("updateClis with force updates a busy box; a ref picks one box or none", as
   }
   assert.deepEqual(installs, Array(4).fill("busy codex"));
   assert.deepEqual(await updateClis({ ref: "nope" }), ["No matching Ona devboxes."]);
+});
+
+// Bug: `update <ref>` updated every box a shared env name matched, not the one box the ref picks.
+test("update with a ref two boxes share is refused and touches neither", async () => {
+  const { updateClis, installs } = updater([
+    { hostId: "one", envName: "shared", codex: pending },
+    { hostId: "two", envName: "shared", codex: pending },
+  ]);
+  await assert.rejects(updateClis({ ref: "shared", force: true }), /"shared" matches 2 devboxes/);
+  assert.deepEqual(installs, []);
 });

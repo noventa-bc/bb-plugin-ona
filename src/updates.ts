@@ -2,7 +2,7 @@
 // updates bb already detects, never install a CLI that isn't there.
 // server.ts schedules updateClis; tests drive it with a fake of the bb calls below.
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
-import type { Row } from "./sync.ts";
+import { rowForRef, type Row } from "./sync.ts";
 
 export interface CliStatus {
   installed: boolean;
@@ -102,9 +102,9 @@ export function createUpdateClis({ bb, machines, autoUpdateProviders }: UpdatesD
   return async function updateClis(options: { ref?: string; force?: boolean } = {}): Promise<string[]> {
     const wanted = parseProviderList(autoUpdateProviders);
     const lines: string[] = [];
-    for (const row of await machines()) {
-      if (options.ref && ![row.hostId, row.machine, row.resource.envId, row.resource.envName].includes(options.ref))
-        continue;
+    const rows = await machines();
+    for (const row of options.ref ? [rowForRef(rows, options.ref)] : rows) {
+      if (!row) continue;
       const name = row.resource.envName;
       if (row.status !== "connected") {
         lines.push(`${name}: skipped (${row.status})`);

@@ -119,7 +119,7 @@ export const usage = [
   "  bb ona move <thread-id> <ref>  Continue a thread in a new one on another devbox at the same path",
   "  bb ona update [ref] [--force] Apply pending Claude Code / Codex updates now (also runs weekdays 09:00)",
   "",
-  "<ref> is a bb machine name/id or an Ona environment name/id.",
+  "<ref> is a bb machine name/id or an Ona environment name/id; a name two devboxes share is refused (use a host id).",
 ].join("\n");
 
 export const commands = [
