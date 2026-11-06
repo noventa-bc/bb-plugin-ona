@@ -55,15 +55,16 @@ test("parseDuration reads s/m/h and bare minutes, and treats junk as off", () =>
   assert.equal(parseDuration("soon"), 0);
 });
 
-test("idleDisconnect refuses 1h30m, 1hr and 90min, which parseDuration reads as off (fails if the schema accepts them)", () => {
-  for (const typo of ["1h30m", "1hr", "90min"]) {
+test("idleDisconnect refuses typos parseDuration reads as off, such as 1h30m, 1d or +30m (fails if the schema accepts one)", () => {
+  for (const typo of ["1h30m", "1hr", "90min", "30min", "30ms", "1d", "1 day", "+30m", ".5h", "1.", "1,5h", "m"]) {
     assert.equal(idleDisconnectSchema.safeParse(typo).success, false, typo);
   }
 });
 
-test("idleDisconnect takes every form parseDuration reads, and empty for off (fails if the schema refuses one)", () => {
-  for (const form of ["30m", "2h", "45s", "1.5h", " 30m ", "90", "0", "", "  "]) {
+test("idleDisconnect takes the forms the README lists, and empty for off (fails if the schema refuses one)", () => {
+  for (const form of ["30m", "2h", "45s", "1.5h", " 30m ", "30M", "30 m", "90", "0", "", "  "]) {
     assert.equal(idleDisconnectSchema.safeParse(form).success, true, JSON.stringify(form));
+    assert.ok(Number.isFinite(parseDuration(form)), `parseDuration reads ${JSON.stringify(form)} as a number`);
   }
 });
 

@@ -145,6 +145,7 @@ export async function settledLifecycle(
 export const SUSPENDED = ["suspending", "suspended"] as const;
 export const RESUMED = ["resuming", "active"] as const;
 
+// No `g` flag: the schema calls `.test()` on it, which a global regex makes stateful.
 const DURATION = /^\s*(\d+(?:\.\d+)?)\s*([smh]?)\s*$/i;
 
 /** "30m", "2h", "45s" or bare minutes to ms; empty, "0" or unparseable is 0 (off). */
@@ -160,5 +161,5 @@ export const idleDisconnectSchema = z
   .string()
   .refine(
     (value) => value.trim() === "" || DURATION.test(value),
-    "use 30m, 2h, 45s or 90 (bare minutes); empty or 0 keeps every box connected",
+    "idleDisconnect: use 30m, 2h, 45s or 90 (bare minutes); empty or 0 keeps every box connected",
   );
