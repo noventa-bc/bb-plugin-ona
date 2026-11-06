@@ -144,15 +144,20 @@ function hintsWithoutReload(text: string): string[] {
   });
 }
 
-test("a `plugin config ona set` hint in the docs or the CLI's text with no `plugin reload ona` in its sentence fails", () => {
+test("the docs and the CLI's text name `plugin reload ona` in every `plugin config ona set` sentence (fails if a hint drops it)", () => {
   const offenders = settingHintFiles.flatMap((file) =>
     hintsWithoutReload(readFileSync(join(repo, file), "utf8")).map((sentence) => `${file}: ${sentence}`),
   );
   assert.deepEqual(offenders, []);
 });
 
-test("the reload check flags a hint whose own sentence lacks the reload (fails if a later sentence counts, or a hint without it passes)", () => {
+test("the reload check counts only the hint's own sentence (fails if a later sentence counts or a bare hint passes)", () => {
   assert.equal(hintsWithoutReload("Run `bb plugin config ona set x 1`, then `bb plugin reload ona`.").length, 0);
   assert.equal(hintsWithoutReload("Run `bb plugin config ona set x 1`. Then run `bb plugin reload ona`.").length, 1);
   assert.equal(hintsWithoutReload("Run `bb plugin config ona set x 1`.").length, 1);
+});
+
+test("SKILL.md's connect-time settings line names the reload (fails if its clause is dropped)", () => {
+  const skill = readFileSync(join(repo, "skills/ona-devboxes/SKILL.md"), "utf8");
+  assert.match(skill, /reach a box on its next connect after `bb plugin reload ona`/);
 });

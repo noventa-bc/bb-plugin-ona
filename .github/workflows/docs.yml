@@ -34,7 +34,7 @@ jobs:
         run: scripts/release-check.sh "origin/$BASE"
       # Prettier, the line limits and the relative links; the pre-commit hook runs the same script.
       - run: scripts/docs-check.sh
-      # The Markdown guards in test/docs-check.test.ts: npm test runs them too, but check.yml skips a Markdown-only change.
-      - run: node --test --experimental-strip-types test/docs-check.test.ts
+      # The guards in test/docs-check.test.ts: npm test runs them too, but check.yml skips a Markdown-only change.
+      - run: node --test --experimental-strip-types --test-timeout=60000 test/docs-check.test.ts
       # The personal-path check on the checkout (AGENTS.md rule 10).
       - run: scripts/leak-check.sh
