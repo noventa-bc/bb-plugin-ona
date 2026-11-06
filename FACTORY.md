@@ -90,16 +90,20 @@ those and the "skipped or not checked" lines ponytail ends with.
    ask before building. Batch the questions into one message.
 4. **Brief** each builder with the template in `docs/owner.md` (a reviewer
    gets its `Role:` line and the step-6 brief), plus: the
-   branch name `agent/<slug>`, the files and line areas involved, the tests to
+   branch name `agent/<slug>`, the files involved (quote the line's text, not
+   its number: numbers drift), the tests to
    write first, the coupled changes from `AGENTS.md`, and what to report back.
 5. **Build** in a worktree (slow commands in the background). The builder runs
    `npm ci --ignore-scripts`, then `npm run prepare`, writes
    a failing test first where possible (each test names, in its title or the
-   handoff, the bug it fails on; a test that still passes with the rule
+   handoff, the bug it fails on, or the brief says "guard, no `// Bug:` line"
+   when `main` has no bug; a test that still passes with the rule
    deleted is not done; stage the fix before a mutant you restore with
    `git -C <worktree> checkout -- <file>`, or the restore brings back the
    unfixed file), keeps
-   `npm run check` green, writes
+   `npm run check` green (Semgrep and `shellcheck` need an install the builder
+   cannot run: the handoff names the skip; this Mac has no `timeout` command,
+   the Bash tool's own timeout serves), writes
    `.agent/HANDOFF.md`, and leaves the work staged for the orchestrator.
 6. **Review.** The orchestrator commits the builder's staged work on its
    branch (after the check passes on its own), reads the handoff and the diff,
@@ -113,7 +117,8 @@ those and the "skipped or not checked" lines ponytail ends with.
    told to run tests and mutants in a scratch folder of its own under the
    session scratchpad (`git archive <sha>` into a new folder, which has no
    history, so git commands stay `git -C <worktree>`; link `node_modules`
-   only when the folder has none), and
+   only when the folder has none; a file the reviewer names is at the path
+   its own write call used, and a probe says what it leaves running), and
    sends blocking findings back to the builder. Code, here, is anything but
    comments, lint messages, Markdown, a lockfile, a `package.json` override
    and the version bump (step 7); the ten numbered Code Review Rules in
@@ -233,7 +238,7 @@ This file is the memory of the flow. Keep it current:
 
 ## Owner instructions on record
 
-Rules the owner gave that no section above states. Checked 2026-11-02.
+Rules the owner gave that no section above states. Checked 2026-11-06.
 
 - Several worktrees are open at once and the shell's working directory drifts
   between them. Address every git command with `git -C <path>` and every file
@@ -261,3 +266,6 @@ Rules the owner gave that no section above states. Checked 2026-11-02.
 - A commit subject or PR title is at most 100 characters (`scripts/conventional.sh`
   has the rule; `.githooks/commit-msg` refuses longer, after the pre-commit
   check has run): measure it first.
+- A roadmap item tagged `[COST]` (it raises what Ona bills) is never worked
+  on without the owner's explicit approval of that item, whatever else the
+  owner asked for (checked 2026-11-06).
