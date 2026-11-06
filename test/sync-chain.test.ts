@@ -132,6 +132,22 @@ test("status shows a retry line only while the quiet period is ahead (fails if a
   assert.match((await retryWith(GIVE_UP_AFTER, Date.now() - HOUR)) ?? "", /^gave up after /);
 });
 
+// Bug: a release's give-up named `bb ona sync <machine>`, a pass that runs no idle release.
+test("a release's give-up says to run bb ona sync for all boxes, another action's names the machine (fails if the release's give-up names the machine)", async () => {
+  const { sync, guard } = world([idle("h1")]);
+  const giveUpWith = async (action: string) => {
+    guard.records.set("h1", { action, reason: "r", at: Date.now(), failures: GIVE_UP_AFTER, quietUntil: 0 });
+    const [row] = await sync.statusRows();
+    return row!.retry;
+  };
+  const machine = (await sync.statusRows())[0]!.machine;
+  assert.equal(await giveUpWith("release-idle"), `gave up after ${GIVE_UP_AFTER} failures; run \`bb ona sync\``);
+  assert.equal(
+    await giveUpWith("reconnect"),
+    `gave up after ${GIVE_UP_AFTER} failures; run \`bb ona sync ${machine}\``,
+  );
+});
+
 // A forced run ends the give-up, so its failure starts a new count and backoff (docs/sync.md rule 3).
 test("a forced failure after a give-up starts a fresh count (fails if a forced failure keeps counting past the give-up)", async () => {
   let now = 0;
@@ -160,6 +176,23 @@ test("a refused idle suspend on a connected box still gives up after three tries
       await tick(60_000);
     }
     assert.equal(calls.filter((call) => call === "suspend h1").length, GIVE_UP_AFTER);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+// Bug: a forced all-boxes pass skipped an idle release that had given up, so `bb ona sync` did not retry it.
+test("a forced all-boxes pass retries a given-up idle release (fails if the release's mayAct ignores force)", async () => {
+  enableFakeClock();
+  try {
+    const { sync, calls } = world([idle("h1")], { refuse: REFUSED, pluginStartedAt: Date.now() - 2 * HOUR });
+    for (let pass = 0; pass < 40; pass++) {
+      await sync.reconcile(new Set([ALL]), { wait: true });
+      await tick(60_000);
+    }
+    assert.equal(calls.filter((call) => call === "suspend h1").length, GIVE_UP_AFTER);
+    await sync.reconcile(new Set([ALL]), { force: true, wait: true });
+    assert.equal(calls.filter((call) => call === "suspend h1").length, GIVE_UP_AFTER + 1);
   } finally {
     await resetFakeClock();
   }
