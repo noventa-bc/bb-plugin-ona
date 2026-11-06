@@ -65,6 +65,8 @@ test("a devbox_command input leaves out unset keys, which bb's RPC client refuse
   });
 });
 
+// shortcut: matches the name as written in the source, so a name escaped, split or built from a template, or imported from
+// another file, slips past; walk app.tsx with the TypeScript parser if a call ever writes it so.
 test("every devbox_command name in app.tsx is followed by devboxCommandInput( (fails if a call builds its input by hand, on one line, split by prettier, or through a variable holding the name)", () => {
   const app = readFileSync(new URL("../app.tsx", import.meta.url), "utf8");
   const names = app.match(/["'`]devbox_command["'`]/g) ?? [];

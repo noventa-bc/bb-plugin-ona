@@ -301,7 +301,7 @@ bb ona sync [name]             # re-check Ona now and repair out-of-step machine
 bb ona keep-alive <name> 2h    # keep a running box from Ona's idle timeout (at most 12h)
 bb ona keep-alive <name> off   # end it early
 bb ona move <thread-id> <ref>  # continue a thread in a new thread on another devbox, at the same path
-bb ona rename <name> [new]     # rename env + bb machine (random fun name if omitted)
+bb ona rename <ref> [name]     # rename env + bb machine (random fun name if omitted)
 bb ona reconnect <name>        # active machines: reopen the tunnel and restart the bb daemon; refused unless bb shows the machine active and Ona shows its box running
 bb ona resume <name>           # a stopped active machine: starts its box and reconnects the bb daemon (your action); a running box is only reconnected; refused unless bb shows the machine active
 bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
