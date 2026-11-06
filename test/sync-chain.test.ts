@@ -253,6 +253,7 @@ test("a failed Ona listing inside the daemon repair leaves the count alone (fail
     await sync.reconcile(new Set(["h1"]), { wait: true });
     assert.equal(guard.records.get("h1")!.failures, 1);
     assert.equal(guard.records.get("h1")!.quietUntil, quietUntil);
+    assert.equal(guard.records.get("h1")!.threadWaiting, true, "the hold is kept");
     await tick(6 * 60_000);
     repairReadFails = false;
     await sync.reconcile(new Set(["h1"]), { wait: true });
@@ -329,11 +330,43 @@ test("a failed Ona read after the daemon check fails the pass, so the next pass 
   });
   await sync.reconcile(new Set(["h1"]), { wait: true });
   const record = guard.records.get("h1")!;
-  assert.match(record.error ?? "", /Ona couldn't be asked before the restart; not restarting/);
+  assert.match(record.error ?? "", /Ona couldn't confirm the box running before the restart; not restarting/);
   assert.equal(record.failures, 1);
   readFails = false;
   await sync.reconcile(new Set(["h1"]), { wait: true });
   assert.deepEqual(calls, ["probe"]);
+});
+
+// Rule 4: a repair read without the box (an empty list) is unknown, as a failed one is, never "gone": before the daemon
+// check it leaves the record alone; after the check the pass fails and backs off.
+test("a repair listing without the box is unknown, not gone (fails if it records a success that resets the count)", async () => {
+  enableFakeClock();
+  try {
+    let emptyRead = 0; // which repair read of the pass comes back empty: 1 before the daemon check, 2 after it
+    let reads = 0;
+    const { sync, calls, guard } = world([idle("h1", { status: "disconnected", lastSeenAt: Date.now() - HOUR })], {
+      daemonAlive: false,
+      reconnectFails: "daemon restart failed",
+      refreshEmpty: () => ++reads === emptyRead,
+    });
+    const pass = async (empty: number) => {
+      [reads, emptyRead] = [0, empty];
+      await sync.reconcile(new Set(["h1"]), { wait: true });
+    };
+    await pass(0);
+    const { failures, quietUntil } = guard.records.get("h1")!;
+    assert.equal(failures, 1);
+    await tick(6 * 60_000);
+    await pass(1);
+    assert.deepEqual(calls, ["probe", "restart daemon"], "no daemon check after an empty read");
+    assert.equal(guard.records.get("h1")!.failures, 1);
+    assert.equal(guard.records.get("h1")!.quietUntil, quietUntil);
+    await pass(2);
+    assert.deepEqual(calls, ["probe", "restart daemon", "probe"], "no restart after an empty read");
+    assert.equal(guard.records.get("h1")!.failures, 2);
+  } finally {
+    await resetFakeClock();
+  }
 });
 
 // That read's failure counts toward the give-up like a failed restart (docs/sync.md rule 5): two failed restarts, then a

@@ -8,7 +8,7 @@
 // 1. never wake compute: no start, no SSH unless Ona says RUNNING, except the two starts docs/sync.md rule 1 names;
 // 2. never stop compute: observed suspends skip the provider's stop;
 // 3. never restart a live daemon: probe first (a restart kills running turns);
-// 4. unknown is not gone: a failed or empty listing changes nothing;
+// 4. unknown is not gone: a failed or empty listing is unknown, never gone;
 // 5. one action per machine at a time, with cooldown, backoff and give-up.
 
 export const GRACE_MS = 45_000;

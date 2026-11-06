@@ -383,10 +383,11 @@ export function createSync(deps: SyncDeps) {
               return;
             case "heal-daemon": {
               // Rule 1: SSH starts stopped boxes, so ask Ona before the daemon check and again right before a restart.
-              // Rule 4: a listing that fails is unknown (null); before the daemon check nothing ran (NOTHING_DONE).
+              // Rule 4: a listing that fails or leaves the box out is unknown (null); before the daemon check nothing ran (NOTHING_DONE).
               const runningNow = async () => {
                 try {
-                  return isRunning((await snapshot.refresh()).envs.find((e) => e.id === resource.envId));
+                  const env = (await snapshot.refresh()).envs.find((e) => e.id === resource.envId);
+                  return env ? isRunning(env) : null;
                 } catch (error) {
                   bb.log.warn(`${machine}: Ona couldn't be asked (${errorText(error)})`);
                   return null;
@@ -404,7 +405,8 @@ export function createSync(deps: SyncDeps) {
               // The check can take 30 s, long enough for the box to be stopped in Ona.
               const stillRunning = await runningNow();
               // The check's SSH ran: a failed pass, so its backoff and the give-up apply (rule 5).
-              if (stillRunning === null) throw new Error("Ona couldn't be asked before the restart; not restarting");
+              if (stillRunning === null)
+                throw new Error("Ona couldn't confirm the box running before the restart; not restarting");
               if (!stillRunning) return gone;
               // The waits inside this call bound it; a plugin reload ends it (docs/sync.md rule 1).
               await provider.reconnect(resource, report, signal);

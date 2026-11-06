@@ -56,6 +56,8 @@ export function world(
     listingError?: string;
     /** The repair's own listing read (`refresh()`) throws while this returns true; the pass's read still works. */
     refreshFails?: () => boolean;
+    /** The repair's own read comes back without any box. */
+    refreshEmpty?: () => boolean;
     /** The host whose workspace list throws. */
     workspacesFail?: string;
     /** bb's host lookup fails: with a plain error, or with only the SDK's `not_found` code (no status). */
@@ -141,7 +143,8 @@ export function world(
   const refreshListing = listing.refresh.bind(listing);
   listing.refresh = async () => {
     if (options.refreshFails?.()) throw new Error("not logged in");
-    return refreshListing();
+    const result = await refreshListing();
+    return options.refreshEmpty?.() ? { ...result, envs: [] } : result;
   };
   const sync = createSync({
     bb: {
