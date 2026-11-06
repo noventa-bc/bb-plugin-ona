@@ -61,10 +61,23 @@ test("idleDisconnect refuses typos parseDuration reads as off, such as 1h30m, 1d
   }
 });
 
-test("idleDisconnect takes the forms the README lists, and empty for off (fails if the schema refuses one)", () => {
-  for (const form of ["30m", "2h", "45s", "1.5h", " 30m ", "30M", "30 m", "90", "0", "", "  "]) {
+test("idleDisconnect takes its documented forms, case and spaces aside, and empty for off, each read as its duration (fails if one is refused or misread)", () => {
+  const forms: Record<string, number> = {
+    "30m": 30 * MIN,
+    "2h": 120 * MIN,
+    "45s": 45_000,
+    "1.5h": 90 * MIN,
+    " 30m ": 30 * MIN,
+    "30M": 30 * MIN,
+    "30 m": 30 * MIN,
+    "90": 90 * MIN,
+    "0": 0,
+    "": 0,
+    "  ": 0,
+  };
+  for (const [form, ms] of Object.entries(forms)) {
     assert.equal(idleDisconnectSchema.safeParse(form).success, true, JSON.stringify(form));
-    assert.ok(Number.isFinite(parseDuration(form)), `parseDuration reads ${JSON.stringify(form)} as a number`);
+    assert.equal(parseDuration(form), ms, JSON.stringify(form));
   }
 });
 

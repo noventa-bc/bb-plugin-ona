@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { local, startHost } from "./e2e-host.ts";
 
-test("bb refuses an idleDisconnect typo and saves 90m (fails if the setting loses its schema)", local, async () => {
+test("bb refuses an idleDisconnect typo and accepts 90m (fails if the setting loses its schema)", local, async () => {
   const { host, close } = await startHost({
     machineBootstrap: {
       async bootstrap() {
