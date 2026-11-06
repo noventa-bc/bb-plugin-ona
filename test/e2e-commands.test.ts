@@ -407,6 +407,56 @@ test(
   },
 );
 
+test(
+  "devbox_command rename renames that devbox in Ona and its bb machine (fails if the name is dropped or the rename is refused)",
+  local,
+  async () => {
+    const envId = extraBoxes["host-2"]!.envId;
+    onaCalls();
+    const reply = (await host.harness.behavior.callRpc("devbox_command", {
+      command: "rename",
+      hostId: "host-2",
+      arg: "renamed-box",
+    })) as { exitCode: number; stdout?: string; stderr?: string };
+    assert.equal(reply.exitCode, 0, reply.stderr);
+    assert.equal(reply.stdout, "Renamed host-2 -> renamed-box (bb machine ona:renamed-box)");
+    assert.ok(onaCalls().includes(`environment update ${envId} --name renamed-box`));
+    assert.equal(envs().find((e) => e.id === envId)!.metadata.name, "renamed-box");
+    assert.deepEqual(host.harness.inspection.sdk.callsTo("hosts.update").at(-1), [
+      { hostId: "host-2", name: "ona:renamed-box" },
+    ]);
+  },
+);
+
+test(
+  "devbox_command keep-alive holds that running box until `off` (fails if the duration is dropped or Ona is not asked)",
+  local,
+  async () => {
+    const envId = extraBoxes["host-2"]!.envId;
+    patchBox(envId, { phase: RUNNING });
+    onaCalls();
+    const started = (await host.harness.behavior.callRpc("devbox_command", {
+      command: "keep-alive",
+      hostId: "host-2",
+      arg: "1m",
+    })) as { exitCode: number; stdout?: string; stderr?: string };
+    assert.equal(started.exitCode, 0, started.stderr);
+    assert.match(started.stdout ?? "", /^Keeping host-2 alive until \d\d:\d\d\./);
+    await waitForLog(`environment keep-alive --environment-id ${envId}`);
+    const status = (await host.harness.behavior.callRpc("devbox_command", {
+      command: "status",
+      hostId: "host-2",
+    })) as { stdout?: string };
+    assert.match(status.stdout ?? "", /^  keep-alive until \d\d:\d\d$/m);
+    const ended = (await host.harness.behavior.callRpc("devbox_command", {
+      command: "keep-alive",
+      hostId: "host-2",
+      arg: "off",
+    })) as { stdout?: string };
+    assert.equal(ended.stdout, "Ended the keep-alive for host-2.");
+  },
+);
+
 // Last in the file: it disposes the host, and the after hook's close() disposes it again (dispose is idempotent).
 test(
   "a resume from the settings button stops polling Ona when the plugin is disposed (fails if the signal is dropped)",

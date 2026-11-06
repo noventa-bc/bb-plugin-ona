@@ -3,9 +3,9 @@ import { test } from "node:test";
 import { commands } from "../src/commands.ts";
 import { devboxCommandSchema, rpcContract } from "../src/rpc.ts";
 
-const SECTION_COMMANDS = ["status", "sync", "reconnect", "resume"];
+const SECTION_COMMANDS = ["status", "sync", "reconnect", "resume", "rename", "keep-alive"];
 
-test("the settings section can run only status, sync, reconnect and resume", () => {
+test("the settings section can run only status, sync, reconnect, resume, rename and keep-alive", () => {
   const { input } = rpcContract.devbox_command;
   assert.deepEqual(devboxCommandSchema.options, SECTION_COMMANDS);
   for (const command of SECTION_COMMANDS) {
@@ -25,4 +25,18 @@ test("a host id the settings section sends is never read as a CLI flag", () => {
   for (const hostId of ["", "--", "--json"]) {
     assert.equal(input.safeParse({ command: "sync", hostId }).success, false, JSON.stringify(hostId));
   }
+});
+
+test("a new name or duration the settings section sends is never read as a CLI flag (fails if a leading dash passes)", () => {
+  const { input } = rpcContract.devbox_command;
+  assert.equal(input.safeParse({ command: "rename", hostId: "host_1", arg: "new-name" }).success, true);
+  assert.equal(input.safeParse({ command: "keep-alive", hostId: "host_1", arg: "off" }).success, true);
+  for (const arg of ["", "--", "--json"]) {
+    assert.equal(input.safeParse({ command: "rename", hostId: "host_1", arg }).success, false, JSON.stringify(arg));
+  }
+});
+
+test("an arg without a host id is refused, since the CLI would read it as the devbox (fails if it is accepted)", () => {
+  const { input } = rpcContract.devbox_command;
+  assert.equal(input.safeParse({ command: "sync", arg: "new-name" }).success, false);
 });

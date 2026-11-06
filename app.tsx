@@ -281,10 +281,13 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 /** The text a `bb ona` reply shows: its stdout, or its stderr when it failed. */
 const replyText = (reply: DevboxCommandReply) => (reply.exitCode === 0 ? reply.stdout : reply.stderr) ?? "";
 
+/** A row's field, trimmed: an empty field is undefined, so no argument is sent. */
+const fieldText = (form: HTMLFormElement) => String(new FormData(form).get("arg") ?? "").trim() || undefined;
+
 /**
- * Settings → Ona devboxes: `bb ona status` as the CLI prints it, each devbox's bb status, and buttons that run
- * the same `bb ona` commands (src/commands.ts). Read on mount, every 30 s and after each action; a row's buttons
- * are disabled while its own call runs.
+ * Settings → Ona devboxes: `bb ona status` as the CLI prints it, each devbox's bb status, and buttons and fields
+ * that run the same `bb ona` commands (src/commands.ts). Read on mount, every 30 s and after each action; a row's
+ * buttons are disabled while its own call runs.
  */
 function DevboxesSection() {
   const rpc = useRpc<typeof rpcContract>();
@@ -322,8 +325,11 @@ function DevboxesSection() {
     };
   }, [rpc, round]);
 
-  /** Runs one `bb ona` command for a devbox (its host id), or for every devbox when `hostId` is left out. */
-  const run = (command: DevboxCommand, hostId?: string) => {
+  /**
+   * Runs one `bb ona` command for a devbox (its host id), or for every devbox when `hostId` is left out. `arg` is
+   * the new name (`rename`) or the duration (`keep-alive`).
+   */
+  const run = (command: DevboxCommand, hostId?: string, arg?: string) => {
     const key = hostId ?? "all";
     // A devbox's reply goes under its row. Sync all has no row, so its reply is dropped;
     // the status re-read shows the result.
@@ -332,7 +338,7 @@ function DevboxesSection() {
     };
     setRunning((current) => [...current, key]);
     void rpc
-      .call("devbox_command", hostId ? { command, hostId } : { command })
+      .call("devbox_command", { command, hostId, arg })
       .then(show, (error: unknown) => show({ exitCode: 1, stderr: messageOf(error) }))
       .finally(() => {
         setRunning((current) => current.filter((k) => k !== key));
@@ -369,6 +375,35 @@ function DevboxesSection() {
                   {label}
                 </button>
               ))}
+              <form
+                className="flex items-center gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  run("rename", box.hostId, fieldText(event.currentTarget));
+                }}
+              >
+                <input
+                  name="arg"
+                  placeholder="New name (blank: random)"
+                  aria-label="New name"
+                  className={projectInput}
+                />
+                <button type="submit" className={sectionButton} disabled={busy}>
+                  Rename
+                </button>
+              </form>
+              <form
+                className="flex items-center gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  run("keep-alive", box.hostId, fieldText(event.currentTarget));
+                }}
+              >
+                <input name="arg" placeholder="2h or off" aria-label="Keep awake for" className={projectInput} />
+                <button type="submit" className={sectionButton} disabled={busy}>
+                  Keep awake
+                </button>
+              </form>
             </div>
             {notes[box.hostId] && <p className="whitespace-pre-wrap text-muted-foreground">{notes[box.hostId]}</p>}
           </div>
