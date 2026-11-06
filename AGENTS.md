@@ -13,6 +13,7 @@ Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
 - CI: `check.yml` runs `npm run check` and skips changes that touch only Markdown; `docs.yml` runs on Markdown changes and is where a job that validates `.md` files goes.
 - `scripts/docs-check.sh` runs the Markdown checks CI runs.
 - CI also runs `shellcheck` on `scripts/*.sh`, `test/*.sh` and `.githooks/*`; `npm run check` does not. After changing a `.sh` file, run `shellcheck` on it (`brew install shellcheck`), or say in the handoff that it was not run.
+- CI also checks that each `src/<name>.ts` has a `test/<name>.test.ts` (`check.yml` names the exceptions); `npm run check` does not, so a new module gets its own test file.
 - CI also runs the Semgrep rules in `.semgrep/rules.yml` (fixtures in `.semgrep/rules.ts`). Locally: `brew install semgrep`, then `semgrep --test --metrics=off .semgrep/` and `semgrep scan --config .semgrep/rules.yml --error --metrics=off app.tsx server.ts src`.
 - Each test times out after 60 s (`--test-timeout` in `package.json`), so a hang shows up as a named failure.
 - Run one test file with `node --test --experimental-strip-types test/reconcile.test.ts`.
