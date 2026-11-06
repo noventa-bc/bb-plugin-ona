@@ -524,3 +524,20 @@ test("a refused resume for a waiting thread is a failure, not a success (fails i
   const [row] = await sync.statusRows();
   assert.equal(row!.retry, null, "bb shows the machine suspended, and nothing retries it");
 });
+
+// Bug: the retry line hid only a suspended machine, but decide() acts only on an active one, so a machine being created,
+// removed, resumed or suspended showed a retry it never got.
+test("the retry line shows only for an active machine (fails if it shows for a machine that is creating, removing, resuming or suspending)", async () => {
+  const record = { action: "heal-daemon", reason: "daemon down", at: NOW, failures: 1, quietUntil: NOW + HOUR };
+  const retryIn = async (phase: string) => {
+    const { sync, guard } = world([idle("h1", { phase })]);
+    guard.records.set("h1", record);
+    const [row] = await sync.statusRows();
+    return row!.retry;
+  };
+  for (const phase of ["creating", "removing", "resuming", "suspending", "suspended"]) {
+    assert.equal(await retryIn(phase), null, `bb shows the machine ${phase}, and decide() doesn't act on it`);
+  }
+  const active = await retryIn("active");
+  assert.match(active ?? "", /^retrying after /);
+});
