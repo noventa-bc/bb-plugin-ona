@@ -117,7 +117,8 @@ export const usage = [
   "  bb ona sync [ref]             Re-check Ona now and repair (ignores cooldowns, backoff and the give-up, keeps the safety rules)",
   "  bb ona keep-alive <ref> <duration|off>  Keep a running devbox from Ona's inactivity timeout (at most 12h)",
   "  bb ona move <thread-id> <ref>  Continue a thread in a new one on another devbox at the same path",
-  "  bb ona update [ref] [--force] Apply pending Claude Code / Codex updates now (also runs weekdays 09:00)",
+  "  bb ona update [ref] [--force] Apply pending updates of the CLIs in `autoUpdateProviders` now",
+  "                                Also weekdays 09:00 when `autoUpdateClis` is on",
   "",
   "<ref> is a bb machine name/id or an Ona environment name/id.",
 ].join("\n");

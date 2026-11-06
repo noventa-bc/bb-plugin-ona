@@ -8,7 +8,7 @@ const createdResource = { envId: "env-1", envName: "box", adopted: false, key: "
 
 const remove = (
   provider: ReturnType<typeof register>["provider"],
-  resource: typeof adoptedResource | typeof createdResource,
+  resource: typeof createdResource & { dataDir?: string },
 ) => provider.remove({ report: lifecycle().report, hostId: "host-1", resource, signal: new AbortController().signal });
 
 const warnings = (logs: { level: string; message: string }[]) =>
@@ -74,4 +74,34 @@ test("an adopted remove whose move-aside throws still removes the machine and wa
   assert.deepEqual(calls, ["get RUNNING", "move-aside"]);
   assert.deepEqual(forgotten, ["env-1"]);
   assert.match(warnings(logs), /May not have moved bb's data folder on box aside \(exit -1: Error: ssh dropped\)\./);
+});
+
+test("a remove of a bb-created box Ona shows STOPPED deletes it and forgets the box (fails if a stopped created box is kept)", async () => {
+  const { provider, calls, forgotten } = register({ found: box("STOPPED") });
+  const removed = await remove(provider, createdResource);
+  assert.equal(removed.status, "removed");
+  assert.deepEqual(calls, ["get STOPPED", "delete env-1"]);
+  assert.deepEqual(forgotten, ["env-1"]);
+});
+
+test("an adopted remove whose move-aside exits 4 logs why the daemon may still run (fails if exit 4 loses its cause)", async () => {
+  const { provider, logs } = register({ found: box("RUNNING"), moveAside: 4 });
+  await remove(provider, adoptedResource);
+  assert.match(warnings(logs), /Could not move .*\(exit 4: \)\. The process listing couldn't be trusted/);
+});
+
+test("an adopted remove whose move-aside exits 5 logs that the folder is or holds the home folder (fails if exit 5 loses its warning)", async () => {
+  const { provider, logs } = register({ found: box("RUNNING"), moveAside: 5 });
+  await remove(provider, adoptedResource);
+  assert.match(
+    warnings(logs),
+    /Did not move bb's data folder for machine host-1 on box: it is or holds the home folder/,
+  );
+});
+
+test("an adopted remove runs the move-aside on the box's env id with hostId and dataDir as arguments, before the keys go (fails if the target, the args or the order change)", async () => {
+  const { provider, moves, forgotten } = register({ found: box("RUNNING") });
+  await remove(provider, { ...adoptedResource, dataDir: "/data/bb" });
+  assert.deepEqual(moves, [{ envId: "env-1", args: ["host-1", "/data/bb"], keysKept: true }]);
+  assert.deepEqual(forgotten, ["env-1"]);
 });
