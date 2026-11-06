@@ -361,7 +361,7 @@ export function createSync(deps: SyncDeps) {
                 if (!decision.resumeAfter || lifecycle.phase !== "active") throw new Error(suspendFailure(refusal));
                 // bb's suspend failed (Ona stopped the box under a live turn) and left the machine active, where bb's
                 // resume does nothing: the plugin wakes the box (decision 0002).
-                // No cap: the waits' own deadlines bound it, and a plugin reload ends it (docs/sync.md rule 1).
+                // The waits inside this call bound it; a plugin reload ends it (docs/sync.md rule 1).
                 const startCalled = await provider.wake(resource, report, signal);
                 return startCalled ? "started it for a waiting thread" : "reconnected it for a waiting thread";
               }
@@ -388,7 +388,7 @@ export function createSync(deps: SyncDeps) {
                 try {
                   return isRunning((await snapshot.refresh()).envs.find((e) => e.id === resource.envId));
                 } catch (error) {
-                  bb.log.info(`${machine}: Ona couldn't be asked (${errorText(error)})`);
+                  bb.log.warn(`${machine}: Ona couldn't be asked (${errorText(error)})`);
                   return null;
                 }
               };
@@ -403,10 +403,10 @@ export function createSync(deps: SyncDeps) {
                 return "couldn't tell whether the daemon runs (SSH or the process check on the box failed); not restarting";
               // The check can take 30 s, long enough for the box to be stopped in Ona.
               const stillRunning = await runningNow();
-              // The check's SSH ran: record the pass, so its cooldown applies (rule 5).
-              if (stillRunning === null) return "Ona couldn't be asked before the restart; not restarting";
+              // The check's SSH ran: a failed pass, so its backoff and the give-up apply (rule 5).
+              if (stillRunning === null) throw new Error("Ona couldn't be asked before the restart; not restarting");
               if (!stillRunning) return gone;
-              // No cap: the waits' own deadlines bound it, and a plugin reload ends it (docs/sync.md rule 1).
+              // The waits inside this call bound it; a plugin reload ends it (docs/sync.md rule 1).
               await provider.reconnect(resource, report, signal);
               return "daemon was down; restarted it";
             }

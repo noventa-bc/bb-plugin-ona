@@ -267,8 +267,7 @@ test("a failed Ona listing inside the daemon repair leaves the count alone (fail
   }
 });
 
-// A wake has no 15-minute cap of its own (docs/sync.md rule 1): a stop and a start that take 17 minutes
-// end in a connect.
+// The waits inside a wake bound it (docs/sync.md rule 1): a stop and a start that take 17 minutes end in a connect.
 test("a slow stop and start still connect the waiting thread's box (fails if a 15-minute cap aborts the wake)", async (t) => {
   enableFakeClock();
   try {
@@ -298,7 +297,7 @@ test("a slow stop and start still connect the waiting thread's box (fails if a 1
   }
 });
 
-// A daemon restart has no 15-minute cap of its own either (docs/sync.md rule 1): a 17-minute reconnect completes.
+// The waits inside a daemon restart bound it too (docs/sync.md rule 1): a 17-minute reconnect completes.
 test("a slow daemon restart still completes (fails if a 15-minute cap aborts the reconnect)", async (t) => {
   enableFakeClock();
   try {
@@ -319,20 +318,48 @@ test("a slow daemon restart still completes (fails if a 15-minute cap aborts the
   }
 });
 
-// The daemon check has SSHed into the box when the read before the restart fails: the pass is recorded, so its cooldown
-// keeps the next pass from SSHing again (docs/sync.md rule 5).
-test("a failed Ona read after the daemon check records the pass, so the next pass does not SSH again (fails if that read records nothing)", async () => {
+// The daemon check has SSHed into the box when the read before the restart fails: the pass is a failure, so its backoff
+// keeps the next pass from SSHing again (docs/sync.md rules 4 and 5). The read works again on the second pass, which
+// would reach the daemon check if no backoff held it.
+test("a failed Ona read after the daemon check fails the pass, so the next pass does not SSH again (fails if that read records nothing or a success)", async () => {
+  let readFails = true;
   const { sync, calls, guard } = world([idle("h1", { status: "disconnected", lastSeenAt: Date.now() - HOUR })], {
     daemonAlive: false,
-    refreshFails: () => calls.includes("probe"),
+    refreshFails: () => readFails && calls.includes("probe"),
   });
   await sync.reconcile(new Set(["h1"]), { wait: true });
-  const record = guard.records.get("h1");
-  assert.ok(record, "the pass is recorded");
-  assert.equal(record.error, undefined);
-  assert.match(record.reason, /Ona couldn't be asked before the restart; not restarting/);
+  const record = guard.records.get("h1")!;
+  assert.match(record.error ?? "", /Ona couldn't be asked before the restart; not restarting/);
+  assert.equal(record.failures, 1);
+  readFails = false;
   await sync.reconcile(new Set(["h1"]), { wait: true });
   assert.deepEqual(calls, ["probe"]);
+});
+
+// That read's failure counts toward the give-up like a failed restart (docs/sync.md rule 5): two failed restarts, then a
+// failed read after the check, make three in a row.
+test("a failed Ona read after the daemon check counts toward the give-up (fails if that read resets the count)", async () => {
+  enableFakeClock();
+  try {
+    let readFails = false;
+    const { sync, calls, guard } = world([idle("h1", { status: "disconnected", lastSeenAt: Date.now() - HOUR })], {
+      daemonAlive: false,
+      reconnectFails: "daemon restart failed",
+      refreshFails: () => readFails && calls.at(-1) === "probe",
+    });
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    await tick(5 * 60_000);
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    await tick(10 * 60_000);
+    readFails = true;
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    assert.equal(calls.filter((call) => call === "restart daemon").length, 2);
+    assert.equal(guard.records.get("h1")!.failures, GIVE_UP_AFTER);
+    const [row] = await sync.statusRows();
+    assert.match(row!.retry ?? "", /gave up/);
+  } finally {
+    await resetFakeClock();
+  }
 });
 
 // A plugin reload aborts the plugin's lifetime signal: a wake still running then ends, and the guard records the abort as
@@ -348,6 +375,23 @@ test("a plugin reload ends a wake in flight (fails if the wake ignores the plugi
       lifetime.abort();
       signal.throwIfAborted();
       return true;
+    },
+  });
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  const record = guard.records.get("h1")!;
+  assert.match(record.error ?? "", /aborted/);
+  assert.equal(record.failures, 1);
+});
+
+// A reload ends a daemon restart the same way (docs/sync.md rule 1).
+test("a plugin reload ends a daemon restart in flight (fails if the restart ignores the plugin's lifetime signal)", async () => {
+  const lifetime = new AbortController();
+  const { sync, guard } = world([idle("h1", { status: "disconnected", lastSeenAt: Date.now() - HOUR })], {
+    daemonAlive: false,
+    signal: lifetime.signal,
+    reconnect: async (_resource, _report, signal) => {
+      lifetime.abort();
+      signal.throwIfAborted();
     },
   });
   await sync.reconcile(new Set(["h1"]), { wait: true });
