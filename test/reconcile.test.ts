@@ -14,7 +14,6 @@ import {
   GRACE_MS,
   HostGuard,
   PassScheduler,
-  STUCK_MS,
   type Clock,
   type MachineView,
   type OnaView,
@@ -27,7 +26,6 @@ const machine = (overrides: Partial<MachineView> = {}): MachineView => ({
   phase: "active",
   status: "disconnected",
   lastSeenAt: NOW - 5 * 60_000,
-  phaseSince: NOW - 60 * 60_000,
   tunnel: "up",
   threadWaiting: false,
   ...overrides,
@@ -104,12 +102,13 @@ test("R4: suspended in bb stays suspended even when Ona runs the box", () => {
   assert.match(decision.reason, /running in Ona/);
 });
 
-test("R5: resuming or suspending for too long -> ask bb to reconcile", () => {
-  assert.equal(
-    decide(machine({ phase: "resuming", phaseSince: NOW - STUCK_MS }), ona("RUNNING"), NOW).action,
-    "reconcile-stuck",
-  );
-  assert.equal(decide(machine({ phase: "suspending", phaseSince: NOW - 60_000 }), ona("RUNNING"), NOW).action, "none");
+test("R5: resuming or suspending decides nothing", () => {
+  for (const phase of ["resuming", "suspending"]) {
+    assert.deepEqual(decide(machine({ phase }), ona("RUNNING"), NOW), {
+      action: "none",
+      reason: `bb is ${phase}`,
+    });
+  }
 });
 
 test("rule 4: unknown Ona state changes nothing", () => {

@@ -70,7 +70,6 @@ export interface SyncBb {
       get(args: { hostId: string }): Promise<BbHost>;
       experimental_suspend(args: { hostId: string }): Promise<BbHost>;
       experimental_resume(args: { hostId: string }): Promise<BbHost>;
-      experimental_reconcile(args: { hostId: string }): Promise<BbHost>;
     };
     threads: { list(args: LiveThreadsArgs): Promise<readonly ThreadRecord[]> };
     environments: { list(args: { hostId: string }): Promise<readonly WorkspaceView[]> };
@@ -128,8 +127,6 @@ export interface Row {
   phase: string;
   /** When bb last heard from the daemon. */
   lastSeenAt: number | null;
-  /** Last change to the host record; stands in for "phase entered at". */
-  updatedAt: number;
   resource: OnaResource;
 }
 
@@ -177,7 +174,6 @@ export function createSync(deps: SyncDeps) {
       status,
       phase: host.lifecycle.phase,
       lastSeenAt: host.lastSeenAt ?? null,
-      updatedAt: host.updatedAt,
       resource: {
         ...parsed.data,
         envName: listing?.envs.find((env) => env.id === parsed.data.envId)?.metadata.name ?? parsed.data.envName,
@@ -365,7 +361,7 @@ export function createSync(deps: SyncDeps) {
   /** Carry out one decision under the machine's guard (rule 5). */
   async function act(row: Row, decision: Decision, force: boolean): Promise<void> {
     const { hostId, machine, resource } = row;
-    const heavy = decision.action === "heal-daemon" || decision.action === "reconcile-stuck";
+    const heavy = decision.action === "heal-daemon";
     const report = { step: (text: string) => bb.log.info(`${machine}: ${text}`), log: () => {} };
     // A thread waiting on a stopped box must not wait out what other passes left (docs/sync.md rule 3).
     await guard
@@ -418,10 +414,6 @@ export function createSync(deps: SyncDeps) {
               await provider.reconnect(resource, report, AbortSignal.timeout(15 * 60_000));
               return "daemon was down; restarted it";
             }
-            case "reconcile-stuck": {
-              const host = await bb.sdk.hosts.experimental_reconcile({ hostId });
-              return `bb now shows it ${host.lifecycle.phase}${host.lifecycle.message ? ` (${host.lifecycle.message})` : ""}`;
-            }
             case "none":
               return;
             default: {
@@ -460,7 +452,6 @@ export function createSync(deps: SyncDeps) {
           phase: row.phase,
           status: row.status,
           lastSeenAt: row.lastSeenAt,
-          phaseSince: row.updatedAt,
           tunnel: tunnels.status(row.resource.envId),
           threadWaiting:
             row.phase === "active" && row.status !== "connected"

@@ -151,7 +151,6 @@ export function world(
           },
           experimental_suspend: lifecycleCall("suspend", "suspended"),
           experimental_resume: lifecycleCall("resume", "resuming"),
-          experimental_reconcile: lifecycleCall("reconcile", "active"),
         },
         threads: {
           // Like bb: hidden threads only when asked, archived ones dropped when asked.
