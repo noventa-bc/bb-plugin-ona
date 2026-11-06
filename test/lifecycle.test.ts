@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  idleDisconnectSchema,
   lifecycleRefusal,
   machinesToRelease,
   parseDuration,
@@ -52,6 +53,32 @@ test("parseDuration reads s/m/h and bare minutes, and treats junk as off", () =>
   assert.equal(parseDuration(""), 0);
   assert.equal(parseDuration("0"), 0);
   assert.equal(parseDuration("soon"), 0);
+});
+
+test("idleDisconnect refuses typos parseDuration reads as off, such as 1h30m, 1d or +30m (fails if the schema accepts one)", () => {
+  for (const typo of ["1h30m", "1hr", "90min", "30min", "30ms", "1d", "1 day", "+30m", ".5h", "1.", "1,5h", "m"]) {
+    assert.equal(idleDisconnectSchema.safeParse(typo).success, false, typo);
+  }
+});
+
+test("idleDisconnect takes its documented forms, case and spaces aside, and empty for off, each read as its duration (fails if one is refused or misread)", () => {
+  const forms: Record<string, number> = {
+    "30m": 30 * MIN,
+    "2h": 120 * MIN,
+    "45s": 45_000,
+    "1.5h": 90 * MIN,
+    " 30m ": 30 * MIN,
+    "30M": 30 * MIN,
+    "30 m": 30 * MIN,
+    "90": 90 * MIN,
+    "0": 0,
+    "": 0,
+    "  ": 0,
+  };
+  for (const [form, ms] of Object.entries(forms)) {
+    assert.equal(idleDisconnectSchema.safeParse(form).success, true, JSON.stringify(form));
+    assert.equal(parseDuration(form), ms, JSON.stringify(form));
+  }
 });
 
 test("a lifecycle request bb didn't take is reported with bb's reason", () => {
