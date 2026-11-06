@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { commands } from "../src/commands.ts";
 import { git, scrubbed, tempDir } from "./sandbox.ts";
 
 const repo = join(import.meta.dirname, "..");
@@ -165,4 +166,50 @@ test("SKILL.md's connect-time settings line names the reload (fails if its claus
 test("server.ts's waitForSharedHome description names the reload (fails if its sentence is dropped)", () => {
   const server = readFileSync(join(repo, "server.ts"), "utf8");
   assert.match(server, /share a home folder\. A changed setting applies after `bb plugin reload ona`\./);
+});
+
+// The `bb ona` and settings guards read the docs and the source as text, so a doc drifts only by a failing check.
+const read = (file: string) => readFileSync(join(repo, file), "utf8");
+
+const commandDocs = ["README.md", "skills/ona-devboxes/SKILL.md", "PLUGIN_OVERVIEW.md"];
+
+test("every `bb ona` command in src/commands.ts is written `bb ona <name>` in README, SKILL.md and PLUGIN_OVERVIEW.md (fails if a command lacks its docs)", () => {
+  const missing = commandDocs.flatMap((file) =>
+    commands.filter((c) => !new RegExp(`bb ona ${c.name}\\b`).test(read(file))).map((c) => `${file}: bb ona ${c.name}`),
+  );
+  assert.deepEqual(missing, []);
+});
+
+/** The setting keys in server.ts's `bb.settings.define({...})` block, one per `    key: {` line. */
+function declaredSettings(server: string): string[] {
+  const block = server.slice(server.indexOf("bb.settings.define({"), server.indexOf("\n  });"));
+  return [...block.matchAll(/^ {4}(\w+): \{/gm)].map((m) => m[1]!);
+}
+
+test("every setting server.ts declares has a row in README's settings table (fails if a setting lacks its row)", () => {
+  const readme = read("README.md");
+  const keys = declaredSettings(read("server.ts"));
+  assert.ok(keys.includes("onaPath") && keys.includes("autoUpdateProviders"), `parser found ${keys.join(", ")}`);
+  const missing = keys.filter((key) => !new RegExp(`^\\| \`${key}\``, "m").test(readme));
+  assert.deepEqual(missing, []);
+});
+
+test("no `bb ona <word> <name>` in the docs: a devbox argument is `<ref>` (fails if `<name>` comes back)", () => {
+  const offenders = ["README.md", "PLUGIN_OVERVIEW.md", "docs/sync.md", "skills/ona-devboxes/SKILL.md"].flatMap(
+    (file) => (read(file).match(/bb ona [\w-]+ <name>/g) ?? []).map((line) => `${file}: ${line}`),
+  );
+  assert.deepEqual(offenders, []);
+});
+
+/** The `ona` subcommand pairs (`environment list`, `project list`, ...) passed to `this.run([` in src/ona.ts. */
+function runPairs(ona: string): string[] {
+  return [...new Set([...ona.matchAll(/this\.run\(\[\s*"(\w+)",\s*"(\w+)"/g)].map((m) => `${m[1]} ${m[2]}`))];
+}
+
+test("every `ona` subcommand pair src/ona.ts runs is written `ona <a> <b>` in docs/sync.md (fails if a call lacks its safety line)", () => {
+  const sync = read("docs/sync.md");
+  const pairs = runPairs(read("src/ona.ts"));
+  assert.ok(pairs.includes("environment list") && pairs.includes("project list"), `parser found ${pairs.join(", ")}`);
+  const missing = pairs.filter((pair) => !sync.includes(`ona ${pair}`));
+  assert.deepEqual(missing, []);
 });
