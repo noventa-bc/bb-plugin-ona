@@ -194,16 +194,20 @@ test("every setting server.ts declares has a row in README's settings table (fai
   assert.deepEqual(missing, []);
 });
 
-test("no `bb ona <word> <name>` in the docs: a devbox argument is `<ref>` (fails if `<name>` comes back)", () => {
+test("no `bb ona <word> <name>` or `[name]` in the docs: a devbox argument is `<ref>` (fails if `<name>` comes back)", () => {
   const offenders = ["README.md", "PLUGIN_OVERVIEW.md", "docs/sync.md", "skills/ona-devboxes/SKILL.md"].flatMap(
-    (file) => (read(file).match(/bb ona [\w-]+ <name>/g) ?? []).map((line) => `${file}: ${line}`),
+    (file) => (read(file).match(/bb ona [\w-]+ (?:<name>|\[name\])/g) ?? []).map((line) => `${file}: ${line}`),
   );
   assert.deepEqual(offenders, []);
 });
 
-/** The `ona` subcommand pairs (`environment list`, `project list`, ...) passed to `this.run([` in src/ona.ts. */
+/** The `ona` subcommand pairs (`environment list`, ...) src/ona.ts runs, as `this.run([...])` or a `const argv = [...]` it runs. */
 function runPairs(ona: string): string[] {
-  return [...new Set([...ona.matchAll(/this\.run\(\[\s*"(\w+)",\s*"(\w+)"/g)].map((m) => `${m[1]} ${m[2]}`))];
+  const calls = ona.match(/this\.run\(/g)?.length ?? 0;
+  const pairs = [...ona.matchAll(/(?:this\.run\(|const argv = )\[\s*"(\w+)",\s*"(\w+)"/g)];
+  // A call this parser can't read (another variable, a split line) would go unchecked: fail instead.
+  assert.equal(pairs.length, calls, "every this.run( call in src/ona.ts starts with a literal pair or a const argv");
+  return [...new Set(pairs.map((m) => `${m[1]} ${m[2]}`))];
 }
 
 test("every `ona` subcommand pair src/ona.ts runs is written `ona <a> <b>` in docs/sync.md (fails if a call lacks its safety line)", () => {
