@@ -304,7 +304,7 @@ bb ona move <thread-id> <ref>  # continue a thread in a new thread on another de
 bb ona rename <ref> [name]     # rename env + bb machine (random fun name if omitted)
 bb ona reconnect <ref>         # active machines: reopen the tunnel and restart the bb daemon; refused unless bb shows the machine active and Ona shows its box running
 bb ona resume <ref>            # a stopped active machine: starts its box and reconnects the bb daemon (your action); a running box is only reconnected; refused unless bb shows the machine active
-bb ona update [ref] [--force]  # apply pending agent-CLI updates on connected devboxes now (also weekdays 09:00); a box with an agent running is skipped unless --force
+bb ona update [ref] [--force]  # apply pending agent-CLI updates on connected devboxes (also weekdays 09:00 when `autoUpdateClis` is on); a box with an agent running is skipped unless --force
 bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
 bb machine resume ona:<name>   # starts it, reopens the tunnel, restarts the daemon (Play button)
 bb machine remove ona:<name>   # created: deletes the box unless it has unpushed commits or uncommitted files; adopted: stops bb's daemon, moves its data folder aside

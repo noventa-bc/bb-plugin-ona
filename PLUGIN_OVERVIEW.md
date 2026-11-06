@@ -29,7 +29,7 @@ and you drive them from bb as usual.
 - `bb ona keep-alive <ref> <duration>` keeps a running devbox from Ona's idle
   timeout for up to 12h, for a long job nobody watches; `off` ends it.
 - `bb ona update [ref] [--force]` applies pending agent-CLI updates (Claude Code and Codex by default, from
-  `autoUpdateProviders`) to connected devboxes now; the same runs weekdays at 09:00 when `autoUpdateClis` is on.
+  `autoUpdateProviders`) to connected devboxes; the same runs weekdays at 09:00 when `autoUpdateClis` is on.
 
 ## How it works
 

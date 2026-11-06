@@ -174,8 +174,14 @@ const read = (file: string) => readFileSync(join(repo, file), "utf8");
 const commandDocs = ["README.md", "skills/ona-devboxes/SKILL.md", "PLUGIN_OVERVIEW.md"];
 
 test("every `bb ona` command in src/commands.ts is written `bb ona <name>` in README, SKILL.md and PLUGIN_OVERVIEW.md (fails if a command lacks its docs)", () => {
+  assert.ok(
+    commands.some((c) => c.name === "update"),
+    "src/commands.ts lists no commands",
+  );
   const missing = commandDocs.flatMap((file) =>
-    commands.filter((c) => !new RegExp(`bb ona ${c.name}\\b`).test(read(file))).map((c) => `${file}: bb ona ${c.name}`),
+    commands
+      .filter((c) => !new RegExp(`bb ona ${c.name}(?![\\w-])`).test(read(file)))
+      .map((c) => `${file}: bb ona ${c.name}`),
   );
   assert.deepEqual(missing, []);
 });
@@ -183,7 +189,10 @@ test("every `bb ona` command in src/commands.ts is written `bb ona <name>` in RE
 /** The setting keys in server.ts's `bb.settings.define({...})` block, one per `    key: {` line. */
 function declaredSettings(server: string): string[] {
   const block = server.slice(server.indexOf("bb.settings.define({"), server.indexOf("\n  });"));
-  return [...block.matchAll(/^ {4}(\w+): \{/gm)].map((m) => m[1]!);
+  const keys = [...block.matchAll(/^ {4}(\w+): \{/gm)].map((m) => m[1]!);
+  // Each setting has one `type:`; a key written another way would be skipped: fail instead.
+  assert.equal(keys.length, block.match(/^ {6}type: /gm)?.length ?? 0, `parser found ${keys.join(", ")}`);
+  return keys;
 }
 
 test("every setting server.ts declares has a row in README's settings table (fails if a setting lacks its row)", () => {
@@ -204,11 +213,14 @@ test("no `bb ona <word> <name>` or `[name]` in the docs: a devbox argument is `<
 
 /** The `ona` subcommand pairs (`environment list`, ...) src/ona.ts runs, as `this.run([...])` or a `const argv = [...]` it runs. */
 function runPairs(ona: string): string[] {
-  // A call this parser can't read (another variable) would go unchecked: fail instead.
+  // A call this parser can't read (another variable, a computed word) would go unchecked: fail instead.
   assert.deepEqual(
-    ona.match(/this\.run\((?!\s*\[|argv\b)/g) ?? [],
+    [
+      ...(ona.match(/this\.run\((?!\s*\[\s*"\w+",\s*"\w+"|argv\b)/g) ?? []),
+      ...(ona.match(/const argv = (?!\[\s*"\w+",\s*"\w+")/g) ?? []),
+    ],
     [],
-    "a this.run( call in src/ona.ts takes neither a literal nor argv",
+    "a this.run( call or const argv in src/ona.ts does not start with two literal words",
   );
   const pairs = [...ona.matchAll(/(?:this\.run\(\s*|const argv = )\[\s*"(\w+)",\s*"(\w+)"/g)];
   return [...new Set(pairs.map((m) => `${m[1]} ${m[2]}`))];
@@ -218,6 +230,6 @@ test("every `ona` subcommand pair src/ona.ts runs is written `ona <a> <b>` in do
   const sync = read("docs/sync.md");
   const pairs = runPairs(read("src/ona.ts"));
   assert.ok(pairs.includes("environment list") && pairs.includes("project list"), `parser found ${pairs.join(", ")}`);
-  const missing = pairs.filter((pair) => !new RegExp(`ona ${pair}\\b`).test(sync));
+  const missing = pairs.filter((pair) => !new RegExp(`ona ${pair}(?![\\w-])`).test(sync));
   assert.deepEqual(missing, []);
 });
