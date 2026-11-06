@@ -36,6 +36,8 @@ export function world(
     resumeRefuses?: string;
     /** bb's resume call rejects with this message: an error, not a refusal on the host. */
     resumeThrows?: string;
+    /** What an accepted resume settles on, instead of active: bb's failed resume leaves the machine suspended. */
+    resumeSettles?: { phase: string; message: string | null };
     daemonAlive?: boolean | null;
     pluginStartedAt?: number;
     /** The daemon restart (the provider's reconnect) rejects with this message. */
@@ -98,23 +100,23 @@ export function world(
   /** Settle reads of the held host so far (`holdSettle`). */
   let holdReads = 0;
   const lifecycleCall =
-    (name: string, phase: string) =>
+    (name: string, answered: string, settled: string) =>
     async ({ hostId }: { hostId: string }) => {
       calls.push(`${name} ${hostId}`);
       if (name === "resume" && options.resumeThrows) throw new Error(options.resumeThrows);
       const host = hosts.get(hostId)!;
-      if (name === "suspend" && options.suspendSettles) {
-        host.lifecycle = { ...host.lifecycle, ...options.suspendSettles };
-      } else {
-        const refusal = (name === "resume" && options.resumeRefuses) || options.refuse;
+      const refusal = (name === "resume" && options.resumeRefuses) || options.refuse;
+      const settles = name === "suspend" ? options.suspendSettles : options.resumeSettles;
+      if (settles) host.lifecycle = { ...host.lifecycle, ...settles };
+      else
         host.lifecycle = refusal
           ? { ...host.lifecycle, message: refusal }
-          : { ...host.lifecycle, phase, message: null };
-      }
+          : { ...host.lifecycle, phase: settled, message: null };
       if (!options.refuse) host.updatedAt = Date.now();
       if (name === "suspend" && !options.refuse) pendingSuspends.add(hostId);
-      // bb answers a suspend before it runs (still suspending); hosts.get shows the phase it settles on.
-      return name === "suspend" ? { ...host, lifecycle: { ...host.lifecycle, phase: "suspending" } } : host;
+      // bb answers a suspend or resume it takes before it runs; hosts.get shows the phase it settles on.
+      if (name === "resume" && refusal && !settles) return host;
+      return { ...host, lifecycle: { ...host.lifecycle, phase: answered } };
     };
   const envs = (): OnaEnvironment[] =>
     options.listing === "empty"
@@ -179,8 +181,8 @@ export function world(
             if (options.holdSettle?.hostId === hostId) calls.push(`settled ${hostId}`);
             return host;
           },
-          experimental_suspend: lifecycleCall("suspend", "suspended"),
-          experimental_resume: lifecycleCall("resume", "resuming"),
+          experimental_suspend: lifecycleCall("suspend", "suspending", "suspended"),
+          experimental_resume: lifecycleCall("resume", "resuming", "active"),
         },
         threads: {
           // Like bb: hidden threads only when asked, archived ones dropped when asked.

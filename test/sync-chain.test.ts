@@ -7,6 +7,7 @@ import { HOUR, idle, waitingThread, world } from "./sync-fakes.ts";
 
 const REFUSED = "Machine suspension failed: Host is not connected";
 const RESUME_REJECTED = "HTTP 409: Only an active or suspended machine can be resumed";
+const RESUME_FAILED = "Machine resume failed: Ona environment not found";
 
 // The mocked clock never fires AbortSignal.timeout: this stand-in fires on it, so a test sees a cap abort.
 function abortTimeoutsOnFakeClock(t: TestContext): void {
@@ -293,6 +294,29 @@ test("a resume bb rejects for a waiting thread is a failure that starts the thre
   assert.equal(record.failures, 1);
   assert.equal(record.error, `couldn't confirm the resume for a waiting thread (${RESUME_REJECTED})`);
   assert.equal(record.threadWaiting, true, "the thread's hold is set");
+});
+
+// Bug: bb answers a resume `resuming` and runs it detached; a resume that then failed (bb settles the machine suspended)
+// was already reported as "resumed for a waiting thread", and that success cleared the thread's hold.
+test("a resume bb settles suspended for a waiting thread is a failure that keeps the thread's hold (fails if bb's resuming answer counts as done)", async () => {
+  const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+  const { sync, guard } = world([host], { resumeSettles: { phase: "suspended", message: RESUME_FAILED } });
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  const record = guard.records.get("h1")!;
+  assert.equal(record.failures, 1);
+  assert.equal(
+    record.error,
+    `couldn't resume it for a waiting thread (bb kept the machine suspended: ${RESUME_FAILED})`,
+  );
+  assert.equal(record.threadWaiting, true, "the thread's hold is set");
+});
+
+test("a resume bb settles active for a waiting thread is a success (fails if the settled resume is not accepted)", async () => {
+  const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+  const { sync, guard, calls } = world([host], { resumeSettles: { phase: "active", message: null } });
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.deepEqual(calls, ["suspend h1", "resume h1"]);
+  assert.equal(guard.records.get("h1")?.failures ?? 0, 0);
 });
 
 // Rule 4: a listing that fails inside the daemon repair asks nothing, so the guard keeps the record's count,

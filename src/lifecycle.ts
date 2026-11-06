@@ -7,6 +7,8 @@ import { pollUntil } from "./time.ts";
 
 /** bb's suspend drain gives up after 5 minutes (docs/ona-notes.md), so a suspend is settled well within this. */
 const SETTLE_MS = 6 * 60_000;
+/** bb puts no bound on the provider's resume (docs/ona-notes.md): a start and connect that runs longer is reported unconfirmed, not failed. */
+const RESUME_SETTLE_MS = 30 * 60_000;
 
 export interface MachineActivity {
   hostId: string;
@@ -102,14 +104,16 @@ export function suspendFailure(refusal: string): string {
 }
 
 /**
- * bb answers a suspend before it runs (202, phase `suspending`), and a failed drain leaves the machine active: `read` is
- * polled until bb settles the suspend, and the lifecycle it settles on is returned. A read that rejects is asked again;
- * only a deadline with no settled phase fails the poll.
+ * bb answers a suspend or resume before it runs (202, phase `suspending` or `resuming`); a failed drain leaves the
+ * machine active, a failed resume leaves it suspended. `read` is polled until bb leaves the `waiting` phase, and the
+ * lifecycle it settles on is returned. A read that rejects is asked again; only a deadline with no settled phase, or
+ * `signal` aborting, fails the poll.
  */
 export async function settledLifecycle(
   read: () => Promise<{ lifecycle: { phase: string; message: string | null } }>,
-  options: { intervalMs?: number; deadlineMs?: number } = {},
+  options: { waiting?: "suspending" | "resuming"; intervalMs?: number; deadlineMs?: number; signal?: AbortSignal } = {},
 ): Promise<{ phase: string; message: string | null }> {
+  const waiting = options.waiting ?? "suspending";
   // The message of the last read, when that read failed: a read that answers clears it.
   const failure: { message?: string } = {};
   const settled = await pollUntil(
@@ -119,31 +123,30 @@ export async function settledLifecycle(
       try {
         const host = await pending;
         failure.message = undefined;
-        return host.lifecycle.phase !== "suspending" ? host : undefined;
+        return host.lifecycle.phase !== waiting ? host : undefined;
       } catch (error: unknown) {
         failure.message = (error instanceof Error ? error.message : String(error)) || "no detail";
         return undefined;
       }
     },
     {
-      deadlineMs: options.deadlineMs ?? SETTLE_MS,
+      deadlineMs: options.deadlineMs ?? (waiting === "resuming" ? RESUME_SETTLE_MS : SETTLE_MS),
       intervalMs: options.intervalMs ?? 1_000,
-      // Never aborts: the deadline ends the poll, and the caller reads that as a suspend still running.
-      signal: new AbortController().signal,
+      // Without a signal only the deadline ends the poll, and the caller reads that as bb still running it.
+      signal: options.signal ?? new AbortController().signal,
     },
   );
   if (!settled) {
     throw new Error(
       failure.message === undefined
-        ? "bb is still suspending the machine"
-        : `bb is still suspending the machine, or could not be read: ${failure.message}`,
+        ? `bb is still ${waiting} the machine`
+        : `bb is still ${waiting} the machine, or could not be read: ${failure.message}`,
     );
   }
   return settled.lifecycle;
 }
 
 export const SUSPENDED = ["suspending", "suspended"] as const;
-export const RESUMED = ["resuming", "active"] as const;
 
 // No `g` flag: the schema calls `.test()` on it, which a global regex makes stateful.
 const DURATION = /^\s*(\d+(?:\.\d+)?)\s*([smh]?)\s*$/i;

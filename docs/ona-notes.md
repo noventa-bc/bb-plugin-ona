@@ -146,6 +146,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 - `resumeMachine` waits for an in-flight suspend, then `resumeMachineWithIntent`
   returns at once unless the phase is suspended, suspending or resuming. A resume of
   an active machine does nothing (checked 2026-11-05).
+- `resumeMachineWithIntent` puts no deadline on the provider's resume: the call ends only when the provider's resume settles or the plugin is released. On success it sets the machine `active`; on failure it sets `suspended` (or `suspending`, when it began there) with "Machine resume failed: …" (bb 0.48.1 server source, checked 2026-11-06).
 - bb's `createMachineBootstrapApi` runs the installer through the provider's `executor.exec` with `timeoutMs` 10 minutes, then waits for the daemon's connection (`enrollments.waitForConnection`) with `timeoutMs` 2 minutes. The plugin's executor asks Ona first (`docs/sync.md` rule 1), so the 10 minutes start once Ona says ready (bb 0.48.1 server source, checked 2026-11-06).
 - bb's `removeMachine` awaits the host's in-flight suspend and resume operations before it removes the host (bb 0.48.1 server source, checked 2026-11-05); `remove` in src/provider.ts relies on it.
 - The host's status is only `connected` or `disconnected` (`toHostWithStatus`). The

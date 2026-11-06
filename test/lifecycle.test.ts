@@ -6,7 +6,6 @@ import {
   machinesToRelease,
   parseDuration,
   workspaceWork,
-  RESUMED,
   settledLifecycle,
   SUSPENDED,
   type MachineActivity,
@@ -84,13 +83,12 @@ test("idleDisconnect takes its documented forms, case and spaces aside, and empt
 test("a lifecycle request bb didn't take is reported with bb's reason", () => {
   assert.equal(lifecycleRefusal({ phase: "suspending", message: null }, SUSPENDED), null);
   assert.equal(lifecycleRefusal({ phase: "suspended", message: null }, SUSPENDED), null);
-  assert.equal(lifecycleRefusal({ phase: "resuming", message: null }, RESUMED), null);
   assert.equal(lifecycleRefusal(undefined, SUSPENDED), null);
   assert.equal(
     lifecycleRefusal({ phase: "active", message: "Automatic cleanup is blocked" }, SUSPENDED),
     "bb kept the machine active: Automatic cleanup is blocked",
   );
-  assert.equal(lifecycleRefusal({ phase: "suspended", message: null }, RESUMED), "bb kept the machine suspended");
+  assert.equal(lifecycleRefusal({ phase: "suspended", message: null }, ["active"]), "bb kept the machine suspended");
 });
 
 const workspace = (
@@ -187,6 +185,36 @@ test("a suspend bb still runs is read again until bb settles it (fails if the fi
   });
   assert.equal(lifecycle.phase, "active");
   assert.equal(reads, 2);
+});
+
+test("a resume bb still runs is read again until bb settles it, and its deadline names the resume (fails if the wait stops at resuming)", async () => {
+  const answers = ["resuming", "suspending", "suspended"];
+  let reads = 0;
+  const lifecycle = await settledLifecycle(async () => ({ lifecycle: { phase: answers[reads++]!, message: null } }), {
+    waiting: "resuming",
+    intervalMs: 1,
+  });
+  assert.deepEqual([lifecycle.phase, reads], ["suspending", 2]);
+  await assert.rejects(
+    settledLifecycle(async () => ({ lifecycle: { phase: "resuming", message: null } }), {
+      waiting: "resuming",
+      intervalMs: 1,
+      deadlineMs: 5,
+    }),
+    { message: "bb is still resuming the machine" },
+  );
+});
+
+test("an aborted signal ends the settle (fails if the poll runs on after a plugin reload)", async () => {
+  const reload = new AbortController();
+  reload.abort(new Error("plugin reloaded"));
+  await assert.rejects(
+    settledLifecycle(async () => ({ lifecycle: { phase: "resuming", message: null } }), {
+      waiting: "resuming",
+      signal: reload.signal,
+    }),
+    { message: "plugin reloaded" },
+  );
 });
 
 test("a suspend bb is still running at its deadline is an error, not a settled phase (fails if the poll never ends)", async () => {

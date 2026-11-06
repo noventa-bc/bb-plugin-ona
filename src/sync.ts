@@ -10,7 +10,6 @@ import {
   lifecycleRefusal,
   machinesToRelease,
   parseDuration,
-  RESUMED,
   settledLifecycle,
   SUSPENDED,
   suspendFailure,
@@ -386,14 +385,19 @@ export function createSync(deps: SyncDeps) {
               if (!decision.resumeAfter) return;
               // A thread is waiting on it: that's you using the box, so let bb start it.
               // Thrown: a returned string is a success, and a success clears the thread's hold (docs/sync.md rule 3).
-              let resumed: BbHost;
+              // bb answers `resuming` and runs the resume detached; a failed one ends suspended, so only `active` is done.
+              let resumed: HostLifecycle;
               try {
-                resumed = await bb.sdk.hosts.experimental_resume({ hostId });
+                const posted = (await bb.sdk.hosts.experimental_resume({ hostId })).lifecycle;
+                resumed =
+                  posted.phase === "resuming"
+                    ? await settledLifecycle(() => bb.sdk.hosts.get({ hostId }), { waiting: "resuming", signal })
+                    : posted;
               } catch (error) {
-                // A timed-out call may hide a resume bb started, so the error doesn't claim it failed.
+                // A timed-out call or settle may hide a resume bb still runs, so the error doesn't claim it failed.
                 throw new Error(`couldn't confirm the resume for a waiting thread (${errorText(error)})`);
               }
-              const resumeRefusal = lifecycleRefusal(resumed.lifecycle, RESUMED);
+              const resumeRefusal = lifecycleRefusal(resumed, ["active"]);
               if (resumeRefusal) throw new Error(`couldn't resume it for a waiting thread (${resumeRefusal})`);
               return "resumed for a waiting thread";
             }
