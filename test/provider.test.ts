@@ -195,6 +195,52 @@ test("a resume that fails at preflight still clears the flag (fails if a failed 
   assert.equal(releasing.size, 0);
 });
 
+test("a resume whose Ona lookup throws clears the no-stop flag (fails if the flag is cleared after the lookup)", async () => {
+  const { provider, releasing } = register({ found: box("RUNNING"), phases: [new Error("Ona is unreachable")] });
+  releasing.add("env-1");
+  await assert.rejects(
+    provider.resume!({
+      ...lifecycle(),
+      hostId: "host-1",
+      resource: adoptedResource,
+      signal: new AbortController().signal,
+    }),
+    /Ona is unreachable/,
+  );
+  assert.equal(releasing.size, 0);
+});
+
+test("a resume of a box Ona shows deleting clears the no-stop flag (fails if the flag is cleared after the start)", async () => {
+  const { provider, releasing } = register({ found: box("DELETING") });
+  releasing.add("env-1");
+  await assert.rejects(
+    provider.resume!({
+      ...lifecycle(),
+      hostId: "host-1",
+      resource: adoptedResource,
+      signal: new AbortController().signal,
+    }),
+    /deleting, so it was not started/,
+  );
+  assert.equal(releasing.size, 0);
+});
+
+test("a resume of a box Ona no longer has rejects as not found, starts nothing and clears the no-stop flag (fails if an absent box is started or keeps the flag)", async () => {
+  const { provider, calls, releasing } = register({ found: box("STOPPED"), phases: [null] });
+  releasing.add("env-1");
+  await assert.rejects(
+    provider.resume!({
+      ...lifecycle(),
+      hostId: "host-1",
+      resource: adoptedResource,
+      signal: new AbortController().signal,
+    }),
+    /Ona environment "env-1" not found/,
+  );
+  assert.deepEqual(calls, ["get null"]);
+  assert.equal(releasing.size, 0);
+});
+
 // The lookup-throws test below guards the order: the tunnel closes after the move-aside, and on a failed lookup.
 test("remove of an adopted machine closes its tunnel (fails if an adopted remove deletes or stops its box)", async () => {
   const { provider, calls, tunnels } = register({ found: box("RUNNING"), phases: ["RUNNING"], tunnel: "up" });
@@ -206,7 +252,7 @@ test("remove of an adopted machine closes its tunnel (fails if an adopted remove
   });
   assert.equal(removed.status, "removed");
   assert.deepEqual(tunnels, ["stop env-1"]);
-  assert.deepEqual(calls, ["get RUNNING"]);
+  assert.deepEqual(calls, ["get RUNNING", "move-aside"]);
 });
 
 test("remove of an adopted machine whose Ona lookup throws still closes its tunnel (fails if it deletes or stops the box)", async () => {
@@ -255,7 +301,7 @@ test("remove of an adopted machine closes a tunnel that reopened during the move
   });
   assert.equal(open.get("env-1") ?? "off", "off");
   assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"]);
-  assert.deepEqual(calls, ["get RUNNING"]);
+  assert.deepEqual(calls, ["get RUNNING", "move-aside"]);
   assert.equal(removed.status, "removed");
 });
 
