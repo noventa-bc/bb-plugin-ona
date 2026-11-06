@@ -119,7 +119,7 @@ test("a forced failure after a give-up starts a fresh count (fails if a forced f
 });
 
 // The connected check must leave a refused release's count alone (docs/sync.md rule 5). Without the give-up the fourth
-// try is due at minute 35, so 40 passes, not 30, are needed to see it: 40 passes make 3 attempts.
+// try is due at minute 35 (the 36th pass); 40 passes leave a margin and still make 3 attempts.
 test("a refused idle suspend on a connected box still gives up after three tries (fails if the connected check clears a release's count, or if mayAct drops the give-up)", async () => {
   enableFakeClock();
   try {
