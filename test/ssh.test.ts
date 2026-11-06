@@ -143,7 +143,7 @@ test("ensure after stopAll starts no tunnel (fails if stopAll leaves ensure open
       return true;
     },
   );
-  t.after(() => tunnels.stop("env-1")); // a loop the unfixed code starts would hold the process open
+  t.after(() => tunnels.stop("env-1")); // a tunnel loop that starts would hold the process open
   tunnels.stopAll();
   tunnels.ensure("env-1");
   await settle();
