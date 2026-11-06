@@ -129,6 +129,8 @@ function fakeRun(
   extra: {
     listingFails?: boolean;
     listingError?: string;
+    /** bb lists no machine for the box (an Ona environment bb doesn't manage). */
+    noMachine?: boolean;
     duringListing?: (guard: HostGuard, machine: { phase: string; hostId: string; machine: string }) => void;
   } = {},
 ) {
@@ -149,7 +151,7 @@ function fakeRun(
   const deps = {
     // Like bb's list: a creating machine is left out unless asked for.
     machines: (options?: { includeCreating?: boolean }) =>
-      Promise.resolve(machine.phase === "creating" && !options?.includeCreating ? [] : [machine]),
+      Promise.resolve(extra.noMachine || (machine.phase === "creating" && !options?.includeCreating) ? [] : [machine]),
     // A fresh row per lookup, as bb gives, so a row the command holds doesn't change under it.
     findMachine: (ref: string) => Promise.resolve(ref === "box" ? { ...machine } : null),
     guard,
@@ -241,6 +243,7 @@ test("rename refuses a machine bb doesn't show active, before any Ona rename", a
   for (const [phase, hint] of [
     ["creating", "Try again once bb shows it active."],
     ["resuming", "Try again once bb shows it active."],
+    ["suspending", "Resume it with `bb machine resume ona:box`."],
     ["suspended", "Resume it with `bb machine resume ona:box`."],
     ["removing", "It is gone or being removed."],
     ["destroyed", "It is gone or being removed."],
@@ -253,6 +256,12 @@ test("rename refuses a machine bb doesn't show active, before any Ona rename", a
     );
     assert.deepEqual(calls, [], phase);
   }
+});
+
+test("rename on a box with no bb machine renames it in Ona only, with no bb update", async () => {
+  const { run, calls } = fakeRun("active", "RUNNING", { noMachine: true });
+  assert.deepEqual(await run("rename", "box", "new-name"), { exitCode: 0, stdout: "Renamed box -> new-name" });
+  assert.deepEqual(calls, ["rename env_1 new-name"]);
 });
 
 test("rename on an active machine renames the box in Ona and its bb machine", async () => {

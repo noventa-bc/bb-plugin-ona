@@ -55,7 +55,7 @@ Keep-alives are not restored after a reload. `bb ona status` shows
 `bb ona open`; no sync pass calls it. It may wake a stopped box, which is what
 you asked for, so safety rule 1 does not gate it.
 
-`bb ona rename` runs `ona environment update <env> --name <name>` (refused unless bb shows the box's machine active), then, when bb has a machine for the box, renames it to match. The Ona call changes only
+`bb ona rename` runs `ona environment update <env> --name <name>` (refused while bb shows its machine in a phase other than active), then, when bb has a machine for the box, renames it to match. The Ona call changes only
 the box's name (bb passes no box setting but `--name`) and neither starts nor stops the
 box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `update`
 "Updates an environment's metadata or settings", with `--name` and

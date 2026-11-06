@@ -46,7 +46,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
   `bb project source add <projectId> --machine <m> --path /workspaces/<repo>`.
 - Thread in a fresh devbox: `bb thread spawn --project <id> --environment-provider ona-devbox --prompt "..."`.
 - `bb ona move <thread-id> <ref>` — continue a thread in a new thread on another devbox at the same path (the path must exist there; uncommitted changes stay behind; the old thread stays).
-- `bb ona rename <ref> [name]` — rename the Ona environment and its bb machine (a random fun name if `name` is omitted); refused until bb shows the machine active.
+- `bb ona rename <ref> [name]` — rename the Ona environment and its bb machine (a random fun name if `name` is omitted); refused while bb shows its machine in a phase other than active.
 - `bb ona update [ref] [--force]` — apply pending updates of the CLIs in `autoUpdateProviders` (default Claude Code and Codex) on connected devboxes (also weekdays at 09:00 when `autoUpdateClis` is on). A box with an agent running is skipped unless `--force`.
 
 ## Shell access

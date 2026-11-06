@@ -109,7 +109,7 @@ export const usage = [
   "  bb ona ssh <ref> --thread <id>  Open another terminal to the devbox in that thread's terminal panel",
   "  bb ona open <ref>             Open the devbox in your Ona editor",
   "  bb ona shell <ref> -- <cmd…>  Run one command in the devbox checkout and print its output",
-  "  bb ona rename <ref> [name]    Rename the Ona environment (random fun name if omitted) and its bb machine; refused until bb shows the machine active",
+  "  bb ona rename <ref> [name]    Rename the Ona environment (random fun name if omitted) and its bb machine; refused while bb shows its machine in a phase other than active",
   "  bb ona reconnect <ref>        Reopen an active machine's tunnel and restart its bb daemon",
   "                                Refused unless bb shows the machine active and Ona shows its box running.",
   "  bb ona resume <ref>           Start a stopped box and reconnect bb's daemon (your action; a running box is only reconnected)",
@@ -145,7 +145,8 @@ export const commands = [
   },
   {
     name: "rename",
-    summary: "Rename a devbox (random fun name if omitted); refused until bb shows the machine active",
+    summary:
+      "Rename a devbox (random fun name if omitted); refused while bb shows its machine in a phase other than active",
     usage: "bb ona rename <ref> [name]",
   },
   {
