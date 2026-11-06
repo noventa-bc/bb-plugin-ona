@@ -24,6 +24,7 @@ let state: E2eHost["state"];
 let patchBox: E2eHost["patchBox"];
 let onaCalls: E2eHost["onaCalls"];
 let sshCalls: E2eHost["sshCalls"];
+let tunnelPids: E2eHost["tunnelPids"];
 let close: E2eHost["close"];
 let resource: OnaResource;
 const hosts: BbHost[] = [];
@@ -34,6 +35,15 @@ const extraBoxes: Record<string, OnaResource> = {};
 const suspends = () => host.harness.inspection.sdk.callsTo("hosts.experimental_suspend");
 /** `environment list` calls in the fake Ona's log so far; the tunnel loop lists too, so compare with `>`. */
 const listings = () => readFileSync(log, "utf8").match(/^environment list/gm)?.length ?? 0;
+/** Whether a process with this pid is still there (signal 0 only probes it). */
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 function cli(currentVersion: string, latestVersion: string) {
   const needsUpdate = currentVersion !== latestVersion;
@@ -82,7 +92,7 @@ async function waitForLog(text: string): Promise<void> {
 
 before(async () => {
   if (local.skip) return;
-  ({ host, provider, log, envs, state, patchBox, onaCalls, sshCalls, close } = await startHost({
+  ({ host, provider, log, envs, state, patchBox, onaCalls, sshCalls, tunnelPids, close } = await startHost({
     machineBootstrap: {
       async bootstrap({ key }) {
         bootstraps.push(key);
@@ -407,7 +417,7 @@ test(
   },
 );
 
-// Last in the file: it disposes the host, and the after hook's close() disposes it again (dispose is idempotent).
+// Disposes the host. The case after it checks what that left running; close() in the after hook disposes again.
 test(
   "a resume from the settings button stops polling Ona when the plugin is disposed (fails if the signal is dropped)",
   local,
@@ -425,5 +435,25 @@ test(
     await sleep(6_000); // longer than the 5 s poll interval
     const asks = onaCalls().filter((call) => call === `environment get ${envId}`).length;
     assert.equal(asks, 0, `Ona was asked ${asks} time(s) after the plugin was disposed`);
+  },
+);
+
+// Runs after the dispose above: every tunnel the earlier cases opened should be ended by it.
+test(
+  "disposing the plugin ends every tunnel (fails if the dispose hook stops stopping the tunnels)",
+  local,
+  async (t) => {
+    const pids = tunnelPids();
+    // Ends the tunnels a failing check leaves running, so they do not outlive the test.
+    t.after(() => {
+      for (const pid of tunnelPids()) {
+        if (alive(pid)) process.kill(pid, "SIGKILL");
+      }
+    });
+    assert.ok(pids.length > 0, "no tunnel was opened, so there is nothing to check");
+    // The SIGTERM from the dispose takes a moment to land.
+    // shortcut: a reused pid reads as a live tunnel, a false failure; match the command in ps when one shows up
+    for (let tick = 0; tick < 50 && pids.some(alive); tick++) await sleep(100);
+    assert.deepEqual(pids.filter(alive), [], "tunnels still running after the plugin was disposed");
   },
 );
