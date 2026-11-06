@@ -3,6 +3,7 @@
 // reconnect, rename, update, sync by the Ona name, the settings section's devbox_command and the thread
 // event. One story in file order: run the whole file.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { after, before, test } from "node:test";
 import { makeThreadResponse } from "@get-bb/plugin-sdk/testing";
@@ -24,6 +25,7 @@ let state: E2eHost["state"];
 let patchBox: E2eHost["patchBox"];
 let onaCalls: E2eHost["onaCalls"];
 let sshCalls: E2eHost["sshCalls"];
+let tunnelPids: E2eHost["tunnelPids"];
 let close: E2eHost["close"];
 let resource: OnaResource;
 const hosts: BbHost[] = [];
@@ -34,6 +36,16 @@ const extraBoxes: Record<string, OnaResource> = {};
 const suspends = () => host.harness.inspection.sdk.callsTo("hosts.experimental_suspend");
 /** `environment list` calls in the fake Ona's log so far; the tunnel loop lists too, so compare with `>`. */
 const listings = () => readFileSync(log, "utf8").match(/^environment list/gm)?.length ?? 0;
+/** Whether this pid still runs a fake tunnel (test/fake-ssh.sh execs `sleep 100000`): a process that reuses the pid counts only if it runs that too. */
+const alive = (pid: number) => {
+  try {
+    return execFileSync("ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8" }).trim() === "sleep 100000";
+  } catch (error) {
+    // ps exits 1 for a pid that is gone; any other failure must not read a live tunnel as dead.
+    if ((error as { status?: number }).status === 1) return false;
+    throw error;
+  }
+};
 
 function cli(currentVersion: string, latestVersion: string) {
   const needsUpdate = currentVersion !== latestVersion;
@@ -82,7 +94,7 @@ async function waitForLog(text: string): Promise<void> {
 
 before(async () => {
   if (local.skip) return;
-  ({ host, provider, log, envs, state, patchBox, onaCalls, sshCalls, close } = await startHost({
+  ({ host, provider, log, envs, state, patchBox, onaCalls, sshCalls, tunnelPids, close } = await startHost({
     machineBootstrap: {
       async bootstrap({ key }) {
         bootstraps.push(key);
@@ -493,9 +505,15 @@ test(
 
 // Last in the file: it disposes the host, and the after hook's close() disposes it again (dispose is idempotent).
 test(
-  "a resume from the settings button stops polling Ona when the plugin is disposed (fails if the signal is dropped)",
+  "disposing the plugin stops a settings-button resume polling Ona and ends every tunnel (fails if the signal is dropped or the tunnels are not stopped)",
   local,
-  async () => {
+  async (t) => {
+    // Ends the tunnels a failing check leaves running, so they do not outlive the test.
+    t.after(() => {
+      for (const pid of tunnelPids()) {
+        if (alive(pid)) process.kill(pid, "SIGKILL");
+      }
+    });
     const envId = setUpHostTwoResume();
     // The reply is not read: the resume ends with the plugin.
     void host.harness.behavior
@@ -505,9 +523,12 @@ test(
     // After its first ask the wait asks again at once, then every 5 s: let those asks land before the dispose.
     await sleep(1_000);
     onaCalls();
+    // An earlier case's tunnel process must still be alive, or the tunnel check below checks nothing.
+    assert.ok(tunnelPids().some(alive), "no tunnel process was alive when the plugin was disposed");
     await host.harness.lifecycle.dispose();
     await sleep(6_000); // longer than the 5 s poll interval
     const asks = onaCalls().filter((call) => call === `environment get ${envId}`).length;
     assert.equal(asks, 0, `Ona was asked ${asks} time(s) after the plugin was disposed`);
+    assert.deepEqual(tunnelPids().filter(alive), [], "tunnels still running after the plugin was disposed");
   },
 );

@@ -6,6 +6,7 @@
 import { experimental_PluginRpcRefusal, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { KeepAlives } from "./src/keepalive.ts";
+import { idleDisconnectSchema } from "./src/lifecycle.ts";
 import { errorText, isRunning, isStopped, OnaCli, OnaSnapshot, sshHost } from "./src/ona.ts";
 import {
   checkOnaLogin,
@@ -63,14 +64,15 @@ export default async function plugin(bb: BbPluginApi) {
       type: "string",
       label: "Let idle devboxes sleep after",
       description:
-        "With no thread activity for this long (e.g. 30m, 1h), bb closes its tunnel to the box and marks the machine suspended, so Ona's own inactivity timeout can stop it (exceptions in the README's How it works). The next message wakes it. Empty or 0 keeps every box connected.",
+        "With no thread activity for this long (e.g. 30m, 1h, or 90 for minutes), bb closes its tunnel to the box and marks the machine suspended, so Ona's own inactivity timeout can stop it (exceptions in the README's How it works). The next message wakes it. Empty or 0 keeps every box connected.",
       default: "1h",
+      experimental_schema: idleDisconnectSchema,
     },
     autoRepair: {
       type: "boolean",
       label: "Repair devboxes changed outside bb",
       description:
-        "When a box is started, stopped, restarted or deleted outside bb (Ona UI, ona CLI), bring bb back in step: restart bb's daemon on a box that came back. Off: stopped or deleted boxes are still marked suspended, tunnels still reopen, idle boxes are still let go after `idleDisconnect`, and a waiting thread still resumes or starts a stopped box; everything else is only reported by `bb ona status`.",
+        "When a box is started, stopped, restarted or deleted outside bb (Ona UI, ona CLI), bring bb back in step: restart bb's daemon on a box that came back. Off: stopped or deleted boxes are still marked suspended, tunnels still reopen, idle boxes are still let go after `idleDisconnect`, and a waiting thread still resumes or starts a stopped box, as does bb's recovery after a restart; everything else is only reported by `bb ona status`.",
       default: true,
     },
     codexSqliteHome: {
@@ -487,8 +489,9 @@ export default async function plugin(bb: BbPluginApi) {
     run: runOna,
   });
 
-  bb.onDispose(() => tunnels.stopAll());
-  // Hooks run last-in first-out: this abort runs before the tunnels stop, so a Resume or Reconnect from the page
-  // cannot open a tunnel after stopAll.
-  bb.onDispose(() => lifetime.abort());
+  // The abort ends a Resume or Reconnect from the page; after stopAll, no tunnel starts for anyone.
+  bb.onDispose(() => {
+    lifetime.abort();
+    tunnels.stopAll();
+  });
 }
