@@ -2,7 +2,7 @@
 // server.ts in the SDK's fake bb host with the fake `ona` and fake `ssh`, a
 // loopback `/health` server for the tunnel probe, and the temp dir the fakes
 // write their state and call log to.
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -84,11 +84,16 @@ export async function startHost(
     writeFileSync(sshLog, "");
     return lines.filter((line) => line !== "" && !line.split(" ").includes("-N"));
   };
+  /** Pids of every tunnel the fake started so far, running or not (test/fake-ssh.sh writes them). */
+  const tunnelPids = (): number[] => {
+    const file = join(dir, "tunnel-pids");
+    return existsSync(file) ? readFileSync(file, "utf8").split("\n").filter(Boolean).map(Number) : [];
+  };
   const close = async () => {
     await host.harness.lifecycle.dispose();
     health.close();
     rmSync(dir, { recursive: true, force: true });
     for (const key of FAKE_ENV) delete process.env[key];
   };
-  return { host, provider, dir, state, log, envs, patchBox, onaCalls, sshCalls, close };
+  return { host, provider, dir, state, log, envs, patchBox, onaCalls, sshCalls, tunnelPids, close };
 }
