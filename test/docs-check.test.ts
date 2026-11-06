@@ -196,17 +196,21 @@ test("every setting server.ts declares has a row in README's settings table (fai
 
 test("no `bb ona <word> <name>` or `[name]` in the docs: a devbox argument is `<ref>` (fails if `<name>` comes back)", () => {
   const offenders = ["README.md", "PLUGIN_OVERVIEW.md", "docs/sync.md", "skills/ona-devboxes/SKILL.md"].flatMap(
-    (file) => (read(file).match(/bb ona [\w-]+ (?:<name>|\[name\])/g) ?? []).map((line) => `${file}: ${line}`),
+    (file) =>
+      (read(file).match(/bb ona [\w-]+ (?:(?:<[\w-]+> )*<name>|\[name\])/g) ?? []).map((line) => `${file}: ${line}`),
   );
   assert.deepEqual(offenders, []);
 });
 
 /** The `ona` subcommand pairs (`environment list`, ...) src/ona.ts runs, as `this.run([...])` or a `const argv = [...]` it runs. */
 function runPairs(ona: string): string[] {
-  const calls = ona.match(/this\.run\(/g)?.length ?? 0;
-  const pairs = [...ona.matchAll(/(?:this\.run\(|const argv = )\[\s*"(\w+)",\s*"(\w+)"/g)];
-  // A call this parser can't read (another variable, a split line) would go unchecked: fail instead.
-  assert.equal(pairs.length, calls, "every this.run( call in src/ona.ts starts with a literal pair or a const argv");
+  // A call this parser can't read (another variable) would go unchecked: fail instead.
+  assert.deepEqual(
+    ona.match(/this\.run\((?!\s*\[|argv\b)/g) ?? [],
+    [],
+    "a this.run( call in src/ona.ts takes neither a literal nor argv",
+  );
+  const pairs = [...ona.matchAll(/(?:this\.run\(\s*|const argv = )\[\s*"(\w+)",\s*"(\w+)"/g)];
   return [...new Set(pairs.map((m) => `${m[1]} ${m[2]}`))];
 }
 
@@ -214,6 +218,6 @@ test("every `ona` subcommand pair src/ona.ts runs is written `ona <a> <b>` in do
   const sync = read("docs/sync.md");
   const pairs = runPairs(read("src/ona.ts"));
   assert.ok(pairs.includes("environment list") && pairs.includes("project list"), `parser found ${pairs.join(", ")}`);
-  const missing = pairs.filter((pair) => !sync.includes(`ona ${pair}`));
+  const missing = pairs.filter((pair) => !new RegExp(`ona ${pair}\\b`).test(sync));
   assert.deepEqual(missing, []);
 });
