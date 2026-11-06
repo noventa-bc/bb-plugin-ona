@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   commandArg,
@@ -54,7 +55,7 @@ test("a field's text is the argument: blank or spaces-only gives none, and the e
   assert.equal(commandArg(" foo "), "foo");
 });
 
-test("a devbox_command input leaves out unset keys, which bb's RPC client refuses (fails if Sync all or a button sends an undefined key)", () => {
+test("a devbox_command input leaves out unset keys, which bb's RPC client refuses (fails if the helper keeps an undefined key)", () => {
   assert.deepStrictEqual(devboxCommandInput("sync", undefined, undefined), { command: "sync" });
   assert.deepStrictEqual(devboxCommandInput("resume", "host-1", undefined), { command: "resume", hostId: "host-1" });
   assert.deepStrictEqual(devboxCommandInput("rename", "host-1", "box"), {
@@ -62,4 +63,11 @@ test("a devbox_command input leaves out unset keys, which bb's RPC client refuse
     hostId: "host-1",
     arg: "box",
   });
+});
+
+test("the settings section sends every devbox_command input through devboxCommandInput (fails if app.tsx builds one by hand)", () => {
+  const app = readFileSync(new URL("../app.tsx", import.meta.url), "utf8");
+  const calls = app.match(/\.call\("devbox_command",[^\n]*/g) ?? [];
+  assert.ok(calls.length > 0, "app.tsx has no devbox_command call");
+  for (const call of calls) assert.match(call, /\.call\("devbox_command", devboxCommandInput\(/);
 });

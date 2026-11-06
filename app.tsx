@@ -283,7 +283,7 @@ const DEVBOX_BUTTONS: { command: DevboxCommand; label: string }[] = [
 /** A text box and the button that sends its text as the command's argument (see commandArg). */
 const DEVBOX_FIELDS: { command: DevboxCommand; label: string; placeholder: string }[] = [
   { command: "rename", label: "Rename", placeholder: "New name (blank: random)" },
-  { command: "keep-alive", label: "Keep awake", placeholder: "2h or off" },
+  { command: "keep-alive", label: "Keep awake", placeholder: "2h, 90m or off" },
 ];
 
 const sectionButton = `${editorButton} disabled:pointer-events-none disabled:opacity-50`;
@@ -314,7 +314,7 @@ function DevboxesSection() {
     // The cleanup drops this round's replies and ends its timer; the next round starts both again.
     let live = true;
     const read = () => {
-      void rpc.call("devbox_command", { command: "status" }).then(
+      void rpc.call("devbox_command", devboxCommandInput("status")).then(
         (reply) => {
           if (live) setStatus(reply);
         },
