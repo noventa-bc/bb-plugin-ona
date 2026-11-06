@@ -8,6 +8,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { after, before, test } from "node:test";
 import { makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import type { OnaResource } from "../src/provider.ts";
+import { sshHost } from "../src/ona.ts";
 import { connectedAtKey, type BbHost, type ThreadRecord } from "../src/sync.ts";
 import { sleep } from "../src/time.ts";
 import { ctx, local, startHost, type E2eHost } from "./e2e-host.ts";
@@ -500,6 +501,32 @@ test(
       arg: "off",
     })) as { stdout?: string };
     assert.equal(ended.stdout, "Ended the keep-alive for host-2.");
+  },
+);
+
+// Bug: a ref took the first row that matched it, so a box whose env name was another box's host id took that box's commands.
+test(
+  "bb ona host and ssh --thread with a host id pick that box, not an earlier box named after it (fails if the first name match wins)",
+  local,
+  async () => {
+    const named = sshHost(extraBoxes["host-2"]!.envId);
+    const renamed = await host.harness.behavior.runCli(["rename", resource.envId, "host-2"]);
+    assert.equal(renamed.exitCode, 0, renamed.stderr);
+    try {
+      const result = await host.harness.behavior.runCli(["host", "host-2"]);
+      assert.equal(result.exitCode, 0, result.stderr);
+      assert.equal(result.stdout, named);
+      // The thread runs on host-1 (the fake environment), so a terminal to host-2 is refused by host-2's name;
+      // first-match would pick host-1 and open a local shell.
+      const terminal = await host.harness.behavior.runCli(["ssh", "host-2", "--thread", "thread-1"]);
+      assert.equal(terminal.exitCode, 1, terminal.stdout);
+      assert.match(
+        terminal.stderr ?? "",
+        new RegExp(`can't ssh to ${envs().find((e) => e.id === extraBoxes["host-2"]!.envId)!.metadata.name}\\.`),
+      );
+    } finally {
+      await host.harness.behavior.runCli(["rename", resource.envId, "new-name"]);
+    }
   },
 );
 

@@ -137,7 +137,7 @@ export interface Row {
 export const matchesRef = (row: Row, ref: string) =>
   [row.hostId, row.machine, row.resource.envId, row.resource.envName].includes(ref);
 
-/** Host id first: another box's Ona env name (`bb ona rename` takes any valid name) or machine name can equal a host id. */
+/** Host id first: another box's Ona env name can equal a host id (`bb ona rename` takes any valid name). */
 export const rowForRef = (rows: readonly Row[], ref: string) =>
   rows.find((r) => r.hostId === ref) ?? rows.find((r) => matchesRef(r, ref));
 

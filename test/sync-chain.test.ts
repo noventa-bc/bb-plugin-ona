@@ -468,7 +468,7 @@ test("a plugin reload ends a daemon restart in flight (fails if the restart igno
 });
 
 // Bug: a ref took the first row that matched it, so another box's env name could win over the host id the ref names.
-test("a ref picks the box whose host id it is, not an earlier box that has it as an env name, and an env name still picks its box (fails if the first matching row wins)", () => {
+test("a ref picks the box whose host id it is, not an earlier box that has it as an env name, and an env name still picks its box (fails if the first matching row wins, or if only host ids match)", () => {
   const earlier = { hostId: "h-a", machine: "box-a", resource: { envId: "env-a", envName: "h-b" } } as Row;
   const named = { hostId: "h-b", machine: "box-b", resource: { envId: "env-b", envName: "box-b-env" } } as Row;
   assert.equal(rowForRef([earlier, named], "h-b"), named);
