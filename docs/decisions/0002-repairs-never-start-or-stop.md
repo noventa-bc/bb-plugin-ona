@@ -4,9 +4,11 @@ Status: accepted
 
 Amended 2026-11-05 (the owner accepted it): the plugin starts a box for a waiting thread when bb's resume would be a no-op, and `bb ona resume` starts one on your request. The Rule and the Consequences say so.
 
+Amended 2026-11-07 (the owner accepted it): bb's own recovery after a bb restart also starts a box. The Rule says so.
+
 ## Rule
 
-Automatic repairs never start or stop a box. bb, or the plugin when bb's resume would be a no-op, starts a box only on your action in bb: creating a machine (adopting a box included), resuming it (Resume, `bb machine resume`, or a message or thread waiting on it), `bb ona resume`, or a command you run that rule 1 in `docs/sync.md` lists as not gated. Automatic suspends mark the machine suspended without calling the provider's stop. SSH to a box is used only when a fresh Ona listing says the box is `RUNNING`.
+Automatic repairs never start or stop a box. bb, or the plugin when bb's resume would be a no-op, starts a box only on your action in bb: creating a machine (adopting a box included), resuming it (Resume, `bb machine resume`, or a message or thread waiting on it), `bb ona resume`, or a command you run that rule 1 in `docs/sync.md` lists as not gated. bb also resumes, on its own, a machine a bb restart left `resuming` or `suspending` (its periodic sweep calls the provider's resume, which starts a stopped box as it does for a Resume). Automatic suspends mark the machine suspended without calling the provider's stop. SSH to a box is used only when a fresh Ona listing says the box is `RUNNING`.
 
 ## Why
 

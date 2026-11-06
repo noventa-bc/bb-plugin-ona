@@ -270,5 +270,8 @@ Rules the owner gave that no section above states. Checked 2026-11-06.
   on without the owner's explicit approval of that item, given with its label;
   a general "continue" or a list that includes it is not that (checked
   2026-11-06).
+- Keep 2 to 5 tasks in flight: when an item waits on a review, a merge or the
+  owner, start the next independent item (no shared files, no `[COST]` tag)
+  rather than wait (checked 2026-11-07).
 - The owner's Mac has no `timeout` command: use the Bash tool's own timeout
   (checked 2026-11-06).
