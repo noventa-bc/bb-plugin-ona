@@ -28,7 +28,7 @@ export type ThreadCost = z.infer<typeof threadCostSchema>;
 export const devboxCommandSchema = z.enum(["status", "sync", "reconnect", "resume"]);
 export type DevboxCommand = z.infer<typeof devboxCommandSchema>;
 
-export const devboxCommandReplySchema = z.object({
+const devboxCommandReplySchema = z.object({
   exitCode: z.number(),
   stdout: z.string().optional(),
   stderr: z.string().optional(),

@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { commands } from "../src/commands.ts";
-import { rpcContract } from "../src/rpc.ts";
+import { devboxCommandSchema, rpcContract } from "../src/rpc.ts";
 
 const SECTION_COMMANDS = ["status", "sync", "reconnect", "resume"];
 
 test("the settings section can run only status, sync, reconnect and resume", () => {
   const { input } = rpcContract.devbox_command;
+  assert.deepEqual(devboxCommandSchema.options, SECTION_COMMANDS);
   for (const command of SECTION_COMMANDS) {
     assert.equal(input.safeParse({ command }).success, true, command);
   }

@@ -133,6 +133,8 @@ export default async function plugin(bb: BbPluginApi) {
     (envId, detail) => bb.log.warn(`keep-alive for ${envId} ended early: ${detail}`),
   );
   bb.onDispose(() => keepAlives.stopAll());
+  const lifetime = new AbortController();
+  bb.onDispose(() => lifetime.abort());
   // Fire and forget, as the editor may take a while; a failure goes to the log.
   const openEditor = (envId: string) =>
     void ona.openEditor(envId).catch((error: unknown) => bb.log.warn(`opening ${envId} failed: ${errorText(error)}`));
@@ -470,9 +472,9 @@ export default async function plugin(bb: BbPluginApi) {
       openEditor(row.resource.envId);
       return { opened: true };
     },
-    // Ends with the caller: a resume's wait on Ona stops when the page goes away or the plugin reloads.
-    devbox_command: ({ command, hostId }, { experimental_signal }) =>
-      runOna(hostId ? [command, hostId] : [command], { signal: experimental_signal }),
+    // Ends with the plugin, not the page: a Resume the user asked for finishes after the window closes, and stops on a reload.
+    devbox_command: ({ command, hostId }) =>
+      runOna(hostId ? [command, hostId] : [command], { signal: lifetime.signal }),
   });
 
   bb.cli.register({

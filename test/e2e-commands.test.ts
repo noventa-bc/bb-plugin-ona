@@ -1,21 +1,20 @@
-// The real server.ts inside the SDK's fake bb host (test/e2e-host.ts), for
-// what a sync pass and the `bb ona` commands do to a box: the idle release and
-// the observed stop (neither may stop the box), keep-alive, reconnect, rename,
-// update, sync by the Ona name, the settings section's devbox_command and the thread event. One story in file order: run the whole file.
+// The real server.ts inside the SDK's fake bb host (test/e2e-host.ts), for what a sync pass and the `bb ona`
+// commands do to a box: the idle release and the observed stop (neither may stop the box), keep-alive,
+// reconnect, rename, update, sync by the Ona name, the settings section's devbox_command and the thread
+// event. One story in file order: run the whole file.
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { after, before, test } from "node:test";
 import { makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import type { OnaResource } from "../src/provider.ts";
 import { connectedAtKey, type BbHost, type ThreadRecord } from "../src/sync.ts";
+import { sleep } from "../src/time.ts";
 import { ctx, local, startHost, type E2eHost } from "./e2e-host.ts";
 
 const HOUR = 3_600_000;
 const STOPPED = "ENVIRONMENT_PHASE_STOPPED";
 const RUNNING = "ENVIRONMENT_PHASE_RUNNING";
 const STARTING = "ENVIRONMENT_PHASE_STARTING";
-const DELETED = "ENVIRONMENT_PHASE_DELETED";
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let host: E2eHost["host"];
 let provider: E2eHost["provider"];
@@ -59,13 +58,13 @@ async function addDevbox(key: string, hostId: string, project: string) {
   onaCalls();
 }
 
-/** Resolves once the fake Ona has been asked about the box; throws after 10 s. */
-async function untilAskedAbout(envId: string): Promise<void> {
+/** Resolves once the fake Ona's log holds `text`; throws after 10 s. */
+async function waitForLog(text: string): Promise<void> {
   for (let tick = 0; tick < 200; tick++) {
-    if (readFileSync(log, "utf8").includes(`environment get ${envId}`)) return;
+    if (readFileSync(log, "utf8").includes(text)) return;
     await sleep(50);
   }
-  throw new Error(`Ona was never asked about ${envId}`);
+  throw new Error(`the fake Ona's log never showed "${text}"`);
 }
 
 before(async () => {
@@ -191,8 +190,7 @@ test("bb ona keep-alive refuses a stopped box, holds a running one and ends on `
   assert.equal(started.exitCode, 0, started.stderr);
   assert.match(started.stdout ?? "", new RegExp(`^Keeping ${ref} alive until \\d\\d:\\d\\d\\.`));
   // Wait until the fake `ona` is running so `off` has a process to end.
-  for (let i = 0; i < 40 && !readFileSync(log, "utf8").includes("keep-alive"); i++)
-    await new Promise((r) => setTimeout(r, 50));
+  await waitForLog("keep-alive");
   assert.match((await host.harness.behavior.runCli(["status"])).stdout ?? "", /^  keep-alive until \d\d:\d\d$/m);
   const ended = await host.harness.behavior.runCli(["keep-alive", ref, "off"]);
   assert.equal(ended.stdout, `Ended the keep-alive for ${ref}.`);
@@ -350,27 +348,51 @@ test(
 );
 
 test(
-  "a resume from the settings button stops polling Ona once its caller stops waiting (fails if the signal is dropped)",
+  "Sync all from the settings section syncs every devbox (fails if the no-id branch runs another command)",
+  local,
+  async () => {
+    // Ona has stopped host-2 while bb still shows it active: the setup the sync case above gives host-1.
+    patchBox(extraBoxes["host-2"]!.envId, { phase: STOPPED });
+    const boxTwo = hosts.find((h) => h.id === "host-2")!;
+    Object.assign(boxTwo, {
+      status: "disconnected",
+      lifecycle: { phase: "active", message: null, suspendedAt: null },
+    });
+    const reply = (await host.harness.behavior.callRpc("devbox_command", { command: "sync" })) as {
+      exitCode: number;
+      stderr?: string;
+    };
+    assert.equal(reply.exitCode, 0, reply.stderr);
+    const suspended = suspends().map(([target]) => (target as { hostId: string }).hostId);
+    assert.ok(suspended.includes("host-2"), `suspended: ${suspended.join(", ")}`);
+  },
+);
+
+// Last in the file: it disposes the host, and the after hook's close() disposes it again (dispose is idempotent).
+test(
+  "a resume from the settings button stops polling Ona when the plugin is disposed (fails if the signal is dropped)",
   local,
   async () => {
     const envId = extraBoxes["host-2"]!.envId;
+    // The Sync all case left host-2 suspending; a resume needs it active.
+    const boxTwo = hosts.find((h) => h.id === "host-2")!;
+    Object.assign(boxTwo, {
+      status: "connected",
+      lifecycle: { phase: "active", message: null, suspendedAt: null },
+    });
     patchBox(envId, { phase: STARTING });
-    const caller = new AbortController();
-    const settled = host.harness.behavior
-      .callRpc("devbox_command", { command: "resume", hostId: "host-2" }, { signal: caller.signal })
-      .then(
-        () => undefined,
-        () => undefined,
-      );
-    await untilAskedAbout(envId);
-    // After its first ask the wait asks again at once, then every 5 s: let the asks before the abort land first.
+    onaCalls(); // only the asks from here on count
+    // The reply is not read: the resume ends with the plugin.
+    void host.harness.behavior
+      .callRpc("devbox_command", { command: "resume", hostId: "host-2" })
+      .catch(() => undefined);
+    await waitForLog(`environment get ${envId}`);
+    // After its first ask the wait asks again at once, then every 5 s: let those asks land before the dispose.
     await sleep(1_000);
     onaCalls();
-    caller.abort();
-    await sleep(6_000);
+    await host.harness.lifecycle.dispose();
+    await sleep(6_000); // longer than the 5 s poll interval
     const asks = onaCalls().filter((call) => call === `environment get ${envId}`).length;
-    patchBox(envId, { phase: DELETED }); // ends a wait that is still running
-    await settled;
-    assert.equal(asks, 0, `Ona was asked ${asks} time(s) after the caller stopped waiting`);
+    assert.equal(asks, 0, `Ona was asked ${asks} time(s) after the plugin was disposed`);
   },
 );
