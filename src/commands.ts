@@ -19,7 +19,7 @@ import { ALL, short, type HostGuard } from "./reconcile.ts";
 import { runOnce, type ShellBackend, type ShellTarget, type ThreadTerminalPlan } from "./shells.ts";
 import type { TunnelManager } from "./ssh.ts";
 import { formatStatus, type OnaHealth } from "./status.ts";
-import type { Row, Sync } from "./sync.ts";
+import { AmbiguousRefError, type Row, type Sync } from "./sync.ts";
 import { notActiveRefusal, notRunningInOna, resumeCommand } from "./wake.ts";
 
 export interface CliResult {
@@ -64,7 +64,10 @@ export async function keepAliveCommand(
   }
   if (request.kind === "off") {
     // A box Ona no longer lists can still have a keep-alive under its id.
-    const envId = await resolveEnvId(ref).catch(() => ref);
+    const envId = await resolveEnvId(ref).catch((error: unknown) => {
+      if (error instanceof AmbiguousRefError) throw error;
+      return ref;
+    });
     return {
       exitCode: 0,
       stdout: keepAlives.stop(envId) ? `Ended the keep-alive for ${ref}.` : `${ref} had no keep-alive.`,
@@ -120,7 +123,7 @@ export const usage = [
   "  bb ona update [ref] [--force] Apply pending updates of the CLIs in `autoUpdateProviders` now",
   "                                Also weekdays 09:00 when `autoUpdateClis` is on",
   "",
-  "<ref> is a bb machine name/id or an Ona environment name/id.",
+  "<ref> is a bb machine name/id or an Ona environment name/id; a name two devboxes share is refused by commands that act on one box (use a host id); `status` lists them all.",
 ].join("\n");
 
 export const commands = [

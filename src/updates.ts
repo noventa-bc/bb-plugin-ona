@@ -92,9 +92,11 @@ export interface UpdatesDeps {
   machines(): Promise<Row[]>;
   /** The `autoUpdateProviders` setting. */
   autoUpdateProviders: string;
+  /** src/sync.ts; passed in because sync.ts imports this module. */
+  rowForRef(rows: readonly Row[], ref: string): Row | undefined;
 }
 
-export function createUpdateClis({ bb, machines, autoUpdateProviders }: UpdatesDeps) {
+export function createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef }: UpdatesDeps) {
   /**
    * Apply pending agent-CLI updates on connected Ona devboxes. Returns one
    * line per box for the CLI and the plugin log.
@@ -102,9 +104,9 @@ export function createUpdateClis({ bb, machines, autoUpdateProviders }: UpdatesD
   return async function updateClis(options: { ref?: string; force?: boolean } = {}): Promise<string[]> {
     const wanted = parseProviderList(autoUpdateProviders);
     const lines: string[] = [];
-    for (const row of await machines()) {
-      if (options.ref && ![row.hostId, row.machine, row.resource.envId, row.resource.envName].includes(options.ref))
-        continue;
+    const rows = await machines();
+    for (const row of options.ref ? [rowForRef(rows, options.ref)] : rows) {
+      if (!row) continue;
       const name = row.resource.envName;
       if (row.status !== "connected") {
         lines.push(`${name}: skipped (${row.status})`);
