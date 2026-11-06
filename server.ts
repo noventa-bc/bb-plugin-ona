@@ -484,7 +484,7 @@ export default async function plugin(bb: BbPluginApi) {
     run: runOna,
   });
 
-  // The abort comes first, in the same hook, so a Resume or Reconnect from the page cannot open a tunnel after stopAll.
+  // The abort ends a Resume or Reconnect from the page; stopAll refuses any tunnel a late step of theirs still asks for.
   bb.onDispose(() => {
     lifetime.abort();
     tunnels.stopAll();

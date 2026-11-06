@@ -129,6 +129,28 @@ test("a tunnel stopped while its gate asks Ona never runs ssh", async () => {
   assert.equal(spawns, 0);
 });
 
+test("ensure after stopAll starts no tunnel (fails if stopAll leaves ensure open)", async (t) => {
+  // Bug: a connect whose last step was already queued when the plugin was disposed reached ensure after
+  // stopAll and started a tunnel loop nothing stopped.
+  let asked = 0;
+  const tunnels = new TunnelManager(
+    "true",
+    () => 1,
+    () => 2,
+    quiet,
+    async () => {
+      asked++;
+      return true;
+    },
+  );
+  t.after(() => tunnels.stop("env-1")); // a loop the unfixed code starts would hold the process open
+  tunnels.stopAll();
+  tunnels.ensure("env-1");
+  await settle();
+  assert.equal(tunnels.status("env-1"), "off");
+  assert.equal(asked, 0);
+});
+
 /** The fake times, in seconds, at which a tunnel asks `gate` over `seconds` of fake time. */
 async function askTimes(gate: () => Promise<boolean>, seconds: number): Promise<number[]> {
   const times: number[] = [];
