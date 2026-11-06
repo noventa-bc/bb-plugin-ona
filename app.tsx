@@ -13,7 +13,7 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import { ONA_MACHINE_PROVIDER_ID, projectInputsChange, projectOfSavedInputs } from "./src/machine-inputs.ts";
 import { remember } from "./src/move.ts";
-import type { Devbox, rpcContract, ThreadCost } from "./src/rpc.ts";
+import type { Devbox, DevboxCommand, DevboxCommandReply, rpcContract, ThreadCost } from "./src/rpc.ts";
 
 /**
  * `@get-bb/plugin-sdk` 0.6.109 does not declare
@@ -268,9 +268,6 @@ function OnaProjectField({ value, onChange }: PluginMachineProviderInputsProps) 
   );
 }
 
-type DevboxCommand = "sync" | "reconnect" | "resume";
-type CommandReply = { exitCode: number; stdout?: string; stderr?: string };
-
 const DEVBOX_BUTTONS: { command: DevboxCommand; label: string }[] = [
   { command: "sync", label: "Sync" },
   { command: "reconnect", label: "Reconnect" },
@@ -282,7 +279,7 @@ const sectionButton = `${editorButton} disabled:pointer-events-none disabled:opa
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /** The text a `bb ona` reply shows: its stdout, or its stderr when it failed. */
-const replyText = (reply: CommandReply) => (reply.exitCode === 0 ? reply.stdout : reply.stderr) ?? "";
+const replyText = (reply: DevboxCommandReply) => (reply.exitCode === 0 ? reply.stdout : reply.stderr) ?? "";
 
 /**
  * Settings → Ona devboxes: `bb ona status` as the CLI prints it, each devbox's bb status, and buttons that run
@@ -292,7 +289,7 @@ const replyText = (reply: CommandReply) => (reply.exitCode === 0 ? reply.stdout 
 function DevboxesSection() {
   const rpc = useRpc<typeof rpcContract>();
   const [devboxes, setDevboxes] = useState<Devbox[]>([]);
-  const [status, setStatus] = useState<CommandReply | null>(null);
+  const [status, setStatus] = useState<DevboxCommandReply | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [running, setRunning] = useState<string[]>([]);
   // Bumped after each action, so the reads run again at once.
@@ -328,9 +325,10 @@ function DevboxesSection() {
   /** Runs one `bb ona` command for a devbox (its host id), or for every devbox when `hostId` is left out. */
   const run = (command: DevboxCommand, hostId?: string) => {
     const key = hostId ?? "all";
-    // Sync all's reply is the status text (`sync` prints it); a devbox's reply goes under its row.
-    const show = (reply: CommandReply) =>
-      hostId ? setNotes((known) => ({ ...known, [hostId]: replyText(reply) })) : setStatus(reply);
+    // A devbox's reply goes under its row. Sync all has no row: the re-read after it shows the result.
+    const show = (reply: DevboxCommandReply) => {
+      if (hostId) setNotes((known) => ({ ...known, [hostId]: replyText(reply) }));
+    };
     setRunning((current) => [...current, key]);
     void rpc
       .call("devbox_command", hostId ? { command, hostId } : { command })

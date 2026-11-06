@@ -1,7 +1,7 @@
 // The real server.ts inside the SDK's fake bb host (test/e2e-host.ts), for
 // what a sync pass and the `bb ona` commands do to a box: the idle release and
 // the observed stop (neither may stop the box), keep-alive, reconnect, rename,
-// update, sync by the Ona name and the thread event. One story in file order: run the whole file.
+// update, sync by the Ona name, the settings section's devbox_command and the thread event. One story in file order: run the whole file.
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { after, before, test } from "node:test";
@@ -13,6 +13,9 @@ import { ctx, local, startHost, type E2eHost } from "./e2e-host.ts";
 const HOUR = 3_600_000;
 const STOPPED = "ENVIRONMENT_PHASE_STOPPED";
 const RUNNING = "ENVIRONMENT_PHASE_RUNNING";
+const STARTING = "ENVIRONMENT_PHASE_STARTING";
+const DELETED = "ENVIRONMENT_PHASE_DELETED";
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let host: E2eHost["host"];
 let provider: E2eHost["provider"];
@@ -27,6 +30,8 @@ let resource: OnaResource;
 const hosts: BbHost[] = [];
 const threads: ThreadRecord[] = [];
 const bootstraps: string[] = [];
+/** The boxes the devbox_command cases add after host-1, by bb host id. */
+const extraBoxes: Record<string, OnaResource> = {};
 const suspends = () => host.harness.inspection.sdk.callsTo("hosts.experimental_suspend");
 /** `environment list` calls in the fake Ona's log so far; the tunnel loop lists too, so compare with `>`. */
 const listings = () => readFileSync(log, "utf8").match(/^environment list/gm)?.length ?? 0;
@@ -34,6 +39,33 @@ const listings = () => readFileSync(log, "utf8").match(/^environment list/gm)?.l
 function cli(currentVersion: string, latestVersion: string) {
   const needsUpdate = currentVersion !== latestVersion;
   return { installed: true, currentVersion, latestVersion, needsUpdate, installAction: { kind: "update" } };
+}
+
+/** Adds a box to the fake Ona and to bb's hosts, as the first test does for host-1. */
+async function addDevbox(key: string, hostId: string, project: string) {
+  const result = await provider.create({ ...ctx, inputs: { mode: "create", project }, key, attempt: 1 });
+  assert.equal(result.status, "created");
+  if (result.status !== "created") throw new Error("no box");
+  extraBoxes[hostId] = result.resource as OnaResource;
+  hosts.push({
+    id: hostId,
+    name: result.name,
+    machineProviderId: "ona",
+    status: "connected",
+    lastSeenAt: Date.now(),
+    updatedAt: Date.now(),
+    lifecycle: { phase: "active", message: null, suspendedAt: null },
+  });
+  onaCalls();
+}
+
+/** Resolves once the fake Ona has been asked about the box; throws after 10 s. */
+async function untilAskedAbout(envId: string): Promise<void> {
+  for (let tick = 0; tick < 200; tick++) {
+    if (readFileSync(log, "utf8").includes(`environment get ${envId}`)) return;
+    await sleep(50);
+  }
+  throw new Error(`Ona was never asked about ${envId}`);
 }
 
 before(async () => {
@@ -45,7 +77,7 @@ before(async () => {
         return { hostId: "host-1" };
       },
     },
-    machineResource: async (hostId) => (hostId === "host-1" ? resource : null),
+    machineResource: async (hostId) => (hostId === "host-1" ? resource : (extraBoxes[hostId] ?? null)),
     sdk: {
       hosts: {
         list: async () => hosts,
@@ -299,3 +331,46 @@ test("thread.deleted drops the thread's stored cost", local, async () => {
   assert.equal((await host.bb.storage.kv.get("cost2:thread-1")) ?? null, null);
   assert.equal((await host.bb.storage.kv.get("cost:thread-1")) ?? null, null);
 });
+
+test(
+  "devbox_command status for one devbox's host id lists only that devbox (fails if the id is dropped or swapped)",
+  local,
+  async () => {
+    await addDevbox("key-2", "host-2", "Data Tools");
+    const reply = (await host.harness.behavior.callRpc("devbox_command", { command: "status", hostId: "host-2" })) as {
+      exitCode: number;
+      stdout?: string;
+      stderr?: string;
+    };
+    const named = (id: string) => hosts.find((h) => h.id === id)!.name;
+    assert.equal(reply.exitCode, 0, reply.stderr);
+    assert.ok(reply.stdout?.includes(named("host-2")), reply.stdout);
+    assert.ok(!reply.stdout?.includes(named("host-1")), `host-1 is in host-2's status:\n${reply.stdout}`);
+  },
+);
+
+test(
+  "a resume from the settings button stops polling Ona once its caller stops waiting (fails if the signal is dropped)",
+  local,
+  async () => {
+    const envId = extraBoxes["host-2"]!.envId;
+    patchBox(envId, { phase: STARTING });
+    const caller = new AbortController();
+    const settled = host.harness.behavior
+      .callRpc("devbox_command", { command: "resume", hostId: "host-2" }, { signal: caller.signal })
+      .then(
+        () => undefined,
+        () => undefined,
+      );
+    await untilAskedAbout(envId);
+    // After its first ask the wait asks again at once, then every 5 s: let the asks before the abort land first.
+    await sleep(1_000);
+    onaCalls();
+    caller.abort();
+    await sleep(6_000);
+    const asks = onaCalls().filter((call) => call === `environment get ${envId}`).length;
+    patchBox(envId, { phase: DELETED }); // ends a wait that is still running
+    await settled;
+    assert.equal(asks, 0, `Ona was asked ${asks} time(s) after the caller stopped waiting`);
+  },
+);

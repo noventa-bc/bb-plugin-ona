@@ -166,6 +166,12 @@ symlink resolves to each devbox's own disk. If `~/.bb-machines` already exists
 as a real folder, setup stops and asks you to move it aside
 (`mv ~/.bb-machines ~/.bb-machines.shared`).
 
+**In settings:** the plugin's settings page has an **Ona devboxes** section. It shows `bb ona status` and
+each devbox's bb status, with **Sync all** above the list and **Sync**, **Reconnect** and **Resume** buttons
+per devbox. Each button runs the same `bb ona sync`, `bb ona reconnect` or `bb ona resume` as the terminal,
+for that devbox (**Sync all** runs `bb ona sync` for every devbox), and a refusal shows the same message.
+The status and the devbox list are read again every 30 seconds while the page is open.
+
 ## Usage
 
 ### Add a devbox
@@ -252,12 +258,6 @@ opens the box in your Ona editor. For a shell, use bb's terminal panel in the ri
 devbox thread it already runs on the box.
 
 bb's native **Open in** menu can't reach devboxes, so the plugin hides it on devbox threads.
-
-**In settings:** the plugin's settings page has an **Ona devboxes** section. It shows `bb ona status` and
-each devbox's bb status, with **Sync all** above the list and **Sync**, **Reconnect** and **Resume** buttons
-per devbox. Each button runs the same `bb ona sync`, `bb ona reconnect` or `bb ona resume` as the terminal,
-for that devbox (**Sync all** runs `bb ona sync` for every devbox), and a refusal shows the same message.
-The status and the devbox list are read again every 30 seconds while the page is open.
 
 ### Spend per thread
 

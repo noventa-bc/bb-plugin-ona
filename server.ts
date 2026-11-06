@@ -395,29 +395,6 @@ export default async function plugin(bb: BbPluginApi) {
 
   const move = createMove({ sdk: bb.sdk, machineOfHost });
 
-  bb.rpc.register(rpcContract, {
-    devboxes_list: async () => ({ devboxes: await devboxes() }),
-    thread_devbox: async ({ threadId }) => {
-      // bb creates a thread before its workspace; the app asks again every 15 s while the thread is shown.
-      const { environmentId } = await bb.sdk.threads.get({ threadId });
-      if (!environmentId) return { devbox: null, pending: true };
-      return { devbox: await workspaceDevbox(environmentId) };
-    },
-    thread_cost: async ({ threadId }) => ({ cost: await costs.threadCost(threadId) }),
-    // A refusal carries the message to the menu without bb recording a plugin crash, which a plain throw would be.
-    thread_move: (input) =>
-      move(input).catch((error: unknown) => {
-        throw new experimental_PluginRpcRefusal({ code: "conflict", message: errorText(error) });
-      }),
-    devbox_open_editor: async ({ hostId }) => {
-      const row = await findMachine(hostId);
-      if (!row) return { opened: false };
-      openEditor(row.resource.envId);
-      return { opened: true };
-    },
-    devbox_command: ({ command, hostId }) => runOna(hostId ? [command, hostId] : [command], {}),
-  });
-
   const updateClis = createUpdateClis({ bb, machines, autoUpdateProviders });
   if (autoUpdateClis) {
     bb.background.schedule("cli-updates", "0 9 * * 1-5", async () => {
@@ -473,6 +450,31 @@ export default async function plugin(bb: BbPluginApi) {
     openEditor,
     onaHealth,
   });
+  bb.rpc.register(rpcContract, {
+    devboxes_list: async () => ({ devboxes: await devboxes() }),
+    thread_devbox: async ({ threadId }) => {
+      // bb creates a thread before its workspace; the app asks again every 15 s while the thread is shown.
+      const { environmentId } = await bb.sdk.threads.get({ threadId });
+      if (!environmentId) return { devbox: null, pending: true };
+      return { devbox: await workspaceDevbox(environmentId) };
+    },
+    thread_cost: async ({ threadId }) => ({ cost: await costs.threadCost(threadId) }),
+    // A refusal carries the message to the menu without bb recording a plugin crash, which a plain throw would be.
+    thread_move: (input) =>
+      move(input).catch((error: unknown) => {
+        throw new experimental_PluginRpcRefusal({ code: "conflict", message: errorText(error) });
+      }),
+    devbox_open_editor: async ({ hostId }) => {
+      const row = await findMachine(hostId);
+      if (!row) return { opened: false };
+      openEditor(row.resource.envId);
+      return { opened: true };
+    },
+    // Ends with the caller: a resume's wait on Ona stops when the page goes away or the plugin reloads.
+    devbox_command: ({ command, hostId }, { experimental_signal }) =>
+      runOna(hostId ? [command, hostId] : [command], { signal: experimental_signal }),
+  });
+
   bb.cli.register({
     name: "ona",
     summary: "Ona devboxes as bb machines",

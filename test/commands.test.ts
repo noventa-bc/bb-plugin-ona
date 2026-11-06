@@ -329,7 +329,7 @@ function fakeRun(
   const deps = {
     machines: () => Promise.resolve([machine]),
     // A fresh row per lookup, as bb gives, so a row the command holds doesn't change under it.
-    findMachine: (ref: string) => Promise.resolve(ref === "box" || ref === ROW.hostId ? { ...machine } : null),
+    findMachine: (ref: string) => Promise.resolve(ref === "box" ? { ...machine } : null),
     guard,
     snapshot: {
       refresh: async () => {
@@ -409,13 +409,6 @@ test("reconnect on a machine bb doesn't show active exits 1, never reconnects, a
 test("reconnect on an active machine reconnects it", async () => {
   const { run, calls } = fakeRun();
   assert.deepEqual(await run("reconnect", "box"), { exitCode: 0, stdout: "Reconnected ona:box" });
-  assert.deepEqual(calls, ["reconnect env_1"]);
-});
-
-// The settings section's buttons pass the bb host id as the ref; server.ts's findMachine matches it (sync.ts matchesRef).
-test("reconnect takes the bb host id the settings section's buttons pass", async () => {
-  const { run, calls } = fakeRun();
-  assert.deepEqual(await run("reconnect", ROW.hostId), { exitCode: 0, stdout: "Reconnected ona:box" });
   assert.deepEqual(calls, ["reconnect env_1"]);
 });
 
