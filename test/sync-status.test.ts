@@ -527,7 +527,6 @@ test("a refused resume for a waiting thread is a failure, not a success (fails i
 
 // Bug: the retry line hid only a suspended machine, but decide() acts only on an active one, so a machine that was
 // creating, removing, resuming or suspending showed a retry it never got.
-// bb's list has no row for a creating machine, so the test covers only the phases the list shows.
 test("the retry and give-up lines show only for an active machine (fails if either shows for a machine that is removing, resuming, suspending or suspended)", async () => {
   const retryIn = async (phase: string, failures: number) => {
     const { sync, guard } = world([idle("h1", { phase })]);

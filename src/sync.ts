@@ -169,7 +169,7 @@ export function createSync(deps: SyncDeps) {
 
   /** `includeCreating` adds the hosts bb is still creating; that call leaves `hostByEnv` as it was. */
   async function machines(options?: { includeCreating?: boolean }): Promise<Row[]> {
-    const hosts = await bb.sdk.hosts.list(options?.includeCreating ? { includeCreating: true } : undefined);
+    const hosts = await bb.sdk.hosts.list(options);
     // The stored resource keeps the name the box was created or adopted with; the last listing has the current one.
     const listing = snapshot.latest;
     const rows: Row[] = [];

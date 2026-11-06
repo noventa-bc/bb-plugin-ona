@@ -131,6 +131,8 @@ function fakeRun(
     listingError?: string;
     /** bb lists no machine for the box (an Ona environment bb doesn't manage). */
     noMachine?: boolean;
+    /** bb's machine list rejects. */
+    machinesFails?: boolean;
     duringListing?: (guard: HostGuard, machine: { phase: string; hostId: string; machine: string }) => void;
   } = {},
 ) {
@@ -150,8 +152,12 @@ function fakeRun(
         ];
   const deps = {
     // Like bb's list: a creating machine is left out unless asked for.
-    machines: (options?: { includeCreating?: boolean }) =>
-      Promise.resolve(extra.noMachine || (machine.phase === "creating" && !options?.includeCreating) ? [] : [machine]),
+    machines: (options?: { includeCreating?: boolean }) => {
+      if (extra.machinesFails) return Promise.reject(new Error("bb is down"));
+      return Promise.resolve(
+        extra.noMachine || (machine.phase === "creating" && !options?.includeCreating) ? [] : [machine],
+      );
+    },
     // A fresh row per lookup, as bb gives, so a row the command holds doesn't change under it.
     findMachine: (ref: string) => Promise.resolve(ref === "box" ? { ...machine } : null),
     guard,
@@ -247,6 +253,8 @@ test("rename refuses a machine bb doesn't show active, before any Ona rename", a
     ["suspended", "Resume it with `bb machine resume ona:box`."],
     ["removing", "It is gone or being removed."],
     ["destroyed", "It is gone or being removed."],
+    // A phase a newer bb adds.
+    ["hibernating", "Try again once bb shows it active."],
   ]) {
     const { run, calls } = fakeRun(phase);
     assert.deepEqual(
@@ -256,6 +264,13 @@ test("rename refuses a machine bb doesn't show active, before any Ona rename", a
     );
     assert.deepEqual(calls, [], phase);
   }
+});
+
+test("rename stops before any Ona rename when bb can't list its machines (fails if the check fails open)", async () => {
+  const { run, calls } = fakeRun("active", "RUNNING", { machinesFails: true });
+  const result = await run("rename", "box", "new-name");
+  assert.equal(result.exitCode, 1, result.stdout);
+  assert.deepEqual(calls, []);
 });
 
 test("rename on a box with no bb machine renames it in Ona only, with no bb update", async () => {
