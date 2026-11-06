@@ -158,9 +158,9 @@ export function createStatusRows(deps: StatusRowsDeps) {
                   ...(record.error ? { error: record.error } : {}),
                 }
               : null,
-          // decide() leaves a suspended machine alone, so no retry line for it.
+          // decide() acts only on an active machine, so no retry line for any other phase.
           retry:
-            row.phase === "suspended" || !record || record.failures === 0
+            row.phase !== "active" || !record || record.failures === 0
               ? null
               : record.failures >= GIVE_UP_AFTER
                 ? `gave up after ${record.failures} failures; run \`bb ona sync ${row.machine}\``

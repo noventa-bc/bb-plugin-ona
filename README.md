@@ -37,7 +37,7 @@ SSH, and the tunnel lands on a small proxy that only lets bb's daemon traffic
 through (see [Security model](docs/security.md)). The server stays on loopback,
 and nothing goes through getbb.app or any other third-party relay. Tunnels only
 work while your Mac is awake and bb is running. An open tunnel counts as
-activity to Ona, so the plugin only keeps it open while you use the box. After
+activity to Ona, so the plugin keeps it open only while you use the box, or after bb's restart recovery resumes the machine. After
 `idleDisconnect` (1h by default) without thread activity, unless bb is setting up,
 tearing down, retrying or retiring one of the machine's workspaces (retiring is bb's grace before a teardown), or one needs recovery, or
 bb's workspace or thread list can't be read, or the Ona listing fails or comes back
@@ -141,17 +141,17 @@ Run `bb ona setup` again at any time to check that everything is still in place.
 
 View them with `bb plugin config ona`, and change one with `bb plugin config ona set <key> <value>`.
 
-| Setting             | Default                        | What it does                                                                                                                                                                                                                                                                                                                                            |
-| ------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `onaPath`           | `/opt/homebrew/bin/ona`        | Path to the `ona` CLI. Change it on Intel Macs or non-Homebrew installs (`which ona`).                                                                                                                                                                                                                                                                  |
-| `sshPath`           | `/usr/bin/ssh`                 | Path to `ssh`.                                                                                                                                                                                                                                                                                                                                          |
-| `defaultProject`    | _(empty)_                      | Ona project used when creating a devbox without one, e.g. `my-app`.                                                                                                                                                                                                                                                                                     |
-| `inactivityTimeout` | `3h`                           | Auto-stop timeout for devboxes bb creates. Adopted ones keep their own.                                                                                                                                                                                                                                                                                 |
-| `autoRepair`        | `true`                         | Repair bb's view of devboxes changed outside bb (see [How bb and Ona stay in sync](docs/sync.md)). Off: stopped or deleted boxes are still marked suspended, tunnels still reopen, idle boxes are still let go after `idleDisconnect`, and a waiting thread still resumes or starts a stopped box; everything else is only reported by `bb ona status`. |
-| `idleDisconnect`    | `1h`                           | After this long with no thread activity, bb closes its tunnel to a devbox and marks the machine suspended so Ona's timeout can stop it (exceptions in How it works). The next message wakes it. Empty or `0` keeps every box connected.                                                                                                                 |
-| `waitForSharedHome` | `true`                         | After a devbox starts, wait until its NFS home is mounted before starting bb's daemon and agents. Starting earlier lets Codex write threads into the container's own home, where the mount hides them ("no rollout found"). Turn off if your environments don't share a home.                                                                           |
-| `codexSqliteHome`   | `/workspaces/.codex-sqlite-bb` | Where Codex launched by bb keeps its SQLite state on the devbox's local disk.                                                                                                                                                                                                                                                                           |
-| `machineDataDir`    | `/workspaces/.bb-machines`     | Local folder that `~/.bb-machines` is symlinked to on every devbox. Empty leaves `~/.bb-machines` alone.                                                                                                                                                                                                                                                |
+| Setting             | Default                        | What it does                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `onaPath`           | `/opt/homebrew/bin/ona`        | Path to the `ona` CLI. Change it on Intel Macs or non-Homebrew installs (`which ona`).                                                                                                                                                                                                                                                                                                         |
+| `sshPath`           | `/usr/bin/ssh`                 | Path to `ssh`.                                                                                                                                                                                                                                                                                                                                                                                 |
+| `defaultProject`    | _(empty)_                      | Ona project used when creating a devbox without one, e.g. `my-app`.                                                                                                                                                                                                                                                                                                                            |
+| `inactivityTimeout` | `3h`                           | Auto-stop timeout for devboxes bb creates. Adopted ones keep their own.                                                                                                                                                                                                                                                                                                                        |
+| `autoRepair`        | `true`                         | Repair bb's view of devboxes changed outside bb (see [How bb and Ona stay in sync](docs/sync.md)). Off: stopped or deleted boxes are still marked suspended, tunnels still reopen, idle boxes are still let go after `idleDisconnect`, and a waiting thread still resumes or starts a stopped box, as does bb's recovery after a restart; everything else is only reported by `bb ona status`. |
+| `idleDisconnect`    | `1h`                           | After this long with no thread activity, bb closes its tunnel to a devbox and marks the machine suspended so Ona's timeout can stop it (exceptions in How it works). The next message wakes it. Empty or `0` keeps every box connected. Write it as `45s`, `30m`, `1.5h` or bare minutes (`90`); bb refuses forms like `1h30m` or `90min` when you save.                                       |
+| `waitForSharedHome` | `true`                         | After a devbox starts, wait until its NFS home is mounted before starting bb's daemon and agents. Starting earlier lets Codex write threads into the container's own home, where the mount hides them ("no rollout found"). Turn off if your environments don't share a home.                                                                                                                  |
+| `codexSqliteHome`   | `/workspaces/.codex-sqlite-bb` | Where Codex launched by bb keeps its SQLite state on the devbox's local disk.                                                                                                                                                                                                                                                                                                                  |
+| `machineDataDir`    | `/workspaces/.bb-machines`     | Local folder that `~/.bb-machines` is symlinked to on every devbox. Empty leaves `~/.bb-machines` alone.                                                                                                                                                                                                                                                                                       |
 
 A changed setting applies after `bb plugin reload ona`.
 
@@ -167,9 +167,13 @@ as a real folder, setup stops and asks you to move it aside
 (`mv ~/.bb-machines ~/.bb-machines.shared`).
 
 **In settings:** the plugin's settings page has an **Ona devboxes** section. It shows `bb ona status` and
-each devbox's bb status, with **Sync all** above the list and **Sync**, **Reconnect** and **Resume** buttons
-per devbox. Each button runs the same `bb ona sync`, `bb ona reconnect` or `bb ona resume` as the terminal,
-for that devbox (**Sync all** runs `bb ona sync` for every devbox), and a refusal shows the same message under the devbox's row.
+each devbox's bb status, with **Sync all** above the list and, per devbox, **Sync**, **Reconnect** and **Resume**
+buttons, plus **Rename** (a new name; empty gives a random one) and **Keep awake** (a duration such as `2h` or `90m`, a bare number being minutes, or
+`off`), each with its own field. Each control runs the same `bb ona sync`, `bb ona reconnect`, `bb ona resume`,
+`bb ona rename` or `bb ona keep-alive` as the terminal, for that devbox (**Sync all** runs `bb ona sync` for every
+devbox). A row's controls show their reply or refusal under that row; **Sync all** has no row, so it shows none, and
+the status is read again after it. **Keep awake** holds a box for at most `12h`, as the CLI does, and ends on a plugin
+reload, and is not restored after one.
 A **Resume** or **Reconnect** started here keeps running after the page closes and ends on a plugin reload.
 The status and the devbox list are read again every 30 seconds while the page is open.
 
@@ -268,7 +272,7 @@ Claude turn whose first read finds nothing is read once more, at least 5 minutes
 usage about 30 minutes after the turn ends in one observation (checked 2026-11-03), so a Codex turn
 is checked up to 12 times (about an hour while a thread header is open and the box runs). For
 Codex, a `≥` before the figure means some sessions have no recorded usage. A paused box shows its
-last figure and isn't woken; a paused Codex thread whose only figure is a $0.00 saved by an older version of this plugin shows none.
+last figure, and reading it never wakes the box; a paused Codex thread whose only figure is a $0.00 saved by an older version of this plugin shows none.
 
 - **Codex:** OpenAI's own per-thread estimate, the number behind Codex's `estimated-thread-cost`
   status item. The plugin asks a short-lived `codex app-server` on the box (`account/usage/read`),
@@ -297,7 +301,7 @@ bb ona sync [name]             # re-check Ona now and repair out-of-step machine
 bb ona keep-alive <name> 2h    # keep a running box from Ona's idle timeout (at most 12h)
 bb ona keep-alive <name> off   # end it early
 bb ona move <thread-id> <ref>  # continue a thread in a new thread on another devbox, at the same path
-bb ona rename <name> [new]     # rename env + bb machine (random fun name if omitted)
+bb ona rename <ref> [name]     # rename env + bb machine (random fun name if omitted)
 bb ona reconnect <name>        # active machines: reopen the tunnel and restart the bb daemon; refused unless bb shows the machine active and Ona shows its box running
 bb ona resume <name>           # a stopped active machine: starts its box and reconnects the bb daemon (your action); a running box is only reconnected; refused unless bb shows the machine active
 bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
@@ -369,7 +373,7 @@ bb machine remove ona:<name>   # created: deletes the box unless it has unpushed
   one suspended in bb but running in Ona needs `bb machine resume ona:<name>`; an active one whose box Ona stopped is started with `bb ona resume <name>`. Two lines to look for:
   - "ERROR … (run `ona login`?)" at the top: the plugin can't reach Ona, so it
     changes nothing.
-  - "gave up after 3 failures" (not for a suspended machine): the last error is shown next to it.
+  - "gave up after 3 failures" (only for an active machine): the last error is shown next to it.
 
   See [How bb and Ona stay in sync](docs/sync.md).
 

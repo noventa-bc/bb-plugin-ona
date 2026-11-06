@@ -91,10 +91,18 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 - `ona environment ssh --proxy-connect` (the ProxyCommand form) has a `--start`
   flag that defaults to true. A plugin-owned SSH config that passes
   `--start=false` means SSH can never wake a stopped box.
+- `ona environment update <id> --name <name>` (what `bb ona rename` runs) changes
+  the name only: bb passes no box setting but `--name`. Ona's help for `update` says
+  "Updates an environment's metadata or settings" and lists `--name` and
+  `--inactivity-timeout`, with no start or stop (checked 2026-11-06).
 
 ## bb SDK
 
 - The plugin pins `@get-bb/plugin-sdk` 0.6.109 (checked 2026-11-03).
+- bb 0.48.1's app RPC client (`useRpc`) refuses an input with a key whose value is
+  `undefined` ("rpc input at $input.<key> is not a JSON value") before it sends, as
+  the SDK's test harness does (checked 2026-11-06). `app.tsx` builds the
+  `devbox_command` input without its unset keys (`devboxCommandInput`).
 - SDK 0.6.109's public types do not declare an `experimental_threadHeaderAction`
   slot (checked 2026-11-03). Its app collector accepts the slot, so `app.tsx`
   takes `LegacyThreadHeaderActionRegistration` from the SDK's
