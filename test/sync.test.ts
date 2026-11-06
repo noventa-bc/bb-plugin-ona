@@ -306,9 +306,9 @@ test("Ona stopping a box with a thread waiting: suspended without stopping, then
     updatedAt: NOW,
     runtime: { displayStatus: "waiting-for-host" },
   };
-  const { sync, calls } = world([idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waiting] })]);
+  const { sync, calls, guard } = world([idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waiting] })]);
   await sync.reconcile(new Set(["h1"]), { wait: true });
-  assert.deepEqual(calls, ["suspend h1", "resume h1"]);
+  assert.deepEqual([calls, guard.records.get("h1")?.failures], [["suspend h1", "resume h1"], 0]);
 });
 
 // Bug: a workflow step or side chat waiting for a box Ona stopped never resumed it (bb hides those threads).

@@ -7,6 +7,7 @@ import { box, connectCalls, register as registerOna } from "./provider-fake.ts";
 import { HOUR, idle, NOW, waitingThread, world } from "./sync-fakes.ts";
 
 const REFUSED = "Machine suspension failed: Host is not connected";
+const RESUME_REFUSED = "Resume is blocked by an interrupted hook";
 const NOT_CONNECTED =
   "bb can't suspend it while a turn is still active on the box; it needs the box back to settle the turn";
 
@@ -505,4 +506,21 @@ test("a suspend bb settles as removing wakes nothing and keeps the no-stop flag,
   assert.deepEqual(ona.calls, [], "nothing is started while bb removes the machine");
   assert.equal(guard.records.get("h1")!.error, "bb kept the machine removing: Removing the machine");
   assert.ok(releasing.has("env-h1"), "bb may still run the suspend, so the no-stop flag stays");
+});
+
+// Bug: bb's refused resume for a waiting thread was returned as a message, so the guard recorded a success: no failure
+// and no backoff.
+test("a refused resume for a waiting thread is a failure, not a success (fails if the refusal is returned as a success), and a suspended box shows no retry line (fails if the retry line comes back)", async () => {
+  const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+  const { sync, guard } = world([host], { resumeRefuses: RESUME_REFUSED });
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  const record = guard.records.get("h1")!;
+  assert.equal(record.failures, 1);
+  assert.equal(
+    record.error,
+    `couldn't resume it for a waiting thread (bb kept the machine suspended: ${RESUME_REFUSED})`,
+  );
+  assert.equal(record.threadWaiting, true, "the thread's hold is kept");
+  const [row] = await sync.statusRows();
+  assert.equal(row!.retry, null, "bb shows the machine suspended, and nothing retries it");
 });

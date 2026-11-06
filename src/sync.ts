@@ -388,15 +388,16 @@ export function createSync(deps: SyncDeps) {
               }
               if (!decision.resumeAfter) return;
               // A thread is waiting on it: that's you using the box, so let bb start it.
+              let resumed: BbHost;
               try {
-                const host = await bb.sdk.hosts.experimental_resume({ hostId });
-                const resumeRefusal = lifecycleRefusal(host.lifecycle, RESUMED);
-                return resumeRefusal
-                  ? `couldn't resume it for a waiting thread (${resumeRefusal})`
-                  : "resumed for a waiting thread";
+                resumed = await bb.sdk.hosts.experimental_resume({ hostId });
               } catch (error) {
                 return `bb will resume it on your next message (${errorText(error)})`;
               }
+              // Thrown: a returned string is a success, and a success clears the thread's hold (docs/sync.md rule 3).
+              const resumeRefusal = lifecycleRefusal(resumed.lifecycle, RESUMED);
+              if (resumeRefusal) throw new Error(`couldn't resume it for a waiting thread (${resumeRefusal})`);
+              return "resumed for a waiting thread";
             }
             case "ensure-tunnel":
               tunnels.ensure(resource.envId);
@@ -476,7 +477,7 @@ export function createSync(deps: SyncDeps) {
         const skipped = !autoRepair && !["none", "suspend-observed", "ensure-tunnel"].includes(decision.action);
         const reason = skipped ? `${decision.reason} (would ${decision.action}; autoRepair is off)` : decision.reason;
         guard.note(row.hostId, reason);
-        // A connection the pass can trust ends a hold (docs/sync.md rule 3).
+        // A connection the pass can trust ends a hold, and clears a failing daemon repair's count (docs/sync.md rule 3).
         if (view.status === "connected" && view.tunnel === "up" && shownRunning(onaState)) guard.connected(row.hostId);
         if (decision.action === "none" || skipped) continue;
         actions.push(act(row, decision, options.force ?? false));
@@ -532,8 +533,9 @@ export function createSync(deps: SyncDeps) {
                   ...(record.error ? { error: record.error } : {}),
                 }
               : null,
+          // decide() leaves a suspended machine alone, so no retry line for it.
           retry:
-            !record || record.failures === 0
+            row.phase === "suspended" || !record || record.failures === 0
               ? null
               : record.failures >= GIVE_UP_AFTER
                 ? `gave up after ${record.failures} failures; run \`bb ona sync ${row.machine}\``
