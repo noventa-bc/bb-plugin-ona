@@ -210,7 +210,7 @@ test("a resume whose Ona lookup throws clears the no-stop flag (fails if the fla
   assert.equal(releasing.size, 0);
 });
 
-test("a resume that Ona refuses to start clears the no-stop flag (fails if the flag is cleared after the start)", async () => {
+test("a resume of a box Ona shows deleting clears the no-stop flag (fails if the flag is cleared after the start)", async () => {
   const { provider, releasing } = register({ found: box("DELETING") });
   releasing.add("env-1");
   await assert.rejects(
@@ -225,8 +225,9 @@ test("a resume that Ona refuses to start clears the no-stop flag (fails if the f
   assert.equal(releasing.size, 0);
 });
 
-test("a resume of a box Ona no longer has rejects as not found and starts nothing (fails if an absent box is started)", async () => {
-  const { provider, calls } = register({ found: box("STOPPED"), phases: [null] });
+test("a resume of a box Ona no longer has rejects as not found, starts nothing and clears the no-stop flag (fails if an absent box is started or keeps the flag)", async () => {
+  const { provider, calls, releasing } = register({ found: box("STOPPED"), phases: [null] });
+  releasing.add("env-1");
   await assert.rejects(
     provider.resume!({
       ...lifecycle(),
@@ -237,6 +238,7 @@ test("a resume of a box Ona no longer has rejects as not found and starts nothin
     /Ona environment "env-1" not found/,
   );
   assert.deepEqual(calls, ["get null"]);
+  assert.equal(releasing.size, 0);
 });
 
 // The lookup-throws test below guards the order: the tunnel closes after the move-aside, and on a failed lookup.
