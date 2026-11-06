@@ -168,7 +168,7 @@ as a real folder, setup stops and asks you to move it aside
 
 **In settings:** the plugin's settings page has an **Ona devboxes** section. It shows `bb ona status` and
 each devbox's bb status, with **Sync all** above the list and, per devbox, **Sync**, **Reconnect** and **Resume**
-buttons, plus **Rename** (a new name; empty gives a random one) and **Keep awake** (a duration such as `2h` or `90m`, a bare number being minutes, or
+buttons, plus **Rename** (a new name; empty gives a random one; refused until bb shows the machine active) and **Keep awake** (a duration such as `2h` or `90m`, a bare number being minutes, or
 `off`), each with its own field. Each control runs the same `bb ona sync`, `bb ona reconnect`, `bb ona resume`,
 `bb ona rename` or `bb ona keep-alive` as the terminal, for that devbox (**Sync all** runs `bb ona sync` for every
 devbox). A row's controls show their reply or refusal under that row; **Sync all** has no row, so it shows none, and
@@ -301,7 +301,7 @@ bb ona sync [ref]              # re-check Ona now and repair out-of-step machine
 bb ona keep-alive <ref> 2h     # keep a running box from Ona's idle timeout (at most 12h)
 bb ona keep-alive <ref> off    # end it early
 bb ona move <thread-id> <ref>  # continue a thread in a new thread on another devbox, at the same path
-bb ona rename <ref> [name]     # rename env + bb machine (random fun name if omitted)
+bb ona rename <ref> [name]     # rename env + bb machine (random fun name if omitted); refused until bb shows the machine active
 bb ona reconnect <ref>         # active machines: reopen the tunnel and restart the bb daemon; refused unless bb shows the machine active and Ona shows its box running
 bb ona resume <ref>            # a stopped active machine: starts its box and reconnects the bb daemon (your action); a running box is only reconnected; refused unless bb shows the machine active
 bb ona update [ref] [--force]  # apply pending agent-CLI updates on connected devboxes (also weekdays 09:00 when `autoUpdateClis` is on); a box with an agent running is skipped unless --force

@@ -160,6 +160,14 @@ function fakeRun(
       lastError: extra.listingFails ? listingError : null,
     },
     provider: { reconnect: async (resource: { envId: string }) => void calls.push(`reconnect ${resource.envId}`) },
+    ona: { rename: async (envId: string, name: string) => void calls.push(`rename ${envId} ${name}`) },
+    bb: {
+      sdk: {
+        hosts: {
+          update: async (args: { hostId: string; name: string }) => void calls.push(`hosts.update ${args.name}`),
+        },
+      },
+    },
     tunnels: { status: () => "up" },
     resolveEnvId: (ref: string) => Promise.resolve(ref === "box" ? "env_1" : ref),
     keepAlives: {
@@ -224,6 +232,31 @@ test("reconnect on a machine bb doesn't show active exits 1, never reconnects, a
     );
     assert.deepEqual(calls, [], phase);
   }
+});
+
+// Bug: rename renamed a box bb was still creating, so a create retry that looks the box up by its name made a second box.
+test("rename refuses a machine bb doesn't show active, before any Ona rename", async () => {
+  for (const [phase, hint] of [
+    ["creating", "Try again once bb shows it active."],
+    ["suspended", "Resume it with `bb machine resume ona:box`."],
+  ]) {
+    const { run, calls } = fakeRun(phase);
+    assert.deepEqual(
+      await run("rename", "box", "new-name"),
+      { exitCode: 1, stderr: `ona:box is ${phase} in bb, so it was not renamed. ${hint}` },
+      phase,
+    );
+    assert.deepEqual(calls, [], phase);
+  }
+});
+
+test("rename on an active machine renames the box in Ona and its bb machine", async () => {
+  const { run, calls } = fakeRun();
+  assert.deepEqual(await run("rename", "box", "new-name"), {
+    exitCode: 0,
+    stdout: "Renamed box -> new-name (bb machine ona:new-name)",
+  });
+  assert.deepEqual(calls, ["rename env_1 new-name", "hosts.update ona:new-name"]);
 });
 
 test("reconnect on an active machine reconnects it", async () => {

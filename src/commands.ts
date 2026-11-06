@@ -295,6 +295,9 @@ export function onaCommands(deps: OnaCommandDeps) {
           const valid = onaRef.safeParse(name);
           if (!valid.success)
             return { exitCode: 1, stderr: `Invalid name "${name}": ${valid.error.issues[0]?.message}` };
+          // Read before the rename: a box bb is still creating is found by its name, so renaming it lets a retry create another.
+          const before = (await machines()).find((r) => r.resource.envId === envId);
+          if (before && before.phase !== "active") return notActiveRefusal(before, "renamed");
           await ona.rename(envId, name);
           await snapshot.refresh().catch(() => undefined);
           const row = (await machines()).find((r) => r.resource.envId === envId);
