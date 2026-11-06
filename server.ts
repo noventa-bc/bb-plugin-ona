@@ -484,8 +484,9 @@ export default async function plugin(bb: BbPluginApi) {
     run: runOna,
   });
 
-  bb.onDispose(() => tunnels.stopAll());
-  // Hooks run last-in first-out: this abort runs before the tunnels stop, so a Resume or Reconnect from the page
-  // cannot open a tunnel after stopAll.
-  bb.onDispose(() => lifetime.abort());
+  // The abort comes first, in the same hook, so a Resume or Reconnect from the page cannot open a tunnel after stopAll.
+  bb.onDispose(() => {
+    lifetime.abort();
+    tunnels.stopAll();
+  });
 }
