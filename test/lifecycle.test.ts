@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  idleDisconnectSchema,
   lifecycleRefusal,
   machinesToRelease,
   parseDuration,
@@ -52,6 +53,18 @@ test("parseDuration reads s/m/h and bare minutes, and treats junk as off", () =>
   assert.equal(parseDuration(""), 0);
   assert.equal(parseDuration("0"), 0);
   assert.equal(parseDuration("soon"), 0);
+});
+
+test("idleDisconnect refuses 1h30m, 1hr and 90min, which parseDuration reads as off (fails if the schema accepts them)", () => {
+  for (const typo of ["1h30m", "1hr", "90min"]) {
+    assert.equal(idleDisconnectSchema.safeParse(typo).success, false, typo);
+  }
+});
+
+test("idleDisconnect takes every form parseDuration reads, and empty for off (fails if the schema refuses one)", () => {
+  for (const form of ["30m", "2h", "45s", "1.5h", " 30m ", "90", "0", "", "  "]) {
+    assert.equal(idleDisconnectSchema.safeParse(form).success, true, JSON.stringify(form));
+  }
 });
 
 test("a lifecycle request bb didn't take is reported with bb's reason", () => {

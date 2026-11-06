@@ -1,6 +1,7 @@
 // Letting idle devboxes sleep: bb's tunnel counts as activity to Ona, so a
 // box nobody uses is let go and Ona's own inactivity timeout stops it. Syncing
 // changes made outside bb lives in reconcile.ts.
+import { z } from "zod";
 import { hostIsBusy } from "./updates.ts";
 import { pollUntil } from "./time.ts";
 
@@ -144,10 +145,20 @@ export async function settledLifecycle(
 export const SUSPENDED = ["suspending", "suspended"] as const;
 export const RESUMED = ["resuming", "active"] as const;
 
+const DURATION = /^\s*(\d+(?:\.\d+)?)\s*([smh]?)\s*$/i;
+
 /** "30m", "2h", "45s" or bare minutes to ms; empty, "0" or unparseable is 0 (off). */
 export function parseDuration(value: string): number {
-  const match = /^\s*(\d+(?:\.\d+)?)\s*([smh]?)\s*$/i.exec(value);
+  const match = DURATION.exec(value);
   if (!match) return 0;
   const unit = { s: 1_000, m: 60_000, h: 3_600_000, "": 60_000 }[match[2]!.toLowerCase() as "s" | "m" | "h" | ""];
   return Math.round(Number(match[1]) * unit);
 }
+
+/** The idleDisconnect setting: a form parseDuration reads, or empty for off. parseDuration reads a typo as off, so the form refuses it. */
+export const idleDisconnectSchema = z
+  .string()
+  .refine(
+    (value) => value.trim() === "" || DURATION.test(value),
+    "use 30m, 2h, 45s or 90 (bare minutes); empty or 0 keeps every box connected",
+  );
