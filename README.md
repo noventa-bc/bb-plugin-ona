@@ -139,7 +139,7 @@ Run `bb ona setup` again at any time to check that everything is still in place.
 
 ## Plugin settings
 
-View them with `bb plugin config ona`, and change one with `bb plugin config ona set <key> <value>`.
+View them with `bb plugin config ona`, and change one with `bb plugin config ona set <key> <value>`, then `bb plugin reload ona`.
 
 | Setting             | Default                        | What it does                                                                                                                                                                                                                                                                                                                                                                                   |
 | ------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -153,9 +153,7 @@ View them with `bb plugin config ona`, and change one with `bb plugin config ona
 | `codexSqliteHome`   | `/workspaces/.codex-sqlite-bb` | Where Codex launched by bb keeps its SQLite state on the devbox's local disk.                                                                                                                                                                                                                                                                                                                  |
 | `machineDataDir`    | `/workspaces/.bb-machines`     | Local folder that `~/.bb-machines` is symlinked to on every devbox. Empty leaves `~/.bb-machines` alone.                                                                                                                                                                                                                                                                                       |
 
-A changed setting applies after `bb plugin reload ona`.
-
-`waitForSharedHome`, `codexSqliteHome` and `machineDataDir` reach a box on its next connect (`bb ona reconnect`, a resume or the daemon's restart); `inactivityTimeout` applies to boxes created after the change.
+`waitForSharedHome`, `codexSqliteHome` and `machineDataDir` reach a box on its next connect (`bb ona reconnect`, a resume or the daemon's restart); `inactivityTimeout` applies to boxes created after the reload.
 
 The last two exist because Ona devboxes can share an NFS-mounted home. SQLite
 breaks on network filesystems, and bb allows only one machine identity per data
@@ -312,7 +310,7 @@ bb machine remove ona:<name>   # created: deletes the box unless it has unpushed
 ## Troubleshooting
 
 - **Provider shows "setup required":** the message says what's missing: install
-  the `ona` CLI (or set `onaPath`), run `ona login`, or run `ona environment ssh-config`.
+  the `ona` CLI (or run `bb plugin config ona set onaPath <path>`, then `bb plugin reload ona`), run `ona login`, or run `ona environment ssh-config`.
 - **"~/.bb-machines is a real folder on the shared home":** move it aside with
   `mv ~/.bb-machines ~/.bb-machines.shared`, then add the machine again.
 - **Creation times out or fails:** check `bb plugin logs ona` and `bb machine show <id>`.

@@ -319,7 +319,7 @@ export function onaCommands(deps: OnaCommandDeps) {
             return {
               exitCode: 1,
               stderr:
-                "Name an Ona project (`bb ona new <project>`) or set one: bb plugin config ona set defaultProject <project>",
+                "Name an Ona project (`bb ona new <project>`) or set one: `bb plugin config ona set defaultProject <project>`, then `bb plugin reload ona`.",
             };
           }
           const valid = onaRef.safeParse(project);
