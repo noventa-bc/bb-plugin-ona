@@ -241,7 +241,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     if (await probe()) return;
     report.step("Waiting for the shared home folder to be mounted");
     const hint =
-      ". If your Ona environments don't share a home folder, turn off the plugin's waitForSharedHome setting; a changed setting applies after `bb plugin reload ona`.";
+      ". If your Ona environments don't share a home folder, turn off the plugin's `waitForSharedHome` setting; a changed setting applies after `bb plugin reload ona`.";
     await pollSsh(probe, "The devbox's home folder was not mounted", { minutes: 5, intervalMs: 5_000, signal, hint });
   }
 
@@ -413,7 +413,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         return {
           action: "refuse",
           message:
-            'Create needs {"project": "<Ona project>"} or the plugin\'s defaultProject setting; a changed setting applies after `bb plugin reload ona`.',
+            'Create needs {"project": "<Ona project>"} or the plugin\'s `defaultProject` setting; a changed setting applies after `bb plugin reload ona`.',
         };
       }
       return { action: "accept" };

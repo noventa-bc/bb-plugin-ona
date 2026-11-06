@@ -109,7 +109,7 @@ test("a silent probe's timeout keeps its hint and names no empty reason", async 
     ],
     [
       { mountExits: [1] },
-      "The devbox's home folder was not mounted within 5 minutes. If your Ona environments don't share a home folder, turn off the plugin's waitForSharedHome setting; a changed setting applies after `bb plugin reload ona`.",
+      "The devbox's home folder was not mounted within 5 minutes. If your Ona environments don't share a home folder, turn off the plugin's `waitForSharedHome` setting; a changed setting applies after `bb plugin reload ona`.",
     ],
   ];
   for (const [setup, message] of cases) {

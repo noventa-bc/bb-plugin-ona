@@ -56,7 +56,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
   user's terminals; use your own thread terminals instead.
 - `ssh "$(bb ona host <machine-or-env>)"` — interactive shell; `bb ona ssh <ref>` prints the command.
 - `bb ona open <ref>` — open in your Ona editor.
-- `bb ona reconnect <ref>` — reopen the tunnel and restart the daemon. `waitForSharedHome`, `codexSqliteHome` and `machineDataDir` reach a box on its next connect (`bb ona reconnect`, a resume or the daemon's restart).
+- `bb ona reconnect <ref>` — reopen the tunnel and restart the daemon. `waitForSharedHome`, `codexSqliteHome` and `machineDataDir` reach a box on its next connect after `bb plugin reload ona` (`bb ona reconnect`, a resume or the daemon's restart).
   Refused unless bb shows the machine active and Ona shows its box running; `bb machine resume <m>` resumes a suspended one.
 - `bb ona resume <ref>` — start a stopped box and reconnect bb's daemon (your action; a running box is only reconnected). Refused unless bb shows the machine active; `bb machine resume <m>` resumes a suspended one.
 - `bb ona status [ref]` — bb's view of each devbox next to Ona's, the box's start, idle timeout, activity, branch and unpushed commits, and what the plugin last did and why (`--json` carries `needsRecovery` and `stuckThreads` as null when bb's workspace or thread list couldn't be read).
