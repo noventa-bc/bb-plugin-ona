@@ -367,13 +367,14 @@ export function createSync(deps: SyncDeps) {
               }
               if (!decision.resumeAfter) return;
               // A thread is waiting on it: that's you using the box, so let bb start it.
+              // Thrown: a returned string is a success, and a success clears the thread's hold (docs/sync.md rule 3).
               let resumed: BbHost;
               try {
                 resumed = await bb.sdk.hosts.experimental_resume({ hostId });
               } catch (error) {
-                throw new Error(`couldn't resume it for a waiting thread (${errorText(error)})`);
+                // A timed-out call may hide a resume bb started, so the error doesn't claim it failed.
+                throw new Error(`couldn't confirm the resume for a waiting thread (${errorText(error)})`);
               }
-              // Thrown: a returned string is a success, and a success clears the thread's hold (docs/sync.md rule 3).
               const resumeRefusal = lifecycleRefusal(resumed.lifecycle, RESUMED);
               if (resumeRefusal) throw new Error(`couldn't resume it for a waiting thread (${resumeRefusal})`);
               return "resumed for a waiting thread";

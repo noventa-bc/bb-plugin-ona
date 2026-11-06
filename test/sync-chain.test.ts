@@ -5,7 +5,7 @@ import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
 import { HOUR, idle, waitingThread, world } from "./sync-fakes.ts";
 
 const REFUSED = "Machine suspension failed: Host is not connected";
-const RESUME_REJECTED = "Machine resume failed: request timed out";
+const RESUME_REJECTED = "HTTP 409: Only an active or suspended machine can be resumed";
 
 // The mocked clock never fires AbortSignal.timeout: this stand-in fires on it, so a test sees a cap abort.
 function abortTimeoutsOnFakeClock(t: TestContext): void {
@@ -231,14 +231,14 @@ test("a connected report with Ona still showing the box stopped does not end a t
 
 // Bug: bb's rejected resume for a waiting thread was returned as a message, so the guard recorded a success: no failure,
 // no backoff, and the thread's hold cleared.
-test("a resume bb rejects for a waiting thread is a failure, with the hold kept (fails if the rejection is returned as a success)", async () => {
+test("a resume bb rejects for a waiting thread is a failure that starts the thread's hold (fails if the rejection is returned as a success)", async () => {
   const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
   const { sync, guard } = world([host], { resumeThrows: RESUME_REJECTED });
   await sync.reconcile(new Set(["h1"]), { wait: true });
   const record = guard.records.get("h1")!;
   assert.equal(record.failures, 1);
-  assert.equal(record.error, `couldn't resume it for a waiting thread (${RESUME_REJECTED})`);
-  assert.equal(record.threadWaiting, true, "the thread's hold is kept");
+  assert.equal(record.error, `couldn't confirm the resume for a waiting thread (${RESUME_REJECTED})`);
+  assert.equal(record.threadWaiting, true, "the thread's hold is set");
 });
 
 // Rule 4: a listing that fails inside the daemon repair asks nothing, so the guard keeps the record's count,
