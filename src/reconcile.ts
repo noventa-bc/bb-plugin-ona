@@ -266,7 +266,7 @@ export class HostGuard {
 
   /**
    * Run `fn` as the machine's one action; a string it returns is appended to
-   * the recorded reason, and NOTHING_DONE records nothing. Returns false (without
+   * the recorded reason, and NOTHING_DONE records nothing (run still returns true). Returns false (without
    * running it) when the machine is busy, or cooling down or given up unless forced
    * (docs/sync.md rule 3).
    */

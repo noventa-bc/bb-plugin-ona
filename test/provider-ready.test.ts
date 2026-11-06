@@ -228,7 +228,7 @@ test("a reconnect to a box Ona idled out fails at once without SSH", async () =>
   assert.deepEqual(calls, ["get STOPPED"]);
 });
 
-// A heal's own 15-minute timeout can end a wait before its deadline.
+// A caller's own timeout can end a wait before its deadline.
 test("an aborted wait names the last reason it was waiting for", async () => {
   const ona = "Ona did not report box ready before the wait ended: dev container starting";
   const creating = running("PHASE_CREATING");
