@@ -299,7 +299,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 - SDK surfaces in 0.6.109 that the plugin doesn't use (checked 2026-11-03):
   - host entries: `experimental_defineHostEntry` (plugin code on the daemon,
     fs watch, signals) and the `experimental_host.deleted` event
-  - UI: `settingsSection` and `navPanel`
+  - UI: `navPanel`
   - provider inputs: `experimental_environmentProviderInputs`
   - `bb.agents.contributeInstructions`
   - `bb.realtime.publish`

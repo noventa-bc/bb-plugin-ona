@@ -415,6 +415,7 @@ export default async function plugin(bb: BbPluginApi) {
       openEditor(row.resource.envId);
       return { opened: true };
     },
+    devbox_command: ({ command, hostId }) => runOna(hostId ? [command, hostId] : [command], {}),
   });
 
   const updateClis = createUpdateClis({ bb, machines, autoUpdateProviders });
@@ -447,34 +448,36 @@ export default async function plugin(bb: BbPluginApi) {
     autoRepair,
   });
 
+  // The `bb ona` CLI and the settings section's buttons (devbox_command) share this handler.
+  const runOna = onaCommands({
+    bb,
+    ona,
+    snapshot,
+    tunnels,
+    guard,
+    keepAlives,
+    provider,
+    shellBackend,
+    machines,
+    reconcile,
+    statusRows,
+    defaultProject,
+    findMachine,
+    resolveEnvId,
+    move,
+    shellTarget,
+    openThreadTerminal,
+    setup,
+    addMachine,
+    updateClis,
+    openEditor,
+    onaHealth,
+  });
   bb.cli.register({
     name: "ona",
     summary: "Ona devboxes as bb machines",
     commands: [...commands],
-    run: onaCommands({
-      bb,
-      ona,
-      snapshot,
-      tunnels,
-      guard,
-      keepAlives,
-      provider,
-      shellBackend,
-      machines,
-      reconcile,
-      statusRows,
-      defaultProject,
-      findMachine,
-      resolveEnvId,
-      move,
-      shellTarget,
-      openThreadTerminal,
-      setup,
-      addMachine,
-      updateClis,
-      openEditor,
-      onaHealth,
-    }),
+    run: runOna,
   });
 
   bb.onDispose(() => tunnels.stopAll());

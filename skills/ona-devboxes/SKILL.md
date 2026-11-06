@@ -60,7 +60,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
   Refused unless bb shows the machine active and Ona shows its box running; `bb machine resume <m>` resumes a suspended one.
 - `bb ona resume <ref>` — start a stopped box and reconnect bb's daemon (your action; a running box is only reconnected). Refused unless bb shows the machine active; `bb machine resume <m>` resumes a suspended one.
 - `bb ona status [ref]` — bb's view of each devbox next to Ona's, the box's start, idle timeout, activity, branch and unpushed commits, and what the plugin last did and why (`--json` carries `needsRecovery` and `stuckThreads` as null when bb's workspace or thread list couldn't be read).
-  Use it first when bb and Ona disagree (box changed outside bb); `bb ona sync [ref]` re-checks and repairs now.
+  Use it first when bb and Ona disagree (box changed outside bb); `bb ona sync [ref]` re-checks and repairs now. The plugin's settings page shows this status with Sync, Reconnect and Resume buttons per devbox.
 - `bb ona keep-alive <ref> <duration>` — keep a running devbox from Ona's inactivity timeout
   (e.g. `2h`, at most `12h`); `bb ona keep-alive <ref> off` ends it. Only when the user asks for it:
   it costs money while the box runs. Refused for a box that isn't running; it never starts one.
