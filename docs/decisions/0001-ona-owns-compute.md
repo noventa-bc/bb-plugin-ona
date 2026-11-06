@@ -2,6 +2,8 @@
 
 Status: accepted
 
+Amended 2026-11-06 (the owner accepted it): bb's recovery after a restart is one of the starts. The Consequences say so.
+
 ## Rule
 
 Ona decides whether a devbox exists and whether it runs. bb decides intent: a machine is `active` or `suspended`. The plugin reconciles bb to Ona and never starts or stops a box on its own.

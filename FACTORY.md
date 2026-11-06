@@ -270,9 +270,10 @@ Rules the owner gave that no section above states. Checked 2026-11-06.
   on without the owner's explicit approval of that item, given with its label;
   a general "continue" or a list that includes it is not that (checked
   2026-11-06).
-- Keep 2 to 5 tasks in flight: when an item waits on a review, a merge or the
-  owner, start the next independent item the owner named (no
-  shared files, no `[COST]` tag) rather than wait, unless the owner said to
-  halt (checked 2026-11-06).
+- Keep at least 2 and at most 5 tasks in flight: when an item waits on a
+  review, a merge or the owner, take the next independent item the owner
+  named in the session (no shared files, no `[COST]` tag) through steps 1 to 3
+  and `AGENTS.md` "Complexity" rather than wait, unless the owner said to halt
+  (checked 2026-11-06).
 - The owner's Mac has no `timeout` command: use the Bash tool's own timeout
   (checked 2026-11-06).

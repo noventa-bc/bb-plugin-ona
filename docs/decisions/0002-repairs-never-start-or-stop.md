@@ -23,4 +23,4 @@ The plugin's automatic repairs never start or stop a box. bb, or the plugin when
 - The daemon is restarted only when the probe finds no daemon process. If SSH fails or times out, nothing is restarted.
 - A box counts as gone only after two good listings in a row without it.
 - The plugin's repairs that find a stopped box only change bb's state, except the start for a waiting thread (see the Rule), so the box stays in whatever state Ona gave it.
-- After a bb restart cut a resume or a Pause short, bb's recovery resumes the machine, which starts its box if Ona shows it stopped, whatever `autoRepair` says.
+- After a bb restart cut a resume or a suspend short (a Pause, or the plugin's idle release), bb's recovery resumes the machine, whatever `autoRepair` says: it starts the box if Ona shows it stopped or stopping, then connects it, so the box stays up until the idle release lets it go.

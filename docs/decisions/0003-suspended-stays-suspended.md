@@ -2,15 +2,17 @@
 
 Status: accepted
 
+Amended 2026-11-06 (the owner accepted it): bb's recovery after a restart resumes a suspend that restart cut short. The Rule and the Why say so.
+
 ## Rule
 
-A box that runs in Ona while bb shows it suspended stays suspended in bb. It is attached to bb again only when the user uses it, by starting a thread or sending a message on that machine.
+A box that runs in Ona while bb shows it suspended stays suspended in bb. It is attached to bb again only when the user uses it, by starting a thread or sending a message on that machine, or when bb's recovery after a restart resumes a suspend the restart cut short (decision 0002).
 
 ## Why
 
 - Starting a box in Ona, for example to open its editor, is not a request to use it through bb.
 - Attaching a box opens a tunnel, and an open tunnel counts as activity to Ona, so an automatic attach would keep the box awake.
-- The suspended state is the user's intent, and the plugin's automatic repairs must not override it. bb's own recovery after a restart that cut a Pause short resumes the machine (decision 0002).
+- The suspended state is the user's intent, and the plugin's automatic repairs must not override it. bb's own recovery after a restart that cut a suspend short resumes the machine (decision 0002).
 
 ## Consequences
 
