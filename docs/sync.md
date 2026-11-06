@@ -121,6 +121,16 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    reverse tunnel's `ssh` is not gated by these waits; its own `shouldConnect`
    in `server.ts` asks a fresh listing.
 
+   A wake for a waiting thread (`provider.wake`) and a daemon restart
+   (`reconnect`) are bounded by the waits inside them, each with its own
+   deadline: the stop, start and SSH waits in `src/provider.ts`, the hold
+   for Ona before each SSH command (`waitForReady` in `src/ona.ts`, up to
+   15 minutes), each `ona` call in `run` in `src/ona.ts`, each SSH command
+   in `src/ssh.ts`, and bb's bootstrap (`docs/ona-notes.md`, bb SDK
+   section). A poll (`pollUntil` in `src/time.ts`) runs its last try past
+   its deadline. Both run on the plugin's lifetime signal (`lifetime` in
+   `server.ts`), so a plugin reload ends them.
+
    These commands you run yourself are not gated and may wake a box:
    `ona environment open` and `bb ona ssh --thread`.
    _Why: an accidental start costs money and keeps the box up._
@@ -135,9 +145,14 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    a newline in it, a failed SSH connection or a timeout counts as unknown, and
    nothing is restarted. _Why: a restart kills running agent turns._ Four callers force the guard, skipping the cooldown, backoff and give-up: `bb ona sync`, `bb ona reconnect`, `bb ona resume`, and the thread's pass (a pass that finds a thread waiting on a box Ona shows stopped or stopping) while no hold is set. The first three skip them outright, and `bb ona sync` still runs this check. Before a thread's pass has failed on a box, the thread's pass skips what other passes left. Once one has (the hold), a success of another, unforced pass does not reset the failure count, and the usual backoff and give-up apply. A thread's pass that fails, forced or not, keeps or starts the hold. The hold ends when bb shows the machine connected with its tunnel up on a box Ona shows running (connected() ends a hold, clearing its count and quiet period; with no hold, it clears them only when the last failure on the box was a daemon repair's), when a thread's pass succeeds, or when `bb ona sync`, `bb ona reconnect` or `bb ona resume` acts on the box (a forced run starts a fresh count: its failure counts 1, and starts a new hold when the forced pass was a thread's pass); a thread's pass is forced again past what other passes left. `bb ona reconnect` runs bb's daemon bootstrap on a box Ona shows running and never starts one; `bb ona resume` also starts a stopped box. Neither runs the daemon check.
 4. **Unknown is not gone.** A failed or empty `ona environment list` changes
-   nothing, and "missing" needs two listings in a row. A lookup by id
+   nothing (except a daemon repair's read after its check, below), and
+   "missing" needs two listings in a row. A lookup by id
    (`ona environment get`) that fails is unknown too; only Ona saying the id
-   doesn't exist counts as gone.
+   doesn't exist counts as gone. A daemon repair whose listing fails or leaves
+   the box out before its daemon check leaves the guard's record untouched (count, quiet period,
+   hold). One that fails or leaves the box out after the
+   check, before the restart, is a failed
+   repair with no restart: it counts toward the backoff and give-up (rule 5).
 5. **One action per machine at a time.** A daemon check or restart makes the machine wait 5 minutes after a success before its next one; suspends, tunnel
    reopens and idle releases do not wait after a success. A failure backs off for every
    action (5, then 10 min; the third failure, in a row or across a hold (rule 3), stops automatic tries until

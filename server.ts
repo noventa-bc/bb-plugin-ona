@@ -250,6 +250,7 @@ export default async function plugin(bb: BbPluginApi) {
     autoRepair,
     idleDisconnect,
     pluginStartedAt,
+    signal: lifetime.signal,
   });
   const { machines, machineOfHost, reconcile, statusRows } = sync;
 
