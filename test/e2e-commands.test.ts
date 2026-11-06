@@ -36,12 +36,14 @@ const extraBoxes: Record<string, OnaResource> = {};
 const suspends = () => host.harness.inspection.sdk.callsTo("hosts.experimental_suspend");
 /** `environment list` calls in the fake Ona's log so far; the tunnel loop lists too, so compare with `>`. */
 const listings = () => readFileSync(log, "utf8").match(/^environment list/gm)?.length ?? 0;
-/** Whether this pid is still a fake tunnel (test/fake-ssh.sh execs `sleep 100000`), so another process that reuses the pid does not count. */
+/** Whether this pid still runs a fake tunnel (test/fake-ssh.sh execs `sleep 100000`): a process that reuses the pid counts only if it runs that too. */
 const alive = (pid: number) => {
   try {
     return execFileSync("ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8" }).trim() === "sleep 100000";
-  } catch {
-    return false;
+  } catch (error) {
+    // ps exits 1 for a pid that is gone; any other failure must not read a live tunnel as dead.
+    if ((error as { status?: number }).status === 1) return false;
+    throw error;
   }
 };
 
@@ -417,11 +419,17 @@ test(
   },
 );
 
-// Disposes the host; close() in the after hook disposes again.
+// Keep this last: it disposes the host, and close() in the after hook disposes again.
 test(
   "disposing the plugin stops a settings-button resume polling Ona and ends every tunnel (fails if the signal is dropped or the tunnels are not stopped)",
   local,
   async (t) => {
+    // Ends the tunnels a failing check leaves running, so they do not outlive the test.
+    t.after(() => {
+      for (const pid of tunnelPids()) {
+        if (alive(pid)) process.kill(pid, "SIGKILL");
+      }
+    });
     const envId = setUpHostTwoResume();
     // The reply is not read: the resume ends with the plugin.
     void host.harness.behavior
@@ -431,14 +439,8 @@ test(
     // After its first ask the wait asks again at once, then every 5 s: let those asks land before the dispose.
     await sleep(1_000);
     onaCalls();
-    // Ends the tunnels a failing check leaves running, so they do not outlive the test.
-    t.after(() => {
-      for (const pid of tunnelPids()) {
-        if (alive(pid)) process.kill(pid, "SIGKILL");
-      }
-    });
-    // At least one tunnel must be up, or the tunnel check below checks nothing.
-    assert.ok(tunnelPids().some(alive), "no tunnel was up when the plugin was disposed");
+    // An earlier case's tunnel process must still be alive, or the tunnel check below checks nothing.
+    assert.ok(tunnelPids().some(alive), "no tunnel process was alive when the plugin was disposed");
     await host.harness.lifecycle.dispose();
     await sleep(6_000); // longer than the 5 s poll interval
     const asks = onaCalls().filter((call) => call === `environment get ${envId}`).length;
