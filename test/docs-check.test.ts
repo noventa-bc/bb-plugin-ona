@@ -122,3 +122,47 @@ test("an angle-bracket link target with spaces or parentheses is checked: a miss
   const ok = docsCheck({ ...clean, "my gone.md": "# Gone\n", "gone(1).md": "# Gone\n", "README.md": readme });
   assert.equal(ok.status, 0, ok.output);
 });
+
+// A `plugin config ona set` hint tells the user to change a setting. A changed setting applies only after
+// `bb plugin reload ona` (server.ts reads its settings once, at load), so the hint's sentence names it.
+const settingHintFiles = [
+  "README.md",
+  "skills/ona-devboxes/SKILL.md",
+  "src/setup.ts",
+  "src/commands.ts",
+  "docs/sync.md",
+];
+
+/** The sentence of each `plugin config ona set` hint in `text` that never names `plugin reload ona`. */
+function hintsWithoutReload(text: string): string[] {
+  const flat = text.replace(/\s+/g, " ");
+  return [...flat.matchAll(/plugin config ona set/g)].flatMap((hint) => {
+    const rest = flat.slice(hint.index);
+    const end = rest.search(/[.!?](?=[ "']|$)/);
+    const sentence = end < 0 ? rest : rest.slice(0, end);
+    return sentence.includes("plugin reload ona") ? [] : [sentence];
+  });
+}
+
+test("the docs and the CLI's text name `plugin reload ona` in every `plugin config ona set` sentence (fails if a hint drops it)", () => {
+  const offenders = settingHintFiles.flatMap((file) =>
+    hintsWithoutReload(readFileSync(join(repo, file), "utf8")).map((sentence) => `${file}: ${sentence}`),
+  );
+  assert.deepEqual(offenders, []);
+});
+
+test("the reload check counts only the hint's own sentence (fails if a later sentence counts or a bare hint passes)", () => {
+  assert.equal(hintsWithoutReload("Run `bb plugin config ona set x 1`, then `bb plugin reload ona`.").length, 0);
+  assert.equal(hintsWithoutReload("Run `bb plugin config ona set x 1`. Then run `bb plugin reload ona`.").length, 1);
+  assert.equal(hintsWithoutReload("Run `bb plugin config ona set x 1`.").length, 1);
+});
+
+test("SKILL.md's connect-time settings line names the reload (fails if its clause is dropped)", () => {
+  const skill = readFileSync(join(repo, "skills/ona-devboxes/SKILL.md"), "utf8");
+  assert.match(skill, /reach a box on its next connect after `bb plugin reload ona`/);
+});
+
+test("server.ts's waitForSharedHome description names the reload (fails if its sentence is dropped)", () => {
+  const server = readFileSync(join(repo, "server.ts"), "utf8");
+  assert.match(server, /share a home folder\. A changed setting applies after `bb plugin reload ona`\./);
+});

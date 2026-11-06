@@ -208,7 +208,7 @@ ona:brisk-heron  bb:suspended  tunnel:off  ona:running
 `last action` resets when the plugin restarts or reloads.
 
 If the automatic repairs get in your way, turn them off with
-`bb plugin config ona set autoRepair false`. With them off, stopped or deleted boxes are
+`bb plugin config ona set autoRepair false`, then `bb plugin reload ona`. With them off, stopped or deleted boxes are
 still marked suspended, tunnels still reopen, idle boxes are still let go after
 `idleDisconnect`, and a waiting thread still resumes or starts a stopped box; `bb ona status`
 shows what would have been done. bb's own recovery after a restart does not read this setting (decision 0002).

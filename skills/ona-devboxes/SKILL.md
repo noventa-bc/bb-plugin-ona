@@ -24,7 +24,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
 - `bb ona setup` lists what is missing; `bb ona setup --yes` applies the Ona SSH
   config and bb's machine access settings. Ask the user before running it with
   `--yes`: it changes their SSH config and bb settings.
-- Optional: `bb plugin config ona set defaultProject my-app`.
+- Optional: `bb plugin config ona set defaultProject my-app`, then `bb plugin reload ona` once the user agrees (a reload ends keep-alives and any wake, resume or reconnect in flight).
 
 ## Machines
 
@@ -36,7 +36,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
   files on it):
   `bb machine create --provider ona --inputs '{"mode":"create","project":"my-app"}'`
   (optional `"classId"` from `ona environment list-classes`). New devboxes get
-  the plugin's `inactivityTimeout` (default `3h`; `bb plugin config ona set inactivityTimeout 6h`).
+  the plugin's `inactivityTimeout` (default `3h`; `bb plugin config ona set inactivityTimeout 6h`, then `bb plugin reload ona` once the user agrees).
 - `bb machine suspend <m>` stops the Ona environment; `bb machine resume <m>`
   starts it, reopens the tunnel and restarts the daemon. Devboxes Ona stopped
   on its own are marked suspended automatically, and starting a thread on one
@@ -56,7 +56,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
   user's terminals; use your own thread terminals instead.
 - `ssh "$(bb ona host <machine-or-env>)"` — interactive shell; `bb ona ssh <ref>` prints the command.
 - `bb ona open <ref>` — open in your Ona editor.
-- `bb ona reconnect <ref>` — reopen the tunnel and restart the daemon. A changed setting applies after `bb plugin reload ona`; `waitForSharedHome`, `codexSqliteHome` and `machineDataDir` reach a box on its next connect (`bb ona reconnect`, a resume or the daemon's restart).
+- `bb ona reconnect <ref>` — reopen the tunnel and restart the daemon. `waitForSharedHome`, `codexSqliteHome` and `machineDataDir` reach a box on its next connect after `bb plugin reload ona` (`bb ona reconnect`, a resume or the daemon's restart).
   Refused unless bb shows the machine active and Ona shows its box running; `bb machine resume <m>` resumes a suspended one.
 - `bb ona resume <ref>` — start a stopped box and reconnect bb's daemon (your action; a running box is only reconnected). Refused unless bb shows the machine active; `bb machine resume <m>` resumes a suspended one.
 - `bb ona status [ref]` — bb's view of each devbox next to Ona's, the box's start, idle timeout, activity, branch and unpushed commits, and what the plugin last did and why (`--json` carries `needsRecovery` and `stuckThreads` as null when bb's workspace or thread list couldn't be read).

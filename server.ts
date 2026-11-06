@@ -95,7 +95,7 @@ export default async function plugin(bb: BbPluginApi) {
       type: "boolean",
       label: "Wait for the shared home on devboxes",
       description:
-        "After a devbox starts, wait until its home folder (shared over NFS) is mounted before starting bb's daemon and agents. Turn off if your Ona environments don't share a home folder.",
+        "After a devbox starts, wait until its home folder (shared over NFS) is mounted before starting bb's daemon and agents. Turn off if your Ona environments don't share a home folder. A changed setting applies after `bb plugin reload ona`.",
       default: true,
     },
     autoUpdateClis: {
