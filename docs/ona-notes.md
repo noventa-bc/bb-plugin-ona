@@ -134,6 +134,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   resuming. A suspend that bb later fails looks accepted when
   it is answered.
 - For an enrolled machine, bb's `createMachineBootstrapApi` runs `install-machine.sh --start`, whose start branch returns at once when `daemon_matches` holds (the daemon on the host's port reports this host id and server URL). `prepare` returns `enrolled` for a host bb has seen (`lastSeenAt` set) or that is connected, so a plugin wake reaches that branch once SSH and the tunnel are up; the start branch never kills a daemon (bb 0.48.1 server source, checked 2026-11-05).
+- `startMachineReconciliation` (behind `hosts.experimental_reconcile`) returns at once unless the machine's phase is `suspended`, and bb's own 10-second sweep (`sweepProviderMachine`) calls `resumeMachine` for a machine left `resuming`, so no plugin repair can or need act on a machine `resuming` or `suspending` (bb 0.48.1 server source, checked 2026-11-06).
 - `resumeMachine` waits for an in-flight suspend, then `resumeMachineWithIntent`
   returns at once unless the phase is suspended, suspending or resuming. A resume of
   an active machine does nothing (checked 2026-11-05).
