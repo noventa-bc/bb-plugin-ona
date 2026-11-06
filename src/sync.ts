@@ -137,6 +137,10 @@ export interface Row {
 export const matchesRef = (row: Row, ref: string) =>
   [row.hostId, row.machine, row.resource.envId, row.resource.envName].includes(ref);
 
+/** Host id first: another box's Ona env name can equal a host id (`bb ona rename` takes any valid name). */
+export const rowForRef = (rows: readonly Row[], ref: string) =>
+  rows.find((r) => r.hostId === ref) ?? rows.find((r) => matchesRef(r, ref));
+
 export type Sync = ReturnType<typeof createSync>;
 
 export function createSync(deps: SyncDeps) {
@@ -228,10 +232,10 @@ export function createSync(deps: SyncDeps) {
    * reconnects or restarts it when a thread needs it.
    */
   const idleMs = parseDuration(idleDisconnect);
-  async function releaseIdleMachines(rows: Row[], actions: Promise<void>[]): Promise<void> {
+  async function releaseIdleMachines(rows: Row[], actions: Promise<void>[], force: boolean): Promise<void> {
     if (idleMs <= 0) return;
     const now = Date.now();
-    const candidates = rows.filter((row) => row.phase === "active" && guard.mayAct(row.hostId));
+    const candidates = rows.filter((row) => row.phase === "active" && guard.mayAct(row.hostId, force));
     const activity: MachineActivity[] = [];
     for (const row of candidates) {
       const threads = await liveThreads(bb.sdk.threads, row.hostId).catch((error: unknown) => {
@@ -268,7 +272,7 @@ export function createSync(deps: SyncDeps) {
               const refusal = lifecycleRefusal(await suspendWithoutStop(row), SUSPENDED);
               if (refusal) throw new Error(refusal);
             },
-            { cooldown: false },
+            { cooldown: false, force },
           )
           .then(
             () => undefined,
@@ -474,7 +478,7 @@ export function createSync(deps: SyncDeps) {
       }
       // A failed or empty listing is unknown (docs/sync.md rule 4): no idle release that pass.
       if (keys.has(ALL) && listing?.envs.length && snapshot.lastError === null)
-        await releaseIdleMachines(rows, actions);
+        await releaseIdleMachines(rows, actions, options.force ?? false);
       if (options.wait) await Promise.all(actions);
     } catch (error) {
       bb.log.warn(`reconcile failed: ${errorText(error)}`);

@@ -6,6 +6,10 @@ import { GIVE_UP_AFTER, type HostGuard } from "./reconcile.ts";
 import type { Row, SyncBb, SyncDeps } from "./sync.ts";
 import { liveThreads, stuckThreads } from "./updates.ts";
 
+// Only the all-boxes pass (`bb ona sync` with no ref) runs an idle release; every other action needs its machine's pass.
+const giveUpCommand = (action: string, machine: string) =>
+  action === "release-idle" ? "bb ona sync" : `bb ona sync ${machine}`;
+
 export interface StatusRow {
   machine: string;
   hostId: string;
@@ -163,7 +167,7 @@ export function createStatusRows(deps: StatusRowsDeps) {
             row.phase !== "active" || !record || record.failures === 0
               ? null
               : record.failures >= GIVE_UP_AFTER
-                ? `gave up after ${record.failures} failures; run \`bb ona sync ${row.machine}\``
+                ? `gave up after ${record.failures} failures; run \`${giveUpCommand(record.action, row.machine)}\``
                 : record.quietUntil > now
                   ? `retrying after ${new Date(record.quietUntil).toLocaleTimeString()}`
                   : null,
