@@ -59,7 +59,8 @@ const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
 
 /**
  * The provider in a fake host. `calls` logs the `get` lookups by id that reach Ona, starts, stops, deletes, the
- * remove's move-aside and every SSH command connect runs; `tunnels`, the ensure and stop calls; `logs`, the host's log.
+ * remove's move-aside and every SSH command connect runs; `tunnels`, the ensure and stop calls; `logs`, the host's log;
+ * `moves`, each move-aside's box, positional args, and whether the box's keys were still kept when it ran.
  */
 export function register({
   found,
@@ -83,6 +84,9 @@ export function register({
   const open = new Map(tunnel ? [[found.id, tunnel]] : []);
   const forgotten: string[] = [];
   const releasing = new Set<string>();
+  const moves: { envId: string; args: string[]; keysKept: boolean }[] = [];
+  // The box the latest executor was made for: the provider makes one right before each exec.
+  let target = "";
   // As the tunnel manager does: an ensure on an open tunnel changes nothing.
   const ensure = (envId: string) => {
     tunnels.push(`ensure ${envId}`);
@@ -149,6 +153,7 @@ export function register({
       // The remove's move-aside script: a sync pass can open the tunnel while it runs.
       if (command[3] === "bb-ona-remove") {
         calls.push("move-aside");
+        moves.push({ envId: target, args: command.slice(4), keysKept: forgotten.length === 0 });
         if (reopenDuringMove) ensure(found.id);
         if (moveAside instanceof Error) throw moveAside;
         return { exitCode: moveAside };
@@ -191,10 +196,24 @@ export function register({
     markConnected: async () => {},
     releasing,
     forgetBox: async (envId: string) => void forgotten.push(envId),
-    executorFor: () => executor,
+    executorFor: (_ssh, envId) => {
+      target = envId;
+      return executor;
+    },
   });
   const provider = host.harness.registrations.machineProviders.get("ona")!;
-  return { provider, reconnect, wake, calls, tunnels, open, forgotten, releasing, logs: host.harness.logEntries };
+  return {
+    provider,
+    reconnect,
+    wake,
+    calls,
+    tunnels,
+    open,
+    forgotten,
+    releasing,
+    moves,
+    logs: host.harness.logEntries,
+  };
 }
 
 /** `steps` collects the progress lines the user sees. */
