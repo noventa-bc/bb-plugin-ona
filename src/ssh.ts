@@ -132,6 +132,7 @@ export async function sshCapture(
  */
 export class TunnelManager {
   private readonly tunnels = new Map<string, { controller: AbortController; connectedAt: number | null }>();
+  /** Set once by stopAll and never reset: a reload builds a new manager. */
   private stopped = false;
 
   private readonly sshBinary: string;
