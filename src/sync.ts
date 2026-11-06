@@ -4,7 +4,7 @@
 // schedule a pass (watchRealtime). server.ts wires them to bb's commands and
 // the lifecycle-sync service; tests drive them with a fake of the bb calls below.
 import type { BbPluginApi, PluginLogger } from "@get-bb/plugin-sdk";
-import { boxFacts, errorText, isArchived, isRunning, type BoxFacts, type OnaListing } from "./ona.ts";
+import { errorText, isArchived, isRunning, type OnaListing } from "./ona.ts";
 import { PROVIDER_ID, resourceSchema, type OnaResource } from "./provider.ts";
 import {
   lifecycleRefusal,
@@ -21,7 +21,6 @@ import {
 import {
   ALL,
   decide,
-  GIVE_UP_AFTER,
   GRACE_MS,
   type Decision,
   type HostGuard,
@@ -30,7 +29,8 @@ import {
   type PassScheduler,
   shownRunning,
 } from "./reconcile.ts";
-import { liveThreads, stuckThreads, threadStatuses, type LiveThreadsArgs, type ThreadState } from "./updates.ts";
+import { createStatusRows } from "./status.ts";
+import { liveThreads, threadStatuses, type LiveThreadsArgs, type ThreadState } from "./updates.ts";
 
 export const connectedAtKey = (envId: string) => `connectedAt:${envId}`;
 
@@ -133,27 +133,6 @@ export interface Row {
 /** A user's ref names a row by bb host id, bb machine name, Ona env id or Ona env name. */
 export const matchesRef = (row: Row, ref: string) =>
   [row.hostId, row.machine, row.resource.envId, row.resource.envName].includes(ref);
-
-export interface StatusRow {
-  machine: string;
-  hostId: string;
-  bb: string;
-  tunnel: string;
-  ona: string;
-  /** What Ona's listing says about the box (`boxFacts`); null when the latest listing failed or doesn't list the box. */
-  facts: BoxFacts | null;
-  /** What the latest check concluded, and since when. */
-  now: { reason: string; since: number } | null;
-  /** The last action the plugin took (or the one in flight). */
-  last: { action: string; reason: string; at: number; error?: string } | null;
-  retry: string | null;
-  /** When a `bb ona keep-alive` ends, epoch ms. */
-  keepAliveUntil: number | null;
-  /** Workspaces bb gave up on, or whose retry is over a minute late (see workspaceWork); null when bb's workspace list couldn't be read. */
-  needsRecovery: number | null;
-  /** Busy threads with no update for `STUCK_THREAD_MS`; they hold the box. Null when bb's thread list couldn't be read. */
-  stuckThreads: { id: string; status: string; updatedAt: number }[] | null;
-}
 
 export type Sync = ReturnType<typeof createSync>;
 
@@ -482,62 +461,17 @@ export function createSync(deps: SyncDeps) {
     }
   }
 
-  async function statusRows(ref?: string): Promise<StatusRow[]> {
-    const listing = await snapshot.get().catch(() => snapshot.latest);
-    const now = Date.now();
-    // Once a listing fails, rows keep the last good phase but not its facts: the facts would look current.
-    const listingOk = snapshot.lastError === null;
-    const rows = (await machines()).filter((r) => !ref || matchesRef(r, ref));
-    return Promise.all(
-      rows.map(async (row) => {
-        const env = listing?.envs.find((e) => e.id === row.resource.envId);
-        const seen = missing.get(row.resource.envId);
-        const phase = env ? (env.status?.phase ?? "?") : seen?.phase;
-        const record = guard.records.get(row.hostId);
-        const busy = guard.busyWith(row.hostId);
-        const threads = await liveThreads(bb.sdk.threads, row.hostId).catch((error: unknown) => {
-          bb.log.info(`couldn't list threads on ${row.hostId}: ${errorText(error)}`);
-          return null;
-        });
-        const work = await workspaces(row.hostId, now);
-        return {
-          machine: row.machine,
-          hostId: row.hostId,
-          bb: row.phase === "active" ? row.status : row.phase,
-          tunnel: tunnels.status(row.resource.envId),
-          ona: !listing?.envs.length
-            ? "unknown"
-            : phase !== undefined
-              ? (phase || "?").replace(/^ENVIRONMENT_PHASE_/, "").toLowerCase()
-              : seen?.archived
-                ? "archived"
-                : "missing",
-          facts: env && listingOk ? boxFacts(env) : null,
-          now: guard.seen.get(row.hostId) ?? null,
-          last: busy
-            ? { action: busy, reason: "in progress", at: Date.now() }
-            : record
-              ? {
-                  action: record.action,
-                  reason: record.reason,
-                  at: record.at,
-                  ...(record.error ? { error: record.error } : {}),
-                }
-              : null,
-          // decide() leaves a suspended machine alone, so no retry line for it.
-          retry:
-            row.phase === "suspended" || !record || record.failures === 0
-              ? null
-              : record.failures >= GIVE_UP_AFTER
-                ? `gave up after ${record.failures} failures; run \`bb ona sync ${row.machine}\``
-                : `retrying after ${new Date(record.quietUntil).toLocaleTimeString()}`,
-          keepAliveUntil: deps.keepAliveUntil(row.resource.envId),
-          needsRecovery: work?.needsRecovery ?? null,
-          stuckThreads: threads === null ? null : stuckThreads(threads, now),
-        };
-      }),
-    );
-  }
+  const statusRows = createStatusRows({
+    bb,
+    snapshot,
+    machines,
+    matchesRef,
+    missing,
+    guard,
+    tunnels,
+    workspaces,
+    keepAliveUntil: deps.keepAliveUntil,
+  });
 
   return { machines, machineOfHost, reconcile, statusRows, missing, suspendWithoutStop };
 }

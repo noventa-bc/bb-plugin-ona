@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  formatStatus,
   keepAliveCommand,
   onaCommands,
   parseArgs,
@@ -11,7 +10,7 @@ import {
 } from "../src/commands.ts";
 import type { BoxFacts, OnaEnvironment } from "../src/ona.ts";
 import { HostGuard } from "../src/reconcile.ts";
-import type { StatusRow } from "../src/sync.ts";
+import { formatStatus, type StatusRow } from "../src/status.ts";
 
 test("parseArgs: positionals, flags, --json, --thread <id> and a shell command after --", () => {
   assert.deepEqual(parseArgs(["status", "box", "--json"]), {
