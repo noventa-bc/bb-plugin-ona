@@ -24,7 +24,6 @@ function fixture(
     status: "disconnected",
     phase: options.phase ?? "active",
     lastSeenAt: null,
-    updatedAt: 0,
     resource: adoptedResource,
   };
   const deps: ResumeDeps = {
