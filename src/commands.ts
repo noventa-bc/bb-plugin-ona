@@ -1,6 +1,6 @@
-// The `bb ona` command: argument parsing, the keep-alive command's checks, the
-// status text, the usage and subcommand list, and the dispatch. server.ts
-// builds the deps from its settings and services and registers it.
+// The `bb ona` command: argument parsing, the keep-alive command's checks, the usage and
+// subcommand list, and the dispatch. server.ts builds the deps from its settings and services
+// and registers it.
 import type { BbPluginApi, PluginCliCommandInfo, PluginCliContext } from "@get-bb/plugin-sdk";
 import { clockTime, parseKeepAlive, type KeepAlives } from "./keepalive.ts";
 import { randomFriendlyName } from "./names.ts";
@@ -10,7 +10,6 @@ import {
   matchEnvironment,
   reasonOf,
   sshHost,
-  type BoxFacts,
   type OnaCli,
   type OnaListing,
   type OnaSnapshot,
@@ -19,7 +18,8 @@ import { onaRef, type registerOnaProvider } from "./provider.ts";
 import { ALL, short, type HostGuard } from "./reconcile.ts";
 import { runOnce, type ShellBackend, type ShellTarget, type ThreadTerminalPlan } from "./shells.ts";
 import type { TunnelManager } from "./ssh.ts";
-import type { Row, StatusRow, Sync } from "./sync.ts";
+import { formatStatus, type OnaHealth } from "./status.ts";
+import type { Row, Sync } from "./sync.ts";
 import { notActiveRefusal, notRunningInOna, resumeCommand } from "./wake.ts";
 
 export interface CliResult {
@@ -95,78 +95,6 @@ export async function keepAliveCommand(
     exitCode: 0,
     stdout: `Keeping ${ref} alive until ${clockTime(until)}. End it early with: bb ona keep-alive ${ref} off`,
   };
-}
-
-/** What the status header says about the ona CLI. */
-export interface OnaHealth {
-  lastError: string | null;
-  /** When the last good listing was taken, epoch ms. */
-  listedAt: number | null;
-  autoRepair: boolean;
-}
-
-/** A duration in its largest whole unit: 10800000 ms is `3h`, 2700000 is `45m`, 90000 is `90s`. */
-const duration = (ms: number) => {
-  const s = Math.round(ms / 1000);
-  if (s % 3600 === 0) return `${s / 3600}h`;
-  if (s % 60 === 0) return `${s / 60}m`;
-  return `${s}s`;
-};
-
-/** `bb ona status` as text. */
-export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()): string {
-  const ago = (at: number) => {
-    // Ona's clock can run ahead of bb's, so a time after `now` reads as 0s ago.
-    const s = Math.max(0, Math.round((now - at) / 1000));
-    const m = Math.round(s / 60);
-    return s < 60 ? `${s}s ago` : m < 60 ? `${m}m ago` : `${Math.round(s / 3600)}h ago`;
-  };
-  /** The `box:` line: what Ona's listing says about the box. A part Ona doesn't give is left out. */
-  const boxLine = (facts: BoxFacts): string | null => {
-    const parts: string[] = [];
-    if (facts.startedAt !== null) parts.push(`last started ${ago(facts.startedAt)}`);
-    if (facts.idleTimeoutMs !== null)
-      parts.push(`idle timeout ${facts.idleTimeoutMs === 0 ? "off" : duration(facts.idleTimeoutMs)}`);
-    if (facts.activity) parts.push(`last activity ${facts.activity.source} ${ago(facts.activity.at)}`);
-    if (facts.branch) parts.push(`branch ${facts.branch}${facts.unpushed > 0 ? ` (${facts.unpushed} unpushed)` : ""}`);
-    else if (facts.unpushed > 0) parts.push(`${facts.unpushed} unpushed`);
-    return parts.length > 0 ? `  box: ${parts.join(", ")}` : null;
-  };
-  const header =
-    ona.lastError !== null
-      ? `Ona CLI: ERROR ${reasonOf(ona.lastError)} (run \`ona login\`?)`
-      : `Ona CLI: ok${ona.listedAt !== null ? `, listed ${ago(ona.listedAt)}` : ""}${ona.autoRepair ? "" : "  (autoRepair is off)"}`;
-  if (rows.length === 0) return `${header}\nNo Ona machines yet.`;
-  const lines = rows.map((row) => {
-    const rowLines = [`${row.machine}  bb:${row.bb}  tunnel:${row.tunnel}  ona:${row.ona}`];
-    if (row.ona === "unknown" && ona.lastError === null)
-      rowLines.push("  Ona lists no environments; idle boxes are not released until it does");
-    const box = row.facts ? boxLine(row.facts) : null;
-    if (box) rowLines.push(box);
-    if (row.now) rowLines.push(`  now: ${row.now.reason} (since ${ago(row.now.since)})`);
-    if (row.last) {
-      rowLines.push(
-        `  last action: ${row.last.action}: ${row.last.reason} (${ago(row.last.at)})${row.last.error ? ` ERROR ${row.last.error}` : ""}`,
-      );
-    }
-    if (row.retry) rowLines.push(`  ${row.retry}`);
-    if (row.keepAliveUntil) rowLines.push(`  keep-alive until ${clockTime(row.keepAliveUntil)}`);
-    if (row.needsRecovery === null || row.stuckThreads === null) {
-      rowLines.push("  bb's workspace or thread list couldn't be read; an active box stays awake until it can");
-    }
-    if ((row.needsRecovery ?? 0) > 0) {
-      rowLines.push(
-        `  ${row.needsRecovery} workspace(s) may need recovery; an active box stays awake until they clear. See \`bb environment list --host ${row.hostId}\``,
-      );
-    }
-    for (const thread of row.stuckThreads ?? []) {
-      rowLines.push(
-        `  thread ${thread.id} is ${thread.status}, last updated ${ago(thread.updatedAt)}; it holds this box until it ends or is archived`,
-      );
-    }
-    return rowLines.join("\n");
-  });
-  return [header, ...lines].join("\n");
 }
 
 export const usage = [

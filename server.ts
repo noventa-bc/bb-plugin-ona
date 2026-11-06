@@ -6,6 +6,7 @@
 import { experimental_PluginRpcRefusal, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { KeepAlives } from "./src/keepalive.ts";
+import { idleDisconnectSchema } from "./src/lifecycle.ts";
 import { errorText, isRunning, isStopped, OnaCli, OnaSnapshot, sshHost } from "./src/ona.ts";
 import {
   checkOnaLogin,
@@ -63,8 +64,9 @@ export default async function plugin(bb: BbPluginApi) {
       type: "string",
       label: "Let idle devboxes sleep after",
       description:
-        "With no thread activity for this long (e.g. 30m, 1h), bb closes its tunnel to the box and marks the machine suspended, so Ona's own inactivity timeout can stop it (exceptions in the README's How it works). The next message wakes it. Empty or 0 keeps every box connected.",
+        "With no thread activity for this long (e.g. 30m, 1h, or 90 for minutes), bb closes its tunnel to the box and marks the machine suspended, so Ona's own inactivity timeout can stop it (exceptions in the README's How it works). The next message wakes it. Empty or 0 keeps every box connected.",
       default: "1h",
+      experimental_schema: idleDisconnectSchema,
     },
     autoRepair: {
       type: "boolean",
