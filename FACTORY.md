@@ -101,9 +101,8 @@ those and the "skipped or not checked" lines ponytail ends with.
    deleted is not done; stage the fix before a mutant you restore with
    `git -C <worktree> checkout -- <file>`, or the restore brings back the
    unfixed file), keeps
-   `npm run check` green (Semgrep and `shellcheck` need an install the builder
-   cannot run: the handoff names the skip; this Mac has no `timeout` command,
-   the Bash tool's own timeout serves), writes
+   `npm run check` green (Semgrep and `shellcheck` run in CI, not in the check,
+   and need an install the builder cannot run: the handoff names the skip), writes
    `.agent/HANDOFF.md`, and leaves the work staged for the orchestrator.
 6. **Review.** The orchestrator commits the builder's staged work on its
    branch (after the check passes on its own), reads the handoff and the diff,
@@ -117,8 +116,8 @@ those and the "skipped or not checked" lines ponytail ends with.
    told to run tests and mutants in a scratch folder of its own under the
    session scratchpad (`git archive <sha>` into a new folder, which has no
    history, so git commands stay `git -C <worktree>`; link `node_modules`
-   only when the folder has none; a file the reviewer names is at the path
-   its own write call used, and a probe says what it leaves running), and
+   only when the folder has none; the reviewer names a file by the path its
+   own write call used and reports any process it leaves running), and
    sends blocking findings back to the builder. Code, here, is anything but
    comments, lint messages, Markdown, a lockfile, a `package.json` override
    and the version bump (step 7); the ten numbered Code Review Rules in
@@ -267,5 +266,8 @@ Rules the owner gave that no section above states. Checked 2026-11-06.
   has the rule; `.githooks/commit-msg` refuses longer, after the pre-commit
   check has run): measure it first.
 - A roadmap item tagged `[COST]` (it raises what Ona bills) is never worked
-  on without the owner's explicit approval of that item, whatever else the
-  owner asked for (checked 2026-11-06).
+  on without the owner's explicit approval of that item, given with its label;
+  a general "continue" or a list that includes it is not that (checked
+  2026-11-06).
+- The owner's Mac has no `timeout` command: use the Bash tool's own timeout
+  (checked 2026-11-06).
