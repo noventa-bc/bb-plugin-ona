@@ -74,11 +74,14 @@ test("a machine bb shows connected starts its count again, so one refused idle r
 
 // Bug: a give-up with no thread waiting outlived bb showing the box connected with its tunnel up, so `bb ona status`
 // kept advising `bb ona sync` on a healthy box.
-test("a machine bb shows connected with its tunnel up clears a give-up that no thread holds (fails if the clear stays limited to a held record)", async () => {
+test("a machine bb shows connected with its tunnel up clears a give-up that no thread holds (fails if the clear stays limited to a held record), and its quiet period (fails if the clear keeps the quiet period)", async () => {
   enableFakeClock();
   try {
     const host = idle("h1", { status: "disconnected", lastSeenAt: Date.now() - HOUR });
-    const { sync, guard, hosts } = world([host], { daemonAlive: false, reconnectFails: "daemon restart failed" });
+    const { sync, guard, hosts, calls } = world([host], {
+      daemonAlive: false,
+      reconnectFails: "daemon restart failed",
+    });
     await sync.reconcile(new Set(["h1"]), { wait: true });
     await tick(5 * 60_000);
     await sync.reconcile(new Set(["h1"]), { wait: true });
@@ -89,6 +92,10 @@ test("a machine bb shows connected with its tunnel up clears a give-up that no t
     await sync.reconcile(new Set(["h1"]), { wait: true });
     const [row] = await sync.statusRows();
     assert.equal(row!.retry, null);
+    // The same instant: the clear also resets the quiet period, so the box may be repaired again at once.
+    hosts.get("h1")!.status = "disconnected";
+    await sync.reconcile(new Set(["h1"]), { wait: true });
+    assert.equal(calls.filter((call) => call === "restart daemon").length, GIVE_UP_AFTER + 1);
   } finally {
     await resetFakeClock();
   }
@@ -111,12 +118,13 @@ test("a forced failure after a give-up starts a fresh count (fails if a forced f
   assert.equal(guard.records.get("h1")!.quietUntil, now + COOLDOWN_MS);
 });
 
-// The connected check must leave a refused release's count alone (docs/sync.md rule 5): 30 passes make 3 attempts, not 30.
-test("a refused idle suspend on a connected box still gives up after three tries (fails if the connected check clears a release's count)", async () => {
+// The connected check must leave a refused release's count alone (docs/sync.md rule 5). Without the give-up the fourth
+// try is due at minute 35, so 40 passes, not 30, are needed to see it: 40 passes make 3 attempts.
+test("a refused idle suspend on a connected box still gives up after three tries (fails if the connected check clears a release's count, or if mayAct drops the give-up)", async () => {
   enableFakeClock();
   try {
     const { sync, calls } = world([idle("h1")], { refuse: REFUSED, pluginStartedAt: Date.now() - 2 * HOUR });
-    for (let pass = 0; pass < 30; pass++) {
+    for (let pass = 0; pass < 40; pass++) {
       await sync.reconcile(new Set([ALL]), { wait: true });
       await tick(60_000);
     }

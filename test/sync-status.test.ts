@@ -510,7 +510,7 @@ test("a suspend bb settles as removing wakes nothing and keeps the no-stop flag,
 
 // Bug: bb's refused resume for a waiting thread was returned as a message, so the guard recorded a success: no failure
 // and no backoff.
-test("a refused resume for a waiting thread is a failure, not a success (fails if the refusal is returned as a success)", async () => {
+test("a refused resume for a waiting thread is a failure, not a success (fails if the refusal is returned as a success), and a suspended box shows no retry line (fails if the retry line comes back)", async () => {
   const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
   const { sync, guard } = world([host], { resumeRefuses: RESUME_REFUSED });
   await sync.reconcile(new Set(["h1"]), { wait: true });
