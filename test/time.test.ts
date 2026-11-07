@@ -73,10 +73,11 @@ test("sleep resolves early on abort, at once on an aborted signal, and after `ms
 const MINUTE = 60_000;
 const quiet = { step() {}, log() {} };
 
-/** Reports `steps`, then waits for its signal and rejects with `error(signal)`. */
-function reportThenHang(steps: string[], error: (signal: AbortSignal) => Error) {
-  return (signal: AbortSignal, report: { step(text: string): void }) => {
+/** Reports `steps`, then logs `logs`, then waits for its signal and rejects with `error(signal)`. */
+function reportThenHang(steps: string[], error: (signal: AbortSignal) => Error, logs: string[] = []) {
+  return (signal: AbortSignal, report: { step(text: string): void; log(text: string): void }) => {
     for (const text of steps) report.step(text);
+    for (const text of logs) report.log(text);
     return new Promise<never>((_, reject) => signal.addEventListener("abort", () => reject(error(signal))));
   };
 }
@@ -102,21 +103,24 @@ test("capped keeps the caller's error when the caller aborts as the cap expires 
 });
 
 // Guard, no `// Bug:` line: the user sees only the message, so a cap cut names the last step the call reported.
-test("a cap cut names the last step, forwarded to the caller's report, and keeps run's error as its cause", async () => {
+// bb's installer output goes through `log`: forwarded, and never taken for a step.
+test("a cap cut names the last step, not a later log line; both reach the caller's report; run's error is the cause", async () => {
   const seen: string[] = [];
+  const logged: string[] = [];
   const inner = new Error("inner");
-  const report = { step: (text: string) => void seen.push(text), log() {} };
+  const report = { step: (text: string) => void seen.push(text), log: (text: string) => void logged.push(text) };
   const run = capped(
     "working",
     30,
     never,
     report,
-    reportThenHang(["one", "two"], () => inner),
+    reportThenHang(["one", "two"], () => inner, ["installer line"]),
   );
   run.catch(() => {});
   await tick(MINUTE, 30);
   await assert.rejects(run, { message: "Gave up working after 30 minutes; last step: two", cause: inner });
   assert.deepEqual(seen, ["one", "two"]);
+  assert.deepEqual(logged, ["installer line"]);
 });
 
 test("a cap cut with no step reported gives the bare message (fails on an empty last step)", async () => {

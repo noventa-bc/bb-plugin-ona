@@ -285,7 +285,7 @@ test("a reconnect waits for the dev container before SSH, and fails without SSH 
 
 const MINUTE = 60_000;
 const capped = (what: string, step: string) => `Gave up ${what} after 30 minutes; last step: ${step}`;
-const installing = "Installing and enrolling the bb daemon";
+const installing = "Starting enrolled machine";
 
 // Bug: a wake and a daemon restart had no overall bound, only the waits inside them, and those can add up to hours.
 test("a wake or a reconnect that never finishes gives up after 30 minutes, and a wake closes the tunnel it opened", async () => {
@@ -344,8 +344,12 @@ test("a caller's abort ends a capped wake or reconnect at once with its own erro
     await tick(MINUTE);
     const reloaded = new Error("plugin reloaded");
     controller.abort(reloaded);
-    // The start's killed child carries the reason as its cause; bb's bootstrap rethrows the reason itself.
-    await assert.rejects(run, (error: Error) => error === reloaded || error.cause === reloaded, name);
+    // bb's bootstrap rethrows the reason itself; a killed `ona` start rejects with its own error, never the cap's.
+    await assert.rejects(
+      run,
+      (error: Error) => (call === "reconnect" ? error === reloaded : !error.message.startsWith("Gave up")),
+      name,
+    );
   }
 });
 

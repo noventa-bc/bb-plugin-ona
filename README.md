@@ -304,8 +304,8 @@ bb ona keep-alive <ref> 2h     # keep a running box from Ona's idle timeout (at 
 bb ona keep-alive <ref> off    # end it early
 bb ona move <thread-id> <ref>  # continue a thread in a new thread on another devbox, at the same path
 bb ona rename <ref> [name]     # rename env + bb machine (random fun name if omitted); refused while bb shows its machine in a phase other than active
-bb ona reconnect <ref>         # active machines: reopen the tunnel and restart the bb daemon; refused unless bb shows the machine active and Ona shows its box running
-bb ona resume <ref>            # a stopped active machine: starts its box and reconnects the bb daemon (your action); a running box is only reconnected; refused unless bb shows the machine active
+bb ona reconnect <ref>         # active machines: reopen the tunnel and restart the bb daemon; refused unless bb shows the machine active and Ona shows its box running; gives up after 30 minutes ("Gave up …; last step: …")
+bb ona resume <ref>            # a stopped active machine: starts its box and reconnects the bb daemon (your action); a running box is only reconnected; refused unless bb shows the machine active; gives up after 30 minutes ("Gave up …; last step: …")
 bb ona update [ref] [--force]  # apply pending agent-CLI updates on connected devboxes (also weekdays 09:00 when `autoUpdateClis` is on); a box with an agent running is skipped unless --force
 bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
 bb machine resume ona:<name>   # starts it, reopens the tunnel, restarts the daemon (Play button)

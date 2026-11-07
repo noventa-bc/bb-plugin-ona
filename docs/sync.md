@@ -131,8 +131,7 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    `src/provider.ts`), above the 25 minutes a wake's stop and start waits
    share. The cap aborts the signal the call passes down, so it can end an
    inner wait (the tunnel wait or bb's installer wait) before that wait's own
-   deadline; the give-up holds while each step honours that signal
-   (`deps.markConnected`, a local storage write, takes none). Its error names
+   deadline; the 30-minute cut holds while each step honours that signal. Its error names
    the last progress step the call reported. Only a wake that started the box
    closes its tunnel when it fails; a reconnect leaves it open. The waits inside
    keep their own deadlines: the stop, start and SSH waits in
@@ -142,8 +141,8 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    bootstrap (`docs/ona-notes.md`, bb SDK section). A resume bb is asked for a
    waiting thread is waited for up to 30 minutes after bb answers `resuming`
    (`settledLifecycle` in `src/lifecycle.ts`). The wake, the restart and the
-   resume wait run on the plugin's lifetime signal (`lifetime` in
-   `server.ts`), so a plugin reload can end them sooner; an ended resume wait
+   resume wait run on a signal a plugin reload aborts, so a reload can end
+   them sooner; an ended resume wait
    reads "couldn't confirm the resume for a waiting thread".
 
    These commands you run yourself are not gated and may wake a box:

@@ -184,8 +184,10 @@ export function register({
     pluginId: "ona",
     // As bb's bootstrap does: one command through the provider's executor.
     machineBootstrap: {
-      bootstrap: async ({ executor: channel, signal }) => {
+      bootstrap: async ({ executor: channel, signal, report }) => {
         await channel.exec({ command: ["sh", "-c", "bootstrap"], stdin: "", timeoutMs: 1, signal, onOutput() {} });
+        // bb 0.49.0 reports this step for an enrolled machine, then waits for the installer and the connection.
+        report.step("Starting enrolled machine");
         if (hangs === "bootstrap") await untilAborted(signal).catch(() => signal.throwIfAborted());
         return { hostId: "host-1" };
       },
