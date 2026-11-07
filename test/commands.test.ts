@@ -138,6 +138,10 @@ function fakeRun(
   extra: {
     listingFails?: boolean;
     listingError?: string;
+    /** bb lists no machine for the box (an Ona environment bb doesn't manage). */
+    noMachine?: boolean;
+    /** bb's machine list rejects. */
+    machinesFails?: boolean;
     duringListing?: (guard: HostGuard, machine: { phase: string; hostId: string; machine: string }) => void;
   } = {},
 ) {
@@ -156,7 +160,13 @@ function fakeRun(
           },
         ];
   const deps = {
-    machines: () => Promise.resolve([machine]),
+    // Like bb's list: a creating machine is left out unless asked for.
+    machines: (options?: { includeCreating?: boolean }) => {
+      if (extra.machinesFails) return Promise.reject(new Error("bb is down"));
+      return Promise.resolve(
+        extra.noMachine || (machine.phase === "creating" && !options?.includeCreating) ? [] : [machine],
+      );
+    },
     // A fresh row per lookup, as bb gives, so a row the command holds doesn't change under it.
     findMachine: (ref: string) => Promise.resolve(ref === "box" ? { ...machine } : null),
     guard,
@@ -169,6 +179,14 @@ function fakeRun(
       lastError: extra.listingFails ? listingError : null,
     },
     provider: { reconnect: async (resource: { envId: string }) => void calls.push(`reconnect ${resource.envId}`) },
+    ona: { rename: async (envId: string, name: string) => void calls.push(`rename ${envId} ${name}`) },
+    bb: {
+      sdk: {
+        hosts: {
+          update: async (args: { hostId: string; name: string }) => void calls.push(`hosts.update ${args.name}`),
+        },
+      },
+    },
     tunnels: { status: () => "up" },
     resolveEnvId: (ref: string) => Promise.resolve(ref === "box" ? "env_1" : ref),
     keepAlives: {
@@ -233,6 +251,50 @@ test("reconnect on a machine bb doesn't show active exits 1, never reconnects, a
     );
     assert.deepEqual(calls, [], phase);
   }
+});
+
+// Bug: rename renamed a box bb was still creating, so a create retry that looks the box up by its name made a second box.
+test("rename refuses a machine bb doesn't show active, before any Ona rename", async () => {
+  for (const [phase, hint] of [
+    ["creating", "Try again once bb shows it active."],
+    ["resuming", "Try again once bb shows it active."],
+    ["suspending", "Resume it with `bb machine resume ona:box`."],
+    ["suspended", "Resume it with `bb machine resume ona:box`."],
+    ["removing", "It is gone or being removed."],
+    ["destroyed", "It is gone or being removed."],
+    // A phase a newer bb adds.
+    ["hibernating", "Try again once bb shows it active."],
+  ]) {
+    const { run, calls } = fakeRun(phase);
+    assert.deepEqual(
+      await run("rename", "box", "new-name"),
+      { exitCode: 1, stderr: `ona:box is ${phase} in bb, so it was not renamed. ${hint}` },
+      phase,
+    );
+    assert.deepEqual(calls, [], phase);
+  }
+});
+
+test("rename stops before any Ona rename when bb can't list its machines (fails if the check fails open)", async () => {
+  const { run, calls } = fakeRun("active", "RUNNING", { machinesFails: true });
+  const result = await run("rename", "box", "new-name");
+  assert.equal(result.exitCode, 1, result.stdout);
+  assert.deepEqual(calls, []);
+});
+
+test("rename on a box with no bb machine renames it in Ona only, with no bb update", async () => {
+  const { run, calls } = fakeRun("active", "RUNNING", { noMachine: true });
+  assert.deepEqual(await run("rename", "box", "new-name"), { exitCode: 0, stdout: "Renamed box -> new-name" });
+  assert.deepEqual(calls, ["rename env_1 new-name"]);
+});
+
+test("rename on an active machine renames the box in Ona and its bb machine", async () => {
+  const { run, calls } = fakeRun();
+  assert.deepEqual(await run("rename", "box", "new-name"), {
+    exitCode: 0,
+    stdout: "Renamed box -> new-name (bb machine ona:new-name)",
+  });
+  assert.deepEqual(calls, ["rename env_1 new-name", "hosts.update ona:new-name"]);
 });
 
 test("reconnect on an active machine reconnects it", async () => {
