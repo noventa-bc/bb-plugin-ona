@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-ona",
-  "version": "0.9.10",
+  "version": "0.9.11",
   "license": "MIT",
   "type": "module",
   "engines": {
