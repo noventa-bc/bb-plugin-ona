@@ -105,9 +105,9 @@ export function suspendFailure(refusal: string): string {
 
 /**
  * bb answers a suspend or resume before it runs (202, phase `suspending` or `resuming`); a failed drain leaves the
- * machine active, a failed resume leaves it suspended (or suspending, when it began there). `read` is polled until bb leaves the `waiting` phase, and the
- * lifecycle it settles on is returned. A read that rejects is asked again; only a deadline with no settled phase, or
- * `signal` aborting, fails the poll.
+ * machine active, a failed resume leaves it suspended (or suspending, when it began there). `read` is polled until bb
+ * leaves the `waiting` phase, and the lifecycle it settles on is returned. A read that rejects is asked again; the poll
+ * fails on a deadline with no settled phase, on `signal` aborting, or at once on a `read` that throws when called.
  */
 export async function settledLifecycle(
   read: () => Promise<{ lifecycle: { phase: string; message: string | null } }>,

@@ -220,6 +220,25 @@ test("an aborted signal ends the settle at once, before its deadline (fails if t
   );
 });
 
+test("a suspend settle waits 6 minutes (fails if a suspend uses the resume's deadline)", async () => {
+  enableFakeClock();
+  try {
+    let outcome = "pending";
+    const settling = settledLifecycle(async () => ({ lifecycle: { phase: "suspending", message: null } })).catch(
+      (error: unknown) => (outcome = (error as Error).message),
+    );
+    await tick(5 * MIN);
+    await settle();
+    assert.equal(outcome, "pending");
+    await tick(MIN);
+    await settle();
+    assert.equal(outcome, "bb is still suspending the machine");
+    await settling;
+  } finally {
+    await resetFakeClock();
+  }
+});
+
 test("a resume settle waits 30 minutes, not the suspend's 6 (fails if a resume uses the suspend's deadline)", async () => {
   enableFakeClock();
   try {

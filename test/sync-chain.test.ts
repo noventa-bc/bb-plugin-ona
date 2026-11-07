@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import { ALL, COOLDOWN_MS, GIVE_UP_AFTER, HostGuard } from "../src/reconcile.ts";
 import { rowForRef, type Row } from "../src/sync.ts";
-import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
+import { enableFakeClock, resetFakeClock, settle, tick } from "./fake-clock.ts";
 import { HOUR, idle, waitingThread, world } from "./sync-fakes.ts";
 
 const REFUSED = "Machine suspension failed: Host is not connected";
@@ -508,13 +508,14 @@ test("a plugin reload ends the wait for a waiting thread's resume (fails if the 
     resumeSettles: { phase: "resuming", message: null },
   });
   const pass = sync.reconcile(new Set(["h1"]), { wait: true });
-  while (!calls.includes("resume h1")) await new Promise((resolve) => setImmediate(resolve));
-  lifetime.abort(new Error("plugin reloaded"));
+  for (let turn = 0; turn < 100 && !calls.includes("resume h1"); turn++) await settle();
+  assert.ok(calls.includes("resume h1"), "bb was asked to resume");
+  lifetime.abort();
   // bb then settles the resume: a settle that ignored the reload would read it as done within a second.
   hosts.get("h1")!.lifecycle.phase = "active";
   await pass;
   const record = guard.records.get("h1")!;
-  assert.equal(record.error, "couldn't confirm the resume for a waiting thread (plugin reloaded)");
+  assert.match(record.error ?? "", /^couldn't confirm the resume for a waiting thread \(.*aborted/);
   assert.equal(record.threadWaiting, true, "the thread's hold is set");
 });
 

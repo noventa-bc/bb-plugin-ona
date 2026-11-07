@@ -132,8 +132,11 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    15 minutes), each `ona` call in `run` in `src/ona.ts`, each SSH command
    in `src/ssh.ts`, and bb's bootstrap (`docs/ona-notes.md`, bb SDK
    section). A poll (`pollUntil` in `src/time.ts`) runs its last try past
-   its deadline. Both run on the plugin's lifetime signal (`lifetime` in
-   `server.ts`), so a plugin reload ends them.
+   its deadline. A resume bb is asked for a waiting thread is waited for up
+   to 30 minutes after bb answers `resuming` (`settledLifecycle` in
+   `src/lifecycle.ts`). All three run on the plugin's lifetime signal
+   (`lifetime` in `server.ts`), so a plugin reload ends them; an ended
+   resume wait reads "couldn't confirm the resume for a waiting thread".
 
    These commands you run yourself are not gated and may wake a box:
    `ona environment open` and `bb ona ssh --thread`.
@@ -196,7 +199,7 @@ bb ona status [ref] [--json]   # bb's view, tunnel, Ona's view, the box's facts,
 bb ona sync [ref]              # re-check Ona now and repair (skips cooldowns, backoff and the give-up, never the safety rules)
 ```
 
-`bb ona sync` returns once its pass has finished; a resume it asks of bb for a waiting thread is waited for until bb settles it, for up to 30 minutes.
+`bb ona sync` returns once its pass has finished; a resume it asks of bb for a waiting thread is waited for until bb settles it, for up to 30 minutes after bb answers `resuming`.
 
 Example `bb ona status` output. `now` is what the latest check concluded, and
 `last action` is the last thing the plugin actually did. Routine checks never
