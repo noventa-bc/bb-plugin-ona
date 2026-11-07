@@ -30,27 +30,38 @@ export async function pollUntil<T>(
   return undefined;
 }
 
+/** A provider's progress report, as bb's SDK shapes it. */
+type Progress = { step(text: string): void; log(text: string): void };
+
 /**
- * Runs `run` with `signal` that also aborts after `minutes`; `run` has to honour it. When the cap aborts it, the error
- * is "Gave up <what> after <minutes> minutes: <first line of run's error>", the reason left out when `run` rethrew the
- * cap's own abort reason. The caller's own abort keeps the error it caused. setTimeout, not AbortSignal.timeout: the
- * tests' mocked clock drives only setTimeout.
+ * Runs `run` with `signal` that also aborts after `minutes`; `run` has to honour it. `run` reports through the report
+ * it is given, which remembers the last step. When the cap aborts it, the error is "Gave up <what> after <minutes>
+ * minutes; last step: <step>" (or ends at "minutes." with no step), with run's error as its cause. The caller's own
+ * abort keeps the error it caused. setTimeout, not AbortSignal.timeout: the tests' mocked clock drives only setTimeout.
  */
 export async function capped<T>(
   what: string,
   minutes: number,
   signal: AbortSignal,
-  run: (signal: AbortSignal) => Promise<T>,
+  report: Progress,
+  run: (signal: AbortSignal, report: Progress) => Promise<T>,
 ): Promise<T> {
+  let last = "";
+  const tracked: Progress = {
+    step: (text) => {
+      last = text;
+      report.step(text);
+    },
+    log: (text) => report.log(text),
+  };
   const gaveUp = `Gave up ${what} after ${minutes} minutes`;
   const cap = new AbortController();
   const timer = setTimeout(() => cap.abort(new Error(`${gaveUp}.`)), minutes * 60_000);
   try {
-    return await run(AbortSignal.any([signal, cap.signal]));
+    return await run(AbortSignal.any([signal, cap.signal]), tracked);
   } catch (error) {
     if (!cap.signal.aborted || signal.aborted) throw error;
-    const reason = error instanceof Error && error !== cap.signal.reason ? error.message.trim().split("\n")[0] : "";
-    throw new Error(reason ? `${gaveUp}: ${reason}` : `${gaveUp}.`, { cause: error });
+    throw new Error(last ? `${gaveUp}; last step: ${last}` : `${gaveUp}.`, { cause: error });
   } finally {
     clearTimeout(timer);
   }

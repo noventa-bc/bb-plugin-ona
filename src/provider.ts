@@ -177,8 +177,8 @@ function notDeletingMessage(
 }
 
 export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
-  const reconnect = (resource: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal) =>
-    capped(`reconnecting ${resource.envName}`, CAP_MINUTES, signal, (s) => connect(resource, resource.key, report, s));
+  const reconnect = (box: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal) =>
+    capped(`reconnecting ${box.envName}`, CAP_MINUTES, signal, report, (s, r) => connect(box, box.key, r, s));
 
   const { ona, tunnels, executorFor = sshExecutor } = deps;
 
@@ -333,8 +333,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
    * first: bb shows the machine active here, so no suspend of bb's can still reach the provider's stop. Resolves true
    * when it called `ona.start`, false when no start was called. It gives up after CAP_MINUTES.
    */
-  const wake = (resource: OnaResource, report: PluginMachineProviderProgress, outer: AbortSignal) =>
-    capped(`waking ${resource.envName}`, CAP_MINUTES, outer, async (signal) => {
+  const wake = (resource: OnaResource, progress: PluginMachineProviderProgress, outer: AbortSignal) =>
+    capped(`waking ${resource.envName}`, CAP_MINUTES, outer, progress, async (signal, report) => {
       deps.releasing.delete(resource.envId);
       const env = await ona.getEnvironmentIfExists(resource.envId, signal);
       if (!env) throw new Error(`Ona environment "${resource.envId}" not found. Run \`ona environment list\`.`);

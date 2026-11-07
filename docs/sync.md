@@ -131,8 +131,10 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    `src/provider.ts`), above the 25 minutes a wake's stop and start waits
    share. The cap aborts the signal the call passes down, so it can end an
    inner wait (the tunnel wait or bb's installer wait) before that wait's own
-   deadline; its error names the reason the cut-short wait gives. A wake that
-   started the box closes its tunnel, as on any failed connect. The waits inside
+   deadline; the give-up holds while each step honours that signal
+   (`deps.markConnected`, a local storage write, takes none). Its error names
+   the last progress step the call reported. Only a wake that started the box
+   closes its tunnel when it fails; a reconnect leaves it open. The waits inside
    keep their own deadlines: the stop, start and SSH waits in
    `src/provider.ts`, the hold for Ona before each SSH command
    (`waitForReady` in `src/ona.ts`, up to 15 minutes), each `ona` call in

@@ -335,7 +335,7 @@ test("a failed Ona listing inside the daemon repair leaves the count alone (fail
   }
 });
 
-// The waits inside a wake bound it (docs/sync.md rule 1): a stop and a start that take 17 minutes end in a connect.
+// A wake gives up after 30 minutes (docs/sync.md rule 1): a stop and a start that take 17 minutes end in a connect.
 test("a slow stop and start still connect the waiting thread's box (fails if a 15-minute cap aborts the wake)", async (t) => {
   enableFakeClock();
   try {
@@ -365,7 +365,7 @@ test("a slow stop and start still connect the waiting thread's box (fails if a 1
   }
 });
 
-// The waits inside a daemon restart bound it too (docs/sync.md rule 1): a 17-minute reconnect completes.
+// A daemon restart gives up after 30 minutes too (docs/sync.md rule 1): a 17-minute reconnect completes.
 test("a slow daemon restart still completes (fails if a 15-minute cap aborts the reconnect)", async (t) => {
   enableFakeClock();
   try {

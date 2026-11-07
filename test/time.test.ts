@@ -71,11 +71,20 @@ test("sleep resolves early on abort, at once on an aborted signal, and after `ms
 });
 
 const MINUTE = 60_000;
+const quiet = { step() {}, log() {} };
+
+/** Reports `steps`, then waits for its signal and rejects with `error(signal)`. */
+function reportThenHang(steps: string[], error: (signal: AbortSignal) => Error) {
+  return (signal: AbortSignal, report: { step(text: string): void }) => {
+    for (const text of steps) report.step(text);
+    return new Promise<never>((_, reject) => signal.addEventListener("abort", () => reject(error(signal))));
+  };
+}
 
 // Guard, no `// Bug:` line: a cap timer left behind keeps the process alive for 30 minutes after a finished call.
 test("capped clears its timer once the call finishes (fails if the cap still fires after it)", async () => {
   let given: AbortSignal | undefined;
-  assert.equal(await capped("working", 30, never, async (signal) => ((given = signal), "done")), "done");
+  assert.equal(await capped("working", 30, never, quiet, async (signal) => ((given = signal), "done")), "done");
   await tick(MINUTE, 31);
   assert.equal(given?.aborted, false);
 });
@@ -84,10 +93,55 @@ test("capped clears its timer once the call finishes (fails if the cap still fir
 test("capped keeps the caller's error when the caller aborts as the cap expires (fails if the cap's wins)", async () => {
   const caller = new AbortController();
   let fail!: (error: Error) => void;
-  const run = capped("working", 30, caller.signal, () => new Promise<never>((_, reject) => (fail = reject)));
+  const run = capped("working", 30, caller.signal, quiet, () => new Promise<never>((_, reject) => (fail = reject)));
   run.catch(() => {});
   await tick(MINUTE, 30);
   caller.abort(new Error("plugin reloaded"));
   fail(new Error("stopped by the reload"));
   await assert.rejects(run, { message: "stopped by the reload" });
+});
+
+// Guard, no `// Bug:` line: the user sees only the message, so a cap cut names the last step the call reported.
+test("a cap cut names the last step, forwarded to the caller's report, and keeps run's error as its cause", async () => {
+  const seen: string[] = [];
+  const inner = new Error("inner");
+  const report = { step: (text: string) => void seen.push(text), log() {} };
+  const run = capped(
+    "working",
+    30,
+    never,
+    report,
+    reportThenHang(["one", "two"], () => inner),
+  );
+  run.catch(() => {});
+  await tick(MINUTE, 30);
+  await assert.rejects(run, { message: "Gave up working after 30 minutes; last step: two", cause: inner });
+  assert.deepEqual(seen, ["one", "two"]);
+});
+
+test("a cap cut with no step reported gives the bare message (fails on an empty last step)", async () => {
+  const run = capped(
+    "working",
+    30,
+    never,
+    quiet,
+    reportThenHang([], () => new Error("inner")),
+  );
+  run.catch(() => {});
+  await tick(MINUTE, 30);
+  await assert.rejects(run, { message: "Gave up working after 30 minutes." });
+});
+
+// bb's bootstrap rethrows its signal's reason, which is the cap's own error.
+test("a cap cut whose run rethrows the cap's reason still names the last step", async () => {
+  const run = capped(
+    "working",
+    30,
+    never,
+    quiet,
+    reportThenHang(["installing"], (signal) => signal.reason as Error),
+  );
+  run.catch(() => {});
+  await tick(MINUTE, 30);
+  await assert.rejects(run, { message: "Gave up working after 30 minutes; last step: installing" });
 });

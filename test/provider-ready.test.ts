@@ -1,6 +1,6 @@
 // The readiness gate before every SSH command in connect (safety rule 1, docs/sync.md), and the 30-minute cap on a
-// wake and a reconnect, driven through `resume`, `wake` and `reconnect` in the fake host of ./provider-fake.ts. setTimeout and Date are mocked, so each tick is one poll
-// interval and the tests are instant.
+// wake and a reconnect, driven through `resume`, `wake` and `reconnect` in the fake host of ./provider-fake.ts.
+// setTimeout and Date are mocked, so each tick is one poll interval and the tests are instant.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
@@ -284,21 +284,33 @@ test("a reconnect waits for the dev container before SSH, and fails without SSH 
 });
 
 const MINUTE = 60_000;
-const wakeCapped = "Gave up waking box after 30 minutes: The operation was aborted";
-const reconnectCapped = "Gave up reconnecting box after 30 minutes: The operation was aborted";
+const capped = (what: string, step: string) => `Gave up ${what} after 30 minutes; last step: ${step}`;
+const installing = "Installing and enrolling the bb daemon";
 
 // Bug: a wake and a daemon restart had no overall bound, only the waits inside them, and those can add up to hours.
 test("a wake or a reconnect that never finishes gives up after 30 minutes, and a wake closes the tunnel it opened", async () => {
   const cases: [string, "wake" | "reconnect", Setup, string, string[]][] = [
-    ["wake, start", "wake", { found: box("STOPPED"), hangs: "start" }, wakeCapped, []],
+    [
+      "wake, start",
+      "wake",
+      { found: box("STOPPED"), hangs: "start" },
+      capped("waking box", "Starting Ona environment box"),
+      [],
+    ],
     [
       "wake, bootstrap",
       "wake",
       { found: box("STOPPED"), phases: ["STOPPED", "RUNNING"], hangs: "bootstrap" },
-      wakeCapped,
+      capped("waking box", installing),
       ["ensure env-1", "stop env-1"],
     ],
-    ["reconnect", "reconnect", { found: box("RUNNING"), hangs: "bootstrap" }, reconnectCapped, ["ensure env-1"]],
+    [
+      "reconnect",
+      "reconnect",
+      { found: box("RUNNING"), hangs: "bootstrap" },
+      capped("reconnecting box", installing),
+      ["ensure env-1"],
+    ],
   ];
   for (const [name, call, setup, message, tunnelCalls] of cases) {
     const registered = register(setup);
@@ -332,21 +344,21 @@ test("a caller's abort ends a capped wake or reconnect at once with its own erro
     await tick(MINUTE);
     const reloaded = new Error("plugin reloaded");
     controller.abort(reloaded);
-    await assert.rejects(run, { message: "The operation was aborted", cause: reloaded }, name);
+    // The start's killed child carries the reason as its cause; bb's bootstrap rethrows the reason itself.
+    await assert.rejects(run, (error: Error) => error === reloaded || error.cause === reloaded, name);
   }
 });
 
-// Guard, no `// Bug:` line: the user sees only the message, so the cap keeps the reason of the wait it cut short.
-test("a reconnect the cap ends names the reason the wait it cut short was waiting for", async () => {
-  // Ona holds each of the first two SSH commands for 14 minutes, then the third past the cap.
+// Guard, no `// Bug:` line: the user sees only the message, so the cap names the step it cut short, not an earlier one.
+test("a reconnect the cap ends in bb's installer names that step, after earlier waits for Ona", async () => {
+  // connect's entry gate waits a minute for the dev container, so a "Waiting for Ona" step comes first.
   const creating = running("PHASE_CREATING");
-  const fourteenMinutes = Array<OnaEnvironment>(168).fill(creating);
-  const phases = [...fourteenMinutes, "RUNNING", ...fourteenMinutes, "RUNNING", creating];
-  const { reconnect } = register({ found: box("RUNNING"), phases });
-  const run = reconnect(adoptedResource, lifecycle().report, new AbortController().signal);
+  const phases = [...Array<OnaEnvironment>(12).fill(creating), "RUNNING"];
+  const steps: string[] = [];
+  const { reconnect } = register({ found: box("RUNNING"), phases, hangs: "bootstrap" });
+  const run = reconnect(adoptedResource, lifecycle(steps).report, new AbortController().signal);
   run.catch(() => {});
   await tick(5_000, 360);
-  const message =
-    "Gave up reconnecting box after 30 minutes: Ona did not report box ready before the wait ended: dev container starting";
-  await assert.rejects(run, { message });
+  await assert.rejects(run, { message: capped("reconnecting box", installing) });
+  assert.deepEqual(steps.slice(0, 1), ["Waiting for Ona: dev container starting"]);
 });
