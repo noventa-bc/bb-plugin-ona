@@ -31,8 +31,9 @@ export async function pollUntil<T>(
 }
 
 /**
- * Runs `run` with `signal` that also aborts after `minutes`. The cap ends it with "Gave up <what> after <minutes>
- * minutes.", the caller's own abort with the error that abort caused. setTimeout, not AbortSignal.timeout: the
+ * Runs `run` with `signal` that also aborts after `minutes`; `run` has to honour it. When the cap aborts it, the error
+ * is "Gave up <what> after <minutes> minutes: <first line of run's error>", the reason left out when `run` rethrew the
+ * cap's own abort reason. The caller's own abort keeps the error it caused. setTimeout, not AbortSignal.timeout: the
  * tests' mocked clock drives only setTimeout.
  */
 export async function capped<T>(
@@ -41,13 +42,15 @@ export async function capped<T>(
   signal: AbortSignal,
   run: (signal: AbortSignal) => Promise<T>,
 ): Promise<T> {
-  const gaveUp = `Gave up ${what} after ${minutes} minutes.`;
+  const gaveUp = `Gave up ${what} after ${minutes} minutes`;
   const cap = new AbortController();
-  const timer = setTimeout(() => cap.abort(new Error(gaveUp)), minutes * 60_000);
+  const timer = setTimeout(() => cap.abort(new Error(`${gaveUp}.`)), minutes * 60_000);
   try {
     return await run(AbortSignal.any([signal, cap.signal]));
   } catch (error) {
-    throw cap.signal.aborted && !signal.aborted ? new Error(gaveUp, { cause: error }) : error;
+    if (!cap.signal.aborted || signal.aborted) throw error;
+    const reason = error instanceof Error && error !== cap.signal.reason ? error.message.trim().split("\n")[0] : "";
+    throw new Error(reason ? `${gaveUp}: ${reason}` : `${gaveUp}.`, { cause: error });
   } finally {
     clearTimeout(timer);
   }

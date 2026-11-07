@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
-import { pollUntil, sleep } from "../src/time.ts";
+import { capped, pollUntil, sleep } from "../src/time.ts";
 import { settle, tick, useFakeClock } from "./fake-clock.ts";
 
 const never = new AbortController().signal;
@@ -68,4 +68,26 @@ test("sleep resolves early on abort, at once on an aborted signal, and after `ms
   assert.equal(done, false);
   mock.timers.tick(1);
   await plain;
+});
+
+const MINUTE = 60_000;
+
+// Guard, no `// Bug:` line: a cap timer left behind keeps the process alive for 30 minutes after a finished call.
+test("capped clears its timer once the call finishes (fails if the cap still fires after it)", async () => {
+  let given: AbortSignal | undefined;
+  assert.equal(await capped("working", 30, never, async (signal) => ((given = signal), "done")), "done");
+  await tick(MINUTE, 31);
+  assert.equal(given?.aborted, false);
+});
+
+// Guard, no `// Bug:` line: a plugin reload that lands as the cap expires is the reload's, not the cap's.
+test("capped keeps the caller's error when the caller aborts as the cap expires (fails if the cap's wins)", async () => {
+  const caller = new AbortController();
+  let fail!: (error: Error) => void;
+  const run = capped("working", 30, caller.signal, () => new Promise<never>((_, reject) => (fail = reject)));
+  run.catch(() => {});
+  await tick(MINUTE, 30);
+  caller.abort(new Error("plugin reloaded"));
+  fail(new Error("stopped by the reload"));
+  await assert.rejects(run, { message: "stopped by the reload" });
 });

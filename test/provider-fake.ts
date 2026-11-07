@@ -30,8 +30,8 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * repeated (default 0). A failed SSH probe prints "refused". Listing `mountExits` turns the shared-home wait on.
  * `codexHome`: the Codex home is set, so connect runs its `mkdir`.
  * `tunnel`: the box's tunnel is already open, in this state.
- * `hangs`: this call never finishes on its own; once its signal aborts it rejects as Node's `execFile` does for a
- * killed child: an AbortError whose cause is the signal's reason.
+ * `hangs`: this call never finishes on its own; once its signal aborts it rejects with a plain Error whose message is
+ * "The operation was aborted", as Node's `execFile` words a killed child, and whose cause is the signal's reason.
  */
 export type Setup = {
   found: OnaEnvironment;
