@@ -7,7 +7,7 @@ import { pollUntil } from "./time.ts";
 
 /** bb's suspend drain gives up after 5 minutes (docs/ona-notes.md), so a suspend is settled well within this. */
 const SETTLE_MS = 6 * 60_000;
-/** bb puts no bound on the provider's resume (docs/ona-notes.md): a start and connect that runs longer is reported unconfirmed, not failed. */
+/** bb puts no bound on the provider's resume (docs/ona-notes.md): one that runs longer is a failure whose message says it is unconfirmed. */
 const RESUME_SETTLE_MS = 30 * 60_000;
 
 export interface MachineActivity {
@@ -105,7 +105,7 @@ export function suspendFailure(refusal: string): string {
 
 /**
  * bb answers a suspend or resume before it runs (202, phase `suspending` or `resuming`); a failed drain leaves the
- * machine active, a failed resume leaves it suspended. `read` is polled until bb leaves the `waiting` phase, and the
+ * machine active, a failed resume leaves it suspended (or suspending, when it began there). `read` is polled until bb leaves the `waiting` phase, and the
  * lifecycle it settles on is returned. A read that rejects is asked again; only a deadline with no settled phase, or
  * `signal` aborting, fails the poll.
  */

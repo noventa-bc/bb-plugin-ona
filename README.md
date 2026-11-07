@@ -371,7 +371,7 @@ bb machine remove ona:<name>   # created: deletes the box unless it has unpushed
   be added again.
 - **bb and Ona disagree about a box** (bb says down but it's running, or the
   other way round): run `bb ona status <ref>`. It shows both views and what
-  the plugin last did about it. `bb ona sync <ref>` re-checks now, and
+  the plugin last did about it. `bb ona sync <ref>` re-checks now (a resume it asks of bb for a waiting thread is waited for until bb settles it, for up to 30 minutes), and
   `bb ona reconnect <ref>` restarts the daemon of an active machine that Ona shows running;
   one suspended in bb but running in Ona needs `bb machine resume ona:<name>`; an active one whose box Ona stopped is started with `bb ona resume <ref>`. Two lines to look for:
   - "ERROR … (run `ona login`?)" at the top: the plugin can't reach Ona, so it

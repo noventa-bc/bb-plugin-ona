@@ -196,6 +196,8 @@ bb ona status [ref] [--json]   # bb's view, tunnel, Ona's view, the box's facts,
 bb ona sync [ref]              # re-check Ona now and repair (skips cooldowns, backoff and the give-up, never the safety rules)
 ```
 
+`bb ona sync` returns once its pass has finished; a resume it asks of bb for a waiting thread is waited for until bb settles it, for up to 30 minutes.
+
 Example `bb ona status` output. `now` is what the latest check concluded, and
 `last action` is the last thing the plugin actually did. Routine checks never
 overwrite `last action`, so a repair stays visible after the box is healthy

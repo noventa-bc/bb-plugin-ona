@@ -10,6 +10,7 @@ import {
   SUSPENDED,
   type MachineActivity,
 } from "../src/lifecycle.ts";
+import { enableFakeClock, resetFakeClock, settle, tick } from "./fake-clock.ts";
 
 const MIN = 60_000;
 const NOW = 1_000 * MIN;
@@ -205,16 +206,36 @@ test("a resume bb still runs is read again until bb settles it, and its deadline
   );
 });
 
-test("an aborted signal ends the settle (fails if the poll runs on after a plugin reload)", async () => {
+test("an aborted signal ends the settle at once, before its deadline (fails if the poll runs on after a plugin reload)", async () => {
   const reload = new AbortController();
   reload.abort(new Error("plugin reloaded"));
   await assert.rejects(
     settledLifecycle(async () => ({ lifecycle: { phase: "resuming", message: null } }), {
       waiting: "resuming",
+      intervalMs: 1,
+      deadlineMs: 50,
       signal: reload.signal,
     }),
     { message: "plugin reloaded" },
   );
+});
+
+test("a resume settle waits 30 minutes, not the suspend's 6 (fails if a resume uses the suspend's deadline)", async () => {
+  enableFakeClock();
+  try {
+    let outcome = "pending";
+    const settling = settledLifecycle(async () => ({ lifecycle: { phase: "resuming", message: null } }), {
+      waiting: "resuming",
+    }).catch((error: unknown) => (outcome = (error as Error).message));
+    await tick(7 * MIN);
+    await settle();
+    assert.equal(outcome, "pending");
+    await tick(23 * MIN);
+    await settling;
+    assert.equal(outcome, "bb is still resuming the machine");
+  } finally {
+    await resetFakeClock();
+  }
 });
 
 test("a suspend bb is still running at its deadline is an error, not a settled phase (fails if the poll never ends)", async () => {
