@@ -382,7 +382,7 @@ export function createSync(deps: SyncDeps) {
                 if (!decision.resumeAfter || lifecycle.phase !== "active") throw new Error(suspendFailure(refusal));
                 // bb's suspend failed (Ona stopped the box under a live turn) and left the machine active, where bb's
                 // resume does nothing: the plugin wakes the box (decision 0002).
-                // The waits inside this call bound it; a plugin reload ends it (docs/sync.md rule 1).
+                // It gives up after 30 minutes; a plugin reload ends it sooner (docs/sync.md rule 1).
                 const startCalled = await provider.wake(resource, report, signal);
                 return startCalled ? "started it for a waiting thread" : "reconnected it for a waiting thread";
               }
@@ -430,7 +430,7 @@ export function createSync(deps: SyncDeps) {
               if (stillRunning === null)
                 throw new Error("Ona couldn't confirm the box running before the restart; not restarting");
               if (!stillRunning) return gone;
-              // The waits inside this call bound it; a plugin reload ends it (docs/sync.md rule 1).
+              // It gives up after 30 minutes; a plugin reload ends it sooner (docs/sync.md rule 1).
               await provider.reconnect(resource, report, signal);
               return "daemon was down; restarted it";
             }

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
 import type { OnaEnvironment } from "../src/ona.ts";
-import { tick, useFakeClock } from "./fake-clock.ts";
+import { settle, tick, useFakeClock } from "./fake-clock.ts";
 import {
   adoptedResource,
   box,
@@ -281,4 +281,57 @@ test("a reconnect waits for the dev container before SSH, and fails without SSH 
     /^Error: Ona environment box is not ready: dev container failed$/,
   );
   assert.deepEqual(fails.calls, ["get RUNNING"]);
+});
+
+const MINUTE = 60_000;
+const wakeCapped = "Gave up waking box after 30 minutes.";
+const reconnectCapped = "Gave up reconnecting box after 30 minutes.";
+
+// Bug: a wake and a daemon restart had no overall bound, only the waits inside them, and those can add up to hours.
+test("a wake or a reconnect that never finishes gives up after 30 minutes, and a wake closes the tunnel it opened", async () => {
+  const cases: [string, "wake" | "reconnect", Setup, string, string[]][] = [
+    ["wake, start", "wake", { found: box("STOPPED"), hangs: "start" }, wakeCapped, []],
+    [
+      "wake, bootstrap",
+      "wake",
+      { found: box("STOPPED"), phases: ["STOPPED", "RUNNING"], hangs: "bootstrap" },
+      wakeCapped,
+      ["ensure env-1", "stop env-1"],
+    ],
+    ["reconnect", "reconnect", { found: box("RUNNING"), hangs: "bootstrap" }, reconnectCapped, ["ensure env-1"]],
+  ];
+  for (const [name, call, setup, message, tunnelCalls] of cases) {
+    const registered = register(setup);
+    let settled = false;
+    const run = registered[call](adoptedResource, lifecycle().report, new AbortController().signal);
+    run.then(
+      () => (settled = true),
+      () => (settled = true),
+    );
+    await tick(MINUTE, 29);
+    await settle();
+    assert.equal(settled, false, `${name}: still running at 29 minutes`);
+    await tick(MINUTE);
+    await settle();
+    assert.equal(settled, true, `${name}: ended at 30 minutes`);
+    await assert.rejects(run, { message }, name);
+    assert.deepEqual(registered.tunnels, tunnelCalls, name);
+  }
+});
+
+// Guard, no `// Bug:` line: a plugin reload ends the call with the error its own abort caused, not the cap's.
+test("a caller's abort ends a capped wake or reconnect at once with its own error, not the cap's", async () => {
+  const cases: [string, "wake" | "reconnect", Setup][] = [
+    ["wake", "wake", { found: box("STOPPED"), hangs: "start" }],
+    ["reconnect", "reconnect", { found: box("RUNNING"), hangs: "bootstrap" }],
+  ];
+  for (const [name, call, setup] of cases) {
+    const controller = new AbortController();
+    const run = register(setup)[call](adoptedResource, lifecycle().report, controller.signal);
+    run.catch(() => {});
+    await tick(MINUTE);
+    const reloaded = new Error("plugin reloaded");
+    controller.abort(reloaded);
+    await assert.rejects(run, { message: "The operation was aborted", cause: reloaded }, name);
+  }
 });

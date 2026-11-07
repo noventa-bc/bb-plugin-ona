@@ -29,3 +29,26 @@ export async function pollUntil<T>(
   signal.throwIfAborted();
   return undefined;
 }
+
+/**
+ * Runs `run` with `signal` that also aborts after `minutes`. The cap ends it with "Gave up <what> after <minutes>
+ * minutes.", the caller's own abort with the error that abort caused. setTimeout, not AbortSignal.timeout: the
+ * tests' mocked clock drives only setTimeout.
+ */
+export async function capped<T>(
+  what: string,
+  minutes: number,
+  signal: AbortSignal,
+  run: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const gaveUp = `Gave up ${what} after ${minutes} minutes.`;
+  const cap = new AbortController();
+  const timer = setTimeout(() => cap.abort(new Error(gaveUp)), minutes * 60_000);
+  try {
+    return await run(AbortSignal.any([signal, cap.signal]));
+  } catch (error) {
+    throw cap.signal.aborted && !signal.aborted ? new Error(gaveUp, { cause: error }) : error;
+  } finally {
+    clearTimeout(timer);
+  }
+}

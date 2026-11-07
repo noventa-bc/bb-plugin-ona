@@ -125,15 +125,19 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    reverse tunnel's `ssh` is not gated by these waits; its own `shouldConnect`
    in `server.ts` asks a fresh listing.
 
-   A wake for a waiting thread (`provider.wake`) and a daemon restart
-   (`reconnect`) are bounded by the waits inside them, each with its own
-   deadline: the stop, start and SSH waits in `src/provider.ts`, the hold
-   for Ona before each SSH command (`waitForReady` in `src/ona.ts`, up to
-   15 minutes), each `ona` call in `run` in `src/ona.ts`, each SSH command
-   in `src/ssh.ts`, and bb's bootstrap (`docs/ona-notes.md`, bb SDK
-   section). A poll (`pollUntil` in `src/time.ts`) runs its last try past
-   its deadline. Both run on the plugin's lifetime signal (`lifetime` in
-   `server.ts`), so a plugin reload ends them.
+   A wake (`provider.wake`: a waiting thread on an active machine, and
+   `bb ona resume`) and a daemon restart (`reconnect`: the heal, and
+   `bb ona reconnect`) give up after 30 minutes (`CAP_MINUTES` in
+   `src/provider.ts`), above the 25 minutes a wake's stop and start waits
+   share. The cap aborts the signal the call passes down, and a wake that
+   started the box closes its tunnel, as on any failed connect. The waits inside
+   keep their own deadlines: the stop, start and SSH waits in
+   `src/provider.ts`, the hold for Ona before each SSH command
+   (`waitForReady` in `src/ona.ts`, up to 15 minutes), each `ona` call in
+   `run` in `src/ona.ts`, each SSH command in `src/ssh.ts`, and bb's
+   bootstrap (`docs/ona-notes.md`, bb SDK section). A wake for a waiting
+   thread and a daemon restart run on the plugin's lifetime signal
+   (`lifetime` in `server.ts`), so a plugin reload can end them sooner.
 
    These commands you run yourself are not gated and may wake a box:
    `ona environment open` and `bb ona ssh --thread`.
