@@ -532,6 +532,16 @@ test("a ref picks the box whose host id it is, not an earlier box that has it as
   assert.equal(rowForRef([earlier, named], "box-b-env"), named);
 });
 
+// bb's list leaves a creating host out, so the realtime map never holds it. An includeCreating list (the rename's
+// lookup) returns it and leaves the map as it was.
+test("machines() keeps a creating host out of hostByEnv, and an includeCreating list leaves hostByEnv as it was (fails if the creating host is mapped)", async () => {
+  const { sync, hostByEnv } = world([idle("h1"), idle("h2", { phase: "creating" })]);
+  const ids = async (options?: { includeCreating: boolean }) => (await sync.machines(options)).map((row) => row.hostId);
+  assert.deepEqual(await ids(), ["h1"]);
+  assert.deepEqual(await ids({ includeCreating: true }), ["h1", "h2"]);
+  assert.deepEqual([...hostByEnv], [["env-h1", "h1"]]);
+});
+
 // Bug: a ref two boxes share by env name picked the first one listed, so bb acted on a box the user did not name.
 test("a ref two boxes share by name is refused and names both boxes (fails if the first match wins)", () => {
   const first = { hostId: "h-1", machine: "api", resource: { envId: "env-1", envName: "api" } } as Row;
