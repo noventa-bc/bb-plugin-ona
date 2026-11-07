@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import { ALL, COOLDOWN_MS, GIVE_UP_AFTER, HostGuard } from "../src/reconcile.ts";
 import { rowForRef, type Row } from "../src/sync.ts";
-import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
+import { enableFakeClock, resetFakeClock, settle, tick } from "./fake-clock.ts";
 import { HOUR, idle, waitingThread, world } from "./sync-fakes.ts";
 
 const REFUSED = "Machine suspension failed: Host is not connected";
 const RESUME_REJECTED = "HTTP 409: Only an active or suspended machine can be resumed";
+const RESUME_FAILED = "Machine resume failed: Ona environment not found";
 
 // The mocked clock never fires AbortSignal.timeout: this stand-in fires on it, so a test sees a cap abort.
 function abortTimeoutsOnFakeClock(t: TestContext): void {
@@ -295,6 +296,21 @@ test("a resume bb rejects for a waiting thread is a failure that starts the thre
   assert.equal(record.threadWaiting, true, "the thread's hold is set");
 });
 
+// Bug: bb answers a resume `resuming` and runs it detached; a resume that then failed (bb settles the machine suspended)
+// was already reported as "resumed for a waiting thread", and that success cleared the thread's hold.
+test("a resume bb settles suspended for a waiting thread is a failure that keeps the thread's hold (fails if bb's resuming answer counts as done)", async () => {
+  const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+  const { sync, guard } = world([host], { resumeSettles: { phase: "suspended", message: RESUME_FAILED } });
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  const record = guard.records.get("h1")!;
+  assert.equal(record.failures, 1);
+  assert.equal(
+    record.error,
+    `couldn't resume it for a waiting thread (bb kept the machine suspended: ${RESUME_FAILED})`,
+  );
+  assert.equal(record.threadWaiting, true, "the thread's hold is set");
+});
+
 // Rule 4: a listing that fails inside the daemon repair asks nothing, so the guard keeps the record's count,
 // quiet period and hold. The repair's read fails on two passes, with a good pass between them.
 test("a failed Ona listing inside the daemon repair leaves the count alone (fails if the read failure counts as a repair failure)", async () => {
@@ -481,6 +497,26 @@ test("a plugin reload ends a wake in flight (fails if the wake ignores the plugi
   const record = guard.records.get("h1")!;
   assert.match(record.error ?? "", /aborted/);
   assert.equal(record.failures, 1);
+});
+
+// A reload ends the wait for a resume bb still runs; the error says the resume is unconfirmed (docs/sync.md rule 1).
+test("a plugin reload ends the wait for a waiting thread's resume (fails if the settle ignores the lifetime signal or its error is not wrapped)", async () => {
+  const lifetime = new AbortController();
+  const host = idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] });
+  const { sync, guard, calls, hosts } = world([host], {
+    signal: lifetime.signal,
+    resumeSettles: { phase: "resuming", message: null },
+  });
+  const pass = sync.reconcile(new Set(["h1"]), { wait: true });
+  for (let turn = 0; turn < 100 && !calls.includes("resume h1"); turn++) await settle();
+  assert.ok(calls.includes("resume h1"), "bb was asked to resume");
+  lifetime.abort();
+  // bb then settles the resume: a settle that ignored the reload would read it as done within a second.
+  hosts.get("h1")!.lifecycle.phase = "active";
+  await pass;
+  const record = guard.records.get("h1")!;
+  assert.match(record.error ?? "", /^couldn't confirm the resume for a waiting thread \(.*aborted/);
+  assert.equal(record.threadWaiting, true, "the thread's hold is set");
 });
 
 // A reload ends a daemon restart the same way (docs/sync.md rule 1).
