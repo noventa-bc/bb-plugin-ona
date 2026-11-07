@@ -30,6 +30,9 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * repeated (default 0). A failed SSH probe prints "refused". Listing `mountExits` turns the shared-home wait on.
  * `codexHome`: the Codex home is set, so connect runs its `mkdir`.
  * `tunnel`: the box's tunnel is already open, in this state.
+ * `hangs`: this call never finishes on its own. Once its signal aborts, a start rejects with a plain Error whose
+ * message is "The operation was aborted", as Node's `execFile` words a killed child, and whose cause is the signal's
+ * reason; a bootstrap rejects with the signal's reason itself, as bb's bootstrap rethrows it.
  */
 export type Setup = {
   found: OnaEnvironment;
@@ -47,12 +50,21 @@ export type Setup = {
   curlExits?: number[];
   codexHome?: boolean;
   tunnel?: "up" | "connecting";
+  hangs?: "start" | "bootstrap";
 };
 
 /** Each command as the gated executor runs it: after a `get` that says RUNNING. */
 export const gated = (...commands: string[]) => commands.flatMap((command) => ["get RUNNING", command]);
 /** What a default connect logs once Ona says ready. */
 export const connectCalls = gated("ssh", "curl", "preflight", "bootstrap");
+
+/** Settles only when `signal` aborts, rejecting as `execFile` does. */
+const untilAborted = (signal: AbortSignal) =>
+  new Promise<never>((_, reject) =>
+    signal.addEventListener("abort", () => reject(new Error("The operation was aborted", { cause: signal.reason })), {
+      once: true,
+    }),
+  );
 
 /** The next entry in turn, the last one repeated. */
 const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
@@ -78,6 +90,7 @@ export function register({
   curlExits = [],
   codexHome,
   tunnel,
+  hangs,
 }: Setup) {
   const calls: string[] = [];
   const tunnels: string[] = [];
@@ -124,7 +137,10 @@ export function register({
       calls.push(`get ${env?.status?.phase?.replace("ENVIRONMENT_PHASE_", "") ?? null}`);
       return env;
     },
-    start: async () => void calls.push("start"),
+    start: async (_envId: string, signal: AbortSignal) => {
+      calls.push("start");
+      if (hangs === "start") await untilAborted(signal);
+    },
     stop: async (envId: string) => void calls.push(`stop ${envId}`),
     delete: async (envId: string) => void calls.push(`delete ${envId}`),
   } as unknown as OnaCli;
@@ -168,8 +184,11 @@ export function register({
     pluginId: "ona",
     // As bb's bootstrap does: one command through the provider's executor.
     machineBootstrap: {
-      bootstrap: async ({ executor: channel, signal }) => {
+      bootstrap: async ({ executor: channel, signal, report }) => {
         await channel.exec({ command: ["sh", "-c", "bootstrap"], stdin: "", timeoutMs: 1, signal, onOutput() {} });
+        // bb 0.49.0 reports this step for an enrolled machine, then waits for the installer and the connection.
+        report.step("Starting enrolled machine");
+        if (hangs === "bootstrap") await untilAborted(signal).catch(() => signal.throwIfAborted());
         return { hostId: "host-1" };
       },
     },

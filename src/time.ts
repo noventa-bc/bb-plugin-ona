@@ -29,3 +29,40 @@ export async function pollUntil<T>(
   signal.throwIfAborted();
   return undefined;
 }
+
+/** A provider's progress report, as bb's SDK shapes it. */
+type Progress = { step(text: string): void; log(text: string): void };
+
+/**
+ * Runs `run` with `signal` that also aborts after `minutes`; `run` has to honour it. `run` reports through the report
+ * it is given, which remembers the last step. When the cap aborts it, the error is "Gave up <what> after <minutes>
+ * minutes; last step: <step>" (or ends at "minutes." with no step), with run's error as its cause. The caller's own
+ * abort keeps the error it caused. setTimeout, not AbortSignal.timeout: the tests' mocked clock drives only setTimeout.
+ */
+export async function capped<T>(
+  what: string,
+  minutes: number,
+  signal: AbortSignal,
+  report: Progress,
+  run: (signal: AbortSignal, report: Progress) => Promise<T>,
+): Promise<T> {
+  let last = "";
+  const tracked: Progress = {
+    step: (text) => {
+      last = text;
+      report.step(text);
+    },
+    log: (text) => report.log(text),
+  };
+  const gaveUp = `Gave up ${what} after ${minutes} minutes`;
+  const cap = new AbortController();
+  const timer = setTimeout(() => cap.abort(new Error(`${gaveUp}.`)), minutes * 60_000);
+  try {
+    return await run(AbortSignal.any([signal, cap.signal]), tracked);
+  } catch (error) {
+    if (!cap.signal.aborted || signal.aborted) throw error;
+    throw new Error(last ? `${gaveUp}; last step: ${last}` : `${gaveUp}.`, { cause: error });
+  } finally {
+    clearTimeout(timer);
+  }
+}

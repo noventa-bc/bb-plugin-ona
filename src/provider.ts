@@ -17,7 +17,7 @@ import {
 import { DAEMON_PROBE, short, STOPPED } from "./reconcile.ts";
 import type { PluginMachineProviderAvailability } from "./setup.ts";
 import { daemonEnv, pollSsh, shellQuote, sshCapture, sshCheck, sshExecutor, type TunnelManager } from "./ssh.ts";
-import { pollUntil } from "./time.ts";
+import { capped, pollUntil } from "./time.ts";
 
 type PluginMachineProviderProgress = MachineBootstrapRequest["report"];
 
@@ -25,6 +25,9 @@ export const PROVIDER_ID = ONA_MACHINE_PROVIDER_ID;
 
 /** Ona can be slow to wake a dev container; give each SSH check this long. */
 const CHECK_TIMEOUT_MS = 5 * 60_000;
+
+/** A wake and a daemon restart give up after this long (docs/sync.md rule 1): above ensureRunning's 25 minutes. */
+const CAP_MINUTES = 30;
 
 export const resourceSchema = z.object({
   envId: z.string(),
@@ -174,8 +177,8 @@ function notDeletingMessage(
 }
 
 export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
-  const reconnect = (resource: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal) =>
-    connect(resource, resource.key, report, signal);
+  const reconnect = (box: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal) =>
+    capped(`reconnecting ${box.envName}`, CAP_MINUTES, signal, report, (s, r) => connect(box, box.key, r, s));
 
   const { ona, tunnels, executorFor = sshExecutor } = deps;
 
@@ -328,19 +331,20 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
    * 0002), and so does `bb ona resume`; the caller checks bb's phase, since a suspended machine is bb's resume's to
    * start. Ona's other phases (deleting, deleted, failed) are refused: the box is not started. Its no-stop flag goes
    * first: bb shows the machine active here, so no suspend of bb's can still reach the provider's stop. Resolves true
-   * when it called `ona.start`, false when no start was called.
+   * when it called `ona.start`, false when no start was called. It gives up after CAP_MINUTES.
    */
-  async function wake(resource: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal) {
-    deps.releasing.delete(resource.envId);
-    const env = await ona.getEnvironmentIfExists(resource.envId, signal);
-    if (!env) throw new Error(`Ona environment "${resource.envId}" not found. Run \`ona environment list\`.`);
-    const startCalled = await ensureRunning(env, report, signal);
-    // Only a box this wake started closes its tunnel on a failed connect; a box that was running, or that Ona started
-    // during the waits, keeps the tunnel connect() left open.
-    if (startCalled) await connectOrClose(resource, report, signal, true);
-    else await connect(resource, resource.key, report, signal);
-    return startCalled;
-  }
+  const wake = (resource: OnaResource, progress: PluginMachineProviderProgress, outer: AbortSignal) =>
+    capped(`waking ${resource.envName}`, CAP_MINUTES, outer, progress, async (signal, report) => {
+      deps.releasing.delete(resource.envId);
+      const env = await ona.getEnvironmentIfExists(resource.envId, signal);
+      if (!env) throw new Error(`Ona environment "${resource.envId}" not found. Run \`ona environment list\`.`);
+      const startCalled = await ensureRunning(env, report, signal);
+      // Only a box this wake started closes its tunnel on a failed connect; a box that was running, or that Ona started
+      // during the waits, keeps the tunnel connect() left open.
+      if (startCalled) await connectOrClose(resource, report, signal, true);
+      else await connect(resource, resource.key, report, signal);
+      return startCalled;
+    });
 
   async function ensureLocalMachineRoot(
     executor: MachineExecutor,
