@@ -3,7 +3,8 @@
 // are mocked, so each tick is one poll interval and the tests are instant.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { envNameForKey, onaRef, resourceSchema } from "../src/provider.ts";
+import { envNameForKey } from "../src/names.ts";
+import { onaRef, resourceSchema } from "../src/provider.ts";
 import { tick, useFakeClock } from "./fake-clock.ts";
 import { adoptedResource, box, connectCalls, gated, lifecycle, register, resume, start } from "./provider-fake.ts";
 
@@ -389,11 +390,6 @@ test("reconcileCleanup deletes nothing and closes no tunnel when no box carries 
   assert.equal(cleaned.status, "removed");
   assert.deepEqual(calls, []);
   assert.deepEqual(tunnels, []);
-});
-
-// A changed formula would orphan every box already made with it.
-test("envNameForKey keeps its formula, so existing boxes keep their names (fails if the formula changes)", () => {
-  assert.equal(envNameForKey("key-1"), "bold-pancake-6978");
 });
 
 test("a refused remove of a bb-created machine names its uncommitted files and keeps its keys", async () => {

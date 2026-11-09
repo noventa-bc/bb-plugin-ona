@@ -239,17 +239,19 @@ test("a suspend settle waits 6 minutes (fails if a suspend uses the resume's dea
   }
 });
 
-test("a resume settle waits 30 minutes, not the suspend's 6 (fails if a resume uses the suspend's deadline)", async () => {
+// Guard, no `// Bug:` line: a settle that ended with the provider's 30-minute cap on its resume would read "still
+// resuming" instead of bb's failure.
+test("a resume settle waits 32 minutes, past the resume's 30-minute cap (fails at the suspend's 6 or the cap's 30)", async () => {
   enableFakeClock();
   try {
     let outcome = "pending";
     const settling = settledLifecycle(async () => ({ lifecycle: { phase: "resuming", message: null } }), {
       waiting: "resuming",
     }).catch((error: unknown) => (outcome = (error as Error).message));
-    await tick(7 * MIN);
+    await tick(31 * MIN);
     await settle();
     assert.equal(outcome, "pending");
-    await tick(23 * MIN);
+    await tick(MIN);
     await settling;
     assert.equal(outcome, "bb is still resuming the machine");
   } finally {

@@ -7,7 +7,8 @@ import assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { after, before, test } from "node:test";
-import { envNameForKey, type OnaResource } from "../src/provider.ts";
+import { envNameForKey } from "../src/names.ts";
+import type { OnaResource } from "../src/provider.ts";
 import type { BbHost } from "../src/sync.ts";
 import { ctx as baseCtx, local, startHost, type E2eHost } from "./e2e-host.ts";
 
