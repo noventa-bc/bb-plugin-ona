@@ -93,14 +93,8 @@ those and the "skipped or not checked" lines ponytail ends with.
    branch name `agent/<slug>`, the files involved (quote the line's text, not
    its number: numbers drift), the tests to
    write first, the coupled changes from `AGENTS.md`, and what to report back.
-5. **Build** in a worktree (slow commands in the background). When a worktree's
-   `package.json` and `package-lock.json` are byte-identical to the main
-   checkout's, the orchestrator links the main checkout's `node_modules` into
-   it: nothing is downloaded, and `npm run prepare` is not needed, since
-   `core.hooksPath` is shared with the main checkout. Otherwise the builder
-   removes any link (the link itself, not what it points to) and runs
-   `npm ci --ignore-scripts` in its worktree, so the install never writes into
-   the main checkout. The builder writes
+5. **Build** in a worktree (slow commands in the background). The builder runs
+   `npm ci --ignore-scripts`, then `npm run prepare`, writes
    a failing test first where possible (each test names, in its title or the
    handoff, the bug it fails on, or the brief says "guard, no `// Bug:` line"
    when `main` has no bug; a test that still passes with the rule
@@ -247,7 +241,7 @@ This file is the memory of the flow. Keep it current:
 
 ## Owner instructions on record
 
-Rules the owner gave that no section above states. Checked 2026-11-06.
+Rules the owner gave that no section above states. Checked 2026-11-11.
 
 - Several worktrees are open at once and the shell's working directory drifts
   between them. Address every git command with `git -C <path>` and every file

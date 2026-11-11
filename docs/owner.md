@@ -80,9 +80,14 @@ Known roadmap items, not to re-report: <labels only>.
 Check list: <what to check in this diff, e.g. the coupled changes from AGENTS.md
   it touches, the docs it changes against the code, and each new test against
   the rule its title names>.
-Tests: `perl -e 'alarm 240; exec @ARGV' -- node --test --experimental-strip-types --test-timeout=10000 <files>`
-  The owner's Mac has no `timeout` command (checked 2026-11-11). A test the
-  sandbox skips prints its reason, and the run ends with `skipped N`.
+Tests: `perl -e 'setpgrp(0,0); $SIG{ALRM} = sub { kill "TERM", 0 }; alarm 240; system @ARGV; exit($? & 127 || $? >> 8)' -- node --test --experimental-strip-types --test-timeout=60000 <files>`
+  The owner's Mac has no `timeout` command (checked 2026-11-11). The process
+  group lets the alarm stop the test processes too; a plain `alarm` kills only
+  `node --test`, and the test processes keep running. A mutant that may hang
+  uses `--test-timeout=10000` instead, so it fails fast; that can cancel an e2e
+  test that sleeps by design (checked 2026-11-11: one), so its cancellation in
+  that run is expected. A test the sandbox skips prints its reason, and the
+  summary shows `skipped N`.
 Report format: findings, each with its concrete failing case, file:line and
   whether it blocks (the Converge rules in FACTORY.md step 6 decide that), then
   up to 5 nits (AGENTS.md).
