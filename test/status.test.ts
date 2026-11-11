@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { BoxFacts } from "../src/ona.ts";
+import { GIVE_UP_AFTER } from "../src/reconcile.ts";
 import { formatStatus, type StatusRow } from "../src/status.ts";
+import { HOUR, idle, NOW, world } from "./sync-fakes.ts";
 
-const row = (overrides: Partial<StatusRow> = {}): StatusRow => ({
+const statusRow = (overrides: Partial<StatusRow> = {}): StatusRow => ({
   machine: "ona:brave-otter",
   hostId: "host_1",
   bb: "connected",
@@ -18,7 +20,6 @@ const row = (overrides: Partial<StatusRow> = {}): StatusRow => ({
   facts: null,
   ...overrides,
 });
-const NOW = 1_000_000_000;
 const NO_FACTS: BoxFacts = { startedAt: null, idleTimeoutMs: null, activity: null, branch: null, unpushed: 0 };
 const HEALTHY = { lastError: null, listedAt: NOW, autoRepair: true };
 
@@ -50,7 +51,7 @@ test("status header names the first non-blank line of the CLI error, or no listi
 test("status text: one block per machine with what the plugin saw, did and is waiting on", () => {
   const text = formatStatus(
     [
-      row({
+      statusRow({
         now: { reason: "connected", since: NOW - 120_000 },
         last: {
           action: "release-idle",
@@ -77,22 +78,25 @@ test("status text: one block per machine with what the plugin saw, did and is wa
 });
 
 test("status explains an unknown box only when the Ona listing is empty, not when the CLI failed", () => {
-  const empty = formatStatus([row({ ona: "unknown" })], HEALTHY, NOW);
+  const empty = formatStatus([statusRow({ ona: "unknown" })], HEALTHY, NOW);
   assert.match(empty, /Ona lists no environments; idle boxes are not released until it does/);
-  const failed = formatStatus([row({ ona: "unknown" })], { ...HEALTHY, lastError: "not logged in" }, NOW);
+  const failed = formatStatus([statusRow({ ona: "unknown" })], { ...HEALTHY, lastError: "not logged in" }, NOW);
   assert.doesNotMatch(failed, /lists no environments/);
 });
 
 test("status says when bb's workspace or thread list can't be read, and says nothing for zero", () => {
   assert.match(
-    formatStatus([row({ needsRecovery: null })], HEALTHY, NOW),
+    formatStatus([statusRow({ needsRecovery: null })], HEALTHY, NOW),
     /bb's workspace or thread list couldn't be read; an active box stays awake until it can/,
   );
-  assert.doesNotMatch(formatStatus([row({ needsRecovery: 0 })], HEALTHY, NOW), /couldn't be read|may need recovery/);
+  assert.doesNotMatch(
+    formatStatus([statusRow({ needsRecovery: 0 })], HEALTHY, NOW),
+    /couldn't be read|may need recovery/,
+  );
 });
 
 test("status prints both lines when bb's thread list fails while workspaces need recovery", () => {
-  const text = formatStatus([row({ needsRecovery: 2, stuckThreads: null })], HEALTHY, NOW);
+  const text = formatStatus([statusRow({ needsRecovery: 2, stuckThreads: null })], HEALTHY, NOW);
   assert.match(text, /couldn't be read; an active box stays awake until it can/);
   assert.match(text, /2 workspace\(s\) may need recovery/);
 });
@@ -100,7 +104,7 @@ test("status prints both lines when bb's thread list fails while workspaces need
 // Bug: a box held awake by a thread bb left "active" gave the owner no reason in status.
 test("status text names a busy thread with no update for over 6h", () => {
   const text = formatStatus(
-    [row({ stuckThreads: [{ id: "thr_1", status: "active", updatedAt: NOW - 9 * 3_600_000 }] })],
+    [statusRow({ stuckThreads: [{ id: "thr_1", status: "active", updatedAt: NOW - 9 * 3_600_000 }] })],
     { lastError: null, listedAt: NOW, autoRepair: true },
     NOW,
   );
@@ -120,14 +124,14 @@ test("status text: a box line gives the start, idle timeout, last activity, bran
     unpushed: 2,
   };
   assert.equal(
-    formatStatus([row({ facts })], HEALTHY, NOW).split("\n")[2],
+    formatStatus([statusRow({ facts })], HEALTHY, NOW).split("\n")[2],
     "  box: last started 1h ago, idle timeout 3h, last activity SSH connections 12m ago, branch main (2 unpushed)",
   );
 });
 
 // A box line names only facts Ona gave: none given means no line at all.
 test("status text: a box line leaves out each fact Ona doesn't give, and no line when it gives none", () => {
-  const status = (facts: BoxFacts | null) => formatStatus([row({ facts })], HEALTHY, NOW);
+  const status = (facts: BoxFacts | null) => formatStatus([statusRow({ facts })], HEALTHY, NOW);
   assert.doesNotMatch(status(null), /box:/, "no listing for the box");
   assert.doesNotMatch(status(NO_FACTS), /box:/, "Ona gave none of the facts");
   assert.equal(
@@ -146,7 +150,7 @@ test("status text: an idle timeout reads in whole hours, minutes or seconds, and
     [90_000, "90s"],
     [0, "off"],
   ] as const) {
-    const text = formatStatus([row({ facts: { ...NO_FACTS, idleTimeoutMs } })], HEALTHY, NOW);
+    const text = formatStatus([statusRow({ facts: { ...NO_FACTS, idleTimeoutMs } })], HEALTHY, NOW);
     assert.equal(text.split("\n")[2], `  box: idle timeout ${span}`);
   }
 });
@@ -154,7 +158,7 @@ test("status text: an idle timeout reads in whole hours, minutes or seconds, and
 // Ona's clock can run ahead of bb's, so a time after `now` reads as 0s ago, not a negative age.
 test("status text: a time ahead of bb's clock reads as 0s ago", () => {
   const facts = { ...NO_FACTS, startedAt: NOW + 3_000 };
-  assert.equal(formatStatus([row({ facts })], HEALTHY, NOW).split("\n")[2], "  box: last started 0s ago");
+  assert.equal(formatStatus([statusRow({ facts })], HEALTHY, NOW).split("\n")[2], "  box: last started 0s ago");
 });
 
 // Minutes are rounded before the unit is picked, so 3570 s is 1h, not 60m.
@@ -169,7 +173,7 @@ test("status text: an age just under an hour reads in minutes up to 59m, then 1h
 test("status text: the box line sits under the row, before now and last action", () => {
   const text = formatStatus(
     [
-      row({
+      statusRow({
         facts: { ...NO_FACTS, branch: "main" },
         now: { reason: "connected", since: NOW - 120_000 },
         last: { action: "release-idle", reason: "idle for 1h", at: NOW - 3_600_000 },
@@ -179,4 +183,23 @@ test("status text: the box line sits under the row, before now and last action",
     NOW,
   );
   assert.match(text, /\n  box: branch main\n  now: connected \(since 2m ago\)\n  last action: /);
+});
+
+// Bug: the retry line hid only a suspended machine, but decide() acts only on an active one, so a machine that was
+// creating, removing, resuming or suspending showed a retry it never got.
+test("the retry and give-up lines show only for an active machine (fails if either shows for a machine that is removing, resuming, suspending or suspended)", async () => {
+  const retryIn = async (phase: string, failures: number) => {
+    const { sync, guard } = world([idle("h1", { phase })]);
+    const record = { action: "heal-daemon", reason: "daemon down", at: NOW, failures, quietUntil: NOW + HOUR };
+    guard.records.set("h1", record);
+    const [row] = await sync.statusRows();
+    return row!.retry;
+  };
+  for (const failures of [1, GIVE_UP_AFTER]) {
+    for (const phase of ["removing", "resuming", "suspending", "suspended"]) {
+      assert.equal(await retryIn(phase, failures), null, `bb shows the machine ${phase}; decide() won't act`);
+    }
+  }
+  assert.match((await retryIn("active", 1)) ?? "", /^retrying after /);
+  assert.match((await retryIn("active", GIVE_UP_AFTER)) ?? "", /^gave up after /);
 });

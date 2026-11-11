@@ -3,7 +3,6 @@
 // reconnect, rename, update, sync by the Ona name, the settings section's devbox_command and the thread
 // event. One story in file order: run the whole file.
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { after, before, test } from "node:test";
 import { makeThreadResponse } from "@get-bb/plugin-sdk/testing";
@@ -11,7 +10,7 @@ import type { OnaResource } from "../src/provider.ts";
 import { sshHost } from "../src/ona.ts";
 import { connectedAtKey, type BbHost, type ThreadRecord } from "../src/sync.ts";
 import { sleep } from "../src/time.ts";
-import { ctx, local, startHost, type E2eHost } from "./e2e-host.ts";
+import { alive, ctx, local, startHost, type E2eHost } from "./e2e-host.ts";
 
 const HOUR = 3_600_000;
 const STOPPED = "ENVIRONMENT_PHASE_STOPPED";
@@ -37,16 +36,6 @@ const extraBoxes: Record<string, OnaResource> = {};
 const suspends = () => host.harness.inspection.sdk.callsTo("hosts.experimental_suspend");
 /** `environment list` calls in the fake Ona's log so far; the tunnel loop lists too, so compare with `>`. */
 const listings = () => readFileSync(log, "utf8").match(/^environment list/gm)?.length ?? 0;
-/** Whether this pid still runs a fake tunnel (test/fake-ssh.sh execs `sleep 100000`): a process that reuses the pid counts only if it runs that too. */
-const alive = (pid: number) => {
-  try {
-    return execFileSync("ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8" }).trim() === "sleep 100000";
-  } catch (error) {
-    // ps exits 1 for a pid that is gone; any other failure must not read a live tunnel as dead.
-    if ((error as { status?: number }).status === 1) return false;
-    throw error;
-  }
-};
 
 function cli(currentVersion: string, latestVersion: string) {
   const needsUpdate = currentVersion !== latestVersion;
