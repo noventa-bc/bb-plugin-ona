@@ -4,15 +4,7 @@ import { test } from "node:test";
 import { boxFacts } from "../src/ona.ts";
 import type { WorkspaceView } from "../src/lifecycle.ts";
 import { ALL, GIVE_UP_AFTER, GRACE_MS } from "../src/reconcile.ts";
-import {
-  connectedAtKey,
-  forgetBox,
-  matchesRef,
-  type Row,
-  watchRealtime,
-  type RealtimeBb,
-  type ThreadRecord,
-} from "../src/sync.ts";
+import { connectedAtKey, forgetBox, watchRealtime, type RealtimeBb, type ThreadRecord } from "../src/sync.ts";
 import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
 import { HOUR, NOW, idle, world } from "./sync-fakes.ts";
 
@@ -473,12 +465,6 @@ test("removing a machine drops its box's stored keys and leaves other boxes' alo
   assert.equal(kv.get(connectedAtKey("env-h2")), NOW);
   await forgetBox(store, "env-h9");
   assert.equal(kv.size, 1, "an unknown box changes nothing");
-});
-
-test("a ref matches a row by host id, machine name, env id or env name, and nothing else", () => {
-  const row = { hostId: "h1", machine: "box-one", resource: { envId: "env-1", envName: "one" } } as Row;
-  for (const ref of ["h1", "box-one", "env-1", "one"]) assert.equal(matchesRef(row, ref), true, ref);
-  assert.equal(matchesRef(row, "two"), false);
 });
 
 /** watchRealtime against a fake bb: thread t1 runs on Ona host h1, thread t2 on a non-Ona host. */

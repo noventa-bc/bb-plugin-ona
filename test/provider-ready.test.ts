@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
-import type { OnaEnvironment } from "../src/ona.ts";
+import { readiness, type OnaEnvironment } from "../src/ona.ts";
 import { settle, tick, useFakeClock } from "./fake-clock.ts";
 import {
   adoptedResource,
@@ -389,4 +389,18 @@ test("a reconnect the cap ends in bb's installer names that step, after earlier 
   await tick(5_000, 360);
   await assert.rejects(run, { message: capped("reconnecting box", installing) });
   assert.deepEqual(steps.slice(0, 1), ["Waiting for Ona: dev container starting"]);
+});
+
+// A failure message there may be left from an earlier start.
+test("readiness: a box still starting waits despite a failure message, which stays out of the reason", () => {
+  const env = (status: OnaEnvironment["status"]): OnaEnvironment => ({ id: "env-0001", metadata: {}, status });
+  const failureMessage = ["old start error"];
+  assert.deepEqual(readiness(env({ phase: "ENVIRONMENT_PHASE_STARTING", failureMessage })), {
+    state: "waiting",
+    reason: "starting",
+  });
+  assert.deepEqual(
+    readiness(env({ phase: "ENVIRONMENT_PHASE_RUNNING", devcontainer: { phase: "PHASE_CREATING" }, failureMessage })),
+    { state: "waiting", reason: "dev container starting" },
+  );
 });
