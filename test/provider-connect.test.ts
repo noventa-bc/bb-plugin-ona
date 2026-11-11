@@ -1,0 +1,100 @@
+// The connect path, driven through `create` (adopt mode) and `resume` in the fake host of ./provider-fake.ts: the waits
+// for a box Ona is starting or stopping, the `~/.bb-machines` step, and the tunnel a failed connect closes. setTimeout
+// and Date are mocked, so each tick is one poll interval and the tests are instant.
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { tick, useFakeClock } from "./fake-clock.ts";
+import { box, connectCalls, gated, resume, start } from "./provider-fake.ts";
+
+useFakeClock();
+
+test("~/.bb-machines retries on exit 6 (fails if a real folder on a not-yet-mounted home is final)", async () => {
+  const { created, calls } = start({ found: box("RUNNING"), rootExits: [6, 6, 0] });
+  await tick(10_000, 2);
+  assert.equal((await created).status, "created");
+  assert.deepEqual(calls, ["get RUNNING", ...gated("ssh", "root", "root", "root", "curl", "preflight", "bootstrap")]);
+});
+
+test("~/.bb-machines throws at once on any other failure (fails if exit 5 is retried)", async () => {
+  const { created, calls } = start({ found: box("RUNNING"), rootExits: [5], rootOutput: "points elsewhere" });
+  await assert.rejects(created, /Could not set up ~\/\.bb-machines: points elsewhere/);
+  assert.deepEqual(calls, ["get RUNNING", ...gated("ssh", "root")]);
+});
+
+test("~/.bb-machines exit 6 past the deadline throws with the script output (fails if it reports success)", async () => {
+  const { created, calls } = start({ found: box("RUNNING"), rootExits: [6], rootOutput: "a real folder\n" });
+  await tick(10_000, 12);
+  await assert.rejects(created, /Could not set up ~\/\.bb-machines: a real folder$/);
+  assert.equal(calls.filter((call) => call === "root").length, 12, "one try every 10s for 2 minutes");
+});
+
+test("a STARTING box that settles to STOPPING waits for the stop, then starts (fails if it starts a stopping box)", async () => {
+  const { created, calls, tunnels } = start({
+    found: box("STARTING"),
+    phases: ["STARTING", "STOPPING", "STOPPING", "STOPPED", "RUNNING"],
+  });
+  await tick(5_000, 3);
+  assert.equal((await created).status, "created");
+  assert.deepEqual(calls, [
+    "get STARTING",
+    "get STOPPING",
+    "get STOPPING",
+    "get STOPPED",
+    "start",
+    "get RUNNING",
+    ...connectCalls,
+  ]);
+  assert.deepEqual(tunnels, ["ensure env-1"]);
+});
+
+test("a box that disappears while starting throws (fails if a missing box counts as settled)", async () => {
+  const { created, calls } = start({ found: box("STARTING"), phases: ["STARTING", null] });
+  // Past the 15-minute start wait, so a loop that keeps polling fails rather than hangs.
+  await tick(5_000, 180);
+  await assert.rejects(created, /disappeared while starting/);
+  assert.deepEqual(calls, ["get STARTING", "get null"]);
+});
+
+test(
+  "an abort during a wait rejects without another probe (fails if the wait sleeps out its interval)",
+  { timeout: 1_000 },
+  async () => {
+    const { created, calls, controller } = start({ found: box("STARTING"), phases: ["STARTING"] });
+    await tick(1_000);
+    controller.abort(new Error("cancelled"));
+    await assert.rejects(created, /cancelled/);
+    assert.deepEqual(calls, ["get STARTING"]);
+  },
+);
+
+// Bug: connect() opens the tunnel before the tunnel wait, preflight and bootstrap, so a resume or
+// create that failed after it left the tunnel open, keeping awake a box bb doesn't show active (decision 0003).
+test("a resume that fails at preflight closes the tunnel it opened and rethrows (fails if the tunnel stays open)", async () => {
+  const { resumed, tunnels } = resume({ found: box("RUNNING"), phases: ["RUNNING"], preflightExit: 3 });
+  await assert.rejects(resumed, /^Error: Devbox is missing bb prerequisites: missing: node$/);
+  assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"]);
+});
+
+test("a create that fails at preflight closes the tunnel it opened and rethrows (fails if the tunnel stays open)", async () => {
+  const { created, tunnels } = start({ found: box("RUNNING"), preflightExit: 3 });
+  await assert.rejects(created, /^Error: Devbox is missing bb prerequisites: missing: node$/);
+  assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"]);
+});
+
+// Bug: a failed adopt left an already-open tunnel up; bb's cleanup remove() closes it later anyway, so nothing
+// keeps it for another machine on the box.
+test("a failed adopt on a box with a tunnel up closes it", async () => {
+  const { created, tunnels } = start({ found: box("RUNNING"), preflightExit: 3, tunnel: "up" });
+  await assert.rejects(created, /^Error: Devbox is missing bb prerequisites: missing: node$/);
+  assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"]);
+});
+
+// Bug: the close keyed on "this call opened the tunnel", so a resume re-run after a stuck one found it
+// open and left it open on failure, keeping awake a box bb doesn't show active (decision 0003).
+test("a resume that fails with the box's tunnel already open, connecting or up, closes it", async () => {
+  for (const tunnel of ["connecting", "up"] as const) {
+    const { resumed, tunnels } = resume({ found: box("RUNNING"), phases: ["RUNNING"], preflightExit: 3, tunnel });
+    await assert.rejects(resumed, /^Error: Devbox is missing bb prerequisites: missing: node$/);
+    assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"], tunnel);
+  }
+});
