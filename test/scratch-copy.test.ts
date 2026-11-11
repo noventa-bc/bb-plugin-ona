@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, lstatSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  realpathSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
 import { git, scrubbed, tempDir } from "./sandbox.ts";
 
@@ -39,6 +48,9 @@ function scratchCopy(args: string[], runEnv: NodeJS.ProcessEnv = env) {
 /** A folder path under a new temp folder, not yet made. */
 const newDir = () => join(tempDir("scratch-copy-out-"), "copy");
 
+/** A new, empty temp folder to pass as TMPDIR, so a temp file the script leaves behind is seen. */
+const freshTmp = () => tempDir("scratch-copy-tmp-");
+
 /** Whether anything is at `path`, a dangling link included. */
 function hasEntry(path: string) {
   try {
@@ -52,12 +64,14 @@ function hasEntry(path: string) {
 test("the copy holds the commit with no .git, and its node_modules links to the main checkout's", () => {
   const { main, worktree } = checkouts();
   const dir = newDir();
-  const r = scratchCopy([worktree, head(worktree), dir]);
+  const tmp = freshTmp();
+  const r = scratchCopy([worktree, head(worktree), dir], { ...env, TMPDIR: tmp });
   assert.equal(r.status, 0, r.messages);
   assert.equal(realpathSync(r.printed), realpathSync(dir));
   assert.equal(existsSync(join(dir, ".git")), false);
   assert.equal(lstatSync(join(dir, "node_modules")).isSymbolicLink(), true);
   assert.equal(realpathSync(join(dir, "node_modules")), realpathSync(join(main, "node_modules")));
+  assert.deepEqual(readdirSync(tmp), [], "a temp file was left in TMPDIR");
 });
 
 test("node_modules is not linked when the commit's package-lock.json differs from the main checkout's, and says why", () => {
@@ -93,13 +107,17 @@ test("node_modules is not linked when the main checkout has none, and says so", 
   assert.match(r.messages, /did not link node_modules: .* has none/);
 });
 
-test("an existing folder is refused before anything is extracted into it", () => {
+test("an existing folder is refused before anything is extracted into it, named directly or through `..`", () => {
   const { worktree } = checkouts();
   const dir = tempDir("scratch-copy-existing-");
   const r = scratchCopy([worktree, head(worktree), dir]);
   assert.equal(r.status, 1);
   assert.match(r.messages, /already exists; name a new folder/);
   assert.equal(existsSync(join(dir, "package.json")), false);
+  // A template, not join(): `${dir}/..` names the same folder, and the check must test the path it resolves to.
+  const through = scratchCopy([worktree, head(worktree), `${dir}/..`]);
+  assert.equal(through.status, 1, through.messages);
+  assert.match(through.messages, /already exists; name a new folder/);
 });
 
 test("a sha that is not a commit is refused, and no folder is made", () => {
@@ -132,6 +150,39 @@ test("a folder reached through a symlink to the worktree is refused as inside it
   assert.equal(hasEntry(join(worktree, "scratch")), false);
 });
 
+test("a `..` after a missing folder is refused, and nothing is made in the worktree or the main checkout", () => {
+  const { main, worktree } = checkouts();
+  const sha = head(worktree);
+  for (const checkout of [worktree, main]) {
+    // A template, not join(): join would fold the `..` away before the script sees it.
+    const dir = `${dirname(checkout)}/nope/../${basename(checkout)}/x`;
+    const r = scratchCopy([worktree, sha, dir]);
+    assert.equal(r.status, 1, r.messages);
+    assert.match(r.messages, /does not exist; make it first/);
+    assert.equal(hasEntry(join(checkout, "x")), false);
+  }
+});
+
+test("a symlink followed by `..` is refused, and nothing is written into the checkout the link points into", () => {
+  const { main, worktree } = checkouts();
+  mkdirSync(join(main, "deep"));
+  const linkParent = tempDir("scratch-copy-link-");
+  symlinkSync(join(main, "deep"), join(linkParent, "link"));
+  const r = scratchCopy([worktree, head(worktree), `${linkParent}/link/../x2`]);
+  assert.equal(r.status, 1, r.messages);
+  assert.match(r.messages, /is inside .*a checkout/);
+  assert.equal(hasEntry(join(main, "x2")), false);
+});
+
+test("a missing parent folder exits 1, and nothing is made", () => {
+  const { worktree } = checkouts();
+  const root = tempDir("scratch-copy-missing-");
+  const r = scratchCopy([worktree, head(worktree), join(root, "missing", "copy")]);
+  assert.equal(r.status, 1, r.messages);
+  assert.match(r.messages, /does not exist; make it first/);
+  assert.equal(hasEntry(join(root, "missing")), false);
+});
+
 test("a failing git archive exits 1 and makes no folder, instead of an empty copy", () => {
   const { worktree } = checkouts();
   const sha = head(worktree);
@@ -143,10 +194,36 @@ test("a failing git archive exits 1 and makes no folder, instead of an empty cop
   );
   chmodSync(join(shims, "git"), 0o755);
   const dir = newDir();
-  const r = scratchCopy([worktree, sha, dir], { ...env, PATH: `${shims}:${env.PATH ?? ""}` });
+  const tmp = freshTmp();
+  const r = scratchCopy([worktree, sha, dir], { ...env, PATH: `${shims}:${env.PATH ?? ""}`, TMPDIR: tmp });
   assert.equal(r.status, 1, r.messages);
   assert.match(r.messages, /git archive failed/);
   assert.equal(hasEntry(dir), false);
+  assert.deepEqual(readdirSync(tmp), [], "a temp file was left in TMPDIR");
+});
+
+test("a parent folder removed during the copy is not recreated: the copy exits 1 and makes no folder", () => {
+  const { worktree } = checkouts();
+  const sha = head(worktree);
+  const parent = join(tempDir("scratch-copy-gone-"), "parent");
+  mkdirSync(parent);
+  const shims = tempDir("scratch-copy-shim-");
+  const realGit = execFileSync("sh", ["-c", "command -v git"]).toString().trim();
+  // The shim removes the parent while git archive runs, after the script's own checks have passed.
+  writeFileSync(
+    join(shims, "git"),
+    `#!/bin/sh\ncase " $* " in *" archive "*) rm -rf "${parent}" ;; esac\nexec "${realGit}" "$@"\n`,
+  );
+  chmodSync(join(shims, "git"), 0o755);
+  const tmp = freshTmp();
+  const r = scratchCopy([worktree, sha, join(parent, "copy")], {
+    ...env,
+    PATH: `${shims}:${env.PATH ?? ""}`,
+    TMPDIR: tmp,
+  });
+  assert.equal(r.status, 1, r.messages);
+  assert.equal(hasEntry(parent), false);
+  assert.deepEqual(readdirSync(tmp), [], "a temp file was left in TMPDIR");
 });
 
 test("a tracked node_modules symlink in the commit is not followed into another folder", () => {

@@ -17,6 +17,12 @@ const bundle = [
   "const createMachineBootstrapApi = () => ({});",
   ...filler,
   "const listPublicHosts = (db) => db;",
+  // Not definitions: a property, a comparison and an arrow's parameter.
+  "obj.listPublicHosts = 1;",
+  "if (listPublicHosts == null) {}",
+  "const next = listPublicHosts => 1;",
+  // A definition with no `=`, which only the `const` form finds.
+  "declare const typedOnly: number;",
   "",
 ].join("\n");
 
@@ -61,10 +67,16 @@ test("each definition gets its own header, and 60 lines follow each one by defau
   assert.equal(headers[1]! - headers[0]! - 1, 61, "the definition and the 60 lines after it");
 });
 
-test("a `const <name> =` definition is found", () => {
+test("a `const <name> = value` line is found", () => {
   const r = bbSource(["createMachineBootstrapApi", "0"]);
   assert.equal(r.status, 0, r.output);
   assert.match(r.output, /^const createMachineBootstrapApi = \(\) => \(\{\}\);$/m);
+});
+
+test("a `declare const <name>` line with no `=` is found", () => {
+  const r = bbSource(["typedOnly", "0"]);
+  assert.equal(r.status, 0, r.output);
+  assert.match(r.output, /^declare const typedOnly: number;$/m);
 });
 
 test("a name with no definition fails and says so", () => {

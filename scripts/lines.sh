@@ -1,6 +1,6 @@
 #!/bin/sh
 # Lists each file ESLint lints whose count of lines is over the max-lines cap in eslint.config.js less [margin]
-# (default 10; a margin above the cap lists every file), highest count first, as "<count> <file>". Blank and
+# (default 10; a margin above the cap lists every file with a counted line), highest count first, as "<count> <file>". Blank and
 # comment lines are not counted, as the rule does. The cap is applied to every file ESLint lints, so plain .js
 # files the repo's own config leaves out (eslint.config.js) are listed too. Read-only.
 #   scripts/lines.sh [margin]
