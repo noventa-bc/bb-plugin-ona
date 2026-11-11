@@ -55,7 +55,7 @@ async function fixture2(run: (argv: string[]) => Promise<string>, envId: string)
 // --- remote-script-interpolation.ts ---
 // Fixtures for semgrep --test. Not compiled, linted or formatted.
 // Every sshCapture and sshCheck call here is also a hit for ssh-outside-runners (this file
-// is outside src/ssh.ts and src/provider.ts); an annotation covers one line.
+// is outside src/ssh.ts, src/provider.ts and src/provider-connect.ts); an annotation covers one line.
 async function fixture3(executor: any, signal: AbortSignal, dir: string, url: string) {
   // ruleid: remote-script-interpolation, ssh-outside-runners
   await sshCapture(executor, `mkdir -p ${dir}`, signal);

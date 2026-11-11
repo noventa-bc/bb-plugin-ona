@@ -136,7 +136,7 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    the last progress step the call reported. A wake that started the box, and
    bb's resume, close the tunnel when they fail; a reconnect leaves it open. The waits inside
    keep their own deadlines: the stop, start and SSH waits in
-   `src/provider.ts`, the hold for Ona before each SSH command
+   `src/provider-connect.ts`, the hold for Ona before each SSH command
    (`waitForReady` in `src/ona.ts`, up to 15 minutes), each `ona` call in
    `run` in `src/ona.ts`, each SSH command in `src/ssh.ts`, and bb's
    bootstrap (`docs/ona-notes.md`, bb SDK section). A resume bb is asked for a
@@ -269,7 +269,7 @@ CI checks parts of these rules with Semgrep (`.semgrep/rules.yml`):
 - `ona-lifecycle-outside-onacli`: `ona environment start`, `stop`, `delete` and
   `ssh` run only through `OnaCli` in `src/ona.ts` (safety rules 1 and 2).
 - `ssh-outside-runners`: `sshExecutor` and `sshCapture` are called only in
-  `src/ssh.ts` and `src/provider.ts`; code elsewhere goes through the
+  `src/ssh.ts`, `src/provider.ts` and `src/provider-connect.ts`; code elsewhere goes through the
   provider's methods, each of which names its guard (safety rule 1).
 - `remote-script-interpolation`: a script sent over SSH interpolates values
   only through `shellQuote`.
