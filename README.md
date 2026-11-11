@@ -400,7 +400,7 @@ The plugin writes `metric` lines to its log, which `bb plugin logs ona` prints. 
 To print the product numbers from the log:
 
 ```sh
-bb plugin logs ona -n 10000 > /tmp/ona.log && scripts/product-numbers.sh < /tmp/ona.log
+f=$(mktemp) && bb plugin logs ona -n 10000 > "$f" && scripts/product-numbers.sh < "$f"
 ```
 
 The script prints one `name value` line per number, in a fixed order. Every name is printed: `0` when nothing matched, and a percentile is `-` when there is no value. After them come one `hand_runs_week_<year>-W<week>` line per ISO week that has hand runs, oldest first. The weeks are UTC.
