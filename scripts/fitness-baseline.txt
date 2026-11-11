@@ -1,0 +1,11 @@
+# A rise needs the owner's yes and is made in the same PR, by editing this file.
+near_cap_src 1
+near_cap_test 7
+server_lines 502
+runtime_deps 1
+settings 11
+commands 16
+intervals 2
+shortcuts 8
+layering 0
+cycles 0
