@@ -189,7 +189,7 @@ function fakeRun(
       },
       log: { info: (message: string) => void logs.push(message) },
     },
-    tunnels: { status: () => "up" },
+    tunnels: { status: () => "up", mark: () => 0 },
     statusRows: async () => [],
     onaHealth: () => ({ lastError: null, listedAt: null, autoRepair: false }),
     resolveEnvId: (ref: string) => Promise.resolve(ref === "box" ? "env_1" : ref),

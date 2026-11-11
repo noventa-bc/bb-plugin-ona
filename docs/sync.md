@@ -98,8 +98,10 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    exits), plus a check when Ona shows the box stopped. A refused tunnel tries again every 10s for a minute, then
    every minute (every minute while Ona can't be asked). A tunnel closes when bb suspends or removes the machine, when
    a create or resume fails, when a wake that started its box fails (a wake of a running box, or of a box Ona started
-   during the wake's waits, keeps its tunnel), or the plugin stops; a check that sees the box stopped asks bb to
-   suspend it once bb no longer shows the machine connected.
+   during the wake's waits, keeps its tunnel), or the plugin stops; a blocked create, resume or wake (below) closes
+   nothing. A check that sees the box stopped asks bb to suspend it once bb no longer shows the machine connected. A
+   connect that began before bb suspended or removed the machine and reaches its tunnel open after that fails and
+   opens none: its open is blocked. A pass's reopen is blocked the same way and counts as a failed action.
 
    **The connect wait.** Every connect (create, resume, the wake, `bb ona reconnect`, a daemon restart) first asks
    `ona environment get` every 5s, for up to 15 minutes, until it says the box is running and so is its dev
@@ -145,7 +147,8 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    inner wait (the tunnel wait or bb's installer wait) before that wait's own
    deadline; the 30-minute cut holds while each step honours that signal. Its error names
    the last progress step the call reported. A wake that started the box, and
-   bb's resume, close the tunnel when they fail; a reconnect leaves it open. The waits inside
+   bb's resume, close the tunnel when they fail, unless their open was blocked
+   (rule 1, Tunnels); a reconnect leaves it open. The waits inside
    keep their own deadlines: the stop, start and SSH waits in
    `src/provider-connect.ts`, the hold for Ona before each SSH command
    (`waitForReady` in `src/ona.ts`, up to 15 minutes), each `ona` call in

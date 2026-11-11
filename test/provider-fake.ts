@@ -32,6 +32,7 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * repeated (default 0). A failed SSH probe prints "refused". Listing `mountExits` turns the shared-home wait on.
  * `codexHome`: the Codex home is set, so connect runs its `mkdir`.
  * `tunnel`: the box's tunnel is already open, in this state.
+ * `closed`: the box's tunnel was closed before the test, so a close is on record.
  * `hangs`: this call never finishes on its own. Once its signal aborts, a start rejects with a plain Error whose
  * message is "The operation was aborted", as Node's `execFile` words a killed child, and whose cause is the signal's
  * reason; a bootstrap rejects with the signal's reason itself, as bb's bootstrap rethrows it.
@@ -56,6 +57,7 @@ export type Setup = {
   curlExits?: number[];
   codexHome?: boolean;
   tunnel?: "up" | "connecting";
+  closed?: boolean;
   hangs?: "start" | "bootstrap";
   unlisted?: boolean;
   startTakes?: number;
@@ -82,7 +84,9 @@ const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
 /**
  * The provider in a fake host. `calls` logs the `get` lookups by id that reach Ona, starts, stops, deletes, the
  * remove's move-aside and every SSH command connect runs; `tunnels`, the ensure and stop calls; `logs`, the host's log;
- * `moves`, each move-aside's box, positional args, and whether the box's keys were still kept when it ran.
+ * `moves`, each move-aside's box, positional args, and whether the box's keys were still kept when it ran; `connected`,
+ * the boxes markConnected ran for; `mark`, `ensure` and `stop`, the tunnel manager's, as another flow opens or bb's
+ * suspend or remove closes a box.
  */
 export function register({
   found,
@@ -100,6 +104,7 @@ export function register({
   curlExits = [],
   codexHome,
   tunnel,
+  closed,
   hangs,
   unlisted,
   startTakes,
@@ -115,11 +120,24 @@ export function register({
   // The box the latest executor was made for: the provider makes one right before each exec.
   let target = "";
   let listed = !unlisted;
-  // As the tunnel manager does: an ensure on an open tunnel changes nothing.
-  const ensure = (envId: string) => {
+  const connected: string[] = [];
+  // As the tunnel manager does: an ensure on an open tunnel changes nothing, and one whose mark is older than the box's
+  // last stop opens nothing.
+  let stops = 0;
+  const stoppedAt = new Map<string, number>();
+  const mark = () => stops;
+  const ensure = (envId: string, since: number) => {
     tunnels.push(`ensure ${envId}`);
+    if ((stoppedAt.get(envId) ?? 0) > since) return false;
     if (!open.has(envId)) open.set(envId, "connecting");
+    return true;
   };
+  const stop = (envId: string) => {
+    tunnels.push(`stop ${envId}`);
+    stoppedAt.set(envId, ++stops);
+    open.delete(envId);
+  };
+  if (closed) stop(found.id);
   const ona = {
     // By name, as cleanup finds a created box by its key-derived name; an adopted box keeps its own.
     findEnvironment: async (ref: string) => {
@@ -195,7 +213,7 @@ export function register({
       if (command[3] === "bb-ona-remove") {
         calls.push("move-aside");
         moves.push({ envId: target, args: command.slice(4), keysKept: forgotten.length === 0 });
-        if (reopenDuringMove) ensure(found.id);
+        if (reopenDuringMove) ensure(found.id, mark());
         if (moveAside instanceof Error) throw moveAside;
         return { exitCode: moveAside };
       }
@@ -218,17 +236,15 @@ export function register({
       },
     },
   });
-  const { reconnect, wake: wakeWithCause } = registerOnaProvider(host.bb, {
+  const { reconnect: reconnectWithMark, wake: wakeWithCause } = registerOnaProvider(host.bb, {
     availability: async () => ({ status: "available" }),
     ona,
     sshBinary: "ssh",
     tunnels: {
       status: (envId: string) => open.get(envId) ?? "off",
+      mark,
       ensure,
-      stop(envId: string) {
-        tunnels.push(`stop ${envId}`);
-        open.delete(envId);
-      },
+      stop,
     } as unknown as TunnelManager,
     defaultProject: "",
     inactivityTimeout: "",
@@ -237,7 +253,7 @@ export function register({
     machineDataDir: rootExits.length ? "/local/bb" : "",
     waitForSharedHome: mountExits.length > 0,
     port: () => 1,
-    markConnected: async () => {},
+    markConnected: async (envId: string) => void connected.push(envId),
     releasing,
     forgetBox: async (envId: string) => void forgotten.push(envId),
     executorFor: (_ssh, envId) => {
@@ -245,13 +261,21 @@ export function register({
       return executor;
     },
   });
-  // Most tests don't read a start's cause: a waiting thread's is the default here.
+  // Most tests read neither a start's cause nor a mark: a waiting thread's cause and a mark no close is newer than are the
+  // defaults here, so a caller that drops its mark never has its tunnel refused.
   const wake = (
     resource: OnaResource,
     progress: PluginMachineProviderProgress,
     outer: AbortSignal,
     cause: WakeVia = "wake-thread",
-  ) => wakeWithCause(resource, progress, outer, cause);
+    since = Infinity,
+  ) => wakeWithCause(resource, progress, outer, cause, since);
+  const reconnect = (
+    resource: OnaResource,
+    report: PluginMachineProviderProgress,
+    signal: AbortSignal,
+    since = Infinity,
+  ) => reconnectWithMark(resource, report, signal, since);
   const provider = host.harness.registrations.machineProviders.get("ona")!;
   return {
     provider,
@@ -260,6 +284,10 @@ export function register({
     calls,
     tunnels,
     open,
+    connected,
+    mark,
+    ensure,
+    stop,
     forgotten,
     releasing,
     moves,
