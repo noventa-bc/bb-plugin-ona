@@ -201,9 +201,8 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 - bb 0.49.0 sets a host whose create failed to `removing` with the failure in its status
   message (`runCreate`), and its cleanup is due 30 s later
   (`MACHINE_CREATE_FAILURE_CLEANUP_GRACE_MS`). The cleanup's steps replace the message;
-  bb writes the failure back when the first cleanup attempt succeeds
-  (`creationFailureMessage`), and a failed attempt leaves its own error, which later
-  attempts keep. A destroyed host's route answers 404 `host_unavailable`
+  bb writes the failure back only when the first cleanup attempt succeeds
+  (`creationFailureMessage`). A destroyed host's route answers 404 `host_unavailable`
   (`requireNonDestroyedHostWithStatus`) (checked 2026-11-11).
 - bb 0.49.0 appends `report.log` from create to the host's `lifecycle.pendingLog`
   (last 16384 characters, `createReporter`); bb empties it when a thread launch waiting
