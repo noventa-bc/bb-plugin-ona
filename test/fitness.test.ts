@@ -21,7 +21,8 @@ const config = [
 const codeLines = (n: number) => `${Array.from({ length: n }, (_, i) => `export const v${i} = ${i};`).join("\n")}\n`;
 
 // One known case for each number. The settings include a type argument on the define call and a quoted key; the commands
-// constant is typed; a settings-like key sits before the define call and a command-like array after the commands array.
+// constant is wrapped in as const and satisfies; a settings-like key sits before the define call and a command-like array
+// after the commands array.
 const FILES: Record<string, string> = {
   "eslint.config.js": `${config}// shortcut: a config comment, counted\n`,
   "package.json":
@@ -62,11 +63,11 @@ const FILES: Record<string, string> = {
   "src/commands.ts": [
     'const sample = { name: "not-a-command" };',
     "",
-    "export const commands: readonly { name: string }[] = [",
+    "export const commands = ([",
     '  { name: "alpha", summary: "a", usage: "bb ona alpha" },',
     '  { name: "beta", summary: "b", usage: "bb ona beta" },',
     '  { name: "gamma", summary: "c", usage: "bb ona gamma" },',
-    "];",
+    "] as const) satisfies readonly { name: string }[];",
     'const extra = [{ name: "not-a-command" }, { name: "neither" }];',
     "",
   ].join("\n"),
@@ -156,8 +157,8 @@ test("each number is the fixture's known answer, in the fixed order", () => {
   assert.equal(r.stdout, EXPECTED.map(([name, value]) => `${name} ${value}\n`).join(""));
 });
 
-test("a layered file that loads every forbidden module counts each once, whichever form loads it", () => {
-  const nine = [
+test("a layered file counts each load of a forbidden module, and not a computed or template argument", () => {
+  const loads = [
     'import { onaThing } from "./ona.ts";',
     'export { sshThing } from "./ssh.ts";',
     'const provider = require("./provider.ts");',
@@ -167,11 +168,17 @@ test("a layered file that loads every forbidden module counts each once, whichev
     'const net = require("node:net");',
     'export const http = () => import("http");',
     'export const https = () => import("node:https");',
+    // A second load of ona, and a second spelling of child_process: each counts.
+    'import "./ona.ts";',
+    'const cp = require("node:child_process");',
+    // Neither argument is a plain string literal, so neither counts.
+    "const dynamic = require(name);",
+    "const templated = require(`./provider.ts`);",
     "",
   ].join("\n");
-  const r = fitness(fixture({ ...CLEAN_LAYERED, "src/names.ts": nine }));
+  const r = fitness(fixture({ ...CLEAN_LAYERED, "src/names.ts": loads }));
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /^layering 9$/m);
+  assert.match(r.stdout, /^layering 11$/m);
 });
 
 test("an export type from a forbidden module is not a layering violation", () => {
@@ -252,11 +259,42 @@ test("a server.ts without a bb.settings.define call fails with a message and pri
   assert.match(r.stderr, /bb\.settings\.define/);
 });
 
-test("a src/commands.ts without an exported commands array fails with a message and prints no number", () => {
-  const r = fitness(fixture({ "src/commands.ts": "export const other = [1, 2];\n" }));
+test("a commands constant that is not exported fails with a message and prints no number", () => {
+  const r = fitness(fixture({ "src/commands.ts": "const commands = [1, 2];\n" }));
   assert.equal(r.status, 1);
   assert.equal(r.stdout, "");
   assert.match(r.stderr, /no exported commands array in src\/commands\.ts/);
+});
+
+test("a bb.settings.define object with a spread property fails with a message and prints no number", () => {
+  const r = fitness(
+    fixture({
+      "server.ts": [
+        "const bb = { settings: { define: (spec: unknown) => spec } };",
+        'const base = { alpha: { type: "string" } };',
+        'export const plugin = bb.settings.define({ ...base, beta: { type: "number" } });',
+        "",
+      ].join("\n"),
+    }),
+  );
+  assert.equal(r.status, 1);
+  assert.equal(r.stdout, "");
+  assert.match(r.stderr, /spread property/);
+});
+
+test("a commands array with a spread element fails with a message and prints no number", () => {
+  const r = fitness(
+    fixture({
+      "src/commands.ts": [
+        'const base = [{ name: "alpha" }];',
+        'export const commands = ([...base, { name: "beta" }] as const) satisfies readonly { name: string }[];',
+        "",
+      ].join("\n"),
+    }),
+  );
+  assert.equal(r.status, 1);
+  assert.equal(r.stdout, "");
+  assert.match(r.stderr, /spread element/);
 });
 
 test("a grep that exits 2 fails the run with a message", () => {
@@ -287,7 +325,7 @@ test("a failing scripts/lines.sh fails the run with a message", () => {
 
 test("any argument other than --check is a usage error", () => {
   const root = fixture();
-  for (const args of [["--json"], ["--check", "extra"]]) {
+  for (const args of [["--json"], ["--check", "extra"], [""]]) {
     const r = fitness(root, args);
     assert.equal(r.status, 2, args.join(" "));
     assert.match(r.stderr, /usage: scripts\/fitness\.sh \[--check\]/);

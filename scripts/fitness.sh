@@ -3,24 +3,27 @@
 # --check compares them with scripts/fitness-baseline.txt: the numbers must equal the baseline line for line (its #
 # lines aside). Any difference is shown as a diff and exits 1. CI runs --check.
 #   scripts/fitness.sh [--check]
-# What the numbers count, in the repo as it is:
+# What the numbers count:
 #   near_cap_src, near_cap_test  the files scripts/lines.sh 10 lists: src/*.ts, server.ts and app.tsx, then test/
 #   server_lines                 the lines of server.ts
 #   runtime_deps                 the dependencies of package.json, not its devDependencies
-#   settings                     the properties of the object literal passed to bb.settings.define(...) in server.ts
-#   commands                     the elements of the array the exported commands constant of src/commands.ts holds
+#   settings                     the properties of the object literal passed to the first bb.settings.define( call in
+#                                server.ts; a spread property fails the run
+#   commands                     the elements of the array in the exported commands constant of src/commands.ts, read
+#                                through as, satisfies and parentheses; a spread element fails the run
 #   intervals                    setInterval( in src/*.ts, server.ts and app.tsx, comments included
 #   shortcuts                    lines with shortcut: in src, test, scripts, server.ts, app.tsx, eslint.config.js and
 #                                .githooks, except scripts/fitness.sh and test/fitness.test.ts
-#   layering                     forbidden loads by the four layered modules named in the node block
+#   layering                     the loads of a forbidden module by one of the four layered modules (see the node block)
 #   cycles                       the modules that reach themselves through run-time imports
+# The files that cycles and layering read are src/*.ts (top level) and server.ts.
 set -eu
 usage() { echo "usage: scripts/fitness.sh [--check]" >&2; exit 2; }
 # CDPATH='' keeps cd from printing the path when the caller has CDPATH set.
 CDPATH='' cd "$(dirname "$0")/.."
-case "$*" in
-  '') mode=print ;;
-  --check) mode=check ;;
+case "$#:$*" in
+  0:) mode=print ;;
+  1:--check) mode=check ;;
   *) usage ;;
 esac
 
@@ -50,15 +53,14 @@ const find = (root, test) => {
   visit(root);
   return found;
 };
-// The modules a file loads at run time: relative specifiers as repo paths, other names as written with node: dropped.
-// Static imports and export-from count, and so do import() and require() calls with a string literal. import type and
-// export type do not.
+// The loads a file makes at run time, one entry per load in source order: a relative specifier as a repo path, another
+// name as written without a leading node:. The layering comment says which forms are loads.
 function loads(file) {
-  const out = new Set();
+  const out = [];
   const visit = (node) => {
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
       const typeOnly = ts.isImportDeclaration(node) ? node.importClause?.isTypeOnly : node.isTypeOnly;
-      if (node.moduleSpecifier && !typeOnly) out.add(node.moduleSpecifier.text);
+      if (node.moduleSpecifier && !typeOnly) out.push(node.moduleSpecifier.text);
     } else if (
       ts.isCallExpression(node) &&
       node.arguments.length === 1 &&
@@ -66,15 +68,16 @@ function loads(file) {
       (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
         (ts.isIdentifier(node.expression) && node.expression.text === "require"))
     ) {
-      out.add(node.arguments[0].text);
+      out.push(node.arguments[0].text);
     }
     ts.forEachChild(node, visit);
   };
   visit(parse(file));
-  return [...out].map((spec) =>
+  return out.map((spec) =>
     spec.startsWith(".") ? path.posix.normalize(path.posix.join(path.posix.dirname(file), spec)) : spec.replace(/^node:/, ""),
   );
 }
+// The files cycles and layering read: src/*.ts (top level) and server.ts.
 const tsFiles = [...fs.readdirSync("src").filter((f) => f.endsWith(".ts")).map((f) => "src/" + f), "server.ts"];
 
 const nearFiles = process.env.FITNESS_ROWS.split("\n")
@@ -95,6 +98,9 @@ const isDefineCall = (node) =>
   node.expression.expression.expression.text === "bb";
 const settingsArg = find(parse("server.ts"), isDefineCall)?.arguments[0];
 if (!settingsArg || !ts.isObjectLiteralExpression(settingsArg)) fail("no bb.settings.define({...}) call in server.ts");
+if (settingsArg.properties.some((property) => ts.isSpreadAssignment(property))) {
+  fail("the bb.settings.define({...}) object in server.ts has a spread property, so its settings cannot be counted");
+}
 const settings = settingsArg.properties.length;
 
 let commandsInit;
@@ -113,12 +119,17 @@ while (
   commandsInit = commandsInit.expression;
 }
 if (!commandsInit || !ts.isArrayLiteralExpression(commandsInit)) fail("no exported commands array in src/commands.ts");
+if (commandsInit.elements.some((element) => ts.isSpreadElement(element))) {
+  fail("the commands array in src/commands.ts has a spread element, so its commands cannot be counted");
+}
 const commands = commandsInit.elements.length;
 
 const intervals = [...tsFiles, "app.tsx"].reduce((n, file) => n + (read(file).match(/setInterval\(/g) ?? []).length, 0);
 const shortcuts = process.env.FITNESS_HITS.split("\n").filter((line) => line !== "").length;
 
-// Layering: each forbidden module that a layered module loads counts once, whichever form loads it (see loads above).
+// Layering counts each load of a forbidden module by a layered module. A static import, or an export ... from, counts
+// (an import type or an export type does not), and so does a require("...") or import("...") call whose single argument
+// is a plain string literal. A computed or template argument is not read, and two spellings of one module count twice.
 // shortcut: only the imports a module makes itself are read, not what its imports load in turn; upgrade when a layered module imports a helper module
 const forbidden = ["src/ssh.ts", "src/ona.ts", "src/provider.ts", "src/provider-connect.ts", "src/sync.ts", "child_process", "net", "http", "https"];
 const layering = ["src/reconcile.ts", "src/names.ts", "src/time.ts", "src/machine-inputs.ts"].reduce(

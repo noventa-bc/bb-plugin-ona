@@ -38,7 +38,7 @@ jobs:
       # needs a native build, and install scripts are the usual supply-chain route.
       - run: npm ci --ignore-scripts
       - run: npm run check
-      # The architecture numbers may not rise above scripts/fitness-baseline.txt (AGENTS.md Commands).
+      # The architecture numbers must equal scripts/fitness-baseline.txt (AGENTS.md Commands).
       - run: scripts/fitness.sh --check
       # The personal-path check on the checkout (AGENTS.md rule 10).
       - run: scripts/leak-check.sh
