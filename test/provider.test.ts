@@ -482,6 +482,6 @@ test("the daemon probe answers unknown for an exit other than 0 or 1 and for a f
   ] as const) {
     const { daemonAlive, calls } = register({ found: box("RUNNING"), probeExit });
     assert.equal(await daemonAlive(adoptedResource, new AbortController().signal), alive, String(probeExit));
-    assert.deepEqual(calls, ["probe"]);
+    assert.deepEqual(calls, ["probe"]); // one probe and nothing else: an extra SSH or start could wake a stopped box
   }
 });

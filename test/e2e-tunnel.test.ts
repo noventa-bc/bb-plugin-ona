@@ -74,7 +74,7 @@ test(
       assert.equal(created.status, "created");
       const [pid] = tunnelPids();
       assert.ok(pid, "the create opened a tunnel");
-      // The listing still holds a running box: an empty listing reads as unknown, not as a good answer.
+      // The box is listed under another id, so the listing is not empty and leaves env-1 out.
       writeFileSync(state, JSON.stringify(envs().map((env) => ({ ...env, id: "env-2" }))));
       await dropTunnel(pid, log);
       assert.deepEqual(tunnelPids(), [pid], "no second tunnel");
