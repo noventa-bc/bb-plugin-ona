@@ -78,8 +78,8 @@ export async function startHost(
   /**
    * `ona` calls since the last read, without the `--timeout` and `-o json` every
    * call carries. `environment list` calls are dropped (a `get` is kept): the
-   * tunnel loop runs one in the background at a time of its own choosing, and no
-   * scenario asserts on them.
+   * tunnel loop runs one in the background at a time of its own choosing. A
+   * scenario that counts them reads the log itself (test/e2e-tunnel.test.ts).
    */
   const onaCalls = () => {
     const lines = readFileSync(log, "utf8").split("\n");
