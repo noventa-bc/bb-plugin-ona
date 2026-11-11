@@ -101,7 +101,7 @@ export interface UpdatesDeps {
   signal: AbortSignal;
 }
 
-/** bb's own limit on one CLI install (`PROVIDER_CLI_INSTALL_TIMEOUT_MS`, 15 min in bb 0.49.0, checked 2026-11-11). */
+/** bb's limit on one CLI install; `docs/ona-notes.md` has the value. */
 export const BB_INSTALL_LIMIT_MS = 15 * 60_000;
 export const INSTALL_POLL_MS = 15_000;
 
@@ -139,7 +139,6 @@ export function createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef,
         for (const cli of pending) {
           const from = statuses[cli]?.currentVersion ?? "?";
           const to = statuses[cli]?.latestVersion ?? "latest";
-          const started = Date.now();
           let events: Awaited<ReturnType<Hosts["installProviderCli"]>>;
           try {
             events = await bb.sdk.hosts.installProviderCli({ hostId: row.hostId, provider: cli, actionKind: "update" });
@@ -148,15 +147,23 @@ export function createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef,
             if (!(error instanceof Error && error.name === "BbRequestTimeoutError")) throw error;
             const done = await pollUntil(
               async () => {
-                const now = (await bb.sdk.hosts.providerCliStatus({ hostId: row.hostId })) as Record<string, CliStatus>;
-                return updatesToApply(now, [cli]).length === 0;
+                try {
+                  const now = (await bb.sdk.hosts.providerCliStatus({ hostId: row.hostId })) as Record<
+                    string,
+                    CliStatus
+                  >;
+                  const status = now[cli];
+                  return status?.installed === true && status.needsUpdate === false;
+                } catch {
+                  return false; // a failed read is asked again; only the deadline or the plugin's abort ends the wait
+                }
               },
-              { deadlineMs: BB_INSTALL_LIMIT_MS - (Date.now() - started), intervalMs: INSTALL_POLL_MS, signal },
+              { deadlineMs: BB_INSTALL_LIMIT_MS, intervalMs: INSTALL_POLL_MS, signal },
             );
             lines.push(
               done
                 ? `${name}: ${cli} ${from} -> ${to} (bb finished after the request timed out)`
-                : `${name}: ${cli} update still pending after bb's 15 min install limit`,
+                : `${name}: ${cli} update not confirmed after 15 min`,
             );
             continue;
           }

@@ -80,6 +80,8 @@ function updater(
     codex?: Partial<CliStatus>;
     /** Runs inside the install, while the update holds the box. */
     duringInstall?: () => Promise<void>;
+    /** Answers the status reads in place of the `codex` status; a test sets it during the install. */
+    statusReply?: () => Promise<unknown>;
   }>,
   install: Record<string, InstallEvents> = {},
   guard = new HostGuard(),
@@ -107,7 +109,10 @@ function updater(
             ].filter((thread) => archived !== false || thread.archivedAt == null),
         },
         hosts: {
-          providerCliStatus: async ({ hostId }) => ({ codex: status(byHost.get(hostId)!.codex ?? {}) }),
+          providerCliStatus: async ({ hostId }) => {
+            const box = byHost.get(hostId)!;
+            return box.statusReply ? box.statusReply() : { codex: status(box.codex ?? {}) };
+          },
           installProviderCli: async ({ hostId, provider }) => {
             installs.push(`${hostId} ${provider}`);
             await byHost.get(hostId)!.duringInstall?.();
@@ -124,6 +129,8 @@ function updater(
   });
   return { updateClis, installs };
 }
+
+type Box = Parameters<typeof updater>[0][number];
 
 const pending: Partial<CliStatus> = {
   needsUpdate: true,
@@ -295,7 +302,7 @@ test("an install the SDK gave up on keeps the box's turn until bb finishes it (f
   assert.equal(guard.busyWith("box"), undefined);
 });
 
-test("the wait for an install the SDK gave up on ends at bb's install limit (fails if it waits on)", async () => {
+test("the wait for an install the SDK gave up on ends 15 min after the request timed out (fails if it waits on)", async () => {
   const guard = new HostGuard();
   const { updateClis } = updater([{ hostId: "box", codex: pending, duringInstall: sdkTimeout }], {}, guard);
   const lines = updateClis();
@@ -304,5 +311,45 @@ test("the wait for an install the SDK gave up on ends at bb's install limit (fai
   await tick(INSTALL_POLL_MS);
   await settle();
   assert.equal(guard.busyWith("box"), undefined, "released at the limit");
-  assert.deepEqual(await lines, ["box-box: codex update still pending after bb's 15 min install limit"]);
+  assert.deepEqual(await lines, ["box-box: codex update not confirmed after 15 min"]);
+});
+
+test("a status read that leaves the CLI out keeps the wait going (fails if that read ends it)", async () => {
+  const guard = new HostGuard();
+  const box: Box = {
+    hostId: "box",
+    codex: pending,
+    duringInstall: () => {
+      box.statusReply = async () => ({});
+      return sdkTimeout();
+    },
+  };
+  const { updateClis } = updater([box], {}, guard);
+  const lines = updateClis();
+  await settle();
+  assert.equal(guard.busyWith("box"), "update-cli", "the turn is held after the read without the CLI");
+  box.statusReply = undefined;
+  box.codex = {};
+  await tick(INSTALL_POLL_MS);
+  assert.deepEqual(await lines, ["box-box: codex 1.0.0 -> 2.0.0 (bb finished after the request timed out)"]);
+});
+
+test("a status read that throws during the wait is asked again (fails if the run rejects)", async () => {
+  const guard = new HostGuard();
+  const box: Box = {
+    hostId: "box",
+    codex: pending,
+    duringInstall: () => {
+      box.statusReply = () => Promise.reject(new Error("bb is busy"));
+      return sdkTimeout();
+    },
+  };
+  const { updateClis } = updater([box], {}, guard);
+  const lines = updateClis();
+  await settle();
+  assert.equal(guard.busyWith("box"), "update-cli", "the turn is held after the read that threw");
+  box.statusReply = undefined;
+  box.codex = {};
+  await tick(INSTALL_POLL_MS);
+  assert.deepEqual(await lines, ["box-box: codex 1.0.0 -> 2.0.0 (bb finished after the request timed out)"]);
 });
