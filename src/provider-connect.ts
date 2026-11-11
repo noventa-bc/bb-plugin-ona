@@ -9,7 +9,7 @@ import { pollUntil } from "./time.ts";
 /** Ona can be slow to wake a dev container; give each SSH check this long. */
 const CHECK_TIMEOUT_MS = 5 * 60_000;
 
-/** The connect path bound to one registration; provider.ts calls the four functions it returns. */
+/** The connect path bound to one registration; provider.ts calls the functions it returns. */
 export function connectHelpers(bb: BbPluginApi, deps: ProviderDeps) {
   const { ona, tunnels, executorFor = sshExecutor } = deps;
 
