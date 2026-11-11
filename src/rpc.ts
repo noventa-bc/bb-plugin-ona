@@ -59,7 +59,10 @@ export const rpcContract = defineRpcContract({
     input: z.object({ hostId: z.string().min(1) }),
     output: z.object({ opened: z.boolean() }),
   },
-  /** The settings section's buttons: a `bb ona` command, as the CLI runs it (src/commands.ts), for one devbox or all. */
+  /**
+   * The settings section's buttons: a `bb ona` command, as the CLI runs it (src/commands.ts), for one devbox or all,
+   * except update, which needs a host id (the refine below).
+   */
   devbox_command: {
     input: z
       .object({
@@ -75,6 +78,10 @@ export const rpcContract = defineRpcContract({
           input.arg === undefined ||
           (input.hostId !== undefined && (input.command === "rename" || input.command === "keep-alive")),
         "arg needs a hostId, and only rename and keep-alive take one",
+      )
+      .refine(
+        (input) => input.command !== "update" || input.hostId !== undefined,
+        "update needs a hostId: without one the CLI updates every devbox",
       ),
     output: devboxCommandReplySchema,
   },

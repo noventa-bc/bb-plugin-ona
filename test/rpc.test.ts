@@ -8,7 +8,8 @@ const SECTION_COMMANDS = ["status", "sync", "reconnect", "resume", "rename", "ke
 test("the settings section can run only status, sync, reconnect, resume, rename, keep-alive and update", () => {
   const { input } = rpcContract.devbox_command;
   assert.deepEqual(devboxCommandSchema.options, SECTION_COMMANDS);
-  for (const command of SECTION_COMMANDS) {
+  // update needs a host id, so it is tested below.
+  for (const command of SECTION_COMMANDS.filter((name) => name !== "update")) {
     assert.equal(input.safeParse({ command }).success, true, command);
   }
   // Every other `bb ona` command is refused, so an extra enum member fails here.
@@ -48,8 +49,8 @@ test("only rename and keep-alive take an arg (fails if status, sync, reconnect, 
   }
 });
 
-test("update runs for one devbox from the settings section, and an unknown command is still refused (fails if update is refused or an unknown name passes)", () => {
+test("update runs for one devbox only: without a host id it is refused (fails if update passes without one, or is refused with one)", () => {
   const { input } = rpcContract.devbox_command;
   assert.equal(input.safeParse({ command: "update", hostId: "host_1" }).success, true);
-  assert.equal(input.safeParse({ command: "upgrade", hostId: "host_1" }).success, false);
+  assert.equal(input.safeParse({ command: "update" }).success, false);
 });
