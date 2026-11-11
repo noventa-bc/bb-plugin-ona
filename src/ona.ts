@@ -279,6 +279,11 @@ export function unpushedWork(env: OnaEnvironment): { branch?: string; count: num
   return git?.branch ? { branch: git.branch, count, files } : { count, files };
 }
 
+/** Whether `status.content.git.totalUnpushedCommits` reads as a finite number. */
+export function gitKnown(env: OnaEnvironment): boolean {
+  return Number.isFinite(Number(env.status?.content?.git?.totalUnpushedCommits));
+}
+
 /**
  * What `bb ona status` shows about a box from Ona's listing. A fact Ona leaves out is null, as is an odd start,
  * timeout or activity; `unpushed` is 0 instead.
@@ -332,6 +337,15 @@ export function isStopped(env: OnaEnvironment): boolean {
 type Readiness = { state: "ready" } | { state: "waiting"; reason: string } | { state: "failed"; message: string };
 
 export const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/**
+ * A plugin log line of a stable shape, `metric <event> key=value ...`, which `bb plugin logs ona` shows. A value's
+ * spaces and `=` become `_`, so no value can split or shift the line.
+ */
+export function metric(event: string, fields: Record<string, string | number>): string {
+  const pairs = Object.entries(fields).map(([key, value]) => `${key}=${String(value).replace(/[\s=]/g, "_")}`);
+  return ["metric", event, ...pairs].join(" ");
+}
 
 /** The first non-blank line, trimmed: one line of Ona's text for a progress line or an error. */
 export function firstLine(text: string): string | undefined {

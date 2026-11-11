@@ -5,6 +5,7 @@
 // the lifecycle-sync service; tests drive them with a fake of the bb calls below.
 import type { BbPluginApi, PluginLogger } from "@get-bb/plugin-sdk";
 import { errorText, isArchived, isRunning, type OnaListing } from "./ona.ts";
+import type { WakeVia } from "./provider-connect.ts";
 import { PROVIDER_ID, resourceSchema, type OnaResource } from "./provider.ts";
 import {
   lifecycleRefusal,
@@ -109,6 +110,7 @@ export interface SyncDeps {
       resource: OnaResource,
       report: { step(text: string): void; log(text: string): void },
       signal: AbortSignal,
+      cause: WakeVia,
     ): Promise<boolean>;
   };
   keepAliveUntil(envId: string): number | null;
@@ -382,7 +384,7 @@ export function createSync(deps: SyncDeps) {
                 // bb's suspend failed (Ona stopped the box under a live turn) and left the machine active, where bb's
                 // resume does nothing: the plugin wakes the box (decision 0002).
                 // It gives up after 30 minutes; a plugin reload ends it sooner (docs/sync.md rule 1).
-                const startCalled = await provider.wake(resource, report, signal);
+                const startCalled = await provider.wake(resource, report, signal, "wake-thread");
                 return startCalled ? "started it for a waiting thread" : "reconnected it for a waiting thread";
               }
               if (!decision.resumeAfter) return;

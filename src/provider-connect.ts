@@ -1,6 +1,6 @@
 // The connect path of the "ona" provider: starts a box, waits for SSH, opens the tunnel, then connects bb's daemon.
 import type { BbPluginApi, MachineExecutor } from "@get-bb/plugin-sdk";
-import { isRunning, isStarting, waitForReady, type OnaEnvironment } from "./ona.ts";
+import { isRunning, isStarting, metric, waitForReady, type OnaEnvironment } from "./ona.ts";
 import type { OnaResource, PluginMachineProviderProgress, ProviderDeps } from "./provider.ts";
 import { short, STOPPED } from "./reconcile.ts";
 import { daemonEnv, pollSsh, shellQuote, sshCapture, sshCheck, sshExecutor } from "./ssh.ts";
@@ -9,9 +9,25 @@ import { pollUntil } from "./time.ts";
 /** Ona can be slow to wake a dev container; give each SSH check this long. */
 const CHECK_TIMEOUT_MS = 5 * 60_000;
 
+/** Who asked for a wake: a waiting thread on an active machine (the sync pass), or `bb ona resume`. */
+export type WakeVia = "wake-thread" | "wake-cmd";
+
+/**
+ * A connect call's start. ensureRunning sets `started` just before it calls Ona's start, so the call still knows it
+ * started the box when that start or the connect throws. create sets `created` once Ona's createEnvironment returns,
+ * so a create that fails before then reads `running`.
+ */
+export interface StartTrace {
+  via: "create" | "resume" | WakeVia;
+  started: boolean;
+  created: boolean;
+}
+
 /** The connect path bound to one registration; provider.ts calls the functions it returns. */
 export function connectHelpers(bb: BbPluginApi, deps: ProviderDeps) {
   const { ona, tunnels, executorFor = sshExecutor } = deps;
+  // When the provider registered, which is when the plugin loaded: the start lines' `up` counts seconds from it.
+  const loadedAt = Date.now();
 
   /**
    * Starts a stopped box, after Ona's own starts and stops finish. Resolves true when it called `ona.start`, and false
@@ -19,7 +35,12 @@ export function connectHelpers(bb: BbPluginApi, deps: ProviderDeps) {
    * deadline: a 15-minute start wait plus a 10-minute stop wait. A wait that runs out judges the box as the read that
    * began the wait showed it.
    */
-  async function ensureRunning(env: OnaEnvironment, report: PluginMachineProviderProgress, signal: AbortSignal) {
+  async function ensureRunning(
+    env: OnaEnvironment,
+    report: PluginMachineProviderProgress,
+    signal: AbortSignal,
+    trace: StartTrace,
+  ) {
     // Ona's own starts and stops finish first, one wait at a time, each judged on the read it settles on: a box that
     // starts or stops again while it is waited for is waited for again, until the shared deadline.
     const deadline = Date.now() + 25 * 60_000;
@@ -50,6 +71,10 @@ export function connectHelpers(bb: BbPluginApi, deps: ProviderDeps) {
       throw new Error(`Ona shows ${env.metadata.name ?? env.id} ${short(phase || "unknown")}, so it was not started.`);
     }
     report.step(`Starting Ona environment ${env.metadata.name ?? env.id}`);
+    // Logged before the call on purpose: a start that fails may still have started the box, so the line records
+    // the attempt.
+    bb.log.info(metric("start", { env: env.id, via: trace.via, up: Math.round((Date.now() - loadedAt) / 1000) }));
+    trace.started = true;
     await ona.start(env.id, signal);
     return true;
   }

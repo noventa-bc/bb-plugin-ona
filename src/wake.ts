@@ -82,7 +82,7 @@ export async function resumeCommand(deps: ResumeDeps, ref: string, signal: Abort
     "resume",
     "requested with bb ona resume",
     async () => {
-      outcome.started = await provider.wake(row.resource, report, signal);
+      outcome.started = await provider.wake(row.resource, report, signal, "wake-cmd");
     },
     { force: true, cooldown: false },
   );

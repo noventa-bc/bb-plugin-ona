@@ -146,6 +146,7 @@ function fakeRun(
   } = {},
 ) {
   const calls: string[] = [];
+  const logs: string[] = [];
   const machine = { ...ROW, phase };
   const guard = new HostGuard();
   const listingError = extra.listingError ?? "could not reach Ona";
@@ -186,8 +187,11 @@ function fakeRun(
           update: async (args: { hostId: string; name: string }) => void calls.push(`hosts.update ${args.name}`),
         },
       },
+      log: { info: (message: string) => void logs.push(message) },
     },
     tunnels: { status: () => "up" },
+    statusRows: async () => [],
+    onaHealth: () => ({ lastError: null, listedAt: null, autoRepair: false }),
     resolveEnvId: (ref: string) => Promise.resolve(ref === "box" ? "env_1" : ref),
     keepAlives: {
       stop: (envId: string) => {
@@ -197,7 +201,7 @@ function fakeRun(
     },
   } as unknown as OnaCommandDeps;
   const run = onaCommands(deps);
-  return { calls, guard, run: (...argv: string[]) => run(argv, {}) };
+  return { calls, guard, logs, run: (...argv: string[]) => run(argv, {}) };
 }
 
 test("help, --help and no command print the usage", async () => {
@@ -224,6 +228,18 @@ test("an unknown command, or one missing its <ref>, exits 1 with the usage", asy
   const { run } = fakeRun();
   assert.deepEqual(await run("frobnicate"), { exitCode: 1, stderr: usage });
   assert.deepEqual(await run("host"), { exitCode: 1, stderr: usage });
+});
+
+test("sync, reconnect and resume each log one metric cmd line; status and a resume without a ref log none (fails if a case logs before its ref check or another command logs one)", async () => {
+  const { run, logs } = fakeRun();
+  // status runs to its end, so a cmd line written later in its path would show.
+  assert.equal((await run("status")).exitCode, 0);
+  await run("resume");
+  assert.deepEqual(logs, []);
+  await run("sync");
+  await run("reconnect", "box");
+  await run("resume", "box");
+  assert.deepEqual(logs, ["metric cmd name=sync", "metric cmd name=reconnect", "metric cmd name=resume"]);
 });
 
 // Bug: reconnect never checked bb's view, so on a suspended machine it opened a tunnel that kept the box awake (decision 0003).
