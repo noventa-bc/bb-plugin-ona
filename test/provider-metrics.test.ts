@@ -127,13 +127,7 @@ test("a create that makes a new box writes its connected line with box=new (fail
     found: { ...box("RUNNING"), metadata: { name: envNameForKey("key-1") } },
     unlisted: true,
   });
-  await provider.create({
-    ...lifecycle(),
-    inputs: { mode: "create", project: "project-1" },
-    key: "key-1",
-    attempt: 1,
-    signal: signal(),
-  });
+  await createNew(provider);
   assert.deepEqual(metricText(logs), ["metric connected via=create box=new secs=0 ok=1"]);
 });
 
@@ -145,6 +139,13 @@ test("a create whose createEnvironment is rejected writes connected with box=run
   });
   await assert.rejects(createNew(provider), /Ona refused the create/);
   assert.deepEqual(metricText(logs), ["metric connected via=create box=running secs=0 ok=0"]);
+});
+
+test("a create whose lookup fails after createEnvironment returns writes connected with box=new and ok=0, since Ona made the box (fails if the flag waits for the lookup)", async () => {
+  // The box is named unlike the key, so the lookup after the create finds nothing.
+  const { provider, logs } = register({ found: box("RUNNING") });
+  await assert.rejects(createNew(provider), /Ona environment .* not found/);
+  assert.deepEqual(metricText(logs), ["metric connected via=create box=new secs=0 ok=0"]);
 });
 
 test("a created box that ensureRunning then starts reads box=new, not stopped (fails if the start's stopped outranks new)", async () => {

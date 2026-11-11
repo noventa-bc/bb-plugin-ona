@@ -174,8 +174,8 @@ function notDeletingMessage(
 
 /**
  * Runs one connect call and writes its `metric connected` line when the call ends, ok or not. `box` is new when Ona's
- * createEnvironment returned during the call, stopped when the call called Ona's start, and running otherwise: `trace`
- * records both.
+ * createEnvironment returned during the call, so a box this call both created and started reads `new`. It is stopped
+ * when the call called Ona's start, and running otherwise: `trace` records both.
  */
 async function timedConnect<T>(
   bb: BbPluginApi,
@@ -303,7 +303,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
             { projectId, name, classId: inputs.classId, inactivityTimeout: deps.inactivityTimeout },
             signal,
           );
-          // Set once the call returns: a create Ona rejects made no box.
+          // A create that fails before createEnvironment returns counts no box as new, even when Ona made one (a
+          // timeout or an abort): it reads running.
           trace.created = true;
           env = await requireEnv(name, signal);
         }
