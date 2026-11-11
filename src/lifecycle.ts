@@ -7,8 +7,11 @@ import { pollUntil } from "./time.ts";
 
 /** bb's suspend drain gives up after 5 minutes (docs/ona-notes.md), so a suspend is settled well within this. */
 const SETTLE_MS = 6 * 60_000;
-/** bb puts no bound on the provider's resume (docs/ona-notes.md): one that runs longer is a failure whose message says it is unconfirmed. */
-const RESUME_SETTLE_MS = 30 * 60_000;
+/**
+ * The provider's resume gives up after 30 minutes (CAP_MINUTES in provider.ts): the wait outlasts bb's first attempt by
+ * 2 minutes.
+ */
+const RESUME_SETTLE_MS = 32 * 60_000;
 
 export interface MachineActivity {
   hostId: string;

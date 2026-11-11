@@ -1,5 +1,5 @@
 // The readiness gate before every SSH command in connect (safety rule 1, docs/sync.md), and the 30-minute cap on a
-// wake and a reconnect, driven through `resume`, `wake` and `reconnect` in the fake host of ./provider-fake.ts.
+// wake, a reconnect and bb's resume, driven through `resume`, `wake` and `reconnect` in the fake host of ./provider-fake.ts.
 // setTimeout and Date are mocked, so each tick is one poll interval and the tests are instant.
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -286,10 +286,19 @@ test("a reconnect waits for the dev container before SSH, and fails without SSH 
 const MINUTE = 60_000;
 const capped = (what: string, step: string) => `Gave up ${what} after 30 minutes; last step: ${step}`;
 const installing = "Starting enrolled machine";
+type Capped = "wake" | "reconnect" | "resume";
+
+/** Starts `call` on the adopted box: bb's resume through the provider, a wake or a reconnect as the plugin calls it. */
+function begin(registered: ReturnType<typeof register>, call: Capped, signal: AbortSignal) {
+  const { report, checkpoint } = lifecycle();
+  if (call !== "resume") return registered[call](adoptedResource, report, signal);
+  return registered.provider.resume!({ resource: adoptedResource, hostId: "host-1", report, checkpoint, signal });
+}
 
 // Bug: a wake and a daemon restart had no overall bound, only the waits inside them, and those can add up to hours.
-test("a wake or a reconnect that never finishes gives up after 30 minutes, and a wake closes the tunnel it opened", async () => {
-  const cases: [string, "wake" | "reconnect", Setup, string, string[]][] = [
+// Bug: bb's own resume of a box had no overall bound either.
+test("a wake, a reconnect or bb's resume that never finishes gives up after 30 minutes, naming the last step", async () => {
+  const cases: [string, Capped, Setup, string, string[]][] = [
     [
       "wake, start",
       "wake",
@@ -311,11 +320,25 @@ test("a wake or a reconnect that never finishes gives up after 30 minutes, and a
       capped("reconnecting box", installing),
       ["ensure env-1"],
     ],
+    [
+      "resume, start",
+      "resume",
+      { found: box("STOPPED"), hangs: "start" },
+      capped("resuming box", "Starting Ona environment box"),
+      [],
+    ],
+    [
+      "resume, bootstrap",
+      "resume",
+      { found: box("STOPPED"), phases: ["STOPPED", "RUNNING"], hangs: "bootstrap" },
+      capped("resuming box", installing),
+      ["ensure env-1", "stop env-1"],
+    ],
   ];
   for (const [name, call, setup, message, tunnelCalls] of cases) {
     const registered = register(setup);
     let settled = false;
-    const run = registered[call](adoptedResource, lifecycle().report, new AbortController().signal);
+    const run = begin(registered, call, new AbortController().signal);
     run.then(
       () => (settled = true),
       () => (settled = true),
@@ -332,14 +355,15 @@ test("a wake or a reconnect that never finishes gives up after 30 minutes, and a
 });
 
 // Guard, no `// Bug:` line: a plugin reload ends the call with the error its own abort caused, not the cap's.
-test("a caller's abort ends a capped wake or reconnect at once with its own error, not the cap's", async () => {
-  const cases: [string, "wake" | "reconnect", Setup][] = [
+test("a caller's abort ends a capped wake, reconnect or resume at once with its own error, not the cap's", async () => {
+  const cases: [string, Capped, Setup][] = [
     ["wake", "wake", { found: box("STOPPED"), hangs: "start" }],
     ["reconnect", "reconnect", { found: box("RUNNING"), hangs: "bootstrap" }],
+    ["resume", "resume", { found: box("RUNNING"), hangs: "bootstrap" }],
   ];
   for (const [name, call, setup] of cases) {
     const controller = new AbortController();
-    const run = register(setup)[call](adoptedResource, lifecycle().report, controller.signal);
+    const run = begin(register(setup), call, controller.signal);
     run.catch(() => {});
     await tick(MINUTE);
     const reloaded = new Error("plugin reloaded");
@@ -347,7 +371,7 @@ test("a caller's abort ends a capped wake or reconnect at once with its own erro
     // bb's bootstrap rethrows the reason itself; a killed `ona` start rejects with its own error, never the cap's.
     await assert.rejects(
       run,
-      (error: Error) => (call === "reconnect" ? error === reloaded : !error.message.startsWith("Gave up")),
+      (error: Error) => (setup.hangs === "bootstrap" ? error === reloaded : !error.message.startsWith("Gave up")),
       name,
     );
   }

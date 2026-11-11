@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { envNameForKey } from "../src/provider.ts";
+import { envNameForKey } from "../src/names.ts";
 import { daemonEnv, shellQuote, sshCapture, sshExecutor, TunnelManager } from "../src/ssh.ts";
 import { pollUntil, sleep } from "../src/time.ts";
 import { enableFakeClock, resetFakeClock, settle, tick } from "./fake-clock.ts";
