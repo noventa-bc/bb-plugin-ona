@@ -20,10 +20,9 @@ function manager(t: TestContext) {
   return tunnels;
 }
 
-/** The provider's reconnect as far as the tunnel goes: `during` runs while it connects, then connect's ensure. */
-function reconnectVia(tunnels: TunnelManager, during = () => {}): SyncDeps["provider"]["reconnect"] {
+/** The provider's reconnect as far as the tunnel goes: connect's ensure. */
+function reconnectVia(tunnels: TunnelManager): SyncDeps["provider"]["reconnect"] {
   return async (resource, _report, _signal, since) => {
-    during();
     if (!tunnels.ensure(resource.envId, since)) throw new Error("closed while it connected");
   };
 }
@@ -35,38 +34,25 @@ const daemonDown = () => idle("h1", { status: "disconnected", lastSeenAt: NOW - 
 // closed it again, since the machine was gone (R25).
 test("a pass that read the machine active before bb removed it leaves the tunnel closed (fails if ensure-tunnel reopens a removed box's tunnel)", async (t) => {
   const tunnels = manager(t);
-  const { sync, hostReads } = world([idle("h1")], {
+  const { sync, hostReads, guard } = world([idle("h1")], {
     tunnels,
     afterCall: (call) => call === "list" && tunnels.stop("env-h1"),
   });
   await sync.reconcile(new Set(["h1"]), { wait: true });
   assert.deepEqual(hostReads, ["list"]);
   assert.equal(tunnels.status("env-h1"), "off");
+  // Rule 8: a refused open is not done, so the guard records a failure and backs off.
+  assert.equal(guard.records.get("h1")?.failures, 1);
 });
 
 test("a daemon restart by a pass that read the machine active before bb removed it leaves the tunnel closed (fails if the heal's connect reopens a removed box's tunnel)", async (t) => {
   const tunnels = manager(t);
-  tunnels.ensure("env-h1");
+  tunnels.ensure("env-h1", tunnels.mark());
   const { sync, calls } = world([daemonDown()], {
     tunnels,
     daemonAlive: false,
     reconnect: reconnectVia(tunnels),
-    duringProbe: () => tunnels.stop("env-h1"),
-  });
-  await sync.reconcile(new Set(["h1"]), { wait: true });
-  assert.deepEqual(calls, ["probe"]);
-  assert.equal(tunnels.status("env-h1"), "off");
-});
-
-// Bug: bb's suspend closed the tunnel while the daemon restart waited on SSH, and the restart reopened it, keeping
-// awake a box bb shows suspended (R31, decision 0003).
-test("a daemon restart in flight when bb suspends the machine leaves the tunnel closed (fails if the connect reopens it after the suspend)", async (t) => {
-  const tunnels = manager(t);
-  tunnels.ensure("env-h1");
-  const { sync, calls } = world([daemonDown()], {
-    tunnels,
-    daemonAlive: false,
-    reconnect: reconnectVia(tunnels, () => tunnels.stop("env-h1")),
+    afterCall: (call) => call === "probe" && tunnels.stop("env-h1"),
   });
   await sync.reconcile(new Set(["h1"]), { wait: true });
   assert.deepEqual(calls, ["probe"]);
@@ -88,4 +74,20 @@ test("a waiting thread on a box Ona stopped is woken after bb's failed suspend c
   });
   await sync.reconcile(new Set(["h1"]), { wait: true });
   assert.equal(opened, true);
+});
+
+test("a waiting thread's wake whose machine bb suspends while it wakes opens no tunnel (fails if the sync wake passes no mark)", async (t) => {
+  const tunnels = manager(t);
+  let opened: boolean | undefined;
+  const { sync } = world([idle("h1", { status: "disconnected", ona: "STOPPED", threads: [waitingThread()] })], {
+    tunnels,
+    suspendSettles: { phase: "active", message: "Machine suspension failed" },
+    wake: async (resource, _report, _signal, _cause, since) => {
+      tunnels.stop(resource.envId);
+      opened = tunnels.ensure(resource.envId, since);
+      return true;
+    },
+  });
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.equal(opened, false);
 });

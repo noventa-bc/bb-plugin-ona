@@ -48,8 +48,6 @@ export function world(
     signal?: AbortSignal;
     /** Ona lists every box STOPPED once the daemon check has run. */
     stopDuringProbe?: boolean;
-    /** Runs while the daemon check runs, as a suspend or remove that lands then would. */
-    duringProbe?: () => void;
     /** Keep a listing 15s fresh, so only `refresh()` sees a change; the clock is the mocked Date when enabled. */
     cached?: boolean;
     archived?: boolean | "not-found" | "fail";
@@ -77,7 +75,8 @@ export function world(
     holdSettle?: { hostId: string; until: string };
     /** The tunnel manager; the default records each ensure and never refuses one. */
     tunnels?: SyncDeps["tunnels"];
-    /** Runs once bb has answered a host listing ("list") or a lifecycle call ("suspend h1"), as a close then would. */
+    /** Runs after bb answers a host listing ("list") or a lifecycle call ("suspend h1"), and during the daemon check
+     * ("probe"), as a close landing then would. */
     afterCall?: (call: string) => void;
   } = {},
 ) {
@@ -254,7 +253,7 @@ export function world(
       daemonAlive: async () => {
         calls.push("probe");
         if (options.stopDuringProbe) for (const box of boxes) box.ona = "STOPPED";
-        options.duringProbe?.();
+        options.afterCall?.("probe");
         return options.daemonAlive ?? true;
       },
       reconnect:

@@ -83,7 +83,8 @@ const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
  * The provider in a fake host. `calls` logs the `get` lookups by id that reach Ona, starts, stops, deletes, the
  * remove's move-aside and every SSH command connect runs; `tunnels`, the ensure and stop calls; `logs`, the host's log;
  * `moves`, each move-aside's box, positional args, and whether the box's keys were still kept when it ran; `connected`,
- * the boxes markConnected ran for; `mark` and `stop`, the tunnel manager's, as bb's suspend or remove closes a box.
+ * the boxes markConnected ran for; `mark`, `ensure` and `stop`, the tunnel manager's, as another flow opens or bb's
+ * suspend or remove closes a box.
  */
 export function register({
   found,
@@ -122,9 +123,9 @@ export function register({
   let stops = 0;
   const stoppedAt = new Map<string, number>();
   const mark = () => stops;
-  const ensure = (envId: string, since?: number) => {
+  const ensure = (envId: string, since: number) => {
     tunnels.push(`ensure ${envId}`);
-    if (since !== undefined && (stoppedAt.get(envId) ?? 0) > since) return false;
+    if ((stoppedAt.get(envId) ?? 0) > since) return false;
     if (!open.has(envId)) open.set(envId, "connecting");
     return true;
   };
@@ -208,7 +209,7 @@ export function register({
       if (command[3] === "bb-ona-remove") {
         calls.push("move-aside");
         moves.push({ envId: target, args: command.slice(4), keysKept: forgotten.length === 0 });
-        if (reopenDuringMove) ensure(found.id);
+        if (reopenDuringMove) ensure(found.id, mark());
         if (moveAside instanceof Error) throw moveAside;
         return { exitCode: moveAside };
       }
@@ -231,7 +232,7 @@ export function register({
       },
     },
   });
-  const { reconnect, wake: wakeWithCause } = registerOnaProvider(host.bb, {
+  const { reconnect: reconnectWithMark, wake: wakeWithCause } = registerOnaProvider(host.bb, {
     availability: async () => ({ status: "available" }),
     ona,
     sshBinary: "ssh",
@@ -256,14 +257,17 @@ export function register({
       return executor;
     },
   });
-  // Most tests don't read a start's cause: a waiting thread's is the default here.
+  // Most tests read neither a start's cause nor a mark: a waiting thread's cause and a mark taken at registration are
+  // the defaults here.
   const wake = (
     resource: OnaResource,
     progress: PluginMachineProviderProgress,
     outer: AbortSignal,
     cause: WakeVia = "wake-thread",
-    since?: number,
+    since = 0,
   ) => wakeWithCause(resource, progress, outer, cause, since);
+  const reconnect = (resource: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal, since = 0) =>
+    reconnectWithMark(resource, report, signal, since);
   const provider = host.harness.registrations.machineProviders.get("ona")!;
   return {
     provider,
@@ -274,6 +278,7 @@ export function register({
     open,
     connected,
     mark,
+    ensure,
     stop,
     forgotten,
     releasing,

@@ -3,7 +3,7 @@
 // and Date are mocked, so each tick is one poll interval and the tests are instant.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { tick, useFakeClock } from "./fake-clock.ts";
+import { settle, tick, useFakeClock } from "./fake-clock.ts";
 import { adoptedResource, box, connectCalls, gated, lifecycle, register, resume, start } from "./provider-fake.ts";
 
 useFakeClock();
@@ -135,4 +135,36 @@ test("a reconnect with a mark taken after the box's last close opens the tunnel 
   await reconnect(adoptedResource, lifecycle().report, new AbortController().signal, mark());
   assert.equal(open.get("env-1"), "connecting");
   assert.deepEqual(connected, ["env-1"]);
+});
+
+test("a refused stale wake leaves the tunnel a newer flow opened, and that flow's mark still opens (fails if the refusal closes the box's tunnel)", async () => {
+  const { wake, mark, ensure, stop, open, tunnels } = register({
+    found: box("STOPPED"),
+    phases: ["STOPPED", "RUNNING"],
+  });
+  const stale = mark();
+  stop("env-1"); // bb suspends the machine
+  const newer = mark();
+  ensure("env-1", newer); // bb's resume opens the tunnel again
+  await assert.rejects(
+    wake(adoptedResource, lifecycle().report, new AbortController().signal, "wake-thread", stale),
+    /while it connected, so its tunnel stays closed/,
+  );
+  assert.equal(open.get("env-1"), "connecting");
+  assert.equal(ensure("env-1", newer), true);
+  assert.equal(tunnels.filter((call) => call.startsWith("stop")).length, 1, "only bb's suspend closed it");
+});
+
+// The close lands while the call waits for Ona to finish starting the box: a mark taken after that wait would miss it.
+test("bb's create and resume refuse the tunnel when the box is closed during the call (fails if either takes its mark late or passes none)", async () => {
+  const starting = () => ({ found: box("STARTING"), phases: ["STARTING", "STARTING", "RUNNING"] });
+  const created = start(starting());
+  const resumed = resume(starting());
+  await settle();
+  created.stop("env-1");
+  resumed.stop("env-1");
+  await tick(5_000, 2);
+  await assert.rejects(created.created, /while it connected, so its tunnel stays closed/);
+  await assert.rejects(resumed.resumed, /while it connected, so its tunnel stays closed/);
+  assert.deepEqual([created.connected, resumed.connected], [[], []]);
 });

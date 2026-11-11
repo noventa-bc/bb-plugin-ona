@@ -99,7 +99,7 @@ export interface SyncDeps {
   tunnels: {
     status(envId: string): "up" | "connecting" | "off";
     mark(): number;
-    ensure(envId: string, since?: number): boolean;
+    ensure(envId: string, since: number): boolean;
   };
   provider: {
     /** Boxes whose next suspend must not stop them; the provider's suspend consumes the entry. */
@@ -109,7 +109,7 @@ export interface SyncDeps {
       resource: OnaResource,
       report: { step(text: string): void; log(text: string): void },
       signal: AbortSignal,
-      since?: number,
+      since: number,
     ): Promise<unknown>;
     /** Starts a stopped box and connects bb's daemon (`provider.wake`); a waiting thread on an active machine asks for it. */
     wake(
@@ -117,7 +117,7 @@ export interface SyncDeps {
       report: { step(text: string): void; log(text: string): void },
       signal: AbortSignal,
       cause: WakeVia,
-      since?: number,
+      since: number,
     ): Promise<boolean>;
   };
   keepAliveUntil(envId: string): number | null;
@@ -386,14 +386,14 @@ export function createSync(deps: SyncDeps) {
             case "suspend-observed": {
               const lifecycle = await suspendWithoutStop(row);
               // The wake below is decided on this read, which follows the close this suspend may have made.
-              const readAt = tunnels.mark();
+              const wakeSince = tunnels.mark();
               const refusal = lifecycleRefusal(lifecycle, SUSPENDED);
               if (refusal) {
                 if (!decision.resumeAfter || lifecycle.phase !== "active") throw new Error(suspendFailure(refusal));
                 // bb's suspend failed (Ona stopped the box under a live turn) and left the machine active, where bb's
                 // resume does nothing: the plugin wakes the box (decision 0002).
                 // It gives up after 30 minutes; a plugin reload ends it sooner (docs/sync.md rule 1).
-                const startCalled = await provider.wake(resource, report, signal, "wake-thread", readAt);
+                const startCalled = await provider.wake(resource, report, signal, "wake-thread", wakeSince);
                 return startCalled ? "started it for a waiting thread" : "reconnected it for a waiting thread";
               }
               if (!decision.resumeAfter) return;
@@ -416,7 +416,9 @@ export function createSync(deps: SyncDeps) {
               return "resumed for a waiting thread";
             }
             case "ensure-tunnel":
-              tunnels.ensure(resource.envId, since);
+              // Rule 8: a refused open is not done.
+              if (!tunnels.ensure(resource.envId, since))
+                throw new Error("bb suspended or removed the machine after this pass read it; tunnel not reopened");
               return;
             case "heal-daemon": {
               // Rule 1: SSH starts stopped boxes, so ask Ona before the daemon check and again right before a restart.

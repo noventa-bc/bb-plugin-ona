@@ -62,7 +62,7 @@ export async function resumeCommand(
   deps: ResumeDeps,
   ref: string,
   signal: AbortSignal,
-  since?: number,
+  since: number,
 ): Promise<CliResult> {
   const { snapshot, findMachine, guard, provider } = deps;
   // Safety rule 1 (docs/sync.md): Ona is asked first; a box it can't be asked about is not touched.

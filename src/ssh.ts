@@ -175,11 +175,11 @@ export class TunnelManager {
   }
 
   /**
-   * Opens the box's tunnel unless one is open. With `since` (a `mark`), it opens nothing and returns false when the box
-   * was closed after the mark was taken: bb suspended or removed the machine after the caller read it.
+   * Opens the box's tunnel unless one is open. It opens nothing and returns false when the box was closed after `since`
+   * (a `mark`) was taken: bb suspended or removed the machine after the caller read it.
    */
-  ensure(envId: string, since?: number): boolean {
-    if (since !== undefined && (this.closedAt.get(envId) ?? 0) > since) return false;
+  ensure(envId: string, since: number): boolean {
+    if ((this.closedAt.get(envId) ?? 0) > since) return false;
     if (this.stopped || this.tunnels.has(envId)) return true;
     const state = { controller: new AbortController(), connectedAt: null as number | null };
     this.tunnels.set(envId, state);

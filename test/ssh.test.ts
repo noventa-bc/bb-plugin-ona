@@ -85,7 +85,7 @@ test("a tunnel runs ssh only when its gate says yes: a gate that says no or thro
     },
   );
   try {
-    for (const envId of ["env-no", "env-throws", "env-yes"]) tunnels.ensure(envId);
+    for (const envId of ["env-no", "env-throws", "env-yes"]) tunnels.ensure(envId, tunnels.mark());
     // env-yes shows a spawn reaches the log; the other two had the same time to (wrongly) spawn.
     const signal = AbortSignal.timeout(10_000);
     assert.ok(
@@ -122,7 +122,7 @@ test("a tunnel stopped while its gate asks Ona never runs ssh", async () => {
     quiet,
     () => new Promise((resolve) => (answer = resolve)),
   );
-  tunnels.ensure("env-1");
+  tunnels.ensure("env-1", tunnels.mark());
   tunnels.stop("env-1");
   answer(true);
   await settle();
@@ -145,7 +145,7 @@ test("ensure after stopAll starts no tunnel (fails if stopAll leaves ensure open
   );
   t.after(() => tunnels.stop("env-1")); // a tunnel loop that starts would hold the process open
   tunnels.stopAll();
-  tunnels.ensure("env-1");
+  tunnels.ensure("env-1", tunnels.mark());
   await settle();
   assert.equal(tunnels.status("env-1"), "off");
   assert.equal(asked, 0);
@@ -167,18 +167,19 @@ test("ensure with a mark older than the box's last stop opens no tunnel and neve
   );
   t.after(() => tunnels.stopAll()); // a tunnel loop that starts would hold the process open
   const before = tunnels.mark();
-  const other = tunnels.mark();
+  tunnels.stop("env-2");
+  const later = tunnels.mark();
   tunnels.stop("env-1");
   assert.equal(tunnels.ensure("env-1", before), false);
-  assert.equal(tunnels.ensure("env-1", other), false, "a stop after any mark refuses it");
+  assert.equal(tunnels.ensure("env-1", later), false, "a stop after the later mark refuses it too");
   await settle();
   assert.equal(tunnels.status("env-1"), "off");
   assert.equal(asked, 0);
-  assert.equal(tunnels.ensure("env-2", before), true, "another box's stop refuses nothing");
+  assert.equal(tunnels.ensure("env-2", later), true, "a stop before the mark refuses nothing");
   assert.equal(tunnels.status("env-2"), "connecting");
 });
 
-test("ensure with a mark taken after the box's last stop, or with no mark, opens the tunnel", async (t) => {
+test("ensure with a mark taken after the box's last stop opens the tunnel", async (t) => {
   const tunnels = new TunnelManager(
     "true",
     () => 1,
@@ -189,9 +190,6 @@ test("ensure with a mark taken after the box's last stop, or with no mark, opens
   t.after(() => tunnels.stopAll());
   tunnels.stop("env-1");
   assert.equal(tunnels.ensure("env-1", tunnels.mark()), true);
-  assert.equal(tunnels.status("env-1"), "connecting");
-  tunnels.stop("env-1");
-  assert.equal(tunnels.ensure("env-1"), true);
   assert.equal(tunnels.status("env-1"), "connecting");
 });
 
@@ -210,7 +208,7 @@ async function askTimes(gate: () => Promise<boolean>, seconds: number): Promise<
   );
   try {
     enableFakeClock();
-    tunnels.ensure("env-1");
+    tunnels.ensure("env-1", tunnels.mark());
     await tick(1_000, seconds);
     await settle();
     return times;

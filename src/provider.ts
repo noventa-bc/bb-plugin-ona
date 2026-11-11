@@ -214,7 +214,7 @@ function timedWake<T>(
     progress: PluginMachineProviderProgress,
     outer: AbortSignal,
     trace: StartTrace,
-    since?: number,
+    since: number,
   ) => Promise<T>,
 ) {
   return (
@@ -222,7 +222,7 @@ function timedWake<T>(
     progress: PluginMachineProviderProgress,
     outer: AbortSignal,
     cause: WakeVia,
-    since?: number,
+    since: number,
   ) => {
     const trace: StartTrace = { via: cause, started: false, created: false };
     return timedConnect(bb, "wake", trace, () => body(resource, progress, outer, trace, since));
@@ -232,7 +232,7 @@ function timedWake<T>(
 export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
   const { ensureRunning, connect, connectOrClose, disconnect } = connectHelpers(bb, deps);
   /** `since`: the tunnels' mark taken before the caller read the machine (see `connect`). */
-  const reconnect = (box: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal, since?: number) =>
+  const reconnect = (box: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal, since: number) =>
     timedConnect(bb, "reconnect", { started: false, created: false }, () =>
       capped(`reconnecting ${box.envName}`, CAP_MINUTES, signal, report, (s, r) =>
         connect(box, box.key, r, s, false, since),

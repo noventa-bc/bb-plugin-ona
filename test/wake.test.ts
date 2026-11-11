@@ -47,7 +47,7 @@ function fixture(
 
 test("bb ona resume refuses when Ona can't be asked, and starts nothing (fails if it starts a box it can't check)", async () => {
   const { deps, calls } = fixture(box("STOPPED"), ["STOPPED", "RUNNING"], { listingFails: true });
-  const result = await resumeCommand(deps, "box", signal());
+  const result = await resumeCommand(deps, "box", signal(), 0);
   assert.equal(result.exitCode, 1);
   assert.match(result.stderr ?? "", /^Can't ask Ona whether box is running \(not logged in\); not started/);
   assert.deepEqual(calls, []);
@@ -55,7 +55,7 @@ test("bb ona resume refuses when Ona can't be asked, and starts nothing (fails i
 
 test("bb ona resume refuses a box Ona doesn't list (fails if it starts an unlisted box)", async () => {
   const { deps, calls } = fixture(box("STOPPED"), ["STOPPED", "RUNNING"], { listed: false });
-  const result = await resumeCommand(deps, "box", signal());
+  const result = await resumeCommand(deps, "box", signal(), 0);
   assert.equal(result.exitCode, 1);
   assert.match(result.stderr ?? "", /^box is not listed in Ona/);
   assert.deepEqual(calls, []);
@@ -63,7 +63,7 @@ test("bb ona resume refuses a box Ona doesn't list (fails if it starts an unlist
 
 test("bb ona resume refuses a machine bb shows suspended, and points at bb machine resume (fails if it wakes it)", async () => {
   const { deps, calls } = fixture(box("STOPPED"), ["STOPPED", "RUNNING"], { phase: "suspended" });
-  const result = await resumeCommand(deps, "box", signal());
+  const result = await resumeCommand(deps, "box", signal(), 0);
   assert.equal(result.exitCode, 1);
   assert.match(result.stderr ?? "", /^box is suspended in bb.*`bb machine resume box`/);
   assert.deepEqual(calls, []);
@@ -71,7 +71,7 @@ test("bb ona resume refuses a machine bb shows suspended, and points at bb machi
 
 test("bb ona resume starts a stopped box and connects it (fails if it only reconnects)", async () => {
   const { deps, calls } = fixture(box("STOPPED"), ["STOPPED", "RUNNING"]);
-  const result = await resumeCommand(deps, "box", signal());
+  const result = await resumeCommand(deps, "box", signal(), 0);
   assert.equal(result.exitCode, 0);
   assert.deepEqual(calls, ["get STOPPED", "start", "get RUNNING", ...connectCalls]);
   assert.match(result.stdout ?? "", /^Started box and reconnected it$/m);
@@ -79,7 +79,7 @@ test("bb ona resume starts a stopped box and connects it (fails if it only recon
 
 test("bb ona resume on a running box connects it without starting it (fails if it starts a running box)", async () => {
   const { deps, calls } = fixture(box("RUNNING"), ["RUNNING"]);
-  const result = await resumeCommand(deps, "box", signal());
+  const result = await resumeCommand(deps, "box", signal(), 0);
   assert.equal(result.exitCode, 0);
   assert.deepEqual(calls, ["get RUNNING", "get RUNNING", ...connectCalls]);
   assert.match(result.stdout ?? "", /^Reconnected box$/m);
@@ -113,7 +113,7 @@ test("bb ona resume refuses a box whose machine another action holds, and starts
       }),
   );
   const { deps, calls } = fixture(box("STOPPED"), ["STOPPED", "RUNNING"], { guard });
-  const result = await resumeCommand(deps, "box", signal());
+  const result = await resumeCommand(deps, "box", signal(), 0);
   finish();
   await held;
   assert.equal(result.exitCode, 1);
