@@ -92,30 +92,20 @@ test("isRunning, the gate for every SSH (safety rule 1), passes only RUNNING: no
   assert.equal(isRunning(undefined), false, "a box the listing doesn't have");
 });
 
-test("findEnvironment matches an exact id", async () => {
-  setFake({});
-  assert.equal((await cli.findEnvironment("env-0001"))?.metadata.name, "brave-otter");
-});
-
-test("findEnvironment matches an exact name", async () => {
-  setFake({});
-  assert.equal((await cli.findEnvironment("swift-lynx"))?.id, "env-9abc");
-});
-
-test("findEnvironment matches a unique id prefix", async () => {
-  setFake({});
-  assert.equal((await cli.findEnvironment("env-9ab"))?.id, "env-9abc");
-});
-
-test("findEnvironment returns null for an ambiguous id prefix", async () => {
-  setFake({});
-  assert.equal(await cli.findEnvironment("env-000"), null);
-});
-
-test("findEnvironment returns null for an unknown ref", async () => {
-  setFake({});
-  assert.equal(await cli.findEnvironment("no-such-box"), null);
-});
+// Each ref and the id it must find (null for none).
+const FIND_CASES: [string, string, string | null][] = [
+  ["findEnvironment matches an exact id", "env-0001", "env-0001"],
+  ["findEnvironment matches an exact name", "swift-lynx", "env-9abc"],
+  ["findEnvironment matches a unique id prefix", "env-9ab", "env-9abc"],
+  ["findEnvironment returns null for an ambiguous id prefix", "env-000", null],
+  ["findEnvironment returns null for an unknown ref", "no-such-box", null],
+];
+for (const [title, ref, id] of FIND_CASES) {
+  test(title, async () => {
+    setFake({});
+    assert.equal((await cli.findEnvironment(ref))?.id ?? null, id);
+  });
+}
 
 test("resolveProjectId matches by id", async () => {
   setFake({ FAKE_ONA_PROJECTS: fixture("projects.json") });

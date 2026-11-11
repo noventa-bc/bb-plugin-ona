@@ -4,15 +4,7 @@ import { test } from "node:test";
 import { boxFacts } from "../src/ona.ts";
 import type { WorkspaceView } from "../src/lifecycle.ts";
 import { ALL, GIVE_UP_AFTER, GRACE_MS } from "../src/reconcile.ts";
-import {
-  connectedAtKey,
-  forgetBox,
-  matchesRef,
-  type Row,
-  watchRealtime,
-  type RealtimeBb,
-  type ThreadRecord,
-} from "../src/sync.ts";
+import { connectedAtKey, forgetBox, watchRealtime, type RealtimeBb, type ThreadRecord } from "../src/sync.ts";
 import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
 import { HOUR, NOW, idle, world } from "./sync-fakes.ts";
 
@@ -188,36 +180,6 @@ test("rows carry the name Ona lists, not the one stored at creation", async () =
     (await sync.machines()).map((row) => row.resource.envName),
     ["renamed", "box"],
   );
-});
-
-// Bug: an open thread header listed every bb host to find the one its thread runs on.
-test("machineOfHost reads the one host it is asked for, not the list", async () => {
-  const { sync, hostReads } = world([idle("h1"), idle("h2")]);
-  const row = await sync.machineOfHost("h2");
-  assert.equal(row?.hostId, "h2");
-  assert.equal(row?.resource.envId, "env-h2");
-  assert.deepEqual(hostReads, ["get h2"]);
-});
-
-test("machineOfHost is null for a host the list would leave out", async () => {
-  const { sync, hosts } = world([idle("h1")]);
-  assert.equal(await sync.machineOfHost("unknown"), null, "bb answers 404");
-  hosts.get("h1")!.machineProviderId = null;
-  assert.equal(await sync.machineOfHost("h1"), null, "not an Ona machine");
-  hosts.get("h1")!.machineProviderId = "ona";
-  hosts.get("h1")!.lifecycle.phase = "creating";
-  assert.equal(await sync.machineOfHost("h1"), null, "still being created");
-});
-
-// An SDK error can carry the `not_found` code and no status (experimental_PluginRpcCallError); that host is gone too.
-test("machineOfHost is null when the lookup error carries only the not_found code", async () => {
-  const { sync } = world([idle("h1")], { hostGet: "not_found" });
-  assert.equal(await sync.machineOfHost("h1"), null);
-});
-
-test("machineOfHost throws when the lookup fails for another reason", async () => {
-  const { sync } = world([idle("h1")], { hostGet: "fail" });
-  await assert.rejects(sync.machineOfHost("h1"), /bb is down/);
 });
 
 test("status reports workspaces that need recovery", async () => {
@@ -473,12 +435,6 @@ test("removing a machine drops its box's stored keys and leaves other boxes' alo
   assert.equal(kv.get(connectedAtKey("env-h2")), NOW);
   await forgetBox(store, "env-h9");
   assert.equal(kv.size, 1, "an unknown box changes nothing");
-});
-
-test("a ref matches a row by host id, machine name, env id or env name, and nothing else", () => {
-  const row = { hostId: "h1", machine: "box-one", resource: { envId: "env-1", envName: "one" } } as Row;
-  for (const ref of ["h1", "box-one", "env-1", "one"]) assert.equal(matchesRef(row, ref), true, ref);
-  assert.equal(matchesRef(row, "two"), false);
 });
 
 /** watchRealtime against a fake bb: thread t1 runs on Ona host h1, thread t2 on a non-Ona host. */

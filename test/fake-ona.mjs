@@ -5,7 +5,7 @@
 // CLI's not-found messages. argv is logged to $FAKE_ONA_LOG; $FAKE_ONA_FAIL
 // fails every call with that message.
 import { spawnSync } from "node:child_process";
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 
 const { FAKE_ONA_FAIL, FAKE_ONA_LOG, FAKE_ONA_ENVIRONMENTS, FAKE_ONA_GET, FAKE_ONA_PROJECTS } = process.env;
 const args = process.argv.slice(2);
@@ -44,9 +44,12 @@ if (group === "project" && verb === "list") {
         fail(`Error: no environment found matching "${ref}"\nPossible resolutions:\n  - Run \`ona environment list\``);
       break;
     case "create": {
-      // shortcut: ids are env-<count+1>, so a create after a delete can reuse an id; number from a counter if a test needs that
+      // Ids count up in a file beside the state: each call is its own process, so a create after a delete must not reuse an id.
+      const counter = `${FAKE_ONA_ENVIRONMENTS}.next`;
+      const next = existsSync(counter) ? Number(readFileSync(counter, "utf8")) : 1;
+      writeFileSync(counter, String(next + 1));
       const created = {
-        id: `env-${envs.length + 1}`,
+        id: `env-${next}`,
         metadata: { name: flag("--name"), projectId: ref },
         status: { phase: "ENVIRONMENT_PHASE_RUNNING" },
       };

@@ -2,6 +2,7 @@
 // server.ts in the SDK's fake bb host with the fake `ona` and fake `ssh`, a
 // loopback `/health` server for the tunnel probe, and the temp dir the fakes
 // write their state and call log to.
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -22,6 +23,18 @@ export const ctx = {
   signal: new AbortController().signal,
   checkpoint: async (_resource: unknown) => {},
 };
+
+/** Whether this pid still runs a fake tunnel (test/fake-ssh.sh execs `sleep 100000`): a process that reuses the pid counts only if it runs that too. */
+export const alive = (pid: number) => {
+  try {
+    return execFileSync("ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8" }).trim() === "sleep 100000";
+  } catch (error) {
+    // ps exits 1 for a pid that is gone; any other failure must not read a live tunnel as dead.
+    if ((error as { status?: number }).status === 1) return false;
+    throw error;
+  }
+};
+
 const here = (name: string) => fileURLToPath(new URL(name, import.meta.url));
 const FAKE_ENV = ["FAKE_ONA_ENVIRONMENTS", "FAKE_ONA_LOG", "FAKE_ONA_PROJECTS", "FAKE_SSH_HOME", "FAKE_SSH_LOG"];
 
