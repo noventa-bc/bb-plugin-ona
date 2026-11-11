@@ -54,8 +54,16 @@ export interface ResumeDeps {
   provider: Pick<ReturnType<typeof registerOnaProvider>, "wake">;
 }
 
-/** `bb ona resume <ref>`: starts a stopped box and reconnects bb's daemon, or reconnects a running one (decision 0002). */
-export async function resumeCommand(deps: ResumeDeps, ref: string, signal: AbortSignal): Promise<CliResult> {
+/**
+ * `bb ona resume <ref>`: starts a stopped box and reconnects bb's daemon, or reconnects a running one (decision 0002).
+ * `since`: the tunnels' mark, taken before the row is read.
+ */
+export async function resumeCommand(
+  deps: ResumeDeps,
+  ref: string,
+  signal: AbortSignal,
+  since: number,
+): Promise<CliResult> {
   const { snapshot, findMachine, guard, provider } = deps;
   // Safety rule 1 (docs/sync.md): Ona is asked first; a box it can't be asked about is not touched.
   const listing = await snapshot.refresh().catch(() => null);
@@ -82,7 +90,7 @@ export async function resumeCommand(deps: ResumeDeps, ref: string, signal: Abort
     "resume",
     "requested with bb ona resume",
     async () => {
-      outcome.started = await provider.wake(row.resource, report, signal, "wake-cmd");
+      outcome.started = await provider.wake(row.resource, report, signal, "wake-cmd", since);
     },
     { force: true, cooldown: false },
   );
