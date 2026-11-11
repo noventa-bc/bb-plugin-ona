@@ -67,30 +67,45 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
 
 **Safety rules.** Every automatic action keeps these:
 
-1. **Never wake a box, except the starts you ask for and bb's restart recovery.** Those are a waiting thread on an active machine whose box Ona stopped (the table's row for a refused suspend, when bb's resume would do nothing), `bb ona resume`, and bb's own resume (yours, a message or thread waiting on the machine, or its recovery after a bb restart, decision 0002), which reaches the provider's resume; each starts the box only when Ona says it is stopped or stopping (a starting box is waited for), then connects. Ona's SSH starts a stopped box, so the plugin uses SSH
-   (tunnel connect and reconnect, `bb ona reconnect`, daemon check, cost collector, and the cleanup
-   when you remove an adopted box's machine) only when Ona, asked right before it, says
-   the box is running: an `ona environment list` for tunnels, the daemon check
-   and the cost collector, or `ona environment get` for a connect and that cleanup
-   ([0005](decisions/0005-lookup-by-id-counts-as-listing.md)). A
-   daemon restart asks Ona again after the daemon check, right before it
-   starts. A cached listing, bb showing the machine connected, a box that is
-   starting or stopping, or a listing that lacks the box is not enough. If Ona
-   can't be asked, nothing connects: tunnels wait, and a thread's cost shows
-   its last figure. Every connect attempt of a tunnel asks for one fresh
-   listing (so does each reconnect after `ssh` exits), plus a check when Ona shows the box
-   stopped. A refused tunnel tries again every 10s for a minute,
-   then every minute (every minute while Ona can't be asked). A tunnel closes
-   when bb suspends or removes the machine, when a create or resume fails, when a wake that started its box fails (a wake of a running box, or of a box Ona started during the wake's waits, keeps its tunnel), or
-   the plugin stops; a check that sees the box stopped asks bb to suspend it
-   once bb no longer shows the machine connected. Create, resume, the wake for a
-   waiting thread and `bb ona resume` start the box you asked for, and bb's recovery after a restart starts one you did not (decision 0002) (`ona environment create` for a new box, else
-   `ona environment start` when Ona shows it stopped or stopping, a starting box being waited for; any other phase is refused), then
-   connect. Every connect (create, resume, the wake, `bb ona reconnect`, a daemon restart)
-   first asks `ona environment get` every 5s, for up to 15 minutes, until it says
-   the box is running and so is its dev container, if it has one
-   (`waitForReady()` in `src/ona.ts`, [0005](decisions/0005-lookup-by-id-counts-as-listing.md)).
-   No SSH runs before that answer. These end the connect at once, with no SSH:
+1. **Never wake a box, except the starts you ask for and bb's restart recovery.**
+   _Why: an accidental start costs money and keeps the box up._
+
+   The starts allowed; each starts the box only when Ona says it is stopped or stopping (a starting box is waited
+   for), then connects:
+   - a waiting thread on an active machine whose box Ona stopped (the table's row for a refused suspend, when bb's
+     resume would do nothing)
+   - `bb ona resume`
+   - bb's own resume (yours, a message or thread waiting on the machine, or its recovery after a bb restart,
+     decision 0002), which reaches the provider's resume
+
+   Create, resume, the wake for a waiting thread and `bb ona resume` start the box you asked for, and bb's recovery
+   after a restart starts one you did not (decision 0002) (`ona environment create` for a new box, else
+   `ona environment start` when Ona shows it stopped or stopping, a starting box being waited for; any other phase is
+   refused), then connect.
+
+   **SSH.** Ona's SSH starts a stopped box, so the plugin uses SSH (tunnel connect and reconnect, `bb ona reconnect`,
+   daemon check, cost collector, and the cleanup when you remove an adopted box's machine) only when Ona, asked right
+   before it, says the box is running:
+   - an `ona environment list` for tunnels, the daemon check and the cost collector; a daemon restart asks Ona again
+     after the daemon check, right before it starts
+   - `ona environment get` for a connect and that cleanup ([0005](decisions/0005-lookup-by-id-counts-as-listing.md))
+
+   A cached listing, bb showing the machine connected, a box that is starting or stopping, or a listing that lacks
+   the box is not enough. If Ona can't be asked, nothing connects: tunnels wait, and a thread's cost shows its last
+   figure.
+
+   **Tunnels.** Every connect attempt of a tunnel asks for one fresh listing (so does each reconnect after `ssh`
+   exits), plus a check when Ona shows the box stopped. A refused tunnel tries again every 10s for a minute, then
+   every minute (every minute while Ona can't be asked). A tunnel closes when bb suspends or removes the machine, when
+   a create or resume fails, when a wake that started its box fails (a wake of a running box, or of a box Ona started
+   during the wake's waits, keeps its tunnel), or the plugin stops; a check that sees the box stopped asks bb to
+   suspend it once bb no longer shows the machine connected.
+
+   **The connect wait.** Every connect (create, resume, the wake, `bb ona reconnect`, a daemon restart) first asks
+   `ona environment get` every 5s, for up to 15 minutes, until it says the box is running and so is its dev
+   container, if it has one (`waitForReady()` in `src/ona.ts`,
+   [0005](decisions/0005-lookup-by-id-counts-as-listing.md)). No SSH runs before that answer. These end the connect
+   at once, with no SSH:
    - a running box whose `spec.desiredPhase` is stopped or deleted (Ona is
      stopping or deleting it); any other desired phase counts as running
    - a box in any phase but stopping or stopped whose dev container is
@@ -113,19 +128,15 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    - any other phase. A failure message there may be left from an earlier start.
    - a `get` that fails (unknown).
 
-   One line of Ona's text is shown: the first non-blank line. When the wait
-   ends early (a caller's own timeout), its error still names the last reason.
-   After Ona answers ready, SSH tries stop at 10 minutes, checked between
-   tries; a try held for Ona can run past it.
-   Every SSH command in a connect (each try of the waits, the Codex `mkdir`,
-   the `~/.bb-machines` step, the preflight and bb's bootstrap) asks
-   `ona environment get` first and runs only on a ready answer, read as above:
-   a failed box ends the connect with no SSH, and a box on its way or a failed
-   `get` holds the command until Ona says ready, for up to 15 minutes. The
-   reverse tunnel's `ssh` is not gated by these waits; its own `shouldConnect`
-   in `server.ts` asks a fresh listing.
+   One line of Ona's text is shown: the first non-blank line. When the wait ends early (a caller's own timeout), its
+   error still names the last reason. After Ona answers ready, SSH tries stop at 10 minutes, checked between tries; a
+   try held for Ona can run past it. Every SSH command in a connect (each try of the waits, the Codex `mkdir`, the
+   `~/.bb-machines` step, the preflight and bb's bootstrap) asks `ona environment get` first and runs only on a ready
+   answer, read as above: a failed box ends the connect with no SSH, and a box on its way or a failed `get` holds the
+   command until Ona says ready, for up to 15 minutes. The reverse tunnel's `ssh` is not gated by these waits; its own
+   `shouldConnect` in `server.ts` asks a fresh listing.
 
-   A wake (`provider.wake`: a waiting thread on an active machine, and
+   **The 30-minute cap.** A wake (`provider.wake`: a waiting thread on an active machine, and
    `bb ona resume`), a daemon restart (`reconnect`: the heal, and
    `bb ona reconnect`) and bb's own resume (the provider's `resume`: Resume in
    bb, bb's recovery after a restart, and a waiting thread's resume) give up
@@ -149,9 +160,8 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    them sooner; an ended resume wait
    reads "couldn't confirm the resume for a waiting thread".
 
-   These commands you run yourself are not gated and may wake a box:
-   `ona environment open` and `bb ona ssh --thread`.
-   _Why: an accidental start costs money and keeps the box up._
+   **Not gated.** These commands you run yourself are not gated and may wake a box: `ona environment open` and
+   `bb ona ssh --thread`.
 
 2. **The plugin's own suspends never stop a box.** Every suspend the plugin makes
    skips the provider's stop. A suspend you ask for (Pause, `bb machine suspend`, or `bb machine reconcile` of a suspended
