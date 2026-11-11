@@ -49,7 +49,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
 - Point a project at the devbox checkout:
   `bb project source add <projectId> --machine <m> --path /workspaces/<repo>`.
 - Thread in a fresh devbox: `bb thread spawn --project <id> --environment-provider ona-devbox --prompt "..."`.
-- Pick the box's Ona project with `--machine-inputs`: `bb thread spawn --project <id> --environment-provider ona-devbox --machine-inputs '{"mode":"create","project":"my-app"}' --prompt "..."`. `bb machine create` takes the same inputs in `--inputs`.
+- Pick the box's Ona project with `--machine-inputs`: `bb thread spawn --project <id> --environment-provider ona-devbox --machine-inputs '{"mode":"create","project":"my-app"}' --prompt "..."`. `bb machine create --provider ona` takes the same inputs in `--inputs`.
 - `<ref>` is a bb machine name/id or an Ona environment name/id; a name two devboxes share is refused by commands that act on one box (use a host id); `bb ona status` lists them all.
 - `bb ona move <thread-id> <ref>` — continue a thread in a new thread on another devbox at the same path (the path must exist there; uncommitted changes stay behind; the old thread stays).
 - `bb ona rename <ref> [name]` — rename the Ona environment and its bb machine (a random fun name if `name` is omitted); refused while bb shows its machine in a phase other than active.
@@ -93,4 +93,4 @@ real folder, setup stops and asks to move it aside.
 - Devbox needs node ≥ 22.19, npm, curl and git (preflight refuses otherwise).
 - Tunnels live only while the bb server machine is awake.
 - Never put secrets in machine inputs; they are readable by every plugin.
-- Boxes are shared: suspending one stops every active thread on it and force-closes its terminals, so suspend or remove a box only when the user asks.
+- A box can run several threads: suspending it stops every active thread on it and force-closes its terminals, so suspend or remove a box only when the user asks.
