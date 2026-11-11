@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { tempDir } from "./sandbox.ts";
@@ -175,4 +175,14 @@ test("with CDPATH set, a relative invocation of --sdk prints the typings' path a
     String(run.stdout),
     /^--- \/.*bb-plugin-sdk\.d\.ts:\d+\ndeclare function defineCli\(spec: PluginCliSpec\)/m,
   );
+});
+
+test("a bb-app folder with a backslash in its name is printed as it is on disk", () => {
+  const appDir = join(tempDir("bb-source-backslash-"), "app\\tx");
+  cpSync(bbApp, appDir, { recursive: true });
+  const file = join(appDir, "server", "dist", "start-server.js");
+  const r = bbSource(["letDefined", "0"], appDir);
+  assert.equal(r.status, 0, r.output);
+  assert.ok(r.output.includes(`bb-app 9.9.9: ${file}\n`), r.output);
+  assert.ok(r.output.includes(`--- ${file}:`), r.output);
 });

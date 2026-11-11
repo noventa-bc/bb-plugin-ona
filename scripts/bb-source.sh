@@ -25,7 +25,7 @@ else
   [ -f "$file" ] || { echo "bb-source: no bb server bundle at $file; set BB_APP_DIR to the bb-app folder" >&2; exit 1; }
   version=$(sed -n 's/^[[:space:]]*"version": *"\([^"]*\)".*/\1/p' "$pkg/package.json" | head -n 1)
   [ -n "$version" ] || { echo "bb-source: no version in $pkg/package.json" >&2; exit 1; }
-  echo "bb-app $version: $file"
+  printf 'bb-app %s: %s\n' "$version" "$file"
 fi
 [ -f "$file" ] || { echo "bb-source: no SDK typings at $file; run npm ci --ignore-scripts" >&2; exit 1; }
 
@@ -35,6 +35,6 @@ fi
 found=$(grep -n -E "function ${name}[(<]|interface $name([^A-Za-z0-9_]|\$)|const $name([^A-Za-z0-9_]|\$)|(^|[^A-Za-z0-9_\$.])$name *=([^=>]|\$)" "$file" | cut -d: -f1) || true
 [ -n "$found" ] || { echo "bb-source: no definition of $name in $file" >&2; exit 1; }
 for n in $found; do
-  echo "--- $file:$n"
+  printf -- '--- %s:%s\n' "$file" "$n"
   sed -n "$n,$((n + lines))p" "$file"
 done

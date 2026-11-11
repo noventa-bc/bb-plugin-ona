@@ -12,14 +12,15 @@ worktree=$1
 sha=$2
 dir=$3
 # cd -P resolves symlinks and `..` in the parent, so the path checked is the path the copy is written to.
-# CDPATH='' keeps cd from printing the path when the caller has CDPATH set.
-parent=$(CDPATH='' cd -P -- "$(dirname -- "$dir")" 2>/dev/null && pwd -P) || { echo "scratch-copy: the folder holding $dir does not exist; make it first" >&2; exit 1; }
+# CDPATH='' keeps cd from printing the path when the caller has CDPATH set; the trailing /. keeps a parent named - from meaning the previous folder.
+parent=$(CDPATH='' cd -P -- "$(dirname -- "$dir")/." 2>/dev/null && pwd -P) || { echo "scratch-copy: the folder holding $dir does not exist; make it first" >&2; exit 1; }
 phys=$parent/$(basename -- "$dir")
 [ ! -e "$phys" ] || { echo "scratch-copy: $dir already exists; name a new folder" >&2; exit 1; }
 git -C "$worktree" rev-parse --verify -q "$sha^{commit}" >/dev/null || { echo "scratch-copy: $sha is not a commit of $worktree" >&2; exit 1; }
 main=$(dirname "$(git -C "$worktree" rev-parse --path-format=absolute --git-common-dir)")
-# git answers for every spelling of the folder: letter case, a /System/Volumes/Data prefix, a symlink.
-if git -C "$parent" rev-parse --git-dir >/dev/null 2>&1; then
+# git answers for every spelling of the folder (letter case, a /System/Volumes/Data prefix, a symlink), and across a
+# mount point inside a checkout with GIT_DISCOVERY_ACROSS_FILESYSTEM.
+if GIT_DISCOVERY_ACROSS_FILESYSTEM=1 git -C "$parent" rev-parse --git-dir >/dev/null 2>&1; then
   echo "scratch-copy: $dir is inside a git checkout; name a folder outside one" >&2
   exit 1
 fi
@@ -36,4 +37,4 @@ elif cmp -s "$main/package.json" "$phys/package.json" && cmp -s "$main/package-l
 else
   echo "scratch-copy: did not link node_modules: package.json or package-lock.json differs from $main" >&2
 fi
-echo "$phys"
+printf '%s\n' "$phys"

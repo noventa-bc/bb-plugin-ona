@@ -262,11 +262,11 @@ test("a folder inside the worktree, reached through the /System/Volumes/Data pre
   assert.equal(hasEntry(join(worktree, "scratch")), false);
 });
 
-test("with CDPATH set to the worktree's parent, a relative worktree name and an absolute folder inside it are refused", () => {
+test("with CDPATH set to the worktree's parent, a relative worktree name and a relative folder inside it are refused", () => {
   const { worktree } = checkouts();
   const parentOfWorktree = dirname(worktree);
   const r = scratchCopy(
-    [basename(worktree), head(worktree), join(worktree, "scratch")],
+    [basename(worktree), head(worktree), join(basename(worktree), "scratch")],
     { ...env, CDPATH: parentOfWorktree },
     parentOfWorktree,
   );
@@ -283,6 +283,24 @@ test("a relative folder whose first name starts with a dash is made", () => {
   assert.equal(r.status, 0, r.messages);
   assert.equal(realpathSync(r.printed), realpathSync(join(cwd, "-dash", "copy")));
   assert.equal(existsSync(join(cwd, "-dash", "copy", "package.json")), true);
+});
+
+test("a relative folder under a folder named - is made there, not under the previous folder", () => {
+  const { worktree } = checkouts();
+  const cwd = tempDir("scratch-copy-cwd-");
+  mkdirSync(join(cwd, "-"));
+  const r = scratchCopy([worktree, head(worktree), "-/copy"], { ...env, OLDPWD: tempDir("scratch-copy-oldpwd-") }, cwd);
+  assert.equal(r.status, 0, r.messages);
+  assert.equal(realpathSync(r.printed), realpathSync(join(cwd, "-", "copy")));
+});
+
+test("a folder name with a backslash is printed as it is on disk", () => {
+  const { worktree } = checkouts();
+  const parent = join(tempDir("scratch-copy-backslash-"), "a\\tb");
+  mkdirSync(parent);
+  const r = scratchCopy([worktree, head(worktree), join(parent, "copy")]);
+  assert.equal(r.status, 0, r.messages);
+  assert.equal(existsSync(join(r.printed, "package.json")), true, r.printed);
 });
 
 test("CDPATH does not move a relative folder: the copy is made under the current folder", () => {
