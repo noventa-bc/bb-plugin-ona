@@ -54,10 +54,14 @@ test("bb running create again for the same machine, still creating with the box 
   assert.deepEqual(calls, ["get RUNNING", ...connectCalls]);
 });
 
-test("a machine of another provider whose resource names the same box id does not refuse the adopt (fails if the provider filter is dropped)", async () => {
+test("a machine that is not this box's Ona machine does not refuse the adopt (fails if the provider filter, the box-id check or the resource guard is dropped)", async () => {
   const { result } = await adopt({
     found: box("RUNNING"),
-    machines: [{ id: "host-9", name: "other", phase: "active", resource: adoptedResource, provider: "other" }],
+    machines: [
+      { id: "host-9", name: "other", phase: "active", resource: adoptedResource, provider: "other" },
+      { id: "host-10", name: "ona:other", phase: "active", resource: { ...adoptedResource, envId: "env-2" } },
+      { id: "host-11", name: "Ona devbox 11", phase: "creating", resource: null },
+    ],
   });
   assert.ok(!(result instanceof Error), String(result));
 });

@@ -67,7 +67,7 @@ export type Setup = {
   deleteFails?: boolean;
   createFails?: boolean;
   reopenDuringMove?: boolean;
-  machines?: { id: string; name: string; phase: string; resource: OnaResource; provider?: string }[];
+  machines?: { id: string; name: string; phase: string; resource: OnaResource | null; provider?: string }[];
 };
 
 /** Each command as the gated executor runs it: after a `get` that says RUNNING. */
