@@ -8,6 +8,7 @@ import {
   errorText,
   isRunning,
   matchEnvironment,
+  metric,
   reasonOf,
   sshHost,
   type OnaCli,
@@ -338,6 +339,7 @@ export function onaCommands(deps: OnaCommandDeps) {
         }
         case "reconnect": {
           if (!ref) break;
+          bb.log.info(metric("cmd", { name: "reconnect" }));
           const row = await findMachine(ref);
           if (!row) return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${ref}".` };
           // A tunnel keeps the box awake, so none opens on a machine bb doesn't show active (decision 0003).
@@ -383,6 +385,7 @@ export function onaCommands(deps: OnaCommandDeps) {
         }
         case "resume": {
           if (!ref) break;
+          bb.log.info(metric("cmd", { name: "resume" }));
           // Awaited, so a refused or failed start reaches the catch below and exits 1 (as `reconnect` does).
           return await resumeCommand(
             { snapshot, findMachine, guard, provider },
@@ -396,6 +399,7 @@ export function onaCommands(deps: OnaCommandDeps) {
           return { exitCode: 0, stdout: formatStatus(rows, onaHealth()) };
         }
         case "sync": {
+          bb.log.info(metric("cmd", { name: "sync" }));
           await snapshot.refresh().catch(() => undefined);
           const targets = ref ? [await findMachine(ref)] : await machines();
           if (targets.some((row) => row === null))

@@ -3,7 +3,8 @@
 import type { MachineExecutor } from "@get-bb/plugin-sdk";
 import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
 import type { OnaCli, OnaEnvironment } from "../src/ona.ts";
-import { registerOnaProvider } from "../src/provider.ts";
+import { registerOnaProvider, type OnaResource, type PluginMachineProviderProgress } from "../src/provider.ts";
+import type { WakeVia } from "../src/provider-connect.ts";
 import type { TunnelManager } from "../src/ssh.ts";
 
 export const box = (phase: string): OnaEnvironment => ({
@@ -21,6 +22,7 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * `lookupFails`: `findEnvironment` throws, and so does `getEnvironmentIfExists` for `found`'s id.
  * `unpushed`: the box has unpushed commits, so a remove is refused.
  * `uncommitted`: the box has uncommitted files and no unpushed commits, so a remove is refused.
+ * `gitCounts`: the box reports its git counts, both zero unless `unpushed` or `uncommitted` sets one.
  * `reopenDuringMove`: a tunnel opens while an adopted remove's move-aside script runs.
  * `moveAside`: the move-aside script exits with this code, or throws this error (default 0).
  * `rootExits`: the `~/.bb-machines` script's exit codes in turn, the last one repeated.
@@ -40,6 +42,7 @@ export type Setup = {
   lookupFails?: boolean;
   unpushed?: boolean;
   uncommitted?: boolean;
+  gitCounts?: boolean;
   reopenDuringMove?: boolean;
   moveAside?: number | Error;
   rootExits?: number[];
@@ -80,6 +83,7 @@ export function register({
   lookupFails,
   unpushed,
   uncommitted,
+  gitCounts,
   reopenDuringMove,
   moveAside = 0,
   rootExits = [],
@@ -119,7 +123,7 @@ export function register({
         calls.push("get failed");
         throw new Error("Ona is unreachable");
       }
-      if (unpushed || uncommitted) {
+      if (unpushed || uncommitted || gitCounts) {
         const git = {
           totalUnpushedCommits: unpushed ? 2 : 0,
           totalChangedFiles: uncommitted ? 1 : 0,
@@ -193,7 +197,7 @@ export function register({
       },
     },
   });
-  const { reconnect, wake } = registerOnaProvider(host.bb, {
+  const { reconnect, wake: wakeWithCause } = registerOnaProvider(host.bb, {
     availability: async () => ({ status: "available" }),
     ona,
     sshBinary: "ssh",
@@ -220,6 +224,13 @@ export function register({
       return executor;
     },
   });
+  // Most tests don't read a start's cause: a waiting thread's is the default here.
+  const wake = (
+    resource: OnaResource,
+    progress: PluginMachineProviderProgress,
+    outer: AbortSignal,
+    cause: WakeVia = "wake-thread",
+  ) => wakeWithCause(resource, progress, outer, cause);
   const provider = host.harness.registrations.machineProviders.get("ona")!;
   return {
     provider,
