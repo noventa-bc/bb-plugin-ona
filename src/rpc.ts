@@ -25,7 +25,7 @@ export const threadCostSchema = z.object({
 });
 export type ThreadCost = z.infer<typeof threadCostSchema>;
 
-export const devboxCommandSchema = z.enum(["status", "sync", "reconnect", "resume", "rename", "keep-alive"]);
+export const devboxCommandSchema = z.enum(["status", "sync", "reconnect", "resume", "rename", "keep-alive", "update"]);
 export type DevboxCommand = z.infer<typeof devboxCommandSchema>;
 
 const devboxCommandReplySchema = z.object({

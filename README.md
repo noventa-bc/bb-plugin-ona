@@ -167,9 +167,9 @@ as a real folder, setup stops and asks you to move it aside
 (`mv ~/.bb-machines ~/.bb-machines.shared`).
 
 **In settings:** the plugin's settings page has an **Ona devboxes** section. It shows `bb ona status` and
-each devbox's bb status, with **Sync all** above the list and, per devbox, **Sync**, **Reconnect** and **Resume**
+each devbox's bb status, with **Sync all** above the list and, per devbox, **Sync**, **Reconnect**, **Resume** and **Update CLIs**
 buttons, plus **Rename** (a new name; empty gives a random one; refused while bb shows its machine in a phase other than active) and **Keep awake** (a duration such as `2h` or `90m`, a bare number being minutes, or
-`off`), each with its own field. Each control runs the same `bb ona sync`, `bb ona reconnect`, `bb ona resume`,
+`off`), each with its own field. Each control runs the same `bb ona sync`, `bb ona reconnect`, `bb ona resume`, `bb ona update`,
 `bb ona rename` or `bb ona keep-alive` as the terminal, for that devbox (**Sync all** runs `bb ona sync` for every
 devbox). A row's controls show their reply or refusal under that row; **Sync all** has no row, so it shows none, and
 the status is read again after it. **Keep awake** holds a box for at most `12h`, as the CLI does, and ends on a plugin

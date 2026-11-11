@@ -278,6 +278,7 @@ const DEVBOX_BUTTONS: { command: DevboxCommand; label: string }[] = [
   { command: "sync", label: "Sync" },
   { command: "reconnect", label: "Reconnect" },
   { command: "resume", label: "Resume" },
+  { command: "update", label: "Update CLIs" },
 ];
 
 /** A text box and the button that sends its text as the command's argument (see commandArg). */
