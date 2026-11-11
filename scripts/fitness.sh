@@ -16,7 +16,7 @@
 #                                .githooks, except scripts/fitness.sh and test/fitness.test.ts
 #   layering                     the loads of a forbidden module by one of the four layered modules (see the node block)
 #   cycles                       the modules that reach themselves through run-time imports
-# The files that cycles and layering read are src/*.ts (top level) and server.ts.
+# cycles reads src/*.ts (top level) and server.ts.
 set -eu
 usage() { echo "usage: scripts/fitness.sh [--check]" >&2; exit 2; }
 # CDPATH='' keeps cd from printing the path when the caller has CDPATH set.
@@ -77,7 +77,7 @@ function loads(file) {
     spec.startsWith(".") ? path.posix.normalize(path.posix.join(path.posix.dirname(file), spec)) : spec.replace(/^node:/, ""),
   );
 }
-// The files cycles and layering read: src/*.ts (top level) and server.ts.
+// The files cycles reads: src/*.ts (top level) and server.ts.
 const tsFiles = [...fs.readdirSync("src").filter((f) => f.endsWith(".ts")).map((f) => "src/" + f), "server.ts"];
 
 const nearFiles = process.env.FITNESS_ROWS.split("\n")
@@ -129,8 +129,8 @@ const shortcuts = process.env.FITNESS_HITS.split("\n").filter((line) => line !==
 
 // Layering counts each load of a forbidden module by a layered module. A static import, or an export ... from, counts
 // (an import type or an export type does not), and so does a require("...") or import("...") call whose single argument
-// is a plain string literal. A computed or template argument is not read, and two spellings of one module count twice.
-// shortcut: only the imports a module makes itself are read, not what its imports load in turn; upgrade when a layered module imports a helper module
+// is a plain string literal. A computed or template argument is not read, and two loads of one module count twice.
+// shortcut: only the imports a module makes itself are read, not what its imports load in turn, upgrade when a layered module imports a helper module
 const forbidden = ["src/ssh.ts", "src/ona.ts", "src/provider.ts", "src/provider-connect.ts", "src/sync.ts", "child_process", "net", "http", "https"];
 const layering = ["src/reconcile.ts", "src/names.ts", "src/time.ts", "src/machine-inputs.ts"].reduce(
   (n, file) => n + loads(file).filter((target) => forbidden.includes(target)).length,
