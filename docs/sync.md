@@ -141,8 +141,10 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    `run` in `src/ona.ts`, each SSH command in `src/ssh.ts`, and bb's
    bootstrap (`docs/ona-notes.md`, bb SDK section). A resume bb is asked for a
    waiting thread is waited for up to 32 minutes after bb answers `resuming`
-   (`settledLifecycle` in `src/lifecycle.ts`), 2 more than bb's resume's cap, so
-   the wait reads bb's failure. The wake, the restart and the
+   (`settledLifecycle` in `src/lifecycle.ts`), outlasting bb's first attempt by
+   2 minutes. With a thread waiting, bb's sweep starts a new attempt within 10 s
+   of a give-up, each with its own 30-minute cap (`docs/ona-notes.md`, bb SDK
+   section). The wake, the restart and the
    resume wait run on a signal a plugin reload aborts, so a reload can end
    them sooner; an ended resume wait
    reads "couldn't confirm the resume for a waiting thread".

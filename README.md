@@ -308,7 +308,7 @@ bb ona reconnect <ref>         # active machines: reopen the tunnel and restart 
 bb ona resume <ref>            # a stopped active machine: starts its box and reconnects the bb daemon (your action); a running box is only reconnected; refused unless bb shows the machine active; gives up after 30 minutes ("Gave up …; last step: …")
 bb ona update [ref] [--force]  # apply pending agent-CLI updates on connected devboxes (also weekdays 09:00 when `autoUpdateClis` is on); a box with an agent running is skipped unless --force
 bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
-bb machine resume ona:<name>   # starts it, reopens the tunnel, restarts the daemon (Play button)
+bb machine resume ona:<name>   # starts it, reopens the tunnel, restarts the daemon (Play button); gives up after 30 minutes ("Machine resume failed: Gave up resuming <box> after 30 minutes; last step: …")
 bb machine remove ona:<name>   # created: deletes the box unless it has unpushed commits or uncommitted files; adopted: stops bb's daemon, moves its data folder aside
 ```
 

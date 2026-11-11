@@ -38,7 +38,9 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
   (optional `"classId"` from `ona environment list-classes`). New devboxes get
   the plugin's `inactivityTimeout` (default `3h`; `bb plugin config ona set inactivityTimeout 6h`, then `bb plugin reload ona` once the user agrees).
 - `bb machine suspend <m>` stops the Ona environment; `bb machine resume <m>`
-  starts it, reopens the tunnel and restarts the daemon. Devboxes Ona stopped
+  starts it, reopens the tunnel and restarts the daemon; it gives up after 30
+  minutes with "Machine resume failed: Gave up resuming <box> after 30 minutes;
+  last step: …". Devboxes Ona stopped
   on its own are marked suspended automatically, and starting a thread on one
   wakes it (takes a few minutes). If a turn was still running when Ona stopped the box, bb can't suspend the machine, so the plugin starts the box for the waiting thread instead.
 - Check agent CLIs: `bb machine provider-cli status <m>`.
