@@ -82,7 +82,8 @@ const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
 /**
  * The provider in a fake host. `calls` logs the `get` lookups by id that reach Ona, starts, stops, deletes, the
  * remove's move-aside and every SSH command connect runs; `tunnels`, the ensure and stop calls; `logs`, the host's log;
- * `moves`, each move-aside's box, positional args, and whether the box's keys were still kept when it ran.
+ * `moves`, each move-aside's box, positional args, and whether the box's keys were still kept when it ran; `connected`,
+ * the boxes markConnected ran for; `mark` and `stop`, the tunnel manager's, as bb's suspend or remove closes a box.
  */
 export function register({
   found,
@@ -115,10 +116,22 @@ export function register({
   // The box the latest executor was made for: the provider makes one right before each exec.
   let target = "";
   let listed = !unlisted;
-  // As the tunnel manager does: an ensure on an open tunnel changes nothing.
-  const ensure = (envId: string) => {
+  const connected: string[] = [];
+  // As the tunnel manager does: an ensure on an open tunnel changes nothing, and one whose mark is older than the box's
+  // last stop opens nothing.
+  let stops = 0;
+  const stoppedAt = new Map<string, number>();
+  const mark = () => stops;
+  const ensure = (envId: string, since?: number) => {
     tunnels.push(`ensure ${envId}`);
+    if (since !== undefined && (stoppedAt.get(envId) ?? 0) > since) return false;
     if (!open.has(envId)) open.set(envId, "connecting");
+    return true;
+  };
+  const stop = (envId: string) => {
+    tunnels.push(`stop ${envId}`);
+    stoppedAt.set(envId, ++stops);
+    open.delete(envId);
   };
   const ona = {
     // By name, as cleanup finds a created box by its key-derived name; an adopted box keeps its own.
@@ -224,11 +237,9 @@ export function register({
     sshBinary: "ssh",
     tunnels: {
       status: (envId: string) => open.get(envId) ?? "off",
+      mark,
       ensure,
-      stop(envId: string) {
-        tunnels.push(`stop ${envId}`);
-        open.delete(envId);
-      },
+      stop,
     } as unknown as TunnelManager,
     defaultProject: "",
     inactivityTimeout: "",
@@ -237,7 +248,7 @@ export function register({
     machineDataDir: rootExits.length ? "/local/bb" : "",
     waitForSharedHome: mountExits.length > 0,
     port: () => 1,
-    markConnected: async () => {},
+    markConnected: async (envId: string) => void connected.push(envId),
     releasing,
     forgetBox: async (envId: string) => void forgotten.push(envId),
     executorFor: (_ssh, envId) => {
@@ -251,7 +262,8 @@ export function register({
     progress: PluginMachineProviderProgress,
     outer: AbortSignal,
     cause: WakeVia = "wake-thread",
-  ) => wakeWithCause(resource, progress, outer, cause);
+    since?: number,
+  ) => wakeWithCause(resource, progress, outer, cause, since);
   const provider = host.harness.registrations.machineProviders.get("ona")!;
   return {
     provider,
@@ -260,6 +272,9 @@ export function register({
     calls,
     tunnels,
     open,
+    connected,
+    mark,
+    stop,
     forgotten,
     releasing,
     moves,

@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { tick, useFakeClock } from "./fake-clock.ts";
-import { box, connectCalls, gated, resume, start } from "./provider-fake.ts";
+import { adoptedResource, box, connectCalls, gated, lifecycle, register, resume, start } from "./provider-fake.ts";
 
 useFakeClock();
 
@@ -97,4 +97,42 @@ test("a resume that fails with the box's tunnel already open, connecting or up, 
     await assert.rejects(resumed, /^Error: Devbox is missing bb prerequisites: missing: node$/);
     assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"], tunnel);
   }
+});
+
+// Bug: a reconnect or wake that read the machine active reopened its box's tunnel after bb's suspend or remove
+// closed it, keeping awake a box bb no longer shows active (R25, R31, decision 0003).
+test("a reconnect whose box was closed after its mark throws before markConnected and opens no tunnel", async () => {
+  const { reconnect, mark, stop, open, connected, calls } = register({ found: box("RUNNING") });
+  const since = mark();
+  stop("env-1");
+  await assert.rejects(
+    reconnect(adoptedResource, lifecycle().report, new AbortController().signal, since),
+    /^Error: bb suspended or removed the machine on box while it connected, so its tunnel stays closed\.$/,
+  );
+  assert.equal(open.has("env-1"), false);
+  assert.deepEqual(connected, []);
+  assert.deepEqual(calls, ["get RUNNING", ...gated("ssh")]);
+});
+
+test("a wake whose box was closed after its mark throws before markConnected and opens no tunnel", async () => {
+  for (const phase of ["RUNNING", "STOPPED"]) {
+    const { wake, mark, stop, open, connected } = register({ found: box(phase), phases: [phase, "RUNNING"] });
+    const since = mark();
+    stop("env-1");
+    await assert.rejects(
+      wake(adoptedResource, lifecycle().report, new AbortController().signal, "wake-thread", since),
+      /while it connected, so its tunnel stays closed/,
+      phase,
+    );
+    assert.equal(open.has("env-1"), false, phase);
+    assert.deepEqual(connected, [], phase);
+  }
+});
+
+test("a reconnect with a mark taken after the box's last close opens the tunnel and connects", async () => {
+  const { reconnect, mark, stop, open, connected } = register({ found: box("RUNNING") });
+  stop("env-1");
+  await reconnect(adoptedResource, lifecycle().report, new AbortController().signal, mark());
+  assert.equal(open.get("env-1"), "connecting");
+  assert.deepEqual(connected, ["env-1"]);
 });

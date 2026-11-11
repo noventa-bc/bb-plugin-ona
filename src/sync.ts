@@ -95,7 +95,12 @@ export interface SyncDeps {
     getEnvironmentIfExists(envId: string, signal?: AbortSignal): Promise<Parameters<typeof isArchived>[0] | null>;
   };
   guard: HostGuard;
-  tunnels: { status(envId: string): "up" | "connecting" | "off"; ensure(envId: string): void };
+  /** `mark` and `ensure`'s `since`: src/ssh.ts `TunnelManager`. */
+  tunnels: {
+    status(envId: string): "up" | "connecting" | "off";
+    mark(): number;
+    ensure(envId: string, since?: number): boolean;
+  };
   provider: {
     /** Boxes whose next suspend must not stop them; the provider's suspend consumes the entry. */
     releasing: Set<string>;
@@ -104,6 +109,7 @@ export interface SyncDeps {
       resource: OnaResource,
       report: { step(text: string): void; log(text: string): void },
       signal: AbortSignal,
+      since?: number,
     ): Promise<unknown>;
     /** Starts a stopped box and connects bb's daemon (`provider.wake`); a waiting thread on an active machine asks for it. */
     wake(
@@ -111,6 +117,7 @@ export interface SyncDeps {
       report: { step(text: string): void; log(text: string): void },
       signal: AbortSignal,
       cause: WakeVia,
+      since?: number,
     ): Promise<boolean>;
   };
   keepAliveUntil(envId: string): number | null;
@@ -362,8 +369,8 @@ export function createSync(deps: SyncDeps) {
     );
   }
 
-  /** Carry out one decision under the machine's guard (rule 5). */
-  async function act(row: Row, decision: Decision, force: boolean): Promise<void> {
+  /** Carry out one decision under the machine's guard (rule 5). `since`: the tunnels' mark taken before the row was read. */
+  async function act(row: Row, decision: Decision, force: boolean, since: number): Promise<void> {
     const { hostId, machine, resource } = row;
     const heavy = decision.action === "heal-daemon";
     const report = { step: (text: string) => bb.log.info(`${machine}: ${text}`), log: () => {} };
@@ -378,13 +385,15 @@ export function createSync(deps: SyncDeps) {
           switch (decision.action) {
             case "suspend-observed": {
               const lifecycle = await suspendWithoutStop(row);
+              // The wake below is decided on this read, which follows the close this suspend may have made.
+              const readAt = tunnels.mark();
               const refusal = lifecycleRefusal(lifecycle, SUSPENDED);
               if (refusal) {
                 if (!decision.resumeAfter || lifecycle.phase !== "active") throw new Error(suspendFailure(refusal));
                 // bb's suspend failed (Ona stopped the box under a live turn) and left the machine active, where bb's
                 // resume does nothing: the plugin wakes the box (decision 0002).
                 // It gives up after 30 minutes; a plugin reload ends it sooner (docs/sync.md rule 1).
-                const startCalled = await provider.wake(resource, report, signal, "wake-thread");
+                const startCalled = await provider.wake(resource, report, signal, "wake-thread", readAt);
                 return startCalled ? "started it for a waiting thread" : "reconnected it for a waiting thread";
               }
               if (!decision.resumeAfter) return;
@@ -407,7 +416,7 @@ export function createSync(deps: SyncDeps) {
               return "resumed for a waiting thread";
             }
             case "ensure-tunnel":
-              tunnels.ensure(resource.envId);
+              tunnels.ensure(resource.envId, since);
               return;
             case "heal-daemon": {
               // Rule 1: SSH starts stopped boxes, so ask Ona before the daemon check and again right before a restart.
@@ -437,7 +446,7 @@ export function createSync(deps: SyncDeps) {
                 throw new Error("Ona couldn't confirm the box running before the restart; not restarting");
               if (!stillRunning) return gone;
               // It gives up after 30 minutes; a plugin reload ends it sooner (docs/sync.md rule 1).
-              await provider.reconnect(resource, report, signal);
+              await provider.reconnect(resource, report, signal, since);
               return "daemon was down; restarted it";
             }
             case "none":
@@ -462,6 +471,8 @@ export function createSync(deps: SyncDeps) {
    */
   async function reconcile(keys: Set<string>, options: { force?: boolean; wait?: boolean } = {}): Promise<void> {
     try {
+      // Before the read: bb may suspend or remove a machine after it answers, and that close must win.
+      const since = tunnels.mark();
       const rows = await machines();
       const targets = keys.has(ALL) ? rows : rows.filter((row) => keys.has(row.hostId));
       if (targets.length === 0) return;
@@ -497,7 +508,7 @@ export function createSync(deps: SyncDeps) {
         // A connection the pass can trust ends a hold, and clears a failing daemon repair's count (docs/sync.md rule 3).
         if (view.status === "connected" && view.tunnel === "up" && shownRunning(onaState)) guard.connected(row.hostId);
         if (decision.action === "none" || skipped) continue;
-        actions.push(act(row, decision, options.force ?? false));
+        actions.push(act(row, decision, options.force ?? false, since));
       }
       // A failed or empty listing is unknown (docs/sync.md rule 4): no idle release that pass.
       if (keys.has(ALL) && listing?.envs.length && snapshot.lastError === null)

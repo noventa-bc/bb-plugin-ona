@@ -48,6 +48,8 @@ export function world(
     signal?: AbortSignal;
     /** Ona lists every box STOPPED once the daemon check has run. */
     stopDuringProbe?: boolean;
+    /** Runs while the daemon check runs, as a suspend or remove that lands then would. */
+    duringProbe?: () => void;
     /** Keep a listing 15s fresh, so only `refresh()` sees a change; the clock is the mocked Date when enabled. */
     cached?: boolean;
     archived?: boolean | "not-found" | "fail";
@@ -73,6 +75,10 @@ export function world(
     suspendSettles?: { phase: string; message: string | null };
     /** The held host's suspend reads as suspending until `until` (a call such as "suspend h2") has been posted, or three reads pass. */
     holdSettle?: { hostId: string; until: string };
+    /** The tunnel manager; the default records each ensure and never refuses one. */
+    tunnels?: SyncDeps["tunnels"];
+    /** Runs once bb has answered a host listing ("list") or a lifecycle call ("suspend h1"), as a close then would. */
+    afterCall?: (call: string) => void;
   } = {},
 ) {
   const calls: string[] = [];
@@ -114,6 +120,7 @@ export function world(
           : { ...host.lifecycle, phase: settled, message: null };
       if (!options.refuse) host.updatedAt = Date.now();
       if (name === "suspend" && !options.refuse) pendingSuspends.add(hostId);
+      options.afterCall?.(`${name} ${hostId}`);
       // bb answers a suspend or resume it takes before it runs; hosts.get shows the phase it settles on.
       if (name === "resume" && refusal && !settles) return host;
       return { ...host, lifecycle: { ...host.lifecycle, phase: answered } };
@@ -159,7 +166,11 @@ export function world(
           // Like bb's list: a creating host is left out unless `includeCreating` is set.
           list: async (args?: { includeCreating?: boolean }) => {
             hostReads.push("list");
-            return [...hosts.values()].filter((host) => args?.includeCreating || host.lifecycle.phase !== "creating");
+            const listed = [...hosts.values()].filter(
+              (host) => args?.includeCreating || host.lifecycle.phase !== "creating",
+            );
+            options.afterCall?.("list");
+            return listed;
           },
           get: async ({ hostId }) => {
             hostReads.push(`get ${hostId}`);
@@ -230,15 +241,20 @@ export function world(
       },
     },
     guard,
-    tunnels: {
+    tunnels: options.tunnels ?? {
       status: (envId) => boxes.find((box) => box.envId === envId)?.tunnel ?? "up",
-      ensure: (envId) => void calls.push(`tunnel ${envId}`),
+      mark: () => 0,
+      ensure: (envId) => {
+        calls.push(`tunnel ${envId}`);
+        return true;
+      },
     },
     provider: {
       releasing,
       daemonAlive: async () => {
         calls.push("probe");
         if (options.stopDuringProbe) for (const box of boxes) box.ona = "STOPPED";
+        options.duringProbe?.();
         return options.daemonAlive ?? true;
       },
       reconnect:

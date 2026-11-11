@@ -99,7 +99,8 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    every minute (every minute while Ona can't be asked). A tunnel closes when bb suspends or removes the machine, when
    a create or resume fails, when a wake that started its box fails (a wake of a running box, or of a box Ona started
    during the wake's waits, keeps its tunnel), or the plugin stops; a check that sees the box stopped asks bb to
-   suspend it once bb no longer shows the machine connected.
+   suspend it once bb no longer shows the machine connected. A connect or a pass's tunnel reopen that started before
+   bb suspended or removed the machine opens no tunnel, and the connect fails.
 
    **The connect wait.** Every connect (create, resume, the wake, `bb ona reconnect`, a daemon restart) first asks
    `ona environment get` every 5s, for up to 15 minutes, until it says the box is running and so is its dev
