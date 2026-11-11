@@ -4,6 +4,8 @@ Status: accepted
 
 Amended 2026-11-06 (the owner accepted it): bb's recovery after a restart is one of the starts. The Consequences say so.
 
+Amended 2026-11-09 (the owner accepted it): `bb machine reconcile` of a suspended machine stops a box, as Pause and `bb machine suspend` do. The Consequences say so.
+
 ## Rule
 
 Ona decides whether a devbox exists and whether it runs. bb decides intent: a machine is `active` or `suspended`. The plugin reconciles bb to Ona, and its automatic repairs never start or stop a box.
@@ -17,5 +19,5 @@ Ona decides whether a devbox exists and whether it runs. bb decides intent: a ma
 ## Consequences
 
 - bb's view can lag Ona's. `bb ona status` shows both views and `bb ona sync` repairs the gap.
-- bb stops a box only on your action in bb (`bb machine suspend` or the Pause button), and starts one on your action or when it recovers a machine a bb restart left half-way (0002 lists the starts).
+- bb stops a box only on your action in bb (`bb machine suspend`, the Pause button, or `bb machine reconcile` of a suspended machine), and starts one on your action or when it recovers a machine a bb restart left half-way (0002 lists the starts).
 - A box missing from Ona is marked suspended and reported; removing it is left to `bb machine remove`.

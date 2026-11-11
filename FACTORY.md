@@ -89,7 +89,7 @@ those and the "skipped or not checked" lines ponytail ends with.
    version to pin, a safety rule to bend, a behaviour change users will see),
    ask before building. Batch the questions into one message.
 4. **Brief** each builder with the template in `docs/owner.md` (a reviewer
-   gets its `Role:` line and the step-6 brief), plus: the
+   gets the reviewer template there, step 6), plus: the
    branch name `agent/<slug>`, the files involved (quote the line's text, not
    its number: numbers drift), the tests to
    write first, the coupled changes from `AGENTS.md`, and what to report back.
@@ -113,8 +113,11 @@ those and the "skipped or not checked" lines ponytail ends with.
    orchestrator's own verdict), `code-review` (its recipe followed by hand:
    the Skill itself starts many agents) and `/ponytail-review branch`, each
    on the branch against `origin/main`, in its own agent, briefed with the
-   builder's worktree path (a fresh agent starts in the main checkout) and
-   told to run tests and mutants in a scratch folder of its own under the
+   template in `docs/owner.md`, the builder's worktree path (a fresh agent
+   starts in the main checkout), the three-dot diff
+   `git -C <worktree> diff origin/main...<sha>` (a two-dot diff from a stale
+   base shows main's newer commits as reverted), and told to run tests and
+   mutants in a scratch folder of its own under the
    session scratchpad (`git archive <sha>` into a new folder, which has no
    history, so git commands stay `git -C <worktree>`; link `node_modules`
    only when the folder has none; the reviewer names a file by the path its
@@ -238,7 +241,7 @@ This file is the memory of the flow. Keep it current:
 
 ## Owner instructions on record
 
-Rules the owner gave that no section above states. Checked 2026-11-06.
+Rules the owner gave that no section above states. Checked 2026-11-11.
 
 - Several worktrees are open at once and the shell's working directory drifts
   between them. Address every git command with `git -C <path>` and every file
@@ -252,9 +255,8 @@ Rules the owner gave that no section above states. Checked 2026-11-06.
   grep (the exit code is grep's). `.githooks/pre-commit` (set by `npm install`)
   runs the checks on every commit; a checkout without the hook reads the exit
   code by hand (checked 2026-11-03).
-- A subagent cannot see the owner's approvals and refuses to install packages (the step-5 `npm ci` is its own), commit or
-  push. Builders leave work staged; the orchestrator commits, pushes and runs
-  approved installs in the builder's worktree, then tells it to continue.
+- A subagent does not commit or push. Builders leave work staged, and the
+  orchestrator commits and pushes.
 - A builder that was stopped (the owner's credits ran out, the session ended)
   cannot be resumed. Its worktree keeps the staged work: review it, finish the
   handoff and the PR from there instead of starting the task again.
@@ -276,5 +278,3 @@ Rules the owner gave that no section above states. Checked 2026-11-06.
   `[COST]` tag) through the flow, steps 1 to 3 and `AGENTS.md` "Complexity"
   included, rather than wait, unless the owner said to halt (checked
   2026-11-06).
-- The owner's Mac has no `timeout` command: use the Bash tool's own timeout
-  (checked 2026-11-06).

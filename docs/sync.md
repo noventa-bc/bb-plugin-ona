@@ -126,21 +126,25 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    in `server.ts` asks a fresh listing.
 
    A wake (`provider.wake`: a waiting thread on an active machine, and
-   `bb ona resume`) and a daemon restart (`reconnect`: the heal, and
-   `bb ona reconnect`) give up after 30 minutes (`CAP_MINUTES` in
-   `src/provider.ts`), above the 25 minutes a wake's stop and start waits
-   share. The cap aborts the signal the call passes down, so it can end an
+   `bb ona resume`), a daemon restart (`reconnect`: the heal, and
+   `bb ona reconnect`) and bb's own resume (the provider's `resume`: Resume in
+   bb, bb's recovery after a restart, and a waiting thread's resume) give up
+   after 30 minutes (`CAP_MINUTES` in `src/provider.ts`), above the 25 minutes
+   the stop and start waits share. The cap aborts the signal the call passes down, so it can end an
    inner wait (the tunnel wait or bb's installer wait) before that wait's own
    deadline; the 30-minute cut holds while each step honours that signal. Its error names
-   the last progress step the call reported. Only a wake that started the box
-   closes its tunnel when it fails; a reconnect leaves it open. The waits inside
+   the last progress step the call reported. A wake that started the box, and
+   bb's resume, close the tunnel when they fail; a reconnect leaves it open. The waits inside
    keep their own deadlines: the stop, start and SSH waits in
    `src/provider.ts`, the hold for Ona before each SSH command
    (`waitForReady` in `src/ona.ts`, up to 15 minutes), each `ona` call in
    `run` in `src/ona.ts`, each SSH command in `src/ssh.ts`, and bb's
    bootstrap (`docs/ona-notes.md`, bb SDK section). A resume bb is asked for a
-   waiting thread is waited for up to 30 minutes after bb answers `resuming`
-   (`settledLifecycle` in `src/lifecycle.ts`). The wake, the restart and the
+   waiting thread is waited for up to 32 minutes after bb answers `resuming`
+   (`settledLifecycle` in `src/lifecycle.ts`), outlasting bb's first attempt by
+   2 minutes. With a thread waiting, bb's sweep starts a new attempt within 10 s
+   of a give-up, each with its own 30-minute cap (`docs/ona-notes.md`, bb SDK
+   section). The wake, the restart and the
    resume wait run on a signal a plugin reload aborts, so a reload can end
    them sooner; an ended resume wait
    reads "couldn't confirm the resume for a waiting thread".
@@ -206,7 +210,7 @@ bb ona status [ref] [--json]   # bb's view, tunnel, Ona's view, the box's facts,
 bb ona sync [ref]              # re-check Ona now and repair (skips cooldowns, backoff and the give-up, never the safety rules)
 ```
 
-`bb ona sync` returns once its pass has finished; a resume it asks of bb for a waiting thread is waited for until bb settles it, for up to 30 minutes after bb answers `resuming`.
+`bb ona sync` returns once its pass has finished; a resume it asks of bb for a waiting thread is waited for until bb settles it, for up to 32 minutes after bb answers `resuming`.
 
 Example `bb ona status` output. `now` is what the latest check concluded, and
 `last action` is the last thing the plugin actually did. Routine checks never

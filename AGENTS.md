@@ -15,9 +15,9 @@ Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
 - For the definitions of a name in bb's server bundle, or in the plugin SDK typings with `--sdk`, run `scripts/bb-source.sh <name> [lines]`: it prints bb's version and each definition with the lines after it.
 - Before adding lines to a file, run `scripts/lines.sh [margin]`: it lists the files with fewer than `margin` (default 10) lines under the `max-lines` cap in `eslint.config.js`.
 - For a reviewer's scratch copy of a commit, use `scripts/scratch-copy.sh <worktree> <sha> <dir>`: the copy has no `.git`, and its `node_modules` links to the main checkout's when `package.json` and `package-lock.json` match it.
-- CI also runs `shellcheck` on `scripts/*.sh`, `test/*.sh` and `.githooks/*`; `npm run check` does not. After changing a `.sh` file, run `shellcheck` on it (`brew install shellcheck`), or say in the handoff that it was not run.
+- CI also runs `shellcheck` on `scripts/*.sh`, `test/*.sh` and `.githooks/*`; `npm run check` does not. After changing a `.sh` file, run `shellcheck` on it (install it with `brew install shellcheck` only when the owner confirms), or say in the handoff that it was not run.
 - CI also checks that each `src/<name>.ts` has a `test/<name>.test.ts` (`check.yml` names the exceptions); `npm run check` does not, so a new module gets its own test file.
-- CI also runs the Semgrep rules in `.semgrep/rules.yml` (fixtures in `.semgrep/rules.ts`). Locally: `brew install semgrep`, then `semgrep --test --metrics=off .semgrep/` and `semgrep scan --config .semgrep/rules.yml --error --metrics=off app.tsx server.ts src`.
+- CI also runs the Semgrep rules in `.semgrep/rules.yml` (fixtures in `.semgrep/rules.ts`). Locally, install it with `brew install semgrep` only when the owner confirms, then run `semgrep --test --metrics=off .semgrep/` and `semgrep scan --config .semgrep/rules.yml --error --metrics=off app.tsx server.ts src`.
 - Each test times out after 60 s (`--test-timeout` in `package.json`), so a hang shows up as a named failure.
 - Run one test file with `node --test --experimental-strip-types test/reconcile.test.ts`.
 - Inside the agent sandbox, tests that need local ports or other processes skip themselves. CI runs them.
