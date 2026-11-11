@@ -30,14 +30,13 @@ export default tseslint.config(
       "max-lines": ["error", { max: 500, skipBlankLines: true, skipComments: true }],
       "no-restricted-syntax": [
         "error",
-        // bb can accept a lifecycle request without acting on it; use the host it returns. A lifecycle call is discarded
+        // bb can accept a lifecycle request without acting on it; use the host it returns. A lifecycle call is flagged
         // when its statement is bare, awaited or void, possibly followed by a chain of calls such as `.catch(...)` or
         // `.catch(...).finally(...)`.
         // shortcut: chains up to four calls deep, add a depth to the list when a deeper chain appears
         ...[0, 1, 2, 3, 4]
           .flatMap((calls) => {
-            // A call on the result is `CallExpression > MemberExpression.callee`, as in `x.catch(...)`. `.callee` keeps a
-            // member read passed as an argument, as in `track(x.host)`, out of the chain.
+            // `.callee` keeps a member read passed as an argument, as in `track(x.host)`, out of the chain.
             const chain = "CallExpression > MemberExpression.callee > ".repeat(calls);
             const lifecycle = "CallExpression[callee.property.name=/^experimental_(suspend|resume|reconcile)$/]";
             return [

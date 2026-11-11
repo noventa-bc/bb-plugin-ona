@@ -4,14 +4,12 @@ import { test } from "node:test";
 import { ESLint } from "eslint";
 
 const repo = join(import.meta.dirname, "..");
-// The selectors are esquery, so each case runs the repo's eslint.config.js on a snippet. The file is one the tsconfig
-// includes, so the config's type-aware rules can parse the snippet.
+// Snippets are linted as this file, which the tsconfig includes, so the type-aware rules can parse them.
 const filePath = join(repo, "test", "eslint-lifecycle.test.ts");
 const eslint = new ESLint({ cwd: repo });
 
 const NAMES = ["suspend", "resume", "reconcile"];
 const HEADS = ["", "await ", "void "];
-// The calls made on the lifecycle result, from none to four.
 const CHAINS = [
   "",
   ".catch(onError)",
@@ -23,8 +21,13 @@ const CHAINS = [
 /** The lines of `lines` (one statement each) that the lifecycle rule flags, as their text. */
 async function flaggedLines(lines: string[]) {
   const [result] = await eslint.lintText(lines.join("\n"), { filePath });
+  assert.deepEqual(
+    result!.messages.filter((message) => message.fatal),
+    [],
+    "a snippet does not parse",
+  );
   return result!.messages
-    .filter((message) => message.ruleId === "no-restricted-syntax" && message.message.startsWith("bb can accept this"))
+    .filter((message) => message.ruleId === "no-restricted-syntax")
     .map((message) => lines[message.line - 1]!);
 }
 
@@ -43,8 +46,11 @@ test("a lifecycle call whose result is kept, returned, passed on or read as a me
     "track(bb.sdk.hosts.experimental_suspend({ hostId }));",
     "await track(bb.sdk.hosts.experimental_suspend({ hostId }));",
     "track(bb.sdk.hosts.experimental_suspend({ hostId }).host);",
-    "const run = () => bb.sdk.hosts.experimental_resume({ hostId });",
-    "const run = () => bb.sdk.hosts.experimental_resume({ hostId }).catch(onError);",
+    "track(bb.sdk.hosts.experimental_suspend({ hostId }).host).then(next);",
+    "await track(bb.sdk.hosts.experimental_suspend({ hostId }).host);",
+    "await track(bb.sdk.hosts.experimental_suspend({ hostId }).host).then(next);",
+    "void track(bb.sdk.hosts.experimental_suspend({ hostId }).host);",
+    "void track(bb.sdk.hosts.experimental_suspend({ hostId }).host).then(next);",
     "items.map(() => bb.sdk.hosts.experimental_suspend({ hostId }).catch(onError));",
   ];
   assert.deepEqual(await flaggedLines(lines), []);
