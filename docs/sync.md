@@ -71,27 +71,24 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    _Why: an accidental start costs money and keeps the box up._
 
    The starts allowed; each starts the box only when Ona says it is stopped or stopping (a starting box is waited
-   for; any other phase is refused), then connects:
+   for), then connects:
    - a waiting thread on an active machine whose box Ona stopped (the table's row for a refused suspend, when bb's
      resume would do nothing)
    - `bb ona resume`
-   - bb's own resume (yours, a message or thread waiting on the machine, or its recovery after a bb restart), which
-     reaches the provider's resume
+   - bb's own resume (yours, a message or thread waiting on the machine, or its recovery after a bb restart,
+     decision 0002), which reaches the provider's resume
 
    Create, resume, the wake for a waiting thread and `bb ona resume` start the box you asked for, and bb's recovery
-   after a restart starts one you did not (decision 0002): `ona environment create` for a new box, else
+   after a restart starts one you did not (decision 0002) (`ona environment create` for a new box, else
    `ona environment start` when Ona shows it stopped or stopping, a starting box being waited for; any other phase is
-   refused. Then they connect.
+   refused), then connect.
 
-   **SSH.** Ona's SSH starts a stopped box, so the plugin uses SSH only when Ona, asked right before it, says the box
-   is running ([0005](decisions/0005-lookup-by-id-counts-as-listing.md)):
-   - tunnel connect and reconnect: an `ona environment list`
-   - a connect: `ona environment get`
-   - `bb ona reconnect`: a fresh `ona environment list`, then the connect's `ona environment get`
-   - the daemon check: an `ona environment list`; a daemon restart asks Ona again after the daemon check, right
-     before it starts
-   - the cost collector: an `ona environment list`
-   - the cleanup when you remove an adopted box's machine: `ona environment get`
+   **SSH.** Ona's SSH starts a stopped box, so the plugin uses SSH (tunnel connect and reconnect, `bb ona reconnect`,
+   daemon check, cost collector, and the cleanup when you remove an adopted box's machine) only when Ona, asked right
+   before it, says the box is running:
+   - an `ona environment list` for tunnels, the daemon check and the cost collector; a daemon restart asks Ona again
+     after the daemon check, right before it starts
+   - `ona environment get` for a connect and that cleanup ([0005](decisions/0005-lookup-by-id-counts-as-listing.md))
 
    A cached listing, bb showing the machine connected, a box that is starting or stopping, or a listing that lacks
    the box is not enough. If Ona can't be asked, nothing connects: tunnels wait, and a thread's cost shows its last
