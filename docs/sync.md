@@ -80,12 +80,14 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
 
    Create, resume, the wake for a waiting thread and `bb ona resume` start the box you asked for, and bb's recovery
    after a restart starts one you did not (decision 0002): `ona environment create` for a new box, else
-   `ona environment start`.
+   `ona environment start` when Ona shows it stopped or stopping, a starting box being waited for; any other phase is
+   refused. Then they connect.
 
    **SSH.** Ona's SSH starts a stopped box, so the plugin uses SSH only when Ona, asked right before it, says the box
    is running ([0005](decisions/0005-lookup-by-id-counts-as-listing.md)):
    - tunnel connect and reconnect: an `ona environment list`
-   - a connect, `bb ona reconnect` included: `ona environment get`
+   - a connect: `ona environment get`
+   - `bb ona reconnect`: a fresh `ona environment list`, then the connect's `ona environment get`
    - the daemon check: an `ona environment list`; a daemon restart asks Ona again after the daemon check, right
      before it starts
    - the cost collector: an `ona environment list`
