@@ -227,25 +227,6 @@ test("remove of a bb-created machine whose Ona lookup throws still closes its tu
   assert.deepEqual(forgotten, [], "the keys stay for bb's retry");
 });
 
-test("remove of an adopted machine closes a tunnel that reopened during the move-aside (fails if it deletes or stops the box)", async () => {
-  const { provider, calls, open, tunnels } = register({
-    found: box("RUNNING"),
-    phases: ["RUNNING"],
-    tunnel: "up",
-    reopenDuringMove: true,
-  });
-  const removed = await provider.remove({
-    report: lifecycle().report,
-    hostId: "host-1",
-    resource: adoptedResource,
-    signal: new AbortController().signal,
-  });
-  assert.equal(open.get("env-1") ?? "off", "off");
-  assert.deepEqual(tunnels, ["ensure env-1", "stop env-1"]);
-  assert.deepEqual(calls, ["get RUNNING", "move-aside"]);
-  assert.equal(removed.status, "removed");
-});
-
 test("a refused remove of a bb-created machine closes its tunnel and keeps its keys", async () => {
   const { provider, tunnels, forgotten } = register({ found: box("RUNNING"), unpushed: true, tunnel: "up" });
   const removed = await provider.remove({

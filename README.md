@@ -187,7 +187,8 @@ bb ona new [ona-project]         # new devbox; deleted when you remove the machi
 ```
 
 These are shortcuts for `bb machine create`. Adopt an existing environment;
-bb never deletes adopted environments:
+bb never deletes adopted environments. A box holds one bb machine: adopting a box another bb machine uses fails with
+"<machine> (<host id>) uses Ona environment <box>; a box holds one bb machine", and you remove that machine first.
 
 ```sh
 bb machine create --provider ona --inputs '{"mode":"adopt","environment":"<name-or-id>"}'

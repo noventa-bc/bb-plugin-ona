@@ -23,7 +23,6 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * `lookupFails`: `findEnvironment` throws, and so does `getEnvironmentIfExists` for `found`'s id.
  * `unpushed`: the box has unpushed commits, so a remove is refused.
  * `uncommitted`: the box has uncommitted files and no unpushed commits, so a remove is refused.
- * `reopenDuringMove`: a tunnel opens while an adopted remove's move-aside script runs.
  * `moveAside`: the move-aside script exits with this code, or throws this error (default 0).
  * `rootExits`: the `~/.bb-machines` script's exit codes in turn, the last one repeated.
  * `preflightExit`: the prerequisites check's exit code. Every other command exits 0 unless an option here says
@@ -41,6 +40,8 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * `startTakes`: Ona's start takes this many milliseconds on the fake clock, so the test enables `useFakeClock`.
  * `deleteFails`: Ona's delete rejects, after the call is logged in `calls`.
  * `createFails`: Ona's createEnvironment rejects, after the call is logged in `calls`, and makes no box.
+ * `machines`: the Ona machines bb lists; as bb's list does, it leaves out the creating ones unless the call sets
+ * `includeCreating`.
  */
 export type Setup = {
   found: OnaEnvironment;
@@ -48,7 +49,6 @@ export type Setup = {
   lookupFails?: boolean;
   unpushed?: boolean;
   uncommitted?: boolean;
-  reopenDuringMove?: boolean;
   moveAside?: number | Error;
   rootExits?: number[];
   rootOutput?: string;
@@ -65,6 +65,7 @@ export type Setup = {
   startTakes?: number;
   deleteFails?: boolean;
   createFails?: boolean;
+  machines?: { id: string; name: string; phase: string; resource: OnaResource }[];
 };
 
 /** Each command as the gated executor runs it: after a `get` that says RUNNING. */
@@ -86,7 +87,8 @@ const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
 /**
  * The provider in a fake host. `calls` logs the `get` lookups by id that reach Ona, starts, stops, deletes, the
  * remove's move-aside and every SSH command connect runs; `tunnels`, the ensure and stop calls; `logs`, the host's log;
- * `moves`, each move-aside's box, positional args, and whether the box's keys were still kept when it ran; `connected`,
+ * `moves`, each move-aside's box, positional args, whether the box's keys were still kept and its tunnel's state when it
+ * ran; `connected`,
  * the boxes markConnected ran for; `mark`, `ensure` and `stop`, the tunnel manager's, as another flow opens or bb's
  * suspend or remove closes a box.
  */
@@ -96,7 +98,6 @@ export function register({
   lookupFails,
   unpushed,
   uncommitted,
-  reopenDuringMove,
   moveAside = 0,
   rootExits = [],
   rootOutput = "",
@@ -113,13 +114,14 @@ export function register({
   startTakes,
   deleteFails,
   createFails,
+  machines = [],
 }: Setup) {
   const calls: string[] = [];
   const tunnels: string[] = [];
   const open = new Map(tunnel ? [[found.id, tunnel]] : []);
   const forgotten: string[] = [];
   const releasing = new Set<string>();
-  const moves: { envId: string; args: string[]; keysKept: boolean }[] = [];
+  const moves: { envId: string; args: string[]; keysKept: boolean; tunnel: string }[] = [];
   // The box the latest executor was made for: the provider makes one right before each exec.
   let target = "";
   let listed = !unlisted;
@@ -212,11 +214,15 @@ export function register({
         onOutput("missing: node");
         return { exitCode: preflightExit };
       }
-      // The remove's move-aside script: a sync pass can open the tunnel while it runs.
+      // The remove's move-aside script.
       if (command[3] === "bb-ona-remove") {
         calls.push("move-aside");
-        moves.push({ envId: target, args: command.slice(4), keysKept: forgotten.length === 0 });
-        if (reopenDuringMove) ensure(found.id, mark());
+        moves.push({
+          envId: target,
+          args: command.slice(4),
+          keysKept: forgotten.length === 0,
+          tunnel: open.get(target) ?? "off",
+        });
         if (moveAside instanceof Error) throw moveAside;
         return { exitCode: moveAside };
       }
@@ -241,6 +247,15 @@ export function register({
         report.step("Starting enrolled machine");
         if (hangs === "bootstrap") await untilAborted(signal).catch(() => signal.throwIfAborted());
         return { hostId: "host-1" };
+      },
+    },
+    machineResource: async (hostId) => machines.find((machine) => machine.id === hostId)?.resource ?? null,
+    sdk: {
+      hosts: {
+        list: async (args?: { includeCreating?: boolean }) =>
+          machines
+            .filter((machine) => args?.includeCreating || machine.phase !== "creating")
+            .map(({ id, name, phase }) => ({ id, name, machineProviderId: "ona", lifecycle: { phase } })),
       },
     },
   });
