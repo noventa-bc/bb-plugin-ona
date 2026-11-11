@@ -32,6 +32,7 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * repeated (default 0). A failed SSH probe prints "refused". Listing `mountExits` turns the shared-home wait on.
  * `codexHome`: the Codex home is set, so connect runs its `mkdir`.
  * `tunnel`: the box's tunnel is already open, in this state.
+ * `closed`: the box's tunnel was closed before the test, so a close is on record.
  * `hangs`: this call never finishes on its own. Once its signal aborts, a start rejects with a plain Error whose
  * message is "The operation was aborted", as Node's `execFile` words a killed child, and whose cause is the signal's
  * reason; a bootstrap rejects with the signal's reason itself, as bb's bootstrap rethrows it.
@@ -56,6 +57,7 @@ export type Setup = {
   curlExits?: number[];
   codexHome?: boolean;
   tunnel?: "up" | "connecting";
+  closed?: boolean;
   hangs?: "start" | "bootstrap";
   unlisted?: boolean;
   startTakes?: number;
@@ -102,6 +104,7 @@ export function register({
   curlExits = [],
   codexHome,
   tunnel,
+  closed,
   hangs,
   unlisted,
   startTakes,
@@ -134,6 +137,7 @@ export function register({
     stoppedAt.set(envId, ++stops);
     open.delete(envId);
   };
+  if (closed) stop(found.id);
   const ona = {
     // By name, as cleanup finds a created box by its key-derived name; an adopted box keeps its own.
     findEnvironment: async (ref: string) => {
@@ -257,17 +261,21 @@ export function register({
       return executor;
     },
   });
-  // Most tests read neither a start's cause nor a mark: a waiting thread's cause and a mark taken at registration are
-  // the defaults here.
+  // Most tests read neither a start's cause nor a mark: a waiting thread's cause and a mark no close is newer than are the
+  // defaults here, so a caller that drops its mark never has its tunnel refused.
   const wake = (
     resource: OnaResource,
     progress: PluginMachineProviderProgress,
     outer: AbortSignal,
     cause: WakeVia = "wake-thread",
-    since = 0,
+    since = Infinity,
   ) => wakeWithCause(resource, progress, outer, cause, since);
-  const reconnect = (resource: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal, since = 0) =>
-    reconnectWithMark(resource, report, signal, since);
+  const reconnect = (
+    resource: OnaResource,
+    report: PluginMachineProviderProgress,
+    signal: AbortSignal,
+    since = Infinity,
+  ) => reconnectWithMark(resource, report, signal, since);
   const provider = host.harness.registrations.machineProviders.get("ona")!;
   return {
     provider,

@@ -167,15 +167,14 @@ test("ensure with a mark older than the box's last stop opens no tunnel and neve
   );
   t.after(() => tunnels.stopAll()); // a tunnel loop that starts would hold the process open
   const before = tunnels.mark();
-  tunnels.stop("env-2");
-  const later = tunnels.mark();
+  const other = tunnels.mark();
   tunnels.stop("env-1");
   assert.equal(tunnels.ensure("env-1", before), false);
-  assert.equal(tunnels.ensure("env-1", later), false, "a stop after the later mark refuses it too");
+  assert.equal(tunnels.ensure("env-1", other), false, "a stop after any mark refuses it");
   await settle();
   assert.equal(tunnels.status("env-1"), "off");
   assert.equal(asked, 0);
-  assert.equal(tunnels.ensure("env-2", later), true, "a stop before the mark refuses nothing");
+  assert.equal(tunnels.ensure("env-2", before), true, "another box's stop refuses nothing");
   assert.equal(tunnels.status("env-2"), "connecting");
 });
 

@@ -132,7 +132,7 @@ export function connectHelpers(bb: BbPluginApi, deps: ProviderDeps) {
     report: PluginMachineProviderProgress,
     signal: AbortSignal,
     /** The box wasn't running when this began, so a start is under way (see `readiness`). */
-    started: boolean,
+    started = false,
     /** The tunnels' mark taken before the caller read the machine: a close after it refuses the tunnel. */
     since: number,
   ) {

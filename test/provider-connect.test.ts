@@ -168,3 +168,15 @@ test("bb's create and resume refuse the tunnel when the box is closed during the
   await assert.rejects(resumed.resumed, /while it connected, so its tunnel stays closed/);
   assert.deepEqual([created.connected, resumed.connected], [[], []]);
 });
+
+test("bb's create on a box whose tunnel was closed before the call opens the tunnel (fails if create's mark is a constant)", async () => {
+  const { created, open } = start({ found: box("RUNNING"), closed: true });
+  assert.equal((await created).status, "created");
+  assert.equal(open.get("env-1"), "connecting");
+});
+
+test("bb's resume of a box whose tunnel was closed before the call opens the tunnel (fails if resume's mark is a constant)", async () => {
+  const { resumed, open } = resume({ found: box("RUNNING"), phases: ["RUNNING"], closed: true });
+  await resumed;
+  assert.equal(open.get("env-1"), "connecting");
+});

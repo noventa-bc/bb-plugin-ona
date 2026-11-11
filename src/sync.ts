@@ -386,14 +386,14 @@ export function createSync(deps: SyncDeps) {
             case "suspend-observed": {
               const lifecycle = await suspendWithoutStop(row);
               // The wake below is decided on this read, which follows the close this suspend may have made.
-              const wakeSince = tunnels.mark();
+              const readAt = tunnels.mark();
               const refusal = lifecycleRefusal(lifecycle, SUSPENDED);
               if (refusal) {
                 if (!decision.resumeAfter || lifecycle.phase !== "active") throw new Error(suspendFailure(refusal));
                 // bb's suspend failed (Ona stopped the box under a live turn) and left the machine active, where bb's
                 // resume does nothing: the plugin wakes the box (decision 0002).
                 // It gives up after 30 minutes; a plugin reload ends it sooner (docs/sync.md rule 1).
-                const startCalled = await provider.wake(resource, report, signal, "wake-thread", wakeSince);
+                const startCalled = await provider.wake(resource, report, signal, "wake-thread", readAt);
                 return startCalled ? "started it for a waiting thread" : "reconnected it for a waiting thread";
               }
               if (!decision.resumeAfter) return;
