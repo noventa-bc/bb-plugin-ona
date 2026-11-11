@@ -5,7 +5,6 @@ import { HOUR, NOW, idle, world } from "./sync-fakes.ts";
 
 test("a daemon repair makes no SSH check when the repair's own listing shows the box stopped (fails if the check before the SSH is dropped)", async () => {
   const { sync, calls } = world([idle("h1", { status: "disconnected", lastSeenAt: NOW - HOUR })], {
-    daemonAlive: false,
     stopBeforeRefresh: true,
   });
   await sync.reconcile(new Set(["h1"]), { wait: true });
@@ -18,4 +17,11 @@ test("two empty Ona listings settle nothing: no lookup by id, no suspend (fails 
   await sync.reconcile(new Set(["h1"]), { wait: true });
   await sync.reconcile(new Set(["h1"]), { wait: true });
   assert.deepEqual(calls, []);
+});
+
+test("an unknown daemon answer is reported as unknown (fails if the fake turns null into true)", async () => {
+  const box = idle("h1", { status: "disconnected", lastSeenAt: NOW - HOUR });
+  const { sync, guard } = world([box], { daemonAlive: null });
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.match(guard.records.get("h1")!.reason, /couldn't tell whether the daemon runs/);
 });

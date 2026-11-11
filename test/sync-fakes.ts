@@ -242,7 +242,7 @@ export function world(
       daemonAlive: async () => {
         calls.push("probe");
         if (options.stopDuringProbe) for (const box of boxes) box.ona = "STOPPED";
-        // Bug: `options.daemonAlive ?? true` turned an unknown (null) answer into true, so no test ran the null case.
+        // Bug: `options.daemonAlive ?? true` turned an unknown (null) answer into true.
         return options.daemonAlive === undefined ? true : options.daemonAlive;
       },
       reconnect:

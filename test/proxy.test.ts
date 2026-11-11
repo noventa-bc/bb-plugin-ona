@@ -39,6 +39,7 @@ test("allows only the installer routes and the daemon's /internal routes", () =>
     ["POST", "/internal/threads/events"],
     ["GET", "/internal/plugins/x/host"],
     ["GET", "/internal/plugins/x/host/abc/more"],
+    ["GET", "/internal/plugins//host/x"],
     ["GET", "/internal/skills/tree"],
     ["GET", "/internal/skills/tree/a.b/c"],
     ["POST", "/api/internal/session/open"],
@@ -175,8 +176,8 @@ test("proxy upgrades only the daemon socket", local, async () => {
     seen.length = 0;
     assert.match(await upgrade(proxy.port, "/ws"), /^HTTP\/1\.1 403/);
     assert.match(await upgrade(proxy.port, "/ws/terminals/t1"), /^HTTP\/1\.1 403/);
-    // Fails if the upgrade handler stops refusing a method other than GET.
-    assert.match(await upgrade(proxy.port, "/internal/ws?sessionId=1", "POST"), /^HTTP\/1\.1 403/);
+    for (const method of ["POST", "PUT", "DELETE"])
+      assert.match(await upgrade(proxy.port, "/internal/ws?sessionId=1", method), /^HTTP\/1\.1 403/, method);
     assert.equal(seen.length, 0);
     const reply = await upgrade(proxy.port, "/internal/ws?sessionId=1");
     assert.match(reply, /^HTTP\/1\.1 101[\s\S]*hello$/);
