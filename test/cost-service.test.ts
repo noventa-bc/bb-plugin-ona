@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { ClaudeUsageBucket } from "../src/cost.ts";
 import { createThreadCost } from "../src/cost-service.ts";
 import type { Devbox, ThreadCost } from "../src/rpc.ts";
+import { CODEX_FIGURE, OLD, ONE_DOLLAR_BUCKET } from "./cost-fakes.ts";
 import { tick, useFakeClock } from "./fake-clock.ts";
 
 // A fake of the bb calls the cost check makes (CostBb): one thread on one devbox,
@@ -17,25 +18,7 @@ const MINUTE = 60_000;
 const KEY = "cost2:t1"; // the record the code reads and writes
 const OLD_KEY = "cost:t1"; // the record key from before the Codex fix (docs/ona-notes.md)
 
-const OLD = -60 * MINUTE; // an hour before the fake clock's zero, so past the 5-minute floor
 const FIGURE: ThreadCost = { provider: "claude-code", usd: 1, basis: "list-price", partial: false, updatedAt: OLD };
-const CODEX_FIGURE: ThreadCost = {
-  provider: "codex",
-  usd: 1,
-  basis: "openai-estimate",
-  partial: false,
-  updatedAt: OLD,
-};
-const ONE_DOLLAR_BUCKET: ClaudeUsageBucket = {
-  model: "claude-opus-5-5",
-  long: false,
-  fast: false,
-  input: 250_000, // $4 per million input tokens
-  output: 0,
-  cacheWrite5m: 0,
-  cacheWrite1h: 0,
-  cacheRead: 0,
-};
 // Codex's account/usage/read answer: with groups once the usage is recorded, without them before.
 const recorded = (usd: number) => ({ estimatedUsageUsdMicros: usd * 1_000_000, groups: [{}] });
 const UNRECORDED = { estimatedUsageUsdMicros: 0, groups: [] };
