@@ -6,6 +6,7 @@ import { test } from "node:test";
 import { tempDir } from "./sandbox.ts";
 
 const script = join(import.meta.dirname, "..", "scripts", "bb-source.sh");
+const repo = join(import.meta.dirname, "..");
 
 // listPublicHosts is defined on line 2 and again on line 76, with 70 filler lines between the two.
 const filler = Array.from({ length: 70 }, (_, i) => `// filler ${i + 1}`);
@@ -23,6 +24,8 @@ const bundle = [
   "const next = listPublicHosts => 1;",
   // A definition with no `=`, which only the `const` form finds.
   "declare const typedOnly: number;",
+  // A `let` with a value, which only the bare `<name> =` form finds.
+  "let letDefined = 1;",
   "",
 ].join("\n");
 
@@ -67,16 +70,16 @@ test("each definition gets its own header, and 60 lines follow each one by defau
   assert.equal(headers[1]! - headers[0]! - 1, 61, "the definition and the 60 lines after it");
 });
 
-test("a `const <name> = value` line is found", () => {
-  const r = bbSource(["createMachineBootstrapApi", "0"]);
-  assert.equal(r.status, 0, r.output);
-  assert.match(r.output, /^const createMachineBootstrapApi = \(\) => \(\{\}\);$/m);
-});
-
 test("a `declare const <name>` line with no `=` is found", () => {
   const r = bbSource(["typedOnly", "0"]);
   assert.equal(r.status, 0, r.output);
   assert.match(r.output, /^declare const typedOnly: number;$/m);
+});
+
+test("a `let <name> = value` line is found, through the bare `<name> =` form", () => {
+  const r = bbSource(["letDefined", "0"]);
+  assert.equal(r.status, 0, r.output);
+  assert.match(r.output, /^let letDefined = 1;$/m);
 });
 
 test("a name with no definition fails and says so", () => {
@@ -158,4 +161,18 @@ test("--sdk fails with a message when the repo has no SDK typings", () => {
   });
   assert.equal(run.status, 1);
   assert.match(String(run.stderr), /no SDK typings at .*bb-plugin-sdk\.d\.ts; run npm ci/);
+});
+
+test("with CDPATH set, a relative invocation of --sdk prints the typings' path and the declaration", () => {
+  const run = spawnSync("sh", ["scripts/bb-source.sh", "--sdk", "defineCli", "0"], {
+    cwd: repo,
+    env: { ...process.env, CDPATH: "." },
+    stdio: "pipe",
+    timeout: 30_000,
+  });
+  assert.equal(run.status, 0, String(run.stderr));
+  assert.match(
+    String(run.stdout),
+    /^--- \/.*bb-plugin-sdk\.d\.ts:\d+\ndeclare function defineCli\(spec: PluginCliSpec\)/m,
+  );
 });

@@ -7,7 +7,8 @@
 set -eu
 usage() { echo "usage: scripts/lines.sh [margin]" >&2; exit 2; }
 [ $# -le 1 ] || usage
-cd "$(dirname "$0")/.."
+# CDPATH='' keeps cd from printing the path when the caller has CDPATH set.
+CDPATH='' cd "$(dirname "$0")/.."
 margin=${1:-10}
 case $margin in ''|0?*|*[!0-9]*) usage ;; esac
 cap=$(sed -n 's/.*"max-lines".*max: *\([0-9][0-9]*\).*/\1/p' eslint.config.js | head -n 1)

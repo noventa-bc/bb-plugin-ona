@@ -118,3 +118,14 @@ test("a margin that is not a number is a usage error", () => {
   assert.equal(r.status, 2);
   assert.match(r.stderr, /usage: scripts\/lines\.sh \[margin\]/);
 });
+
+test("with CDPATH set, a relative invocation prints the rows and nothing else", () => {
+  const run = spawnSync("sh", ["scripts/lines.sh"], {
+    cwd: fixture(),
+    env: { ...process.env, CDPATH: "." },
+    stdio: "pipe",
+    timeout: 120_000,
+  });
+  assert.equal(run.status, 0, String(run.stderr));
+  assert.equal(String(run.stdout), "20 at-cap.js\n11 one-over.js\n");
+});

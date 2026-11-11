@@ -7,7 +7,8 @@
 # BB_APP_DIR is the bb-app package folder; by default it is the one inside /Applications/bb.app.
 set -eu
 usage() { echo "usage: scripts/bb-source.sh [--sdk] <name> [lines]" >&2; exit 2; }
-root=$(cd "$(dirname "$0")/.." && pwd)
+# CDPATH='' keeps cd from printing the path when the caller has CDPATH set.
+root=$(CDPATH='' cd "$(dirname "$0")/.." && pwd)
 sdk=
 if [ "${1:-}" = --sdk ]; then sdk=1; shift; fi
 [ $# -le 2 ] || usage
