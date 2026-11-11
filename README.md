@@ -318,7 +318,7 @@ bb machine remove ona:<name>   # created: deletes the box unless it has unpushed
   the `ona` CLI (or run `bb plugin config ona set onaPath <path>`, then `bb plugin reload ona`), run `ona login`, or run `ona environment ssh-config`.
 - **"~/.bb-machines is a real folder on the shared home":** move it aside with
   `mv ~/.bb-machines ~/.bb-machines.shared`, then add the machine again.
-- **Creation times out or fails:** check `bb machine show <id>`: its message names the failure.
+- **Creation times out or fails:** check `bb plugin logs ona` and `bb machine show <id>`.
   Prerequisite failures name the missing tool.
 - **"thread … holds this box" in `bb ona status`:** bb still shows that thread
   busy after more than 6 hours with no update, so the plugin won't release the
