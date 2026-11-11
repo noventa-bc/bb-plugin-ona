@@ -198,11 +198,13 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   (`lifecycleReporter`); `bb.log.*` also goes to
   `bb plugin logs <id>` (`emitLog`); `report.step` text is cleared when the remove
   finishes (checked 2026-11-09).
-- bb 0.49.0 sets a host whose create failed to `removing` with the failure as its status
-  message, and starts its cleanup 30 s later (`MACHINE_CREATE_FAILURE_CLEANUP_GRACE_MS`,
-  `runCreate`); the cleanup's steps replace the message, and bb writes the failure back
-  when the cleanup ends (`creationFailureMessage`). A destroyed host is not served: its
-  route answers 404 (`requireNonDestroyedHostWithStatus`) (checked 2026-11-11).
+- bb 0.49.0 sets a host whose create failed to `removing` with the failure in its status
+  message (`runCreate`), and its cleanup is due 30 s later
+  (`MACHINE_CREATE_FAILURE_CLEANUP_GRACE_MS`). The cleanup's steps replace the message;
+  bb writes the failure back when the first cleanup attempt succeeds
+  (`creationFailureMessage`), and a failed attempt leaves its own error, which later
+  attempts keep. A destroyed host's route answers 404 `host_unavailable`
+  (`requireNonDestroyedHostWithStatus`) (checked 2026-11-11).
 - bb 0.49.0 appends `report.log` from create to the host's `lifecycle.pendingLog`
   (last 16384 characters, `createReporter`); bb empties it when a thread launch waiting
   on the host reads it (`takeCreateLog`) and when the host turns active (`runCreate`)
