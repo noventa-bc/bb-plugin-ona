@@ -179,10 +179,7 @@ function fakeRun(
       },
       lastError: extra.listingFails ? listingError : null,
     },
-    provider: {
-      reconnect: async (resource: { envId: string }) => void calls.push(`reconnect ${resource.envId}`),
-      wake: async () => false,
-    },
+    provider: { reconnect: async (resource: { envId: string }) => void calls.push(`reconnect ${resource.envId}`) },
     ona: { rename: async (envId: string, name: string) => void calls.push(`rename ${envId} ${name}`) },
     bb: {
       sdk: {
@@ -193,9 +190,6 @@ function fakeRun(
       log: { info: (message: string) => void logs.push(message) },
     },
     tunnels: { status: () => "up" },
-    reconcile: async () => {},
-    statusRows: async () => [],
-    onaHealth: () => ({ lastError: null, listedAt: null, autoRepair: false }),
     resolveEnvId: (ref: string) => Promise.resolve(ref === "box" ? "env_1" : ref),
     keepAlives: {
       stop: (envId: string) => {

@@ -279,13 +279,9 @@ export function unpushedWork(env: OnaEnvironment): { branch?: string; count: num
   return git?.branch ? { branch: git.branch, count, files } : { count, files };
 }
 
-/**
- * Whether Ona gives both git counts `unpushedWork` reads. A count Ona leaves out reads as zero there, so a delete of a
- * box without them goes ahead unchecked: the delete line's `git=unknown`.
- */
+/** Whether `status.content.git.totalUnpushedCommits` reads as a finite number. */
 export function gitKnown(env: OnaEnvironment): boolean {
-  const git = env.status?.content?.git;
-  return Number.isFinite(Number(git?.totalUnpushedCommits)) && Number.isFinite(Number(git?.totalChangedFiles));
+  return Number.isFinite(Number(env.status?.content?.git?.totalUnpushedCommits));
 }
 
 /**

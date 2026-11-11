@@ -9,27 +9,24 @@ import { pollUntil } from "./time.ts";
 /** Ona can be slow to wake a dev container; give each SSH check this long. */
 const CHECK_TIMEOUT_MS = 5 * 60_000;
 
-/** When this module loaded, which is when the plugin did: the start lines' `up` counts seconds from it. */
-const loadedAt = Date.now();
-
 /** Who asked for a wake: a waiting thread on an active machine (the sync pass), or `bb ona resume`. */
 export type WakeVia = "wake-thread" | "wake-cmd";
 
-/** The cause of a start: a provider create or resume, or a wake. */
-type StartVia = "create" | "resume" | WakeVia;
-
 /**
  * A connect call's start. ensureRunning sets `started` just before it calls Ona's start, so the call still knows it
- * started the box when that start or the connect throws.
+ * started the box when that start or the connect throws. create sets `created` before Ona's createEnvironment.
  */
 export interface StartTrace {
-  via: StartVia;
+  via: "create" | "resume" | WakeVia;
   started: boolean;
+  created: boolean;
 }
 
 /** The connect path bound to one registration; provider.ts calls the functions it returns. */
 export function connectHelpers(bb: BbPluginApi, deps: ProviderDeps) {
   const { ona, tunnels, executorFor = sshExecutor } = deps;
+  // When the provider registered, which is when the plugin loaded: the start lines' `up` counts seconds from it.
+  const loadedAt = Date.now();
 
   /**
    * Starts a stopped box, after Ona's own starts and stops finish. Resolves true when it called `ona.start`, and false
@@ -73,6 +70,8 @@ export function connectHelpers(bb: BbPluginApi, deps: ProviderDeps) {
       throw new Error(`Ona shows ${env.metadata.name ?? env.id} ${short(phase || "unknown")}, so it was not started.`);
     }
     report.step(`Starting Ona environment ${env.metadata.name ?? env.id}`);
+    // Logged before the call on purpose: a start that fails may still have started the box, so the line records
+    // the attempt.
     bb.log.info(metric("start", { env: env.id, via: trace.via, up: Math.round((Date.now() - loadedAt) / 1000) }));
     trace.started = true;
     await ona.start(env.id, signal);

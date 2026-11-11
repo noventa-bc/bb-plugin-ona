@@ -6,6 +6,7 @@ import type { OnaCli, OnaEnvironment } from "../src/ona.ts";
 import { registerOnaProvider, type OnaResource, type PluginMachineProviderProgress } from "../src/provider.ts";
 import type { WakeVia } from "../src/provider-connect.ts";
 import type { TunnelManager } from "../src/ssh.ts";
+import { tick } from "./fake-clock.ts";
 
 export const box = (phase: string): OnaEnvironment => ({
   id: "env-1",
@@ -22,7 +23,6 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * `lookupFails`: `findEnvironment` throws, and so does `getEnvironmentIfExists` for `found`'s id.
  * `unpushed`: the box has unpushed commits, so a remove is refused.
  * `uncommitted`: the box has uncommitted files and no unpushed commits, so a remove is refused.
- * `gitCounts`: the box reports its git counts, both zero unless `unpushed` or `uncommitted` sets one.
  * `reopenDuringMove`: a tunnel opens while an adopted remove's move-aside script runs.
  * `moveAside`: the move-aside script exits with this code, or throws this error (default 0).
  * `rootExits`: the `~/.bb-machines` script's exit codes in turn, the last one repeated.
@@ -35,6 +35,9 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * `hangs`: this call never finishes on its own. Once its signal aborts, a start rejects with a plain Error whose
  * message is "The operation was aborted", as Node's `execFile` words a killed child, and whose cause is the signal's
  * reason; a bootstrap rejects with the signal's reason itself, as bb's bootstrap rethrows it.
+ * `unlisted`: Ona lists `found` only once `createEnvironment` runs, as for a box a create makes.
+ * `startTakes`: Ona's start takes this many milliseconds on the fake clock, so the test enables `useFakeClock`.
+ * `deleteFails`: Ona's delete rejects, after the call is logged in `calls`.
  */
 export type Setup = {
   found: OnaEnvironment;
@@ -42,7 +45,6 @@ export type Setup = {
   lookupFails?: boolean;
   unpushed?: boolean;
   uncommitted?: boolean;
-  gitCounts?: boolean;
   reopenDuringMove?: boolean;
   moveAside?: number | Error;
   rootExits?: number[];
@@ -54,6 +56,9 @@ export type Setup = {
   codexHome?: boolean;
   tunnel?: "up" | "connecting";
   hangs?: "start" | "bootstrap";
+  unlisted?: boolean;
+  startTakes?: number;
+  deleteFails?: boolean;
 };
 
 /** Each command as the gated executor runs it: after a `get` that says RUNNING. */
@@ -83,7 +88,6 @@ export function register({
   lookupFails,
   unpushed,
   uncommitted,
-  gitCounts,
   reopenDuringMove,
   moveAside = 0,
   rootExits = [],
@@ -95,6 +99,9 @@ export function register({
   codexHome,
   tunnel,
   hangs,
+  unlisted,
+  startTakes,
+  deleteFails,
 }: Setup) {
   const calls: string[] = [];
   const tunnels: string[] = [];
@@ -104,6 +111,7 @@ export function register({
   const moves: { envId: string; args: string[]; keysKept: boolean }[] = [];
   // The box the latest executor was made for: the provider makes one right before each exec.
   let target = "";
+  let listed = !unlisted;
   // As the tunnel manager does: an ensure on an open tunnel changes nothing.
   const ensure = (envId: string) => {
     tunnels.push(`ensure ${envId}`);
@@ -113,7 +121,12 @@ export function register({
     // By name, as cleanup finds a created box by its key-derived name; an adopted box keeps its own.
     findEnvironment: async (ref: string) => {
       if (lookupFails) throw new Error("Ona is unreachable");
-      return ref !== found.metadata.name ? null : found;
+      return ref !== found.metadata.name || !listed ? null : found;
+    },
+    resolveProjectId: async () => "project-1",
+    createEnvironment: async () => {
+      calls.push("create");
+      listed = true;
     },
     getEnvironmentIfExists: async (id: string, signal: AbortSignal) => {
       if (id !== found.id) return null;
@@ -123,7 +136,7 @@ export function register({
         calls.push("get failed");
         throw new Error("Ona is unreachable");
       }
-      if (unpushed || uncommitted || gitCounts) {
+      if (unpushed || uncommitted) {
         const git = {
           totalUnpushedCommits: unpushed ? 2 : 0,
           totalChangedFiles: uncommitted ? 1 : 0,
@@ -143,10 +156,14 @@ export function register({
     },
     start: async (_envId: string, signal: AbortSignal) => {
       calls.push("start");
+      if (startTakes) await tick(startTakes);
       if (hangs === "start") await untilAborted(signal);
     },
     stop: async (envId: string) => void calls.push(`stop ${envId}`),
-    delete: async (envId: string) => void calls.push(`delete ${envId}`),
+    delete: async (envId: string) => {
+      calls.push(`delete ${envId}`);
+      if (deleteFails) throw new Error("Ona delete failed");
+    },
   } as unknown as OnaCli;
   const executor: MachineExecutor = {
     async exec({ command, onOutput }) {
