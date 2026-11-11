@@ -77,8 +77,8 @@ those and the "skipped or not checked" lines ponytail ends with.
    server function the builder reads first; a task that calls bb's API names
    the server-side validation of that call too (it lives only in the server
    source: a fork onto another host is refused there). The source path is in
-   `docs/ona-notes.md` (bb SDK section). Read it with bounded grep (`grep -n`,
-   piped to `head`). Its round-1 adversarial reviewer is briefed to read that
+   `docs/ona-notes.md` (bb SDK section). Read it with `scripts/bb-source.sh <name>`
+   (`AGENTS.md` "Commands" says what it prints). Its round-1 adversarial reviewer is briefed to read that
    source too, so it runs on Opus (see the model paragraph under Roles).
    Execute only once sure; until then, ask.
 2. **Size.** A task is one PR a reviewer can read in one sitting: one roadmap
@@ -118,9 +118,10 @@ those and the "skipped or not checked" lines ponytail ends with.
    `git -C <worktree> diff origin/main...<sha>` (a two-dot diff from a stale
    base shows main's newer commits as reverted), and told to run tests and
    mutants in a scratch folder of its own under the
-   session scratchpad (`git archive <sha>` into a new folder, which has no
-   history, so git commands stay `git -C <worktree>`; link `node_modules`
-   only when the folder has none; the reviewer names a file by the path its
+   session scratchpad (`scripts/scratch-copy.sh <worktree> <sha> <dir>` makes
+   it: the copy has no history, so git commands stay `git -C <worktree>`; when
+   the script reports no `node_modules` link, the brief gives the `ln -s` that
+   links the builder's worktree's `node_modules`, and a reviewer never installs; the reviewer names a file by the path its
    own write call used and reports any process it leaves running), and
    sends blocking findings back to the builder. Code, here, is anything but
    comments, lint messages, Markdown, a lockfile, a `package.json` override
