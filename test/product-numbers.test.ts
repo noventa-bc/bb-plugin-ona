@@ -12,7 +12,9 @@ const logLine = (message: string, when = "2026-11-02T08:00:00Z") =>
 
 /** Runs the script with `input` on stdin and `args`; returns its exit status, stdout and stderr. */
 function productNumbers(input: string, args: string[] = []) {
-  const run = spawnSync("sh", [SCRIPT, ...args], { input, encoding: "utf8", timeout: 60_000 });
+  // A zone 14 hours ahead of UTC: a week or day computed in local time lands on another day and fails the tests.
+  const env = { ...process.env, TZ: "Pacific/Kiritimati" };
+  const run = spawnSync("sh", [SCRIPT, ...args], { input, encoding: "utf8", timeout: 60_000, env });
   return { status: run.status, stdout: run.stdout, stderr: run.stderr };
 }
 
@@ -249,6 +251,12 @@ test("a log line whose message is not a string is skipped, and the run goes on (
   );
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /^hand_runs 1$/m);
+  assert.match(r.stdout, /^skipped_lines 1$/m);
+});
+
+test("a metric line whose ts is a string is skipped (fails if the ts type is not checked)", () => {
+  const r = productNumbers(lines('{"ts":"2026-11-02T08:00:00Z","level":"info","message":"metric cmd name=sync"}'));
+  assert.match(r.stdout, /^hand_runs 0$/m);
   assert.match(r.stdout, /^skipped_lines 1$/m);
 });
 

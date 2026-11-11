@@ -1,10 +1,10 @@
 #!/bin/sh
 # Prints the product numbers from this plugin's metric log lines, one "name value" line each in a fixed order, then one
 # line per ISO week that has hand runs. Give it the output of bb plugin logs, which prints one JSON log line per line:
-#   bb plugin logs ona -n 10000 > <file> && scripts/product-numbers.sh < <file>
+#   bb plugin logs ona -n 10000 > ona.log && scripts/product-numbers.sh < ona.log
 # A line that is not a JSON log line is counted in skipped_lines; a log line that is not a metric line is ignored.
 set -eu
-[ $# -eq 0 ] || { echo "usage: bb plugin logs ona -n 10000 > <file> && scripts/product-numbers.sh < <file>" >&2; exit 2; }
+[ $# -eq 0 ] || { echo "usage: bb plugin logs ona -n 10000 > ona.log && scripts/product-numbers.sh < ona.log" >&2; exit 2; }
 node -e '
 const fs = require("node:fs");
 // A log line is a JSON object with a number ts that a Date can hold and a string message; any other line is skipped.
