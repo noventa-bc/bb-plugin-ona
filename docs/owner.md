@@ -75,10 +75,11 @@ Round: <n>; the passes this round are the ones FACTORY.md step 6 gives it.
 Read-only: change nothing in the builder's worktree; step 6 sets the scratch
   folder.
 Commands: every git command is `git -C <absolute path>`, and every file is
-  named by its absolute path; `git add`, `commit`, `restore` and `checkout` run
-  only in a throwaway repo the reviewer made under the scratchpad; nothing is
-  written under the folder that holds the checkouts. The test command below
-  goes in a script file: inside `sh -c "..."` its quotes end early.
+  named by its absolute path; a reviewer runs no `git add`, `commit`, `restore` or `checkout`, and undoes a
+  mutant by copying back the file it saved first; nothing is written under the
+  folder that holds the checkouts. The orchestrator hands over the test command
+  below as a script file in the scratchpad: inside `sh -c "..."` its quotes end
+  early.
 Scope: the item's code (roadmap label `<label>`); anything outside it goes
   under "Pre-existing" (step 6).
 Known roadmap items, not to re-report: <labels only>.
