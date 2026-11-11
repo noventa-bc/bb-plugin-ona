@@ -89,7 +89,7 @@ those and the "skipped or not checked" lines ponytail ends with.
    version to pin, a safety rule to bend, a behaviour change users will see),
    ask before building. Batch the questions into one message.
 4. **Brief** each builder with the template in `docs/owner.md` (a reviewer
-   gets its `Role:` line and the step-6 brief), plus: the
+   gets the reviewer template there, step 6), plus: the
    branch name `agent/<slug>`, the files involved (quote the line's text, not
    its number: numbers drift), the tests to
    write first, the coupled changes from `AGENTS.md`, and what to report back.
