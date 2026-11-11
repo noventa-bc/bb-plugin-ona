@@ -33,21 +33,22 @@ export default tseslint.config(
         // bb can accept a lifecycle request without acting on it; use the host it returns. A lifecycle call is discarded
         // when its statement is bare, awaited or void, possibly followed by a chain of calls such as `.catch(...)` or
         // `.catch(...).finally(...)`.
-        // shortcut: chains up to two calls deep, add a parent form when a deeper chain appears
-        ...[
-          "ExpressionStatement > AwaitExpression",
-          "ExpressionStatement > UnaryExpression[operator='void']",
-          "ExpressionStatement",
-          "ExpressionStatement > AwaitExpression > CallExpression > MemberExpression",
-          "ExpressionStatement > UnaryExpression[operator='void'] > CallExpression > MemberExpression",
-          "ExpressionStatement > CallExpression > MemberExpression",
-          "ExpressionStatement > AwaitExpression > CallExpression > MemberExpression > CallExpression > MemberExpression",
-          "ExpressionStatement > UnaryExpression[operator='void'] > CallExpression > MemberExpression > CallExpression > MemberExpression",
-          "ExpressionStatement > CallExpression > MemberExpression > CallExpression > MemberExpression",
-        ].map((parent) => ({
-          selector: `${parent} > CallExpression[callee.property.name=/^experimental_(suspend|resume|reconcile)$/]`,
-          message: "bb can accept this without acting on it: check the returned host's lifecycle (lifecycleRefusal).",
-        })),
+        // shortcut: chains up to four calls deep, add a depth to the list when a deeper chain appears
+        ...[0, 1, 2, 3, 4]
+          .flatMap((calls) => {
+            // A call on the result is `CallExpression > MemberExpression.callee`, as in `x.catch(...)`. `.callee` keeps a
+            // member read passed as an argument, as in `track(x.host)`, out of the chain.
+            const chain = "CallExpression > MemberExpression.callee > ".repeat(calls);
+            const lifecycle = "CallExpression[callee.property.name=/^experimental_(suspend|resume|reconcile)$/]";
+            return [
+              `ExpressionStatement > ${chain}${lifecycle}`,
+              `ExpressionStatement > :matches(AwaitExpression, UnaryExpression[operator='void']) > ${chain}${lifecycle}`,
+            ];
+          })
+          .map((selector) => ({
+            selector,
+            message: "bb can accept this without acting on it: check the returned host's lifecycle (lifecycleRefusal).",
+          })),
         {
           // A reset right after an aborted fake sleep breaks the next test's timers on CI's Node
           // (test/fake-clock.ts). `mock.reset()` resets the clock too.
