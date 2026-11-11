@@ -278,6 +278,9 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 - bb 0.49.0's SDK for a plugin is built by `createNodeBbSdk` with a fetch that gives up after
   `DEFAULT_BB_REQUEST_TIMEOUT_MS` (75 s) and throws an Error named `BbRequestTimeoutError`, while bb
   goes on with the request (checked 2026-11-09 in `server/dist/start-server.js`).
+- bb 0.49.0 answers `hosts.installProviderCli` only once the install ends, with no streamed events, and runs it for up
+  to `PROVIDER_CLI_INSTALL_TIMEOUT_MS` (15 min); a plugin's call gives up after 75 s while the install goes on
+  (checked 2026-11-11).
 - bb 0.49.0 refuses a thread spawn into its personal project ("Personal project threads must use a
   personal workspace", `assertProjectWorkspaceCompatibility`) unless its environment is `reuse`,
   `provider`, `project-default`, a host's personal workspace, or a host's `unmanaged` workspace with

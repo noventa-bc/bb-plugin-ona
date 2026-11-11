@@ -4,6 +4,7 @@
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import type { HostGuard } from "./reconcile.ts";
 import type { Row } from "./sync.ts";
+import { pollUntil } from "./time.ts";
 
 export interface CliStatus {
   installed: boolean;
@@ -95,11 +96,16 @@ export interface UpdatesDeps {
   autoUpdateProviders: string;
   /** src/sync.ts; passed in because sync.ts imports this module. */
   rowForRef(rows: readonly Row[], ref: string): Row | undefined;
-  /** Each box's update takes the machine's turn and records nothing (docs/sync.md rule 5). */
   guard: HostGuard;
+  /** Ends a wait for an install the SDK gave up on (the plugin's lifetime). */
+  signal: AbortSignal;
 }
 
-export function createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef, guard }: UpdatesDeps) {
+/** bb's own limit on one CLI install (`PROVIDER_CLI_INSTALL_TIMEOUT_MS`, 15 min in bb 0.49.0, checked 2026-11-11). */
+export const BB_INSTALL_LIMIT_MS = 15 * 60_000;
+export const INSTALL_POLL_MS = 15_000;
+
+export function createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef, guard, signal }: UpdatesDeps) {
   /**
    * Apply pending agent-CLI updates on connected Ona devboxes. Returns one
    * line per box for the CLI and the plugin log.
@@ -133,11 +139,27 @@ export function createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef,
         for (const cli of pending) {
           const from = statuses[cli]?.currentVersion ?? "?";
           const to = statuses[cli]?.latestVersion ?? "latest";
-          const events = await bb.sdk.hosts.installProviderCli({
-            hostId: row.hostId,
-            provider: cli,
-            actionKind: "update",
-          });
+          const started = Date.now();
+          let events: Awaited<ReturnType<Hosts["installProviderCli"]>>;
+          try {
+            events = await bb.sdk.hosts.installProviderCli({ hostId: row.hostId, provider: cli, actionKind: "update" });
+          } catch (error) {
+            // The SDK gives up while bb goes on installing (docs/ona-notes.md): keep the turn until bb is done.
+            if (!(error instanceof Error && error.name === "BbRequestTimeoutError")) throw error;
+            const done = await pollUntil(
+              async () => {
+                const now = (await bb.sdk.hosts.providerCliStatus({ hostId: row.hostId })) as Record<string, CliStatus>;
+                return updatesToApply(now, [cli]).length === 0;
+              },
+              { deadlineMs: BB_INSTALL_LIMIT_MS - (Date.now() - started), intervalMs: INSTALL_POLL_MS, signal },
+            );
+            lines.push(
+              done
+                ? `${name}: ${cli} ${from} -> ${to} (bb finished after the request timed out)`
+                : `${name}: ${cli} update still pending after bb's 15 min install limit`,
+            );
+            continue;
+          }
           const failed = events.find(
             (event) => event.type === "error" || (event.type === "completed" && event.exitCode !== 0),
           );

@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { settle, tick, useFakeClock } from "./fake-clock.ts";
 import { GIVE_UP_AFTER, HostGuard, type HostRecord } from "../src/reconcile.ts";
 import { rowForRef, type Row } from "../src/sync.ts";
 import {
+  BB_INSTALL_LIMIT_MS,
   createUpdateClis,
   hostIsBusy,
+  INSTALL_POLL_MS,
   parseProviderList,
   STUCK_THREAD_MS,
   stuckThreads,
@@ -14,6 +17,9 @@ import {
   type ThreadState,
   type UpdatesBb,
 } from "../src/updates.ts";
+
+// The wait for an install the SDK gave up on polls on setTimeout and Date.
+useFakeClock();
 
 const status = (overrides: Partial<CliStatus>): CliStatus => ({
   installed: true,
@@ -114,6 +120,7 @@ function updater(
     autoUpdateProviders: "codex",
     rowForRef,
     guard,
+    signal: new AbortController().signal,
   });
   return { updateClis, installs };
 }
@@ -233,12 +240,14 @@ test("another action is refused while an update holds the box, and allowed after
   assert.equal(await guard.run("box", "reconnect", "by hand", async () => {}), true);
 });
 
-test("a failed update records nothing: no backoff or give-up for the box (fails if the update counts toward rule 5)", async () => {
+test("an update records nothing, failed or not: no cooldown, backoff or give-up for the box (fails if the update counts toward rule 5)", async () => {
   const guard = new HostGuard(2, { now: () => 1_000 });
+  guard.records.set("updated", failing(2, 0));
   guard.records.set("failed", failing(2, 0));
   guard.records.set("thrown", failing(2, 0));
   const { updateClis } = updater(
     [
+      { hostId: "updated", codex: pending },
       { hostId: "failed", codex: pending },
       { hostId: "fresh", codex: pending },
       { hostId: "thrown", codex: pending, duringInstall: () => Promise.reject(new Error("daemon gone")) },
@@ -247,26 +256,10 @@ test("a failed update records nothing: no backoff or give-up for the box (fails 
     guard,
   );
   await assert.rejects(updateClis(), /daemon gone/);
+  assert.deepEqual(guard.records.get("updated"), failing(2, 0), "a success resets no count");
   assert.deepEqual(guard.records.get("failed"), failing(2, 0));
   assert.deepEqual(guard.records.get("thrown"), failing(2, 0));
   assert.equal(guard.records.has("fresh"), false);
-});
-
-test("a successful update starts no cooldown and resets no failure count", async () => {
-  const guard = new HostGuard(2, { now: () => 1_000 });
-  guard.records.set("box", failing(2, 0));
-  const { updateClis } = updater(
-    [
-      { hostId: "box", codex: pending },
-      { hostId: "fresh", codex: pending },
-    ],
-    {},
-    guard,
-  );
-  assert.deepEqual(await updateClis(), ["box-box: codex 1.0.0 -> 2.0.0", "box-fresh: codex 1.0.0 -> 2.0.0"]);
-  assert.deepEqual(guard.records.get("box"), failing(2, 0));
-  assert.equal(guard.records.has("fresh"), false);
-  assert.equal(guard.mayAct("fresh"), true);
 });
 
 test("an update runs on a box in backoff or given up (fails if the update waits out another action's backoff)", async () => {
@@ -283,4 +276,33 @@ test("an update runs on a box in backoff or given up (fails if the update waits 
   );
   assert.deepEqual(await updateClis(), ["box-backoff: codex 1.0.0 -> 2.0.0", "box-gave-up: codex 1.0.0 -> 2.0.0"]);
   assert.deepEqual(installs, ["backoff codex", "gave-up codex"]);
+});
+
+const sdkTimeout = () =>
+  Promise.reject(Object.assign(new Error("BB request timed out after 75 seconds."), { name: "BbRequestTimeoutError" }));
+
+test("an install the SDK gave up on keeps the box's turn until bb finishes it (fails if the timeout releases the box)", async () => {
+  const guard = new HostGuard();
+  const box = { hostId: "box", codex: pending, duringInstall: sdkTimeout };
+  const { updateClis } = updater([box], {}, guard);
+  const lines = updateClis();
+  await tick(INSTALL_POLL_MS, 3);
+  assert.equal(guard.busyWith("box"), "update-cli");
+  assert.equal(await guard.run("box", "reconnect", "by hand", async () => {}, { force: true }), false);
+  box.codex = {};
+  await tick(INSTALL_POLL_MS);
+  assert.deepEqual(await lines, ["box-box: codex 1.0.0 -> 2.0.0 (bb finished after the request timed out)"]);
+  assert.equal(guard.busyWith("box"), undefined);
+});
+
+test("the wait for an install the SDK gave up on ends at bb's install limit (fails if it waits on)", async () => {
+  const guard = new HostGuard();
+  const { updateClis } = updater([{ hostId: "box", codex: pending, duringInstall: sdkTimeout }], {}, guard);
+  const lines = updateClis();
+  await tick(INSTALL_POLL_MS, BB_INSTALL_LIMIT_MS / INSTALL_POLL_MS - 1);
+  assert.equal(guard.busyWith("box"), "update-cli", "still waiting just before the limit");
+  await tick(INSTALL_POLL_MS);
+  await settle();
+  assert.equal(guard.busyWith("box"), undefined, "released at the limit");
+  assert.deepEqual(await lines, ["box-box: codex update still pending after bb's 15 min install limit"]);
 });
