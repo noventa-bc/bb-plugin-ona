@@ -55,6 +55,20 @@ test("allows only the installer routes and the daemon's /internal routes", () =>
   assert.equal(isAllowedUpgrade("/ws/terminals/t1"), false);
 });
 
+test("refuses a dot segment, a percent or a backslash inside a route's parameter (fails if safePathname stops refusing them)", () => {
+  for (const url of [
+    "/internal/plugins/../host/x",
+    "/internal/plugins/./host/x",
+    "/internal/plugins/%2e%2e/host/x",
+    "/internal/plugins/a%2fb/host/x",
+    "/internal/plugins/a\\b/host/x",
+    "/internal/plugins/x/host/..",
+  ])
+    assert.equal(isAllowedRequest("GET", url), false, url);
+  // The neighbour: a dot inside a segment is not a dot segment.
+  assert.equal(isAllowedRequest("GET", "/internal/plugins/my.plugin/host/..abc"), true);
+});
+
 test("strips identity and forwarding headers", () => {
   const out = filterHeaders(
     {
@@ -139,11 +153,11 @@ test("proxy forwards allowed routes and blocks the user API", local, async () =>
   }
 });
 
-function upgrade(port: number, path: string): Promise<string> {
+function upgrade(port: number, path: string, method = "GET"): Promise<string> {
   return new Promise((resolve, reject) => {
     const socket = net.connect(port, "127.0.0.1", () => {
       socket.write(
-        `GET ${path} HTTP/1.1\r\nhost: x\r\nconnection: Upgrade\r\nupgrade: websocket\r\nx-bb-gate-auth: machine\r\n\r\n`,
+        `${method} ${path} HTTP/1.1\r\nhost: x\r\nconnection: Upgrade\r\nupgrade: websocket\r\nx-bb-gate-auth: machine\r\n\r\n`,
       );
     });
     let data = "";
@@ -161,6 +175,8 @@ test("proxy upgrades only the daemon socket", local, async () => {
     seen.length = 0;
     assert.match(await upgrade(proxy.port, "/ws"), /^HTTP\/1\.1 403/);
     assert.match(await upgrade(proxy.port, "/ws/terminals/t1"), /^HTTP\/1\.1 403/);
+    // Fails if the upgrade handler stops refusing a method other than GET.
+    assert.match(await upgrade(proxy.port, "/internal/ws?sessionId=1", "POST"), /^HTTP\/1\.1 403/);
     assert.equal(seen.length, 0);
     const reply = await upgrade(proxy.port, "/internal/ws?sessionId=1");
     assert.match(reply, /^HTTP\/1\.1 101[\s\S]*hello$/);

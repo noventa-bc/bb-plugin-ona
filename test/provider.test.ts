@@ -471,3 +471,17 @@ test("onaRef refuses a trailing newline and the empty name", () => {
   assert.equal(onaRef.safeParse("a\n").success, false, "trailing newline");
   assert.equal(onaRef.safeParse("").success, false, "empty name");
 });
+
+test("the daemon probe answers unknown for an exit other than 0 or 1 and for a failed SSH (fails if either reads as no daemon)", async () => {
+  for (const [probeExit, alive] of [
+    [0, true],
+    [1, false],
+    [2, null],
+    [255, null],
+    [new Error("ssh: connection refused"), null],
+  ] as const) {
+    const { daemonAlive, calls } = register({ found: box("RUNNING"), probeExit });
+    assert.equal(await daemonAlive(adoptedResource, new AbortController().signal), alive, String(probeExit));
+    assert.deepEqual(calls, ["probe"]);
+  }
+});

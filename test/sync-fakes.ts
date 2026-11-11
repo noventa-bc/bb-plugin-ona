@@ -48,6 +48,8 @@ export function world(
     signal?: AbortSignal;
     /** Ona lists every box STOPPED once the daemon check has run. */
     stopDuringProbe?: boolean;
+    /** Ona lists every box STOPPED from the repair's own read (`refresh()`) on; the pass's read came before it. */
+    stopBeforeRefresh?: boolean;
     /** Keep a listing 15s fresh, so only `refresh()` sees a change; the clock is the mocked Date when enabled. */
     cached?: boolean;
     archived?: boolean | "not-found" | "fail";
@@ -148,6 +150,7 @@ export function world(
   const refreshListing = listing.refresh.bind(listing);
   listing.refresh = async () => {
     if (options.refreshFails?.()) throw new Error("not logged in");
+    if (options.stopBeforeRefresh) for (const box of boxes) box.ona = "STOPPED";
     const result = await refreshListing();
     return options.refreshEmpty?.() ? { ...result, envs: [] } : result;
   };
@@ -239,7 +242,8 @@ export function world(
       daemonAlive: async () => {
         calls.push("probe");
         if (options.stopDuringProbe) for (const box of boxes) box.ona = "STOPPED";
-        return options.daemonAlive ?? true;
+        // Bug: `options.daemonAlive ?? true` turned an unknown (null) answer into true, so no test ran the null case.
+        return options.daemonAlive === undefined ? true : options.daemonAlive;
       },
       reconnect:
         options.reconnect ??

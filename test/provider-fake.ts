@@ -30,6 +30,7 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * otherwise.
  * `sshExits`, `mountExits`, `curlExits`: the SSH, shared-home and tunnel probes' exit codes in turn, the last one
  * repeated (default 0). A failed SSH probe prints "refused". Listing `mountExits` turns the shared-home wait on.
+ * `probeExit`: the daemon probe's exit code, or the error its SSH throws (default 0).
  * `codexHome`: the Codex home is set, so connect runs its `mkdir`.
  * `tunnel`: the box's tunnel is already open, in this state.
  * `hangs`: this call never finishes on its own. Once its signal aborts, a start rejects with a plain Error whose
@@ -54,6 +55,7 @@ export type Setup = {
   sshExits?: number[];
   mountExits?: number[];
   curlExits?: number[];
+  probeExit?: number | Error;
   codexHome?: boolean;
   tunnel?: "up" | "connecting";
   hangs?: "start" | "bootstrap";
@@ -98,6 +100,7 @@ export function register({
   sshExits = [0],
   mountExits = [],
   curlExits = [],
+  probeExit = 0,
   codexHome,
   tunnel,
   hangs,
@@ -199,6 +202,11 @@ export function register({
         if (moveAside instanceof Error) throw moveAside;
         return { exitCode: moveAside };
       }
+      if (command[3] === "bb-ona-probe") {
+        calls.push("probe");
+        if (probeExit instanceof Error) throw probeExit;
+        return { exitCode: probeExit };
+      }
       if (command[3] !== "bb-ona-root") return { exitCode: 0 };
       calls.push("root");
       onOutput(rootOutput);
@@ -218,7 +226,11 @@ export function register({
       },
     },
   });
-  const { reconnect, wake: wakeWithCause } = registerOnaProvider(host.bb, {
+  const {
+    reconnect,
+    daemonAlive,
+    wake: wakeWithCause,
+  } = registerOnaProvider(host.bb, {
     availability: async () => ({ status: "available" }),
     ona,
     sshBinary: "ssh",
@@ -256,6 +268,7 @@ export function register({
   return {
     provider,
     reconnect,
+    daemonAlive,
     wake,
     calls,
     tunnels,
