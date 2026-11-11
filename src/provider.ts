@@ -4,8 +4,17 @@ import type { BbPluginApi, MachineBootstrapRequest } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { ONA_MACHINE_PROVIDER_ID, ONA_NAME_MESSAGE, ONA_NAME_PATTERN } from "./machine-inputs.ts";
 import { envNameForKey } from "./names.ts";
-import { isDeleted, isRunning, isStopped, unpushedWork, type OnaCli, type OnaEnvironment } from "./ona.ts";
-import { connectHelpers } from "./provider-connect.ts";
+import {
+  gitKnown,
+  isDeleted,
+  isRunning,
+  isStopped,
+  metric,
+  unpushedWork,
+  type OnaCli,
+  type OnaEnvironment,
+} from "./ona.ts";
+import { connectHelpers, type StartTrace, type WakeVia } from "./provider-connect.ts";
 import { DAEMON_PROBE } from "./reconcile.ts";
 import type { PluginMachineProviderAvailability } from "./setup.ts";
 import { sshExecutor, type TunnelManager } from "./ssh.ts";
@@ -163,10 +172,62 @@ function notDeletingMessage(
   );
 }
 
+/**
+ * Runs one connect call and writes its `metric connected` line when the call ends, ok or not. `box` is new when Ona's
+ * createEnvironment returned during the call, so a box this call both created and started reads `new`. It is stopped
+ * when the call called Ona's start, and running otherwise: `trace` records both.
+ */
+async function timedConnect<T>(
+  bb: BbPluginApi,
+  via: "create" | "resume" | "wake" | "reconnect",
+  trace: { started: boolean; created: boolean },
+  call: () => Promise<T>,
+): Promise<T> {
+  const began = Date.now();
+  let ok = 0;
+  try {
+    const result = await call();
+    ok = 1;
+    return result;
+  } finally {
+    const box = trace.created ? "new" : trace.started ? "stopped" : "running";
+    bb.log.info(metric("connected", { via, box, secs: Math.round((Date.now() - began) / 1000), ok }));
+  }
+}
+
+/**
+ * A create or resume method: its body gets the start trace and passes it to ensureRunning, and a create sets
+ * `trace.created` once Ona's createEnvironment returns. The call writes its `metric connected` line when it ends.
+ */
+function timed<A, T>(bb: BbPluginApi, via: "create" | "resume", method: (args: A, trace: StartTrace) => Promise<T>) {
+  return (args: A) => {
+    const trace: StartTrace = { via, started: false, created: false };
+    return timedConnect(bb, via, trace, () => method(args, trace));
+  };
+}
+
+/** A wake: its body gets the start trace, and the caller's cause names the start's metric line. */
+function timedWake<T>(
+  bb: BbPluginApi,
+  body: (
+    resource: OnaResource,
+    progress: PluginMachineProviderProgress,
+    outer: AbortSignal,
+    trace: StartTrace,
+  ) => Promise<T>,
+) {
+  return (resource: OnaResource, progress: PluginMachineProviderProgress, outer: AbortSignal, cause: WakeVia) => {
+    const trace: StartTrace = { via: cause, started: false, created: false };
+    return timedConnect(bb, "wake", trace, () => body(resource, progress, outer, trace));
+  };
+}
+
 export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
   const { ensureRunning, connect, connectOrClose, disconnect } = connectHelpers(bb, deps);
   const reconnect = (box: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal) =>
-    capped(`reconnecting ${box.envName}`, CAP_MINUTES, signal, report, (s, r) => connect(box, box.key, r, s));
+    timedConnect(bb, "reconnect", { started: false, created: false }, () =>
+      capped(`reconnecting ${box.envName}`, CAP_MINUTES, signal, report, (s, r) => connect(box, box.key, r, s)),
+    );
 
   const { ona, executorFor = sshExecutor } = deps;
 
@@ -182,20 +243,22 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
    * 0002), and so does `bb ona resume`; the caller checks bb's phase, since a suspended machine is bb's resume's to
    * start. Ona's other phases (deleting, deleted, failed) are refused: the box is not started. Its no-stop flag goes
    * first: bb shows the machine active here, so no suspend of bb's can still reach the provider's stop. Resolves true
-   * when it called `ona.start`, false when no start was called. It gives up after CAP_MINUTES.
+   * when it called `ona.start`, false when no start was called. It gives up after CAP_MINUTES. `cause` names the caller
+   * on the start's metric line.
    */
-  const wake = (resource: OnaResource, progress: PluginMachineProviderProgress, outer: AbortSignal) =>
+  const wake = timedWake(bb, (resource, progress, outer, trace) =>
     capped(`waking ${resource.envName}`, CAP_MINUTES, outer, progress, async (signal, report) => {
       deps.releasing.delete(resource.envId);
       const env = await ona.getEnvironmentIfExists(resource.envId, signal);
       if (!env) throw new Error(`Ona environment "${resource.envId}" not found. Run \`ona environment list\`.`);
-      const startCalled = await ensureRunning(env, report, signal);
+      const startCalled = await ensureRunning(env, report, signal, trace);
       // Only a box this wake started closes its tunnel on a failed connect; a box that was running, or that Ona started
       // during the waits, keeps the tunnel connect() left open.
       if (startCalled) await connectOrClose(resource, report, signal, true);
       else await connect(resource, resource.key, report, signal);
       return startCalled;
-    });
+    }),
+  );
 
   /** The box's current name: the stored one goes stale after `bb ona rename`. */
   const nameOf = (env: OnaEnvironment, owned: OnaResource) => env.metadata.name ?? owned.envName;
@@ -220,7 +283,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       }
       return { action: "accept" };
     },
-    async create({ inputs, key, checkpoint, report, signal }) {
+    create: timed(bb, "create", async ({ inputs, key, checkpoint, report, signal }, trace) => {
       let env: OnaEnvironment;
       let adopted: boolean;
       if (inputs.mode === "adopt") {
@@ -240,6 +303,9 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
             { projectId, name, classId: inputs.classId, inactivityTimeout: deps.inactivityTimeout },
             signal,
           );
+          // A create that fails before createEnvironment returns counts no box as new, even when Ona made one (a
+          // timeout or an abort): it reads running.
+          trace.created = true;
           env = await requireEnv(name, signal);
         }
       }
@@ -250,11 +316,11 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         key,
       };
       await checkpoint(resource);
-      await ensureRunning(env, report, signal);
+      await ensureRunning(env, report, signal, trace);
       // Not running when this began: Ona can lag behind a start before it reports STARTING.
       await connectOrClose(resource, report, signal, !isRunning(env));
       return { status: "created", name: `ona:${resource.envName}`, resource };
-    },
+    }),
     async reconcileCleanup({ key, report, signal }) {
       // Only environments this provider created carry the key-derived name;
       // adopted environments are never deleted.
@@ -263,12 +329,14 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         // Same check as remove: a delete would lose the work on the box.
         const work = unpushedWork(env);
         if (work) {
+          bb.log.info(metric("keep", { env: env.id, via: "cleanup", commits: work.count, files: work.files }));
           await disconnect(env.id);
           return { status: "failed", message: notDeletingMessage(env.metadata.name ?? env.id, env.id, work) };
         }
         report.step(`Deleting orphaned Ona environment ${env.metadata.name ?? env.id}`);
         await disconnect(env.id);
         await ona.delete(env.id, signal);
+        bb.log.info(metric("delete", { env: env.id, via: "cleanup", git: gitKnown(env) ? "known" : "unknown" }));
       }
       return { status: "removed" };
     },
@@ -288,14 +356,14 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     },
     // bb's own resume: on Resume in bb, on bb's restart recovery and on a waiting thread's resume. It gives up after
     // CAP_MINUTES, since bb puts no deadline on it.
-    async resume({ resource, checkpoint, report: progress, signal: outer }) {
+    resume: timed(bb, "resume", async ({ resource, checkpoint, report: progress, signal: outer }, trace) => {
       const owned = resourceSchema.parse(resource);
       return capped(`resuming ${owned.envName}`, CAP_MINUTES, outer, progress, async (signal, report) => {
         // Drop a no-stop flag a failed suspend may have left; the next suspend is the user's.
         deps.releasing.delete(owned.envId);
         const env = await ona.getEnvironmentIfExists(owned.envId, signal);
         if (!env) throw new Error(`Ona environment "${owned.envId}" not found. Run \`ona environment list\`.`);
-        await ensureRunning(env, report, signal);
+        await ensureRunning(env, report, signal, trace);
         // The stored name goes stale after `bb ona rename`; only a lifecycle hook can store the current one.
         const current = { ...owned, envName: nameOf(env, owned) };
         await checkpoint(current);
@@ -303,7 +371,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         await connectOrClose(current, report, signal, !isRunning(env));
         return { resource: current };
       });
-    },
+    }),
     async remove({ resource, hostId, report, signal }) {
       const owned = resourceSchema.parse(resource);
       // A removal can leave a no-stop flag behind (a suspend bb settled as removing never reaches the provider's
@@ -380,6 +448,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       const live = env && !isDeleted(env) ? env : null;
       const work = live && unpushedWork(live);
       if (work) {
+        bb.log.info(metric("keep", { env: owned.envId, via: "remove", commits: work.count, files: work.files }));
         await disconnect(owned.envId);
         return { status: "failed", message: notDeletingMessage(nameOf(live, owned), owned.envId, work) };
       }
@@ -388,6 +457,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       if (live) {
         report.step(`Deleting Ona environment ${nameOf(live, owned)}`);
         await ona.delete(owned.envId, signal);
+        bb.log.info(metric("delete", { env: owned.envId, via: "remove", git: gitKnown(live) ? "known" : "unknown" }));
       }
       return { status: "removed" };
     },

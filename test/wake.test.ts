@@ -83,7 +83,8 @@ test("bb ona resume on a running box connects it without starting it (fails if i
 
 /** `bb ona`'s run handler over the resume deps; the other subcommands' deps are not reached by these tests. */
 function dispatch(deps: ResumeDeps) {
-  const run = onaCommands({ ...deps } as unknown as OnaCommandDeps);
+  // The run handler writes its metric cmd line through bb's log before it acts.
+  const run = onaCommands({ ...deps, bb: { log: { info: () => {} } } } as unknown as OnaCommandDeps);
   return (ref: string) => run(["resume", ref], {});
 }
 
