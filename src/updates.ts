@@ -2,7 +2,9 @@
 // updates bb already detects, never install a CLI that isn't there.
 // server.ts schedules updateClis; tests drive it with a fake of the bb calls below.
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
+import type { HostGuard } from "./reconcile.ts";
 import type { Row } from "./sync.ts";
+import { pollUntil } from "./time.ts";
 
 export interface CliStatus {
   installed: boolean;
@@ -94,9 +96,16 @@ export interface UpdatesDeps {
   autoUpdateProviders: string;
   /** src/sync.ts; passed in because sync.ts imports this module. */
   rowForRef(rows: readonly Row[], ref: string): Row | undefined;
+  guard: HostGuard;
+  /** Ends a wait for an install the SDK gave up on (the plugin's lifetime). */
+  signal: AbortSignal;
 }
 
-export function createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef }: UpdatesDeps) {
+/** bb's limit on one CLI install; `docs/ona-notes.md` has the value. */
+export const BB_INSTALL_LIMIT_MS = 15 * 60_000;
+export const INSTALL_POLL_MS = 15_000;
+
+export function createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef, guard, signal }: UpdatesDeps) {
   /**
    * Apply pending agent-CLI updates on connected Ona devboxes. Returns one
    * line per box for the CLI and the plugin log.
@@ -112,37 +121,63 @@ export function createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef 
         lines.push(`${name}: skipped (${row.status})`);
         continue;
       }
-      if (!options.force) {
-        if (hostIsBusy(threadStatuses(await liveThreads(bb.sdk.threads, row.hostId)))) {
-          lines.push(`${name}: skipped (an agent is running; retry with --force)`);
-          continue;
+      const holder = await guard.hold(row.hostId, "update-cli", async () => {
+        if (!options.force) {
+          if (hostIsBusy(threadStatuses(await liveThreads(bb.sdk.threads, row.hostId)))) {
+            lines.push(`${name}: skipped (an agent is running; retry with --force)`);
+            return;
+          }
         }
-      }
-      const statuses = (await bb.sdk.hosts.providerCliStatus({ hostId: row.hostId })) as Record<string, CliStatus>;
-      const pending = updatesToApply(statuses, wanted);
-      if (pending.length === 0) {
-        lines.push(
-          `${name}: up to date (${wanted.map((p) => `${p} ${statuses[p]?.currentVersion ?? "not installed"}`).join(", ")})`,
-        );
-        continue;
-      }
-      for (const cli of pending) {
-        const from = statuses[cli]?.currentVersion ?? "?";
-        const to = statuses[cli]?.latestVersion ?? "latest";
-        const events = await bb.sdk.hosts.installProviderCli({
-          hostId: row.hostId,
-          provider: cli,
-          actionKind: "update",
-        });
-        const failed = events.find(
-          (event) => event.type === "error" || (event.type === "completed" && event.exitCode !== 0),
-        );
-        lines.push(
-          failed
-            ? `${name}: ${cli} update failed (${"message" in failed ? failed.message : `exit ${"exitCode" in failed ? failed.exitCode : "?"}`})`
-            : `${name}: ${cli} ${from} -> ${to}`,
-        );
-      }
+        const statuses = (await bb.sdk.hosts.providerCliStatus({ hostId: row.hostId })) as Record<string, CliStatus>;
+        const pending = updatesToApply(statuses, wanted);
+        if (pending.length === 0) {
+          lines.push(
+            `${name}: up to date (${wanted.map((p) => `${p} ${statuses[p]?.currentVersion ?? "not installed"}`).join(", ")})`,
+          );
+          return;
+        }
+        for (const cli of pending) {
+          const from = statuses[cli]?.currentVersion ?? "?";
+          const to = statuses[cli]?.latestVersion ?? "latest";
+          let events: Awaited<ReturnType<Hosts["installProviderCli"]>>;
+          try {
+            events = await bb.sdk.hosts.installProviderCli({ hostId: row.hostId, provider: cli, actionKind: "update" });
+          } catch (error) {
+            // The SDK gives up, not bb (docs/ona-notes.md): keep the turn until bb is done, 15 min later, or the plugin's abort.
+            if (!(error instanceof Error && error.name === "BbRequestTimeoutError")) throw error;
+            const done = await pollUntil(
+              async () => {
+                try {
+                  const now = (await bb.sdk.hosts.providerCliStatus({ hostId: row.hostId })) as Record<
+                    string,
+                    CliStatus
+                  >;
+                  const status = now[cli];
+                  return status?.installed === true && status.needsUpdate === false;
+                } catch {
+                  return false; // a failed read is asked again; the wait ends only when bb is done, at the deadline or on the plugin's abort.
+                }
+              },
+              { deadlineMs: BB_INSTALL_LIMIT_MS, intervalMs: INSTALL_POLL_MS, signal },
+            );
+            lines.push(
+              done
+                ? `${name}: ${cli} ${from} -> ${to} (bb finished after the request timed out)`
+                : `${name}: ${cli} update not confirmed after 15 min`,
+            );
+            continue;
+          }
+          const failed = events.find(
+            (event) => event.type === "error" || (event.type === "completed" && event.exitCode !== 0),
+          );
+          lines.push(
+            failed
+              ? `${name}: ${cli} update failed (${"message" in failed ? failed.message : `exit ${"exitCode" in failed ? failed.exitCode : "?"}`})`
+              : `${name}: ${cli} ${from} -> ${to}`,
+          );
+        }
+      });
+      if (holder) lines.push(`${name}: skipped (${holder} in progress)`);
     }
     return lines.length > 0 ? lines : ["No matching Ona devboxes."];
   };

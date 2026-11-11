@@ -278,6 +278,9 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 - bb 0.49.0's SDK for a plugin is built by `createNodeBbSdk` with a fetch that gives up after
   `DEFAULT_BB_REQUEST_TIMEOUT_MS` (75 s) and throws an Error named `BbRequestTimeoutError`, while bb
   goes on with the request (checked 2026-11-09 in `server/dist/start-server.js`).
+- bb 0.49.0 answers `hosts.installProviderCli` only once the install ends, with no streamed events, and runs it for up
+  to `PROVIDER_CLI_INSTALL_TIMEOUT_MS` (15 min); a plugin's call gives up after 75 s while the install goes on
+  (checked 2026-11-11).
 - bb 0.49.0 refuses a thread spawn into its personal project ("Personal project threads must use a
   personal workspace", `assertProjectWorkspaceCompatibility`) unless its environment is `reuse`,
   `provider`, `project-default`, a host's personal workspace, or a host's `unmanaged` workspace with
@@ -358,3 +361,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   - declarative `defineCli`
   - `bb.status.needsConfiguration`
   - `ephemeral: true` machines
+- bb 0.49.0 stores a plugin's log lines as one JSON object per line, `{"ts":<epoch ms>,"level":<debug, info, warn or error>,"message":<text>}`, in `<data-dir>/plugins/<plugin-id>/logs/plugin.log` (`appendPluginLogLine` and `pluginLogsDir` in the server bundle, checked 2026-11-11). The message is the text the plugin passed to its logger, without the `[plugin:<id>]` prefix that bb's own log line adds (`emitLog`, same bundle, checked 2026-11-11).
+- bb 0.49.0 caps that file at `PLUGIN_LOG_MAX_BYTES`, 5 * 1024 * 1024 bytes (5 MiB): before a write, a file over the cap is renamed to `plugin.log.1`, replacing the earlier one, so one rotated file is kept (`appendPluginLogLine`, checked 2026-11-11).
+- bb 0.49.0's stored lines survive a bb restart and a plugin reload: `readPluginLogTail` reads `plugin.log.1` and then `plugin.log` from disk (checked 2026-11-11).
+- bb 0.49.0's `bb plugin logs <id>` prints the last 100 lines by default. `-n` (`--lines`) sets the count, and the server's `/plugins/:id/logs` route caps `tail` at 10000, so a larger `-n` prints 10000. Each line prints unchanged (the `logs <id>` command in `host-daemon/dist/bb-chunks/plugin-K4RLPVUQ.js`, and `app.get("/plugins/:id/logs")` in `server/dist/start-server.js`, checked 2026-11-11).

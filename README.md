@@ -152,7 +152,7 @@ View them with `bb plugin config ona`, and change one with `bb plugin config ona
 | `waitForSharedHome`   | `true`                         | After a devbox starts, wait until its NFS home is mounted before starting bb's daemon and agents. Starting earlier lets Codex write threads into the container's own home, where the mount hides them ("no rollout found"). Turn off if your environments don't share a home.                                                                                                                  |
 | `codexSqliteHome`     | `/workspaces/.codex-sqlite-bb` | Where Codex launched by bb keeps its SQLite state on the devbox's local disk.                                                                                                                                                                                                                                                                                                                  |
 | `machineDataDir`      | `/workspaces/.bb-machines`     | Local folder that `~/.bb-machines` is symlinked to on every devbox. Empty leaves `~/.bb-machines` alone.                                                                                                                                                                                                                                                                                       |
-| `autoUpdateClis`      | `true`                         | Weekdays at 09:00 (this Mac's time), apply pending updates for the CLIs in `autoUpdateProviders` on connected devboxes. A box with a running agent turn is skipped until the next run.                                                                                                                                                                                                         |
+| `autoUpdateClis`      | `true`                         | Weekdays at 09:00 (this Mac's time), apply pending updates for the CLIs in `autoUpdateProviders` on connected devboxes. A box with a running agent turn, or that another action is running on, is skipped until the next run.                                                                                                                                                                  |
 | `autoUpdateProviders` | `claude-code,codex`            | Provider ids of the CLIs to update, comma-separated. Only installed CLIs are updated; nothing new is installed.                                                                                                                                                                                                                                                                                |
 
 `waitForSharedHome`, `codexSqliteHome` and `machineDataDir` reach a box on its next connect (`bb ona reconnect`, a resume or the daemon's restart); `inactivityTimeout` applies to boxes created after the reload.
@@ -306,7 +306,7 @@ bb ona move <thread-id> <ref>  # continue a thread in a new thread on another de
 bb ona rename <ref> [name]     # rename env + bb machine (random fun name if omitted); refused while bb shows its machine in a phase other than active
 bb ona reconnect <ref>         # active machines: reopen the tunnel and restart the bb daemon; refused unless bb shows the machine active and Ona shows its box running; gives up after 30 minutes ("Gave up …; last step: …")
 bb ona resume <ref>            # a stopped active machine: starts its box and reconnects the bb daemon (your action); a running box is only reconnected; refused unless bb shows the machine active; gives up after 30 minutes ("Gave up …; last step: …")
-bb ona update [ref] [--force]  # apply pending agent-CLI updates on connected devboxes (also weekdays 09:00 when `autoUpdateClis` is on); a box with an agent running is skipped unless --force
+bb ona update [ref] [--force]  # apply pending agent-CLI updates on connected devboxes (also weekdays 09:00 when `autoUpdateClis` is on); a box with an agent running is skipped unless --force; a box another action is running on is skipped
 bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
 bb machine resume ona:<name>   # starts it, reopens the tunnel, restarts the daemon (Play button); gives up after 30 minutes ("Machine resume failed: Gave up resuming <box> after 30 minutes; last step: …")
 bb machine remove ona:<name>   # created: deletes the box unless it has unpushed commits or uncommitted files; adopted: stops bb's daemon, moves its data folder aside
@@ -386,6 +386,28 @@ bb machine remove ona:<name>   # created: deletes the box unless it has unpushed
   devboxes, add `export CODEX_SQLITE_HOME=/workspaces/.codex-sqlite` to your
   shell profile. `/workspaces` is each devbox's local disk, so every devbox gets
   its own database while login and sessions stay shared.
+
+### Metric lines and product numbers
+
+The plugin writes `metric` lines to its log, which `bb plugin logs ona` prints. Each is `metric <event> key=value ...`, and a value's spaces and `=` are written as `_`:
+
+- `metric cmd name=<sync|reconnect|resume>`: a hand run. A hand run is any run of `bb ona sync`, `bb ona reconnect` or `bb ona resume`, including the buttons in the Ona devboxes section and runs by an agent.
+- `metric start env=<id> via=<create|resume|wake-thread|wake-cmd> up=<seconds>`: the plugin asked Ona to start a box; `via` says what led to it, and `up` is the seconds since the plugin loaded. The line is written when the attempt begins, so it records an attempt, not a success.
+- `metric connected via=<create|resume|wake|reconnect> box=<new|stopped|running> secs=<n> ok=<1|0>`: a connect call ended. `box` is `new` once Ona has returned the created box, including a create that fails after that (`ok=0`). Otherwise it is `stopped` when the call started the box, and `running` otherwise, which includes a create that failed before Ona returned a box. `ok=0` means the call failed.
+- `metric delete env=<id> via=<remove|cleanup> git=<known|unknown>`: the plugin deleted a box. `git=known` means Ona reported the box's count of unpushed commits.
+- `metric keep env=<id> via=<remove|cleanup> commits=<n> files=<n>`: the plugin refused to delete a box with unpushed commits or uncommitted files, and kept it.
+
+To print the product numbers from the log:
+
+```sh
+f=$(mktemp) && bb plugin logs ona -n 10000 > "$f" && scripts/product-numbers.sh < "$f"
+```
+
+The script prints one `name value` line per number, in a fixed order. Every name is printed: `0` when nothing matched, and a percentile is `-` when there is no value. After them come one `hand_runs_week_<year>-W<week>` line per ISO week that has hand runs, oldest first. The weeks are UTC.
+
+`deletes_refused` counts the boxes a removal refused at least once, not keep lines: a box refused more than once has a keep line for each refusal. `connect_secs_stopped_*` covers the connects that worked (`ok=1`) with `box=stopped` or `box=new`, and `connect_secs_running_*` those with `box=running`. `skipped_lines` counts the input lines that are not log lines: lines that are not a JSON object, and JSON objects whose `ts` is not a number a Date can hold or whose `message` is not a string. A log line whose first word is not `metric` is ignored and is not counted in `skipped_lines`.
+
+The numbers cannot see starts made outside the plugin, or lines older than the newest 10000 that the command returns. `starts_soon_after_load` counts the resume starts whose `up` is under 300 seconds.
 
 ## Security model
 

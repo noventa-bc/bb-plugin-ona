@@ -105,7 +105,7 @@ export default async function plugin(bb: BbPluginApi) {
       type: "boolean",
       label: "Auto-update agent CLIs on devboxes",
       description:
-        "Weekdays at 09:00 (this Mac's time), apply pending updates for the CLIs below on connected Ona devboxes. Boxes with a running agent turn are skipped until the next run. A changed setting applies after `bb plugin reload ona`.",
+        "Weekdays at 09:00 (this Mac's time), apply pending updates for the CLIs below on connected Ona devboxes. Boxes with a running agent turn, or that another action is running on, are skipped until the next run. A changed setting applies after `bb plugin reload ona`.",
       default: true,
     },
     autoUpdateProviders: {
@@ -403,7 +403,7 @@ export default async function plugin(bb: BbPluginApi) {
 
   const move = createMove({ sdk: bb.sdk, machineOfHost });
 
-  const updateClis = createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef });
+  const updateClis = createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef, guard, signal: lifetime.signal });
   if (autoUpdateClis) {
     bb.background.schedule("cli-updates", "0 9 * * 1-5", async () => {
       for (const line of await updateClis()) bb.log.info(`cli update: ${line}`);

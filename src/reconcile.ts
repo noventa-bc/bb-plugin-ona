@@ -322,6 +322,22 @@ export class HostGuard {
   }
 
   /**
+   * Run `fn` as the machine's one action and record nothing: no cooldown, backoff or give-up applies or follows.
+   * Returns the action that holds the machine instead, without running `fn`, when it is busy (docs/sync.md rule 5).
+   */
+  async hold(hostId: string, action: string, fn: () => Promise<void>): Promise<string | undefined> {
+    const holder = this.busy.get(hostId);
+    if (holder) return holder;
+    this.busy.set(hostId, action);
+    try {
+      await fn();
+    } finally {
+      this.busy.delete(hostId);
+    }
+    return undefined;
+  }
+
+  /**
    * Record what a check concluded (for `bb ona status`). Kept apart from
    * `records`, so "connected" doesn't hide the repair that got it there.
    */
