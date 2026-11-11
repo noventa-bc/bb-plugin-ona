@@ -182,7 +182,8 @@ test("a resume of a box Ona no longer has rejects as not found, starts nothing a
   assert.equal(releasing.size, 0);
 });
 
-// The lookup-throws test below guards the order: the tunnel closes after the move-aside, and on a failed lookup.
+// The tests below guard the order: the tunnel closes before the lookup, so a failed lookup leaves it closed, and again
+// after the move-aside.
 test("remove of an adopted machine closes its tunnel (fails if an adopted remove deletes or stops its box)", async () => {
   const { provider, calls, tunnels } = register({ found: box("RUNNING"), phases: ["RUNNING"], tunnel: "up" });
   const removed = await provider.remove({
@@ -192,7 +193,7 @@ test("remove of an adopted machine closes its tunnel (fails if an adopted remove
     signal: new AbortController().signal,
   });
   assert.equal(removed.status, "removed");
-  assert.deepEqual(tunnels, ["stop env-1"]);
+  assert.deepEqual(tunnels, ["stop env-1", "stop env-1"]);
   assert.deepEqual(calls, ["get RUNNING", "move-aside"]);
 });
 
@@ -225,6 +226,25 @@ test("remove of a bb-created machine whose Ona lookup throws still closes its tu
   );
   assert.deepEqual(tunnels, ["stop env-1"]);
   assert.deepEqual(forgotten, [], "the keys stay for bb's retry");
+});
+
+test("remove of an adopted machine closes a tunnel that reopened during the move-aside (fails if it deletes or stops the box)", async () => {
+  const { provider, calls, open, tunnels } = register({
+    found: box("RUNNING"),
+    phases: ["RUNNING"],
+    tunnel: "up",
+    reopenDuringMove: true,
+  });
+  const removed = await provider.remove({
+    report: lifecycle().report,
+    hostId: "host-1",
+    resource: adoptedResource,
+    signal: new AbortController().signal,
+  });
+  assert.equal(open.get("env-1") ?? "off", "off");
+  assert.deepEqual(tunnels, ["stop env-1", "ensure env-1", "stop env-1"]);
+  assert.deepEqual(calls, ["get RUNNING", "move-aside"]);
+  assert.equal(removed.status, "removed");
 });
 
 test("a refused remove of a bb-created machine closes its tunnel and keeps its keys", async () => {

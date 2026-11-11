@@ -111,6 +111,6 @@ test("an adopted remove closes the box's tunnel before the move-aside and stops 
   const removed = await remove(provider, adoptedResource);
   assert.equal(removed.status, "removed");
   assert.equal(moves[0]?.tunnel, "off");
-  assert.deepEqual(tunnels, ["stop env-1"]);
+  assert.deepEqual(tunnels, ["stop env-1", "stop env-1"]);
   assert.deepEqual(calls, ["get RUNNING", "move-aside"]);
 });

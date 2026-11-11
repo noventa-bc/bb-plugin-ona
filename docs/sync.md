@@ -266,15 +266,14 @@ drops the box's stored keys (`forgetBox()` in `src/sync.ts`, called from the pro
 or uncommitted files on (`unpushedWork()` in `src/ona.ts`), before it deletes
 or forgets anything. `reconcileCleanup()` in `src/provider.ts` refuses the same
 way for an orphaned created box.
+A box holds one bb machine: an adopt is refused when another bb machine has stored the box (in any phase, creating
+included); see `create` in `src/provider.ts`.
 Every `remove()` path closes the box's tunnel (`remove` in `src/provider.ts`).
-For an adopted box, `remove()` closes the tunnel first, then runs `MOVE_MACHINE_ASIDE` (`src/provider.ts`)
-over SSH, only when `ona environment get`, made just before, says the box is
-running (safety rule 1). It stops every process whose command line names bb's
+For an adopted box, `remove()` closes the tunnel before and again after it runs `MOVE_MACHINE_ASIDE`
+(`src/provider.ts`), since a sync pass's wake can reopen the tunnel meanwhile. The script runs over SSH, only when
+`ona environment get`, made just before, says the box is running (safety rule 1). It stops every process whose command line names bb's
 data folder (bb's daemon among them) and moves the folder aside; the box is
 never deleted.
-A box holds one bb machine: the provider's `create()` refuses to adopt a box that another Ona machine bb lists, in
-any phase, already uses, before its checkpoint, so bb's cleanup of the refused create closes no tunnel and forgets no
-keys.
 To add or change a rule, update `decide()`, its test in
 `test/reconcile.test.ts`, and the table above, all in the same change.
 

@@ -40,8 +40,9 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * `startTakes`: Ona's start takes this many milliseconds on the fake clock, so the test enables `useFakeClock`.
  * `deleteFails`: Ona's delete rejects, after the call is logged in `calls`.
  * `createFails`: Ona's createEnvironment rejects, after the call is logged in `calls`, and makes no box.
- * `machines`: the Ona machines bb lists; as bb's list does, it leaves out the creating ones unless the call sets
- * `includeCreating`.
+ * `reopenDuringMove`: a tunnel opens while an adopted remove's move-aside script runs.
+ * `machines`: the machines bb lists, of provider "ona" unless `provider` says otherwise; as bb's list does, it leaves
+ * out the creating ones unless the call sets `includeCreating`.
  */
 export type Setup = {
   found: OnaEnvironment;
@@ -65,7 +66,8 @@ export type Setup = {
   startTakes?: number;
   deleteFails?: boolean;
   createFails?: boolean;
-  machines?: { id: string; name: string; phase: string; resource: OnaResource }[];
+  reopenDuringMove?: boolean;
+  machines?: { id: string; name: string; phase: string; resource: OnaResource; provider?: string }[];
 };
 
 /** Each command as the gated executor runs it: after a `get` that says RUNNING. */
@@ -114,6 +116,7 @@ export function register({
   startTakes,
   deleteFails,
   createFails,
+  reopenDuringMove,
   machines = [],
 }: Setup) {
   const calls: string[] = [];
@@ -214,7 +217,7 @@ export function register({
         onOutput("missing: node");
         return { exitCode: preflightExit };
       }
-      // The remove's move-aside script.
+      // The remove's move-aside script: a sync pass can open the tunnel while it runs.
       if (command[3] === "bb-ona-remove") {
         calls.push("move-aside");
         moves.push({
@@ -223,6 +226,7 @@ export function register({
           keysKept: forgotten.length === 0,
           tunnel: open.get(target) ?? "off",
         });
+        if (reopenDuringMove) ensure(found.id, mark());
         if (moveAside instanceof Error) throw moveAside;
         return { exitCode: moveAside };
       }
@@ -255,7 +259,7 @@ export function register({
         list: async (args?: { includeCreating?: boolean }) =>
           machines
             .filter((machine) => args?.includeCreating || machine.phase !== "creating")
-            .map(({ id, name, phase }) => ({ id, name, machineProviderId: "ona", lifecycle: { phase } })),
+            .map(({ id, name, provider = "ona" }) => ({ id, name, machineProviderId: provider })),
       },
     },
   });

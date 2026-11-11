@@ -270,10 +270,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     }),
   );
 
-  /**
-   * The other bb machine of this provider whose stored resource names the box, in any phase bb lists. A host whose
-   * resource carries `key` is this create's own (bb runs create again for a host it is still creating).
-   */
+  /** A host whose resource carries `key` is this create's own (bb runs create again for a host it is still creating). */
   async function machineUsing(envId: string, key: string) {
     for (const host of await bb.sdk.hosts.list({ includeCreating: true })) {
       if (host.machineProviderId !== PROVIDER_ID) continue;
@@ -467,6 +464,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
               `Before adopting it again, start it and ${byHand}.`,
           );
         }
+        // Closed again: a sync pass's wake can reopen the tunnel while the move-aside runs.
+        await disconnect(owned.envId);
         await deps.forgetBox(owned.envId);
         return { status: "removed" };
       }
