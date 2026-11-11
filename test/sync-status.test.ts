@@ -524,3 +524,10 @@ test("a refused resume for a waiting thread is a failure, not a success (fails i
   const [row] = await sync.statusRows();
   assert.equal(row!.retry, null, "bb shows the machine suspended, and nothing retries it");
 });
+
+test("a resume bb settles active for a waiting thread is a success that says so (fails if the settled resume is not accepted)", async () => {
+  const { sync, guard } = world([idle("h1", { ona: "STOPPED", status: "disconnected", threads: [waitingThread()] })]);
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  const { failures, reason } = guard.records.get("h1")!;
+  assert.deepEqual([failures, reason], [0, "Ona stopped the box; resumed for a waiting thread"]);
+});

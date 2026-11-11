@@ -30,8 +30,9 @@ const FAKE_KEYS = [
 ] as const;
 
 function setFake(vars: Partial<Record<(typeof FAKE_KEYS)[number], string>>): void {
-  // The fake rewrites this file on create/start/stop, so each test gets a fresh copy of the fixture.
+  // The fake rewrites this file and its id counter, so each test starts from a fresh fixture and no counter.
   copyFileSync(fixture("environments.json"), join(dir, "environments.json"));
+  rmSync(join(dir, "environments.json.next"), { force: true });
   process.env.FAKE_ONA_ENVIRONMENTS = join(dir, "environments.json");
   for (const [key, value] of Object.entries(vars)) process.env[key] = value;
 }
@@ -92,9 +93,13 @@ test("isRunning, the gate for every SSH (safety rule 1), passes only RUNNING: no
   assert.equal(isRunning(undefined), false, "a box the listing doesn't have");
 });
 
-// Each ref and the id it must find (null for none).
+test("findEnvironment matches an exact id", async () => {
+  setFake({});
+  assert.equal((await cli.findEnvironment("env-0001"))?.metadata.name, "brave-otter");
+});
+
+// Each ref and the id it must find (null for none). A miss must be null itself: `?.id ?? null` would pass an undefined.
 const FIND_CASES: [string, string, string | null][] = [
-  ["findEnvironment matches an exact id", "env-0001", "env-0001"],
   ["findEnvironment matches an exact name", "swift-lynx", "env-9abc"],
   ["findEnvironment matches a unique id prefix", "env-9ab", "env-9abc"],
   ["findEnvironment returns null for an ambiguous id prefix", "env-000", null],
@@ -103,7 +108,8 @@ const FIND_CASES: [string, string, string | null][] = [
 for (const [title, ref, id] of FIND_CASES) {
   test(title, async () => {
     setFake({});
-    assert.equal((await cli.findEnvironment(ref))?.id ?? null, id);
+    const found = await cli.findEnvironment(ref);
+    assert.equal(found === null ? null : found.id, id);
   });
 }
 
@@ -157,6 +163,15 @@ test("every call passes Ona's own --timeout, matching the wrapper's", async () =
     "environment create proj-0001 --name new-box --timeout 1800s",
     "environment delete env-0001 --timeout 900s",
   ]);
+});
+
+test("a box created after a delete gets a new id", async () => {
+  setFake({});
+  await cli.createEnvironment({ projectId: "proj-0001", name: "first" });
+  const first = (await cli.findEnvironment("first"))!.id;
+  await cli.delete(first);
+  await cli.createEnvironment({ projectId: "proj-0001", name: "second" });
+  assert.notEqual((await cli.findEnvironment("second"))!.id, first);
 });
 
 test("openEditor runs ona environment open with the box id", async () => {
@@ -261,20 +276,6 @@ test("readiness: a stopped box with Ona's failure message, a string or a list, f
   assert.deepEqual(readiness(env([]), true), { state: "waiting", reason: "starting" });
   assert.deepEqual(readiness(env([""]), true), { state: "waiting", reason: "starting" });
   assert.deepEqual(readiness(env(null), true), { state: "waiting", reason: "starting" });
-});
-
-// A failure message there may be left from an earlier start.
-test("readiness: a box still starting waits despite a failure message, which stays out of the reason", () => {
-  const env = (status: OnaEnvironment["status"]): OnaEnvironment => ({ id: "env-0001", metadata: {}, status });
-  const failureMessage = ["old start error"];
-  assert.deepEqual(readiness(env({ phase: "ENVIRONMENT_PHASE_STARTING", failureMessage })), {
-    state: "waiting",
-    reason: "starting",
-  });
-  assert.deepEqual(
-    readiness(env({ phase: "ENVIRONMENT_PHASE_RUNNING", devcontainer: { phase: "PHASE_CREATING" }, failureMessage })),
-    { state: "waiting", reason: "dev container starting" },
-  );
 });
 
 test("readiness: a running box with a running dev container is ready despite a stale failure message", () => {

@@ -182,6 +182,36 @@ test("rows carry the name Ona lists, not the one stored at creation", async () =
   );
 });
 
+// Bug: an open thread header listed every bb host to find the one its thread runs on.
+test("machineOfHost reads the one host it is asked for, not the list", async () => {
+  const { sync, hostReads } = world([idle("h1"), idle("h2")]);
+  const row = await sync.machineOfHost("h2");
+  assert.equal(row?.hostId, "h2");
+  assert.equal(row?.resource.envId, "env-h2");
+  assert.deepEqual(hostReads, ["get h2"]);
+});
+
+test("machineOfHost is null for a host the list would leave out", async () => {
+  const { sync, hosts } = world([idle("h1")]);
+  assert.equal(await sync.machineOfHost("unknown"), null, "bb answers 404");
+  hosts.get("h1")!.machineProviderId = null;
+  assert.equal(await sync.machineOfHost("h1"), null, "not an Ona machine");
+  hosts.get("h1")!.machineProviderId = "ona";
+  hosts.get("h1")!.lifecycle.phase = "creating";
+  assert.equal(await sync.machineOfHost("h1"), null, "still being created");
+});
+
+// An SDK error can carry the `not_found` code and no status (experimental_PluginRpcCallError); that host is gone too.
+test("machineOfHost is null when the lookup error carries only the not_found code", async () => {
+  const { sync } = world([idle("h1")], { hostGet: "not_found" });
+  assert.equal(await sync.machineOfHost("h1"), null);
+});
+
+test("machineOfHost throws when the lookup fails for another reason", async () => {
+  const { sync } = world([idle("h1")], { hostGet: "fail" });
+  await assert.rejects(sync.machineOfHost("h1"), /bb is down/);
+});
+
 test("status reports workspaces that need recovery", async () => {
   const failed: WorkspaceView = {
     status: "error",

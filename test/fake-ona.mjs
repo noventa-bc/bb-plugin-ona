@@ -44,6 +44,8 @@ if (group === "project" && verb === "list") {
         fail(`Error: no environment found matching "${ref}"\nPossible resolutions:\n  - Run \`ona environment list\``);
       break;
     case "create": {
+      if (!FAKE_ONA_ENVIRONMENTS)
+        fail("fake-ona: FAKE_ONA_ENVIRONMENTS is unset, so a create has no state file to write");
       // Ids count up in a file beside the state: each call is its own process, so a create after a delete must not reuse an id.
       const counter = `${FAKE_ONA_ENVIRONMENTS}.next`;
       const next = existsSync(counter) ? Number(readFileSync(counter, "utf8")) : 1;

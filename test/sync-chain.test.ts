@@ -535,3 +535,13 @@ test("a plugin reload ends a daemon restart in flight (fails if the restart igno
   assert.match(record.error ?? "", /aborted/);
   assert.equal(record.failures, 1);
 });
+
+// bb's list leaves a creating host out, so the realtime map never holds it. An includeCreating list (the rename's
+// lookup) returns it and leaves the map as it was.
+test("machines() keeps a creating host out of hostByEnv, and an includeCreating list leaves hostByEnv as it was (fails if the creating host is mapped)", async () => {
+  const { sync, hostByEnv } = world([idle("h1"), idle("h2", { phase: "creating" })]);
+  const ids = async (options?: { includeCreating: boolean }) => (await sync.machines(options)).map((row) => row.hostId);
+  assert.deepEqual(await ids(), ["h1"]);
+  assert.deepEqual(await ids({ includeCreating: true }), ["h1", "h2"]);
+  assert.deepEqual([...hostByEnv], [["env-h1", "h1"]]);
+});
