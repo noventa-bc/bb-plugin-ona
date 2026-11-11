@@ -36,13 +36,14 @@ rules:
       - pattern: '[..., "environment", "ssh", ...]'
 
   - id: ssh-outside-runners
-    message: "Run commands on a box only in src/ssh.ts or src/provider.ts; elsewhere call a provider method, which names its guard (docs/sync.md safety rule 1)."
+    message: "Run commands on a box only in src/ssh.ts, src/provider.ts or src/provider-connect.ts; elsewhere call a provider method, which names its guard (docs/sync.md safety rule 1)."
     severity: ERROR
     languages: [typescript]
     paths:
       exclude:
         - src/ssh.ts
         - src/provider.ts
+        - src/provider-connect.ts
     pattern-either:
       - pattern: sshExecutor(...)
       - pattern: sshCapture(...)

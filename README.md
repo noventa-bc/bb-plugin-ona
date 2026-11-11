@@ -404,7 +404,7 @@ bb plugin reload ona                                           # after changes
 ```
 
 Source: `server.ts` (settings, tunnels, wiring), `src/provider.ts` (machine
-provider), `src/proxy.ts` (daemon-only proxy), `src/ssh.ts` (executor,
+provider), `src/provider-connect.ts` (its connect path), `src/proxy.ts` (daemon-only proxy), `src/ssh.ts` (executor,
 tunnels), `src/setup.ts` (prerequisite checks), `src/ona.ts` (ona CLI wrapper,
 shared listing), `src/reconcile.ts` (sync rules), `src/sync.ts` (sync passes),
 `src/status.ts` (`bb ona status`), `src/commands.ts` (`bb ona` commands), `src/lifecycle.ts` (idle
