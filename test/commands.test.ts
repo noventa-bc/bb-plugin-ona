@@ -190,6 +190,8 @@ function fakeRun(
       log: { info: (message: string) => void logs.push(message) },
     },
     tunnels: { status: () => "up" },
+    statusRows: async () => [],
+    onaHealth: () => ({ lastError: null, listedAt: null, autoRepair: false }),
     resolveEnvId: (ref: string) => Promise.resolve(ref === "box" ? "env_1" : ref),
     keepAlives: {
       stop: (envId: string) => {
@@ -230,7 +232,8 @@ test("an unknown command, or one missing its <ref>, exits 1 with the usage", asy
 
 test("sync, reconnect and resume each log one metric cmd line; status and a resume without a ref log none (fails if a case logs before its ref check or another command logs one)", async () => {
   const { run, logs } = fakeRun();
-  await run("status");
+  // status runs to its end, so a cmd line written later in its path would show.
+  assert.equal((await run("status")).exitCode, 0);
   await run("resume");
   assert.deepEqual(logs, []);
   await run("sync");

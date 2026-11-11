@@ -173,8 +173,9 @@ function notDeletingMessage(
 }
 
 /**
- * Runs one connect call and writes its `metric connected` line when the call ends, ok or not. `box` is new when the
- * call made the box, stopped when it called Ona's start, and running otherwise: `trace` records both.
+ * Runs one connect call and writes its `metric connected` line when the call ends, ok or not. `box` is new when Ona's
+ * createEnvironment returned during the call, stopped when the call called Ona's start, and running otherwise: `trace`
+ * records both.
  */
 async function timedConnect<T>(
   bb: BbPluginApi,
@@ -195,8 +196,8 @@ async function timedConnect<T>(
 }
 
 /**
- * A create or resume method: its body gets the start trace and passes it to ensureRunning. The call writes its
- * `metric connected` line when it ends.
+ * A create or resume method: its body gets the start trace and passes it to ensureRunning, and a create sets
+ * `trace.created` once Ona's createEnvironment returns. The call writes its `metric connected` line when it ends.
  */
 function timed<A, T>(bb: BbPluginApi, via: "create" | "resume", method: (args: A, trace: StartTrace) => Promise<T>) {
   return (args: A) => {
@@ -298,11 +299,12 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
           const projectRef = inputs.project ?? deps.defaultProject;
           report.step(`Creating Ona environment ${name} from project ${projectRef}`);
           const projectId = await ona.resolveProjectId(projectRef, signal);
-          trace.created = true;
           await ona.createEnvironment(
             { projectId, name, classId: inputs.classId, inactivityTimeout: deps.inactivityTimeout },
             signal,
           );
+          // Set once the call returns: a create Ona rejects made no box.
+          trace.created = true;
           env = await requireEnv(name, signal);
         }
       }

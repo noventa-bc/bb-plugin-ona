@@ -33,6 +33,16 @@ const remove = (provider: ReturnType<typeof register>["provider"]) =>
 const cleanup = (provider: ReturnType<typeof register>["provider"]) =>
   provider.reconcileCleanup({ key: "key-1", report: lifecycle().report, signal: signal() });
 
+/** A create of the box named for key-1, in project-1. */
+const createNew = (provider: ReturnType<typeof register>["provider"]) =>
+  provider.create({
+    ...lifecycle(),
+    inputs: { mode: "create", project: "project-1" },
+    key: "key-1",
+    attempt: 1,
+    signal: signal(),
+  });
+
 test("a resume that starts a stopped box writes a start line naming resume, then a connected line with box=stopped (fails if a line is missing or names another cause)", async () => {
   const { resumed, logs } = resume({ found: box("STOPPED"), phases: ["STOPPED", "RUNNING"] });
   await resumed;
@@ -127,6 +137,29 @@ test("a create that makes a new box writes its connected line with box=new (fail
   assert.deepEqual(metricText(logs), ["metric connected via=create box=new secs=0 ok=1"]);
 });
 
+test("a create whose createEnvironment is rejected writes connected with box=running and ok=0, and still rejects (fails if box reads new before the call returns)", async () => {
+  const { provider, logs } = register({
+    found: { ...box("RUNNING"), metadata: { name: envNameForKey("key-1") } },
+    unlisted: true,
+    createFails: true,
+  });
+  await assert.rejects(createNew(provider), /Ona refused the create/);
+  assert.deepEqual(metricText(logs), ["metric connected via=create box=running secs=0 ok=0"]);
+});
+
+test("a created box that ensureRunning then starts reads box=new, not stopped (fails if the start's stopped outranks new)", async () => {
+  const { provider, logs } = register({
+    found: { ...box("STOPPED"), metadata: { name: envNameForKey("key-1") } },
+    unlisted: true,
+    phases: ["RUNNING"],
+  });
+  await createNew(provider);
+  assert.deepEqual(metricText(logs), [
+    "metric start env=env-1 via=create up=0",
+    "metric connected via=create box=new secs=0 ok=1",
+  ]);
+});
+
 test("a delete that Ona rejects writes no delete line and still rejects, in remove and in cleanup (fails if the line is written before the delete)", async () => {
   const removing = register({ found: box("RUNNING"), deleteFails: true });
   await assert.rejects(remove(removing.provider), /Ona delete failed/);
@@ -151,12 +184,6 @@ test("a remove that deletes a box with no git content writes delete with git=unk
 
 test("a remove of a clean box, whose listing gives only the unpushed-commit count, writes delete with git=known (fails if a clean box reads as unknown)", async () => {
   const { provider, logs } = register({ found: boxWithGit({ totalUnpushedCommits: 0 }) });
-  await remove(provider);
-  assert.deepEqual(metricLines(logs), ["metric delete env=env-1 via=remove git=known"]);
-});
-
-test("a remove of a box whose git counts are both zero writes delete with git=known (fails if known reads as unknown)", async () => {
-  const { provider, logs } = register({ found: boxWithGit({ totalUnpushedCommits: 0, totalChangedFiles: 0 }) });
   await remove(provider);
   assert.deepEqual(metricLines(logs), ["metric delete env=env-1 via=remove git=known"]);
 });

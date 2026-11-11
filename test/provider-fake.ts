@@ -38,6 +38,7 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * `unlisted`: Ona lists `found` only once `createEnvironment` runs, as for a box a create makes.
  * `startTakes`: Ona's start takes this many milliseconds on the fake clock, so the test enables `useFakeClock`.
  * `deleteFails`: Ona's delete rejects, after the call is logged in `calls`.
+ * `createFails`: Ona's createEnvironment rejects, after the call is logged in `calls`, and makes no box.
  */
 export type Setup = {
   found: OnaEnvironment;
@@ -59,6 +60,7 @@ export type Setup = {
   unlisted?: boolean;
   startTakes?: number;
   deleteFails?: boolean;
+  createFails?: boolean;
 };
 
 /** Each command as the gated executor runs it: after a `get` that says RUNNING. */
@@ -102,6 +104,7 @@ export function register({
   unlisted,
   startTakes,
   deleteFails,
+  createFails,
 }: Setup) {
   const calls: string[] = [];
   const tunnels: string[] = [];
@@ -126,6 +129,7 @@ export function register({
     resolveProjectId: async () => "project-1",
     createEnvironment: async () => {
       calls.push("create");
+      if (createFails) throw new Error("Ona refused the create");
       listed = true;
     },
     getEnvironmentIfExists: async (id: string, signal: AbortSignal) => {

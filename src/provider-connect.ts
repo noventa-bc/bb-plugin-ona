@@ -14,7 +14,8 @@ export type WakeVia = "wake-thread" | "wake-cmd";
 
 /**
  * A connect call's start. ensureRunning sets `started` just before it calls Ona's start, so the call still knows it
- * started the box when that start or the connect throws. create sets `created` before Ona's createEnvironment.
+ * started the box when that start or the connect throws. create sets `created` once Ona's createEnvironment returns,
+ * so a create Ona rejects reads `running`.
  */
 export interface StartTrace {
   via: "create" | "resume" | WakeVia;
