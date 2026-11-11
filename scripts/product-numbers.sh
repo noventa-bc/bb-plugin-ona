@@ -1,10 +1,10 @@
 #!/bin/sh
 # Prints the product numbers from this plugin's metric log lines, one "name value" line each in a fixed order, then one
 # line per ISO week that has hand runs. Give it the output of bb plugin logs, which prints one JSON log line per line:
-#   bb plugin logs ona -n 10000 | scripts/product-numbers.sh
+#   bb plugin logs ona -n 10000 > <file> && scripts/product-numbers.sh < <file>
 # A line that is not a JSON log line is counted in skipped_lines; a log line that is not a metric line is ignored.
 set -eu
-[ $# -eq 0 ] || { echo "usage: bb plugin logs ona -n 10000 | scripts/product-numbers.sh" >&2; exit 2; }
+[ $# -eq 0 ] || { echo "usage: bb plugin logs ona -n 10000 > <file> && scripts/product-numbers.sh < <file>" >&2; exit 2; }
 node -e '
 const fs = require("node:fs");
 // A log line is a JSON object with a number ts that a Date can hold and a string message; any other line is skipped.
@@ -73,6 +73,7 @@ const ofKind = (kind) => metrics.filter((m) => m.kind === kind);
 const starts = ofKind("start");
 const connects = ofKind("connected");
 const deletes = ofKind("delete");
+// bb retries a refused removal, so one box can have a keep line per retry: the keeps are counted by env, not by line.
 const keeps = ofKind("keep");
 const handRuns = ofKind("cmd");
 const soonAfterLoad = starts.filter((m) => {
@@ -102,7 +103,7 @@ const rows = [
   ["new_boxes", count(connects, "box", "new")],
   ["deletes", deletes.length],
   ["deletes_git_unknown", count(deletes, "git", "unknown")],
-  ["deletes_refused", keeps.length],
+  ["deletes_refused", new Set(keeps.map((m) => m.fields.env)).size],
   ["hand_runs", handRuns.length],
   ["connect_ok", count(connects, "ok", "1")],
   ["connect_failed", count(connects, "ok", "0")],

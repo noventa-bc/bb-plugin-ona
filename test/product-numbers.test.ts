@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { test } from "node:test";
+import { metric } from "../src/ona.ts";
 
 const SCRIPT = join(import.meta.dirname, "..", "scripts", "product-numbers.sh");
 
@@ -48,7 +49,7 @@ const FIXTURE = lines(
   logLine("metric connected via=wake box=running secs=9 ok=1"),
   logLine("metric connected via=wake box=running secs=500 ok=0"),
   logLine("metric connected via=wake box=running ok=1"),
-  // deletes 3, of which git=unknown 2. deletes_refused 2 (the keep lines).
+  // deletes 3, of which git=unknown 2. deletes_refused 2 (two boxes, one keep line each).
   logLine("metric delete env=env-8 via=remove git=known"),
   logLine("metric delete env=env-9 via=cleanup git=unknown"),
   logLine("metric delete env=env-10 via=remove git=unknown"),
@@ -197,4 +198,100 @@ test("any argument is a usage error", () => {
     assert.equal(r.stdout, "");
     assert.match(r.stderr, /^usage: /m);
   }
+});
+
+test("a box refused on each bb retry counts once in deletes_refused (fails if each keep line counts)", () => {
+  const r = productNumbers(
+    lines(
+      logLine("metric keep env=env-30 via=remove commits=2 files=0"),
+      logLine("metric keep env=env-30 via=remove commits=2 files=0", "2026-11-02T08:01:00Z"),
+      logLine("metric keep env=env-31 via=cleanup commits=0 files=1"),
+    ),
+  );
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^deletes_refused 2$/m);
+});
+
+test("a hand run's ISO week starts on Monday, so a Sunday is in the week that ends on it (fails if the Monday-first adjustment is dropped)", () => {
+  const r = productNumbers(
+    lines(
+      logLine("metric cmd name=sync", "2026-11-08T12:00:00Z"),
+      logLine("metric cmd name=sync", "2026-11-02T12:00:00Z"),
+    ),
+  );
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^hand_runs_week_2026-W45 2$/m);
+});
+
+test("the week lines print oldest first when a later week comes before an earlier one (fails if the week labels are not sorted)", () => {
+  const r = productNumbers(
+    lines(
+      logLine("metric cmd name=sync", "2026-11-09T12:00:00Z"),
+      logLine("metric cmd name=sync", "2026-11-02T12:00:00Z"),
+    ),
+  );
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(r.stdout.match(/^hand_runs_week_.*$/gm), ["hand_runs_week_2026-W45 1", "hand_runs_week_2026-W46 1"]);
+});
+
+test("a log line whose message does not start with metric counts nowhere (fails if the metric word is not checked)", () => {
+  const r = productNumbers(lines(logLine("note cmd name=sync"), logLine("ona start env=e via=create up=1")));
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, productNumbers("").stdout);
+});
+
+test("a log line whose message is not a string is skipped, and the run goes on (fails if the message type is not checked)", () => {
+  const r = productNumbers(
+    lines(
+      JSON.stringify({ ts: Date.parse("2026-11-02T08:00:00Z"), level: "info", message: 5 }),
+      logLine("metric cmd name=sync"),
+    ),
+  );
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^hand_runs 1$/m);
+  assert.match(r.stdout, /^skipped_lines 1$/m);
+});
+
+test("a metric line whose ts a Date cannot hold is skipped, and no week prints NaN (fails if the ts is not range-checked)", () => {
+  const r = productNumbers(lines('{"ts":1e20,"level":"info","message":"metric cmd name=sync"}'));
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^hand_runs 0$/m);
+  assert.match(r.stdout, /^skipped_lines 1$/m);
+  assert.doesNotMatch(r.stdout, /NaN/);
+});
+
+test("the metric lines src/ona.ts writes are counted here, one of each kind (fails if the writer and this script disagree on a name or key)", () => {
+  const r = productNumbers(
+    lines(
+      logLine(metric("cmd", { name: "sync" })),
+      logLine(metric("start", { env: "env-1", via: "wake-thread", up: 5 })),
+      logLine(metric("connected", { via: "create", box: "new", secs: 4, ok: 1 })),
+      logLine(metric("delete", { env: "env-2", via: "remove", git: "unknown" })),
+      logLine(metric("keep", { env: "env-3", via: "remove", commits: 2, files: 0 })),
+    ),
+  );
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(
+    r.stdout,
+    lines(
+      "starts_create 0",
+      "starts_resume 0",
+      "starts_wake_thread 1",
+      "starts_wake_cmd 0",
+      "starts_soon_after_load 0",
+      "new_boxes 1",
+      "deletes 1",
+      "deletes_git_unknown 1",
+      "deletes_refused 1",
+      "hand_runs 1",
+      "connect_ok 1",
+      "connect_failed 0",
+      "connect_secs_stopped_p50 4",
+      "connect_secs_stopped_p90 4",
+      "connect_secs_running_p50 -",
+      "connect_secs_running_p90 -",
+      "skipped_lines 0",
+      "hand_runs_week_2026-W45 1",
+    ),
+  );
 });
