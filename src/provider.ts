@@ -214,22 +214,32 @@ function timedWake<T>(
     progress: PluginMachineProviderProgress,
     outer: AbortSignal,
     trace: StartTrace,
+    since: number,
   ) => Promise<T>,
 ) {
-  return (resource: OnaResource, progress: PluginMachineProviderProgress, outer: AbortSignal, cause: WakeVia) => {
+  return (
+    resource: OnaResource,
+    progress: PluginMachineProviderProgress,
+    outer: AbortSignal,
+    cause: WakeVia,
+    since: number,
+  ) => {
     const trace: StartTrace = { via: cause, started: false, created: false };
-    return timedConnect(bb, "wake", trace, () => body(resource, progress, outer, trace));
+    return timedConnect(bb, "wake", trace, () => body(resource, progress, outer, trace, since));
   };
 }
 
 export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
   const { ensureRunning, connect, connectOrClose, disconnect } = connectHelpers(bb, deps);
-  const reconnect = (box: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal) =>
+  /** `since`: the tunnels' mark taken before the caller read the machine (see `connect`). */
+  const reconnect = (box: OnaResource, report: PluginMachineProviderProgress, signal: AbortSignal, since: number) =>
     timedConnect(bb, "reconnect", { started: false, created: false }, () =>
-      capped(`reconnecting ${box.envName}`, CAP_MINUTES, signal, report, (s, r) => connect(box, box.key, r, s)),
+      capped(`reconnecting ${box.envName}`, CAP_MINUTES, signal, report, (s, r) =>
+        connect(box, box.key, r, s, false, since),
+      ),
     );
 
-  const { ona, executorFor = sshExecutor } = deps;
+  const { ona, tunnels, executorFor = sshExecutor } = deps;
 
   async function requireEnv(ref: string, signal: AbortSignal): Promise<OnaEnvironment> {
     const env = await ona.findEnvironment(ref, signal);
@@ -246,7 +256,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
    * when it called `ona.start`, false when no start was called. It gives up after CAP_MINUTES. `cause` names the caller
    * on the start's metric line.
    */
-  const wake = timedWake(bb, (resource, progress, outer, trace) =>
+  const wake = timedWake(bb, (resource, progress, outer, trace, since) =>
     capped(`waking ${resource.envName}`, CAP_MINUTES, outer, progress, async (signal, report) => {
       deps.releasing.delete(resource.envId);
       const env = await ona.getEnvironmentIfExists(resource.envId, signal);
@@ -254,8 +264,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       const startCalled = await ensureRunning(env, report, signal, trace);
       // Only a box this wake started closes its tunnel on a failed connect; a box that was running, or that Ona started
       // during the waits, keeps the tunnel connect() left open.
-      if (startCalled) await connectOrClose(resource, report, signal, true);
-      else await connect(resource, resource.key, report, signal);
+      if (startCalled) await connectOrClose(resource, report, signal, true, since);
+      else await connect(resource, resource.key, report, signal, false, since);
       return startCalled;
     }),
   );
@@ -284,6 +294,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       return { action: "accept" };
     },
     create: timed(bb, "create", async ({ inputs, key, checkpoint, report, signal }, trace) => {
+      // Taken at the start: a close of the box while this call runs refuses its tunnel (see `connect`).
+      const since = tunnels.mark();
       let env: OnaEnvironment;
       let adopted: boolean;
       if (inputs.mode === "adopt") {
@@ -318,7 +330,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       await checkpoint(resource);
       await ensureRunning(env, report, signal, trace);
       // Not running when this began: Ona can lag behind a start before it reports STARTING.
-      await connectOrClose(resource, report, signal, !isRunning(env));
+      await connectOrClose(resource, report, signal, !isRunning(env), since);
       return { status: "created", name: `ona:${resource.envName}`, resource };
     }),
     async reconcileCleanup({ key, report, signal }) {
@@ -358,6 +370,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     // CAP_MINUTES, since bb puts no deadline on it.
     resume: timed(bb, "resume", async ({ resource, checkpoint, report: progress, signal: outer }, trace) => {
       const owned = resourceSchema.parse(resource);
+      const since = tunnels.mark();
       return capped(`resuming ${owned.envName}`, CAP_MINUTES, outer, progress, async (signal, report) => {
         // Drop a no-stop flag a failed suspend may have left; the next suspend is the user's.
         deps.releasing.delete(owned.envId);
@@ -368,7 +381,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         const current = { ...owned, envName: nameOf(env, owned) };
         await checkpoint(current);
         // bootstrap with the creation key starts, or re-enrolls, the daemon.
-        await connectOrClose(current, report, signal, !isRunning(env));
+        await connectOrClose(current, report, signal, !isRunning(env), since);
         return { resource: current };
       });
     }),

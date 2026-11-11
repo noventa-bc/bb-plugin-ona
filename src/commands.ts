@@ -340,6 +340,8 @@ export function onaCommands(deps: OnaCommandDeps) {
         case "reconnect": {
           if (!ref) break;
           bb.log.info(metric("cmd", { name: "reconnect" }));
+          // Before the row is read: a suspend or remove after it refuses the tunnel (src/ssh.ts `mark`).
+          const since = tunnels.mark();
           const row = await findMachine(ref);
           if (!row) return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${ref}".` };
           // A tunnel keeps the box awake, so none opens on a machine bb doesn't show active (decision 0003).
@@ -376,7 +378,7 @@ export function onaCommands(deps: OnaCommandDeps) {
             "reconnect",
             "requested with bb ona reconnect",
             async () => {
-              await provider.reconnect(row.resource, report, ctx.signal ?? new AbortController().signal);
+              await provider.reconnect(row.resource, report, ctx.signal ?? new AbortController().signal, since);
             },
             { force: true, cooldown: false },
           );
@@ -391,6 +393,8 @@ export function onaCommands(deps: OnaCommandDeps) {
             { snapshot, findMachine, guard, provider },
             ref,
             ctx.signal ?? new AbortController().signal,
+            // Before resumeCommand reads the row, as for reconnect.
+            tunnels.mark(),
           );
         }
         case "status": {
