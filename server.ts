@@ -403,7 +403,7 @@ export default async function plugin(bb: BbPluginApi) {
 
   const move = createMove({ sdk: bb.sdk, machineOfHost });
 
-  const updateClis = createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef });
+  const updateClis = createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef, guard });
   if (autoUpdateClis) {
     bb.background.schedule("cli-updates", "0 9 * * 1-5", async () => {
       for (const line of await updateClis()) bb.log.info(`cli update: ${line}`);

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { GIVE_UP_AFTER, HostGuard, type HostRecord } from "../src/reconcile.ts";
 import { rowForRef, type Row } from "../src/sync.ts";
 import {
   createUpdateClis,
@@ -71,8 +72,11 @@ function updater(
     /** Listed only when asked for hidden threads, like bb's workflow workers and side chats. */
     hiddenThreads?: ThreadState[];
     codex?: Partial<CliStatus>;
+    /** Runs inside the install, while the update holds the box. */
+    duringInstall?: () => Promise<void>;
   }>,
   install: Record<string, InstallEvents> = {},
+  guard = new HostGuard(),
 ) {
   const installs: string[] = [];
   const rows = boxes.map(
@@ -100,6 +104,7 @@ function updater(
           providerCliStatus: async ({ hostId }) => ({ codex: status(byHost.get(hostId)!.codex ?? {}) }),
           installProviderCli: async ({ hostId, provider }) => {
             installs.push(`${hostId} ${provider}`);
+            await byHost.get(hostId)!.duringInstall?.();
             return install[hostId] ?? [{ type: "completed", provider, exitCode: 0, signal: null, success: true }];
           },
         },
@@ -108,6 +113,7 @@ function updater(
     machines: async () => rows,
     autoUpdateProviders: "codex",
     rowForRef,
+    guard,
   });
   return { updateClis, installs };
 }
@@ -171,4 +177,110 @@ test("update with a ref two boxes share is refused and touches neither", async (
   ]);
   await assert.rejects(updateClis({ ref: "shared", force: true }), /"shared" matches 2 devboxes/);
   assert.deepEqual(installs, []);
+});
+
+/** A record of past failures on a box, quiet until `quietUntil`. */
+const failing = (failures: number, quietUntil: number): HostRecord => ({
+  action: "heal-daemon",
+  reason: "daemon down",
+  at: 0,
+  error: "ssh failed",
+  failures,
+  quietUntil,
+});
+
+// Bug: an update ran while a repair held the box.
+test("updateClis skips a box another action holds and names it (fails if the update bypasses the guard)", async () => {
+  const guard = new HostGuard();
+  const { updateClis, installs } = updater(
+    [
+      { hostId: "held", codex: pending },
+      { hostId: "free", codex: pending },
+    ],
+    {},
+    guard,
+  );
+  let lines: string[] = [];
+  let forced: string[] = [];
+  await guard.run("held", "reconnect", "by hand", async () => {
+    lines = await updateClis();
+    forced = await updateClis({ ref: "held", force: true });
+  });
+  assert.deepEqual(lines, ["box-held: skipped (reconnect in progress)", "box-free: codex 1.0.0 -> 2.0.0"]);
+  assert.deepEqual(forced, ["box-held: skipped (reconnect in progress)"], "--force skips only the busy-agent check");
+  assert.deepEqual(installs, ["free codex"]);
+});
+
+test("another action is refused while an update holds the box, and allowed after it ends or throws (fails if the update does not take the machine's turn)", async () => {
+  const guard = new HostGuard();
+  const seen: string[] = [];
+  const tryOthers = async () => {
+    const ran = await guard.run("box", "reconnect", "by hand", async () => {}, { force: true });
+    seen.push(`${guard.busyWith("box")} mayAct=${guard.mayAct("box", true)} run=${ran}`);
+  };
+  const { updateClis } = updater([{ hostId: "box", codex: pending, duringInstall: tryOthers }], {}, guard);
+  await updateClis();
+  assert.deepEqual(seen, ["update-cli mayAct=false run=false"]);
+  assert.equal(guard.mayAct("box"), true);
+
+  const { updateClis: throwing } = updater(
+    [{ hostId: "box", codex: pending, duringInstall: () => Promise.reject(new Error("daemon gone")) }],
+    {},
+    guard,
+  );
+  await assert.rejects(throwing(), /daemon gone/);
+  assert.equal(guard.busyWith("box"), undefined);
+  assert.equal(await guard.run("box", "reconnect", "by hand", async () => {}), true);
+});
+
+test("a failed update records nothing: no backoff or give-up for the box (fails if the update counts toward rule 5)", async () => {
+  const guard = new HostGuard(2, { now: () => 1_000 });
+  guard.records.set("failed", failing(2, 0));
+  guard.records.set("thrown", failing(2, 0));
+  const { updateClis } = updater(
+    [
+      { hostId: "failed", codex: pending },
+      { hostId: "fresh", codex: pending },
+      { hostId: "thrown", codex: pending, duringInstall: () => Promise.reject(new Error("daemon gone")) },
+    ],
+    { failed: [{ type: "error", provider: "codex", message: "npm said no" }] },
+    guard,
+  );
+  await assert.rejects(updateClis(), /daemon gone/);
+  assert.deepEqual(guard.records.get("failed"), failing(2, 0));
+  assert.deepEqual(guard.records.get("thrown"), failing(2, 0));
+  assert.equal(guard.records.has("fresh"), false);
+});
+
+test("a successful update starts no cooldown and resets no failure count", async () => {
+  const guard = new HostGuard(2, { now: () => 1_000 });
+  guard.records.set("box", failing(2, 0));
+  const { updateClis } = updater(
+    [
+      { hostId: "box", codex: pending },
+      { hostId: "fresh", codex: pending },
+    ],
+    {},
+    guard,
+  );
+  assert.deepEqual(await updateClis(), ["box-box: codex 1.0.0 -> 2.0.0", "box-fresh: codex 1.0.0 -> 2.0.0"]);
+  assert.deepEqual(guard.records.get("box"), failing(2, 0));
+  assert.equal(guard.records.has("fresh"), false);
+  assert.equal(guard.mayAct("fresh"), true);
+});
+
+test("an update runs on a box in backoff or given up (fails if the update waits out another action's backoff)", async () => {
+  const guard = new HostGuard(2, { now: () => 1_000 });
+  guard.records.set("backoff", failing(1, 60_000));
+  guard.records.set("gave-up", failing(GIVE_UP_AFTER, 0));
+  const { updateClis, installs } = updater(
+    [
+      { hostId: "backoff", codex: pending },
+      { hostId: "gave-up", codex: pending },
+    ],
+    {},
+    guard,
+  );
+  assert.deepEqual(await updateClis(), ["box-backoff: codex 1.0.0 -> 2.0.0", "box-gave-up: codex 1.0.0 -> 2.0.0"]);
+  assert.deepEqual(installs, ["backoff codex", "gave-up codex"]);
 });
