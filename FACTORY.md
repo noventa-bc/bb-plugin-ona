@@ -273,6 +273,12 @@ Rules the owner gave that no section above states. Checked 2026-11-11.
   on without the owner's explicit approval of that item, given with its label;
   a general "continue" or a list that includes it is not that (checked
   2026-11-06).
+- Once per release an agent audits the safety checks: in a scratch copy it
+  removes or inverts each check that enforces a safety rule (`docs/sync.md`,
+  Code Review Rules 1 to 8) and runs the tests. A check no test catches gets
+  a test in its own PR, once the code confirms the mutant changes behaviour;
+  the count goes on the roadmap. The repo keeps no mutant list or marker
+  comments: the owner chose the audit over standing tooling (checked 2026-11-11).
 - Keep up to 5 tasks in flight, and at least 2 when the named items allow:
   when an item waits on a review, a merge or the owner, take the next
   independent item the owner named in the session (no shared files, no
