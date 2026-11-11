@@ -143,7 +143,7 @@ export function createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef,
           try {
             events = await bb.sdk.hosts.installProviderCli({ hostId: row.hostId, provider: cli, actionKind: "update" });
           } catch (error) {
-            // The SDK gives up while bb goes on installing (docs/ona-notes.md): keep the turn until bb is done.
+            // The SDK gives up, not bb (docs/ona-notes.md): keep the turn until bb is done, 15 min later, or the plugin's abort.
             if (!(error instanceof Error && error.name === "BbRequestTimeoutError")) throw error;
             const done = await pollUntil(
               async () => {
@@ -155,7 +155,7 @@ export function createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef,
                   const status = now[cli];
                   return status?.installed === true && status.needsUpdate === false;
                 } catch {
-                  return false; // a failed read is asked again; only the deadline or the plugin's abort ends the wait
+                  return false; // a failed read is asked again; the wait ends only when bb is done, at the deadline or on the plugin's abort.
                 }
               },
               { deadlineMs: BB_INSTALL_LIMIT_MS, intervalMs: INSTALL_POLL_MS, signal },

@@ -85,6 +85,7 @@ function updater(
   }>,
   install: Record<string, InstallEvents> = {},
   guard = new HostGuard(),
+  signal = new AbortController().signal,
 ) {
   const installs: string[] = [];
   const rows = boxes.map(
@@ -125,7 +126,7 @@ function updater(
     autoUpdateProviders: "codex",
     rowForRef,
     guard,
-    signal: new AbortController().signal,
+    signal,
   });
   return { updateClis, installs };
 }
@@ -328,6 +329,10 @@ test("a status read that leaves the CLI out keeps the wait going (fails if that 
   const lines = updateClis();
   await settle();
   assert.equal(guard.busyWith("box"), "update-cli", "the turn is held after the read without the CLI");
+  box.statusReply = async () => ({ codex: status({ installed: false, needsUpdate: false }) });
+  await tick(INSTALL_POLL_MS);
+  await settle();
+  assert.equal(guard.busyWith("box"), "update-cli", "the turn is held after a read that shows the CLI not installed");
   box.statusReply = undefined;
   box.codex = {};
   await tick(INSTALL_POLL_MS);
@@ -352,4 +357,28 @@ test("a status read that throws during the wait is asked again (fails if the run
   box.codex = {};
   await tick(INSTALL_POLL_MS);
   assert.deepEqual(await lines, ["box-box: codex 1.0.0 -> 2.0.0 (bb finished after the request timed out)"]);
+});
+
+test("the plugin's abort ends the wait for an install the SDK gave up on, and frees the box (fails if the wait ignores the abort)", async () => {
+  const guard = new HostGuard();
+  const plugin = new AbortController();
+  const { updateClis, installs } = updater(
+    [{ hostId: "box", codex: pending, duringInstall: sdkTimeout }],
+    {},
+    guard,
+    plugin.signal,
+  );
+  // Not awaited yet: a wait that ignores the abort then fails the assertions below instead of hanging the test.
+  const outcome = updateClis().then(
+    () => "ended",
+    (error: unknown) => (error as Error).message,
+  );
+  await tick(INSTALL_POLL_MS, 2);
+  await settle();
+  assert.equal(guard.busyWith("box"), "update-cli", "still waiting before the abort");
+  plugin.abort(new Error("plugin stopped"));
+  await settle();
+  assert.equal(guard.busyWith("box"), undefined, "the abort frees the box");
+  assert.equal(await outcome, "plugin stopped");
+  assert.deepEqual(installs, ["box codex"], "no second install");
 });
