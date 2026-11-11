@@ -28,7 +28,7 @@ archive=$(mktemp "$parent/.scratch-copy.XXXXXX")
 trap 'rm -f "$archive"' EXIT
 git -C "$worktree" archive "$sha" > "$archive" || { echo "scratch-copy: git archive failed for $sha" >&2; exit 1; }
 mkdir "$phys"
-# The shell opens both paths: GNU tar reads a backslash in a -C or -f argument as an escape.
+# The shell opens both paths: GNU tar reads a backslash in its -C argument as an escape.
 (cd -- "$phys" && tar -x -f -) < "$archive"
 if [ ! -d "$main/node_modules" ]; then
   echo "scratch-copy: did not link node_modules: $main has none" >&2
