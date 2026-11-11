@@ -1,24 +1,41 @@
 #!/bin/sh
 # Extracts commit <sha> of <worktree> into a new folder <dir>, for a reviewer to run tests and mutants in
 # without touching <worktree>. The copy has no .git. Its node_modules links to the main checkout's when its
-# package.json and package-lock.json match the main checkout's. Prints the copy's absolute path on stdout;
-# the other messages go to stderr.
+# package.json and package-lock.json match the main checkout's. <dir> must lie outside both checkouts.
+# Prints the copy's absolute path on stdout; the other messages go to stderr.
 #   scripts/scratch-copy.sh <worktree> <sha> <dir>
 set -eu
-[ $# -eq 3 ] || { echo "usage: scripts/scratch-copy.sh <worktree> <sha> <dir>" >&2; exit 2; }
+usage() { echo "usage: scripts/scratch-copy.sh <worktree> <sha> <dir>" >&2; exit 2; }
+[ $# -eq 3 ] || usage
 worktree=$1
 sha=$2
 dir=$3
 [ ! -e "$dir" ] || { echo "scratch-copy: $dir already exists; name a new folder" >&2; exit 1; }
 git -C "$worktree" rev-parse --verify -q "$sha^{commit}" >/dev/null || { echo "scratch-copy: $sha is not a commit of $worktree" >&2; exit 1; }
-mkdir -p "$dir"
-git -C "$worktree" archive "$sha" | tar -x -C "$dir"
-dir=$(cd "$dir" && pwd)
 main=$(dirname "$(git -C "$worktree" rev-parse --path-format=absolute --git-common-dir)")
+# The physical path of <dir>, which may not exist yet: its nearest existing folder, resolved, plus the rest.
+abs=$dir
+case $abs in /*) ;; *) abs=$(pwd)/$abs ;; esac
+probe=$abs
+rest=
+while [ ! -d "$probe" ]; do
+  rest=/$(basename "$probe")$rest
+  probe=$(dirname "$probe")
+done
+phys=$(cd "$probe" && pwd -P)$rest
+for root in "$(cd "$worktree" && pwd -P)" "$(cd "$main" && pwd -P)"; do
+  case $phys in "$root"|"$root"/*) echo "scratch-copy: $dir is inside $root, a checkout; name a folder outside it" >&2; exit 1 ;; esac
+done
+archive=$(mktemp "${TMPDIR:-/tmp}/scratch-copy.XXXXXX")
+trap 'rm -f "$archive"' EXIT
+git -C "$worktree" archive "$sha" > "$archive" || { echo "scratch-copy: git archive failed for $sha" >&2; exit 1; }
+mkdir -p "$dir"
+tar -x -C "$dir" -f "$archive"
+dir=$(cd "$dir" && pwd)
 if [ ! -d "$main/node_modules" ]; then
   echo "scratch-copy: did not link node_modules: $main has none" >&2
 elif cmp -s "$main/package.json" "$dir/package.json" && cmp -s "$main/package-lock.json" "$dir/package-lock.json"; then
-  ln -s "$main/node_modules" "$dir/node_modules"
+  ln -sn "$main/node_modules" "$dir/node_modules"
   echo "scratch-copy: linked node_modules to $main/node_modules" >&2
 else
   echo "scratch-copy: did not link node_modules: package.json or package-lock.json differs from $main" >&2

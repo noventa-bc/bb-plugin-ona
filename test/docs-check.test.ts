@@ -63,6 +63,14 @@ test("a root with no .git, such as a scratch copy, checks its Markdown files on 
   assert.match(r.output, /has no \.git, so it checks every Markdown file on disk/);
 });
 
+test("a Markdown file under node_modules is not checked when the root has no .git", () => {
+  const dir = tempDir("docs-check-modules-");
+  writeFiles(dir, { ...repoConfig, ...clean, "node_modules/pkg/README.md": "# Pkg\n\nSee [gone](gone.md).\n" });
+  const r = runCheck(dir);
+  assert.equal(r.status, 0, r.output);
+  assert.doesNotMatch(r.output, /node_modules/);
+});
+
 test("a dead relative link and a file over its line limit both fail the check", () => {
   const r = docsCheck({
     ...clean,
