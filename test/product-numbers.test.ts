@@ -208,6 +208,8 @@ test("a box refused on each bb retry counts once in deletes_refused (fails if ea
       logLine("metric keep env=env-30 via=remove commits=2 files=0"),
       logLine("metric keep env=env-30 via=remove commits=2 files=0", "2026-11-02T08:01:00Z"),
       logLine("metric keep env=env-31 via=cleanup commits=0 files=1"),
+      // A later removal deleted env-30: it still counts as refused once.
+      logLine("metric delete env=env-30 via=remove git=known", "2026-11-02T08:02:00Z"),
     ),
   );
   assert.equal(r.status, 0, r.stderr);
