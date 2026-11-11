@@ -93,8 +93,14 @@ those and the "skipped or not checked" lines ponytail ends with.
    branch name `agent/<slug>`, the files involved (quote the line's text, not
    its number: numbers drift), the tests to
    write first, the coupled changes from `AGENTS.md`, and what to report back.
-5. **Build** in a worktree (slow commands in the background). The builder runs
-   `npm ci --ignore-scripts`, then `npm run prepare`, writes
+5. **Build** in a worktree (slow commands in the background). When a worktree's
+   `package.json` and `package-lock.json` are byte-identical to the main
+   checkout's, the orchestrator links the main checkout's `node_modules` into
+   it: nothing is downloaded, and `npm run prepare` is not needed, since
+   `core.hooksPath` is shared with the main checkout. Otherwise the builder
+   removes any link (the link itself, not what it points to) and runs
+   `npm ci --ignore-scripts` in its worktree, so the install never writes into
+   the main checkout. The builder writes
    a failing test first where possible (each test names, in its title or the
    handoff, the bug it fails on, or the brief says "guard, no `// Bug:` line"
    when `main` has no bug; a test that still passes with the rule
@@ -113,8 +119,11 @@ those and the "skipped or not checked" lines ponytail ends with.
    orchestrator's own verdict), `code-review` (its recipe followed by hand:
    the Skill itself starts many agents) and `/ponytail-review branch`, each
    on the branch against `origin/main`, in its own agent, briefed with the
-   builder's worktree path (a fresh agent starts in the main checkout) and
-   told to run tests and mutants in a scratch folder of its own under the
+   template in `docs/owner.md`, the builder's worktree path (a fresh agent
+   starts in the main checkout), the three-dot diff
+   `git -C <worktree> diff origin/main...<sha>` (a two-dot diff from a stale
+   base shows main's newer commits as reverted), and told to run tests and
+   mutants in a scratch folder of its own under the
    session scratchpad (`git archive <sha>` into a new folder, which has no
    history, so git commands stay `git -C <worktree>`; link `node_modules`
    only when the folder has none; the reviewer names a file by the path its
@@ -252,9 +261,8 @@ Rules the owner gave that no section above states. Checked 2026-11-06.
   grep (the exit code is grep's). `.githooks/pre-commit` (set by `npm install`)
   runs the checks on every commit; a checkout without the hook reads the exit
   code by hand (checked 2026-11-03).
-- A subagent cannot see the owner's approvals and refuses to install packages (the step-5 `npm ci` is its own), commit or
-  push. Builders leave work staged; the orchestrator commits, pushes and runs
-  approved installs in the builder's worktree, then tells it to continue.
+- A subagent does not commit or push. Builders leave work staged, and the
+  orchestrator commits and pushes.
 - A builder that was stopped (the owner's credits ran out, the session ended)
   cannot be resumed. Its worktree keeps the staged work: review it, finish the
   handoff and the PR from there instead of starting the task again.
@@ -276,5 +284,3 @@ Rules the owner gave that no section above states. Checked 2026-11-06.
   `[COST]` tag) through the flow, steps 1 to 3 and `AGENTS.md` "Complexity"
   included, rather than wait, unless the owner said to halt (checked
   2026-11-06).
-- The owner's Mac has no `timeout` command: use the Bash tool's own timeout
-  (checked 2026-11-06).
