@@ -95,11 +95,16 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   the name only: bb passes no box setting but `--name`. Ona's help for `update` says
   "Updates an environment's metadata or settings" and lists `--name` and
   `--inactivity-timeout`, with no start or stop (checked 2026-11-06).
+- Archived environments vanish from `ona environment list`, but `ona environment get <id>`
+  still returns them (decision [0005](decisions/0005-lookup-by-id-counts-as-listing.md)).
+  `isArchived` in `src/ona.ts` reads `metadata.archivedAt` from that output.
+- The Ona SDK (`@gitpod/sdk`) is Enterprise-only. The Ona CLI is the portable
+  path for plugins that must run for every user.
 
 ## bb SDK
 
 - bb's server source is the bundle `/Applications/bb.app/Contents/Resources/app.asar.unpacked/node_modules/bb-app/server/dist/start-server.js`; the installed version is the `"version"` field of `package.json` in that `bb-app` folder (`grep '"version"' /Applications/bb.app/Contents/Resources/app.asar.unpacked/node_modules/bb-app/package.json`) (bb 0.49.0, checked 2026-11-09).
-- The plugin pins `@get-bb/plugin-sdk` 0.6.109 (checked 2026-11-03).
+- The plugin pins `@get-bb/plugin-sdk` 0.6.132 (checked 2026-11-11).
 - bb 0.49.0's app RPC client (`useRpc`) refuses an input with a key whose value is
   `undefined` ("rpc input at $input.<key> is not a JSON value") before it sends, as
   the SDK's test harness does (harness checked 2026-11-06; bb's check in the app's
@@ -116,15 +121,19 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   `placement: "header"` (checked 2026-11-03). A header action is a labelled
   button with an icon and a `run`, not a component, so it can't show the cost
   chip. bb places it after the workspace's Open button, and it cannot hide
-  that button, so it cannot replace the hide in `app.tsx`.
+  that button, so it cannot replace the hide in `app.tsx`. In bb 0.49.0's thread
+  header (`thread-detail-DObhspNc.js`, checked 2026-11-11) a header action sits
+  after that button, and a component header action (`experimental_threadHeaderAction`,
+  which `app.tsx` uses for the Editor and the cost chip) sits before it.
 - SDK 0.6.109 has no `machine_busy` suspend error code (checked 2026-11-03: the
-  name occurs nowhere in its typings or `dist`).
+  name occurs nowhere in its typings or `dist`; bb's server does answer with it, see
+  the suspend and reconcile bullets).
 - bb 0.49.0's `startMachineResume` accepts a machine that is `active`,
   `suspended`, `suspending` or `resuming`, answers 409 `machine_not_suspended` for
   `creating` and `removing`, and 404 `host_not_found` for a destroyed host (from
   `requireSuspendableMachine`; checked 2026-11-09).
-- bb 0.49.0's suspend (`maintainMachine`, checked 2026-11-09) cancels unfinished
-  environment hooks, stops active threads through the daemon and closes the host's
+- bb 0.49.0's suspend (`maintainMachine`, checked 2026-11-11) cancels unfinished
+  environment hooks, stops active threads through the daemon and force-closes the host's
   terminals before the provider's suspend runs. With the daemon gone, that stop
   fails at once with "Host is not connected" (502 `host_unavailable`). bb then sets
   the phase back to `active`, sets the host's `lifecycle.message` to "Machine
@@ -149,7 +158,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   resuming. A suspend that bb later fails looks accepted when
   it is answered.
 - For an enrolled machine, bb's `createMachineBootstrapApi` runs `install-machine.sh --start`, whose start branch returns at once when `daemon_matches` holds (the daemon on the host's port reports this host id and server URL). `prepare` returns `enrolled` for a host bb has seen (`lastSeenAt` set) or that is connected, so a plugin wake reaches that branch once SSH and the tunnel are up; the start branch never kills a daemon (bb 0.49.0 server source, checked 2026-11-09).
-- `startMachineReconciliation` (behind `hosts.experimental_reconcile`) returns at once unless the machine's phase is `suspended`. bb's own 10-second sweep (`sweepProviderMachine`) calls `resumeMachine` for a machine left `resuming`, for a machine left `suspending` with no suspend operation running in the server process (a server restart mid-suspend; a failed resume keeps `suspending`, so the next tick calls again), and for a suspended machine with a thread waiting in its offline queue; a failed resume of a machine left `resuming` ends `suspended`. bb passes the provider's resume the host id, resource, checkpoint, report and signal (bb 0.49.0 server source, checked 2026-11-09).
+- `startMachineReconciliation` (behind `hosts.experimental_reconcile`) returns at once unless the machine's phase is `suspended`. On a suspended machine it rejects with 409 `machine_busy` ("Wait for thread provisioning to finish before suspending this machine.") while thread provisioning is pending on the host, the same check suspend makes. bb's own 10-second sweep (`sweepProviderMachine`) calls `resumeMachine` for a machine left `resuming`, for a machine left `suspending` with no suspend operation running in the server process (a server restart mid-suspend; a failed resume keeps `suspending`, so the next tick calls again), and for a suspended machine with a thread waiting in its offline queue; a failed resume of a machine left `resuming` ends `suspended`. bb passes the provider's resume the host id, resource, checkpoint, report and signal (bb 0.49.0 server source, checked 2026-11-09).
 - `resumeMachine` waits for an in-flight suspend, then `resumeMachineWithIntent`
   returns at once unless the phase is suspended, suspending or resuming. A resume of
   an active machine does nothing. While a remove runs, `resumeMachine` waits for it and
@@ -335,6 +344,10 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   `disabledReason:n??void 0` in `plugin-frontend-0dkOuthv.js`) (checked 2026-11-09).
 - The control's types: `PluginMachineProviderInputsProps` in the SDK 0.6.109 typings
   (`bb-plugin-sdk-app.d.ts`). Checked 2026-11-05.
+- bb 0.49.0's `updateSettings` (`server/dist/start-server.js`) saves a plugin's settings,
+  calls its `onChange` listeners, and reloads the plugin only when its status is
+  `needs-configuration`. So a settings save does not reload a healthy plugin: a changed
+  setting applies after `bb plugin reload ona` (checked 2026-11-11).
 - SDK surfaces in 0.6.109 that the plugin doesn't use (checked 2026-11-03):
   - host entries: `experimental_defineHostEntry` (plugin code on the daemon,
     fs watch, signals) and the `experimental_host.deleted` event
@@ -345,13 +358,3 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   - declarative `defineCli`
   - `bb.status.needsConfiguration`
   - `ephemeral: true` machines
-
-## Known gaps
-
-- Archived environments vanish from `ona environment list`, but
-  `ona environment get <id>` still returns them. The plugin reads
-  `metadata.archivedAt` from that output to tell archived from gone. That field
-  name comes from Ona's API and hasn't been seen on a real archived box yet
-  (checked 2026-10-30); if it's wrong, archived boxes are still reported gone.
-- The Ona SDK (`@gitpod/sdk`) is Enterprise-only. The Ona CLI is the portable
-  path for plugins that must run for every user.

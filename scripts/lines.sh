@@ -25,8 +25,14 @@ const files = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
 const rows = [];
 for (const file of files) {
   for (const m of file.messages) {
-    const count = /has too many lines \((\d+)\)/.exec(m.message);
-    if (count) rows.push([Number(count[1]), path.relative(process.cwd(), file.filePath)]);
+    // The rule picks the finding; its count is the number in parentheses, and a message without one fails the run.
+    if (m.ruleId !== "max-lines") continue;
+    const count = /\((\d+)\)/.exec(m.message);
+    if (!count) {
+      console.error("lines: a max-lines message has no line count: " + m.message);
+      process.exit(1);
+    }
+    rows.push([Number(count[1]), path.relative(process.cwd(), file.filePath)]);
   }
 }
 rows.sort((a, b) => b[0] - a[0] || (a[1] < b[1] ? -1 : 1));

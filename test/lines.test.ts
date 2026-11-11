@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { tempDir } from "./sandbox.ts";
@@ -117,6 +117,43 @@ test("a margin that is not a number is a usage error", () => {
   const r = lines(fixture(), ["ten"]);
   assert.equal(r.status, 2);
   assert.match(r.stderr, /usage: scripts\/lines\.sh \[margin\]/);
+});
+
+/** A folder with lines.sh and an eslint stand-in that prints `report` as its JSON in place of ESLint's. */
+function withReport(report: unknown[]) {
+  const root = tempDir("lines-report-");
+  mkdirSync(join(root, "scripts"));
+  copyFileSync(join(repo, "scripts", "lines.sh"), join(root, "scripts", "lines.sh"));
+  mkdirSync(join(root, "node_modules", ".bin"), { recursive: true });
+  const eslint = join(root, "node_modules", ".bin", "eslint");
+  writeFileSync(eslint, `#!/bin/sh\ncat <<'REPORT'\n${JSON.stringify(report)}\nREPORT\n`);
+  chmodSync(eslint, 0o755);
+  writeFileSync(join(root, "eslint.config.js"), config);
+  return root;
+}
+
+test("a max-lines finding whose message has no line count fails the run and names the message", () => {
+  const r = lines(
+    withReport([{ filePath: "a.ts", messages: [{ ruleId: "max-lines", message: "File is long." }] }]),
+    [],
+  );
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /has no line count: File is long\./);
+});
+
+test("only max-lines findings are rows, whatever another rule's message says", () => {
+  const r = lines(
+    withReport([
+      {
+        filePath: "a.ts",
+        messages: [{ ruleId: "max-lines", message: "File has too many lines (11). Maximum allowed is 10." }],
+      },
+      { filePath: "b.ts", messages: [{ ruleId: "no-console", message: "File has too many lines (12)." }] },
+    ]),
+    [],
+  );
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(r.rows, [[11, "a.ts"]]);
 });
 
 test("with CDPATH set, a relative invocation prints the rows and nothing else", () => {
