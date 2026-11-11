@@ -17,18 +17,28 @@ const repoConfig: Record<string, string> = {
 
 const env = scrubbed(process.env);
 
-/** Write the files into a new git repository, stage them (git add skips ignored files), delete `removed` from disk, run docs-check.sh on it. */
-function docsCheck(files: Record<string, string>, removed: string[] = []) {
-  const dir = tempDir("docs-check-");
-  for (const [name, text] of Object.entries({ ...repoConfig, ...files })) {
+/** Writes each file under `dir`, making its folders. */
+function writeFiles(dir: string, files: Record<string, string>) {
+  for (const [name, text] of Object.entries(files)) {
     mkdirSync(dirname(join(dir, name)), { recursive: true });
     writeFileSync(join(dir, name), text);
   }
+}
+
+/** Runs docs-check.sh on `dir`; returns its exit status and output. */
+function runCheck(dir: string) {
+  const run = spawnSync(script, [dir], { env, stdio: "pipe", timeout: 60_000 });
+  return { status: run.status, output: String(run.stdout) + String(run.stderr) };
+}
+
+/** Write the files into a new git repository, stage them (git add skips ignored files), delete `removed` from disk, run docs-check.sh on it. */
+function docsCheck(files: Record<string, string>, removed: string[] = []) {
+  const dir = tempDir("docs-check-");
+  writeFiles(dir, { ...repoConfig, ...files });
   git(dir, env, "init", "-q");
   git(dir, env, "add", "--all");
   for (const name of removed) rmSync(join(dir, name));
-  const run = spawnSync(script, [dir], { env, stdio: "pipe", timeout: 60_000 });
-  return { status: run.status, output: String(run.stdout) + String(run.stderr) };
+  return runCheck(dir);
 }
 
 // The inline code span and the fenced block hold link examples, which the link scan skips.
@@ -42,6 +52,15 @@ const clean: Record<string, string> = {
 test("clean Markdown passes: prettier, the line limits and the relative links", () => {
   const r = docsCheck(clean);
   assert.equal(r.status, 0, r.output);
+});
+
+test("a root with no .git, such as a scratch copy, checks its Markdown files on disk and says so", () => {
+  const dir = tempDir("docs-check-scratch-");
+  writeFiles(dir, { ...repoConfig, ...clean, "README.md": "# Readme\n\nSee [gone](gone.md).\n" });
+  const r = runCheck(dir);
+  assert.equal(r.status, 1, r.output);
+  assert.match(r.output, /README\.md: dead link gone\.md/);
+  assert.match(r.output, /has no \.git, so it checks every Markdown file on disk/);
 });
 
 test("a dead relative link and a file over its line limit both fail the check", () => {

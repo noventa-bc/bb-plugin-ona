@@ -41,7 +41,7 @@ npm run check        # Node pin, typecheck, lint, format check, tests
    "Set up" checks them; `scripts/conventional.sh` has the rule).
 2. Fix a bug with a failing test first. Put logic in `src/` as pure functions
    with tests; a change to a sync pass gets a scenario in `test/sync-status.test.ts`
-   or `test/sync-chain.test.ts` (`test/sync.test.ts` sits at the 500-line lint cap).
+   or `test/sync-chain.test.ts`; run `scripts/lines.sh` first, since the `max-lines` cap in `eslint.config.js` applies to both.
    Offline end-to-end: `test/e2e.test.ts` loads the real `server.ts` in the
    SDK's fake bb host with the fake `ona` (`test/fake-ona.mjs`, stateful) and
    fake `ssh`, and drives the provider's create, suspend, resume and remove;

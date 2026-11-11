@@ -11,7 +11,10 @@ Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
 
 - Run `npm run check` (Node pin, typecheck, lint, format check and tests) before you finish. `npm run format` fixes formatting.
 - CI: `check.yml` runs `npm run check` and skips changes that touch only Markdown; `docs.yml` runs on Markdown changes and is where a job that validates `.md` files goes.
-- `scripts/docs-check.sh` runs the Markdown checks CI runs.
+- Before committing Markdown, run `scripts/docs-check.sh`: the Markdown checks CI runs. In a copy with no `.git` it checks every Markdown file on disk.
+- For any read of bb's server source or the plugin SDK typings, use `scripts/bb-source.sh <name> [lines]` (`--sdk` searches the typings); it replaces hand greps and finds.
+- Before adding lines to a file, run `scripts/lines.sh [margin]`: it lists the lint-checked files with fewer than `margin` (default 10) lines under the `max-lines` cap, so a new sync scenario goes in whichever of `test/sync-status.test.ts` and `test/sync-chain.test.ts` it does not list.
+- For a reviewer's scratch copy of a commit, use `scripts/scratch-copy.sh <worktree> <sha> <dir>`: the copy has no `.git`, and its `node_modules` links to the main checkout's when `package.json` and `package-lock.json` match it.
 - CI also runs `shellcheck` on `scripts/*.sh`, `test/*.sh` and `.githooks/*`; `npm run check` does not. After changing a `.sh` file, run `shellcheck` on it (`brew install shellcheck`), or say in the handoff that it was not run.
 - CI also checks that each `src/<name>.ts` has a `test/<name>.test.ts` (`check.yml` names the exceptions); `npm run check` does not, so a new module gets its own test file.
 - CI also runs the Semgrep rules in `.semgrep/rules.yml` (fixtures in `.semgrep/rules.ts`). Locally: `brew install semgrep`, then `semgrep --test --metrics=off .semgrep/` and `semgrep scan --config .semgrep/rules.yml --error --metrics=off app.tsx server.ts src`.
@@ -53,7 +56,7 @@ Change these together, in the same edit.
 - Write the least code that solves the whole task (the ponytail ruleset, installed as a Claude Code plugin; see `docs/owner.md`). A shortcut with a known limit gets a comment `shortcut: <the limit>, <when to upgrade>`; `/ponytail-debt` lists them. A shortcut comment never describes an unfixed weakness; that goes to the private roadmap.
 - Fix a bug with a failing test first, where a test is possible. A `// Bug:` line names only a bug that was on `main`, not a design tried and dropped inside the PR (git history has it).
 - When you find a bug, a source of noise or anything that can damage the repo, add the guard that stops it recurring in the same change (a finding already on `main` that the branch does not make reachable or worse takes its guard in its roadmap item, `FACTORY.md` step 6): a test, a lint rule, a CI step, a `.gitignore` line or a written rule here. Say in the handoff which guard you added.
-- A change to what a sync pass does gets a scenario in `test/sync-status.test.ts` or `test/sync-chain.test.ts` (fake bb calls and Ona listing from `test/sync-fakes.ts`); `test/sync.test.ts` sits at the 500-line lint cap (`test/reconcile.test.ts` at 495; the `max-lines` count, blank and comment lines skipped).
+- A change to what a sync pass does gets a scenario in `test/sync-status.test.ts` or `test/sync-chain.test.ts` (fake bb calls and Ona listing from `test/sync-fakes.ts`); run `scripts/lines.sh` first, since the `max-lines` cap in `eslint.config.js` applies to both.
 - For `server.ts` code without tests, list owner check steps in the handoff instead.
 - Put logic in `src/` as pure functions with tests.
 - Every SSH or `ona` call must name the safety rule that covers it, in `docs/sync.md`.
