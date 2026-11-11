@@ -358,3 +358,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   - declarative `defineCli`
   - `bb.status.needsConfiguration`
   - `ephemeral: true` machines
+- bb 0.49.0 stores a plugin's log lines as one JSON object per line, `{"ts":<epoch ms>,"level":<debug, info, warn or error>,"message":<text>}`, in `<data-dir>/plugins/<plugin-id>/logs/plugin.log` (`appendPluginLogLine` and `pluginLogsDir` in the server bundle, checked 2026-11-11). The message is the text the plugin passed to its logger, without the `[plugin:<id>]` prefix that bb's own log line adds (`emitLog`, same bundle, checked 2026-11-11).
+- bb 0.49.0 caps that file at `PLUGIN_LOG_MAX_BYTES`, 5 * 1024 * 1024 bytes (5 MiB): before a write, a file over the cap is renamed to `plugin.log.1`, replacing the earlier one, so one rotated file is kept (`appendPluginLogLine`, checked 2026-11-11).
+- bb 0.49.0's stored lines survive a bb restart and a plugin reload: `readPluginLogTail` reads `plugin.log.1` and then `plugin.log` from disk, and nothing in the plugin modules removes the logs folder on a start or a reload (checked 2026-11-11).
+- bb 0.49.0's `bb plugin logs <id>` prints the last 100 lines by default. `-n` (`--lines`) sets the count, and the server's `/plugins/:id/logs` route caps `tail` at 10000, so a larger `-n` prints 10000. Each line prints unchanged (the `logs <id>` command in `host-daemon/dist/bb-chunks/plugin-K4RLPVUQ.js`, and `app.get("/plugins/:id/logs")` in `server/dist/start-server.js`, checked 2026-11-11).
