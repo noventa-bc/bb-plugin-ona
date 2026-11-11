@@ -46,7 +46,7 @@ nothing and don't push; you review, commit and merge. Inside it, `FACTORY.md`
 ### Task brief template
 
 ```
-Role: builder or reviewer (never the orchestrator)
+Role: builder (never the orchestrator)
 Goal: <one sentence, user-visible outcome>
 Scope: <files or area>; out of scope: <...>
 Done when: <tests or behaviour>; `npm run check` passes.
@@ -60,6 +60,37 @@ names the shape of bb's answer (an accepted suspend or resume answers 202
 before the operation runs, and a refusal comes back at once as a 4xx;
 `docs/ona-notes.md`, checked 2026-11-05), so the builder designs a phase check
 on the settled host, not on the answer.
+
+### Reviewer brief template
+
+FACTORY.md step 6 points here. The `Role:` line names the pass; step 6 holds
+the rules a reviewer follows, so the lines below do not repeat them.
+
+```
+Role: reviewer (adversarial, code-review or ponytail-review; never the builder
+  or the orchestrator)
+Target: worktree `<absolute path>`; commit `<sha>`; base `origin/main`;
+  diff `git -C <worktree> diff origin/main...<sha>`
+Round: <n>; the passes this round are the ones FACTORY.md step 6 gives it.
+Read-only: change nothing in the builder's worktree; step 6 sets the scratch
+  folder.
+Scope: the item's code (roadmap label `<label>`); anything outside it goes
+  under "Pre-existing" (step 6).
+Known roadmap items, not to re-report: <labels only>.
+Check list: <what to check in this diff, e.g. the coupled changes from AGENTS.md
+  it touches, the docs it changes against the code, and each new test against
+  the rule its title names>.
+Tests: `perl -e 'setpgrp(0,0); $SIG{ALRM} = sub { kill "TERM", 0 }; alarm 240; system @ARGV; exit($? & 127 || $? >> 8)' -- node --test --experimental-strip-types --test-timeout=60000 <files>`
+  The owner's Mac has no `timeout` command (checked 2026-11-11). The alarm
+  stops the process group `node --test` runs in, and the test processes in that
+  group stop with it. A mutant that may hang uses `--test-timeout=10000`
+  instead, so it fails fast; that can cancel an e2e test that sleeps by design,
+  so its cancellation in that run is expected. A test the sandbox skips prints its reason, and the
+  summary shows `skipped N`.
+Report format: findings, each with its concrete failing case, file:line and
+  whether it blocks (the Converge rules in FACTORY.md step 6 decide that), then
+  up to 5 nits (AGENTS.md).
+```
 
 ## Review a handoff outside the orchestrated flow
 

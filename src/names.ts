@@ -95,6 +95,11 @@ export function friendlyName(seed: string): string {
   return `${adjective}-${noun}-${hash.subarray(4, 6).toString("hex")}`;
 }
 
+/** Deterministic Ona name for a creation key, so retries find the same environment. */
+export function envNameForKey(key: string): string {
+  return friendlyName(key);
+}
+
 export function randomFriendlyName(): string {
   return friendlyName(randomBytes(16).toString("hex"));
 }

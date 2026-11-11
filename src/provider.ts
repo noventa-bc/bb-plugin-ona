@@ -3,7 +3,7 @@
 import type { BbPluginApi, MachineBootstrapRequest, MachineExecutor } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { ONA_MACHINE_PROVIDER_ID, ONA_NAME_MESSAGE, ONA_NAME_PATTERN } from "./machine-inputs.ts";
-import { friendlyName } from "./names.ts";
+import { envNameForKey } from "./names.ts";
 import {
   isDeleted,
   isRunning,
@@ -26,7 +26,10 @@ export const PROVIDER_ID = ONA_MACHINE_PROVIDER_ID;
 /** Ona can be slow to wake a dev container; give each SSH check this long. */
 const CHECK_TIMEOUT_MS = 5 * 60_000;
 
-/** A wake and a daemon restart give up after this long (docs/sync.md rule 1): above ensureRunning's 25 minutes. */
+/**
+ * A wake, a daemon restart and bb's resume give up after this long (docs/sync.md rule 1): above ensureRunning's 25
+ * minutes.
+ */
 const CAP_MINUTES = 30;
 
 export const resourceSchema = z.object({
@@ -153,11 +156,6 @@ export const MOVE_MACHINE_ASIDE = [
   '[ -z "${HOME:-}" ] || cd "$HOME" || exit 5',
   "exit 3",
 ].join("\n");
-
-/** Deterministic Ona name for a creation key, so retries find the same environment. */
-export function envNameForKey(key: string): string {
-  return friendlyName(key);
-}
 
 /** The refusal a remove or an orphan cleanup gives when a delete would lose work on the box; both paths say the same. */
 function notDeletingMessage(
@@ -488,19 +486,23 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       }
       return { resource };
     },
-    async resume({ resource, checkpoint, report, signal }) {
+    // bb's own resume: on Resume in bb, on bb's restart recovery and on a waiting thread's resume. It gives up after
+    // CAP_MINUTES, since bb puts no deadline on it.
+    async resume({ resource, checkpoint, report: progress, signal: outer }) {
       const owned = resourceSchema.parse(resource);
-      // Drop a no-stop flag a failed suspend may have left; the next suspend is the user's.
-      deps.releasing.delete(owned.envId);
-      const env = await ona.getEnvironmentIfExists(owned.envId, signal);
-      if (!env) throw new Error(`Ona environment "${owned.envId}" not found. Run \`ona environment list\`.`);
-      await ensureRunning(env, report, signal);
-      // The stored name goes stale after `bb ona rename`; only a lifecycle hook can store the current one.
-      const current = { ...owned, envName: nameOf(env, owned) };
-      await checkpoint(current);
-      // bootstrap with the creation key starts, or re-enrolls, the daemon.
-      await connectOrClose(current, report, signal, !isRunning(env));
-      return { resource: current };
+      return capped(`resuming ${owned.envName}`, CAP_MINUTES, outer, progress, async (signal, report) => {
+        // Drop a no-stop flag a failed suspend may have left; the next suspend is the user's.
+        deps.releasing.delete(owned.envId);
+        const env = await ona.getEnvironmentIfExists(owned.envId, signal);
+        if (!env) throw new Error(`Ona environment "${owned.envId}" not found. Run \`ona environment list\`.`);
+        await ensureRunning(env, report, signal);
+        // The stored name goes stale after `bb ona rename`; only a lifecycle hook can store the current one.
+        const current = { ...owned, envName: nameOf(env, owned) };
+        await checkpoint(current);
+        // bootstrap with the creation key starts, or re-enrolls, the daemon.
+        await connectOrClose(current, report, signal, !isRunning(env));
+        return { resource: current };
+      });
     },
     async remove({ resource, hostId, report, signal }) {
       const owned = resourceSchema.parse(resource);

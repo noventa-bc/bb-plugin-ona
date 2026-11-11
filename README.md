@@ -299,7 +299,7 @@ bb ona open <ref>                        # open the devbox in your Ona editor
 ```sh
 bb ona list                    # machines, Ona env, tunnel status
 bb ona status [ref]            # bb's view next to Ona's, the box's start, idle timeout, activity, branch and unpushed commits, and what the plugin last did
-bb ona sync [ref]              # re-check Ona now and repair out-of-step machines; a resume it starts is waited for up to 30 minutes after bb answers `resuming`
+bb ona sync [ref]              # re-check Ona now and repair out-of-step machines; a resume it starts is waited for up to 32 minutes after bb answers `resuming`
 bb ona keep-alive <ref> 2h     # keep a running box from Ona's idle timeout (at most 12h)
 bb ona keep-alive <ref> off    # end it early
 bb ona move <thread-id> <ref>  # continue a thread in a new thread on another devbox, at the same path
@@ -308,7 +308,7 @@ bb ona reconnect <ref>         # active machines: reopen the tunnel and restart 
 bb ona resume <ref>            # a stopped active machine: starts its box and reconnects the bb daemon (your action); a running box is only reconnected; refused unless bb shows the machine active; gives up after 30 minutes ("Gave up …; last step: …")
 bb ona update [ref] [--force]  # apply pending agent-CLI updates on connected devboxes (also weekdays 09:00 when `autoUpdateClis` is on); a box with an agent running is skipped unless --force
 bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
-bb machine resume ona:<name>   # starts it, reopens the tunnel, restarts the daemon (Play button)
+bb machine resume ona:<name>   # starts it, reopens the tunnel, restarts the daemon (Play button); gives up after 30 minutes ("Machine resume failed: Gave up resuming <box> after 30 minutes; last step: …")
 bb machine remove ona:<name>   # created: deletes the box unless it has unpushed commits or uncommitted files; adopted: stops bb's daemon, moves its data folder aside
 ```
 
@@ -371,7 +371,7 @@ bb machine remove ona:<name>   # created: deletes the box unless it has unpushed
   be added again.
 - **bb and Ona disagree about a box** (bb says down but it's running, or the
   other way round): run `bb ona status <ref>`. It shows both views and what
-  the plugin last did about it. `bb ona sync <ref>` re-checks now (a resume it asks of bb for a waiting thread is waited for until bb settles it, for up to 30 minutes after bb answers `resuming`), and
+  the plugin last did about it. `bb ona sync <ref>` re-checks now (a resume it asks of bb for a waiting thread is waited for until bb settles it, for up to 32 minutes after bb answers `resuming`), and
   `bb ona reconnect <ref>` restarts the daemon of an active machine that Ona shows running;
   one suspended in bb but running in Ona needs `bb machine resume ona:<name>`; an active one whose box Ona stopped is started with `bb ona resume <ref>`. Two lines to look for:
   - "ERROR … (run `ona login`?)" at the top: the plugin can't reach Ona, so it
