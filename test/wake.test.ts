@@ -15,7 +15,7 @@ const signal = () => new AbortController().signal;
 function fixture(
   found: OnaEnvironment,
   phases: string[],
-  options: { phase?: string; listed?: boolean; listingFails?: boolean; guard?: HostGuard } = {},
+  options: { phase?: string; listed?: boolean; listingFails?: boolean; guard?: HostGuard; onRead?: () => void } = {},
 ) {
   const fake = register({ found, phases });
   const row: Row = {
@@ -26,8 +26,11 @@ function fixture(
     lastSeenAt: null,
     resource: adoptedResource,
   };
-  const deps: ResumeDeps = {
-    findMachine: async () => row,
+  const deps = {
+    findMachine: async () => {
+      options.onRead?.();
+      return row;
+    },
     snapshot: {
       refresh: async () => {
         if (options.listingFails) throw new Error("not logged in");
@@ -36,14 +39,15 @@ function fixture(
       lastError: options.listingFails ? "not logged in" : null,
     },
     guard: options.guard ?? new HostGuard(),
-    provider: { wake: fake.wake },
+    provider: { wake: fake.wake, reconnect: fake.reconnect },
+    tunnels: { mark: fake.mark },
   };
-  return { deps, calls: fake.calls };
+  return { deps, calls: fake.calls, fake };
 }
 
 test("bb ona resume refuses when Ona can't be asked, and starts nothing (fails if it starts a box it can't check)", async () => {
   const { deps, calls } = fixture(box("STOPPED"), ["STOPPED", "RUNNING"], { listingFails: true });
-  const result = await resumeCommand(deps, "box", signal());
+  const result = await resumeCommand(deps, "box", signal(), 0);
   assert.equal(result.exitCode, 1);
   assert.match(result.stderr ?? "", /^Can't ask Ona whether box is running \(not logged in\); not started/);
   assert.deepEqual(calls, []);
@@ -51,7 +55,7 @@ test("bb ona resume refuses when Ona can't be asked, and starts nothing (fails i
 
 test("bb ona resume refuses a box Ona doesn't list (fails if it starts an unlisted box)", async () => {
   const { deps, calls } = fixture(box("STOPPED"), ["STOPPED", "RUNNING"], { listed: false });
-  const result = await resumeCommand(deps, "box", signal());
+  const result = await resumeCommand(deps, "box", signal(), 0);
   assert.equal(result.exitCode, 1);
   assert.match(result.stderr ?? "", /^box is not listed in Ona/);
   assert.deepEqual(calls, []);
@@ -59,7 +63,7 @@ test("bb ona resume refuses a box Ona doesn't list (fails if it starts an unlist
 
 test("bb ona resume refuses a machine bb shows suspended, and points at bb machine resume (fails if it wakes it)", async () => {
   const { deps, calls } = fixture(box("STOPPED"), ["STOPPED", "RUNNING"], { phase: "suspended" });
-  const result = await resumeCommand(deps, "box", signal());
+  const result = await resumeCommand(deps, "box", signal(), 0);
   assert.equal(result.exitCode, 1);
   assert.match(result.stderr ?? "", /^box is suspended in bb.*`bb machine resume box`/);
   assert.deepEqual(calls, []);
@@ -67,7 +71,7 @@ test("bb ona resume refuses a machine bb shows suspended, and points at bb machi
 
 test("bb ona resume starts a stopped box and connects it (fails if it only reconnects)", async () => {
   const { deps, calls } = fixture(box("STOPPED"), ["STOPPED", "RUNNING"]);
-  const result = await resumeCommand(deps, "box", signal());
+  const result = await resumeCommand(deps, "box", signal(), 0);
   assert.equal(result.exitCode, 0);
   assert.deepEqual(calls, ["get STOPPED", "start", "get RUNNING", ...connectCalls]);
   assert.match(result.stdout ?? "", /^Started box and reconnected it$/m);
@@ -75,17 +79,17 @@ test("bb ona resume starts a stopped box and connects it (fails if it only recon
 
 test("bb ona resume on a running box connects it without starting it (fails if it starts a running box)", async () => {
   const { deps, calls } = fixture(box("RUNNING"), ["RUNNING"]);
-  const result = await resumeCommand(deps, "box", signal());
+  const result = await resumeCommand(deps, "box", signal(), 0);
   assert.equal(result.exitCode, 0);
   assert.deepEqual(calls, ["get RUNNING", "get RUNNING", ...connectCalls]);
   assert.match(result.stdout ?? "", /^Reconnected box$/m);
 });
 
 /** `bb ona`'s run handler over the resume deps; the other subcommands' deps are not reached by these tests. */
-function dispatch(deps: ResumeDeps) {
+function dispatch(deps: ResumeDeps & { tunnels: { mark(): number } }) {
   // The run handler writes its metric cmd line through bb's log before it acts.
   const run = onaCommands({ ...deps, bb: { log: { info: () => {} } } } as unknown as OnaCommandDeps);
-  return (ref: string) => run(["resume", ref], {});
+  return (ref: string, command = "resume") => run([command, ref], {});
 }
 
 test("bb ona resume through the command dispatch starts a stopped box (fails if the resume case is not dispatched)", async () => {
@@ -109,7 +113,7 @@ test("bb ona resume refuses a box whose machine another action holds, and starts
       }),
   );
   const { deps, calls } = fixture(box("STOPPED"), ["STOPPED", "RUNNING"], { guard });
-  const result = await resumeCommand(deps, "box", signal());
+  const result = await resumeCommand(deps, "box", signal(), 0);
   finish();
   await held;
   assert.equal(result.exitCode, 1);
@@ -162,4 +166,16 @@ test("bb ona resume on a STOPPING box that Ona settles as running reports a reco
   assert.equal(result.exitCode, 0);
   assert.match(result.stdout ?? "", /^Reconnected box$/m);
   assert.ok(!calls.includes("start"), calls.join(", "));
+});
+
+// Bug: `bb ona resume` and `bb ona reconnect` read the machine active, and their connect reopened the tunnel a
+// suspend or remove of bb's closed after the read (R25, R31).
+test("bb ona resume and reconnect take their mark before they read the row: a close after the read refuses the tunnel", async () => {
+  for (const command of ["resume", "reconnect"]) {
+    const { deps, fake } = fixture(box("RUNNING"), ["RUNNING"], { onRead: () => fake.stop("env-1") });
+    const result = await dispatch(deps)("box", command);
+    assert.equal(result.exitCode, 1, command);
+    assert.match(result.stderr ?? "", /while it connected, so its tunnel stays closed/, command);
+    assert.equal(fake.open.has("env-1"), false, command);
+  }
 });

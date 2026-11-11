@@ -134,6 +134,9 @@ export class TunnelManager {
   private readonly tunnels = new Map<string, { controller: AbortController; connectedAt: number | null }>();
   /** Set once by stopAll and never reset: a reload builds a new manager. */
   private stopped = false;
+  /** Closes so far, and the count at each box's last close: `ensure` refuses a mark older than its box's last close. */
+  private closes = 0;
+  private readonly closedAt = new Map<string, number>();
 
   private readonly sshBinary: string;
   private readonly remotePort: () => number;
@@ -166,14 +169,26 @@ export class TunnelManager {
     this.onConnected = onConnected;
   }
 
-  ensure(envId: string): void {
-    if (this.stopped || this.tunnels.has(envId)) return;
+  /** Taken before the read that decides an open, and passed to `ensure`. */
+  mark(): number {
+    return this.closes;
+  }
+
+  /**
+   * Opens the box's tunnel unless one is open. It opens nothing and returns false when the box was closed after `since`
+   * (a `mark`) was taken: bb suspended or removed the machine after the caller read it.
+   */
+  ensure(envId: string, since: number): boolean {
+    if ((this.closedAt.get(envId) ?? 0) > since) return false;
+    if (this.stopped || this.tunnels.has(envId)) return true;
     const state = { controller: new AbortController(), connectedAt: null as number | null };
     this.tunnels.set(envId, state);
     void this.loop(envId, state);
+    return true;
   }
 
   stop(envId: string): void {
+    this.closedAt.set(envId, ++this.closes);
     this.tunnels.get(envId)?.controller.abort();
     this.tunnels.delete(envId);
   }

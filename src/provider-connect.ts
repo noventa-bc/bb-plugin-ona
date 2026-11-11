@@ -6,6 +6,9 @@ import { short, STOPPED } from "./reconcile.ts";
 import { daemonEnv, pollSsh, shellQuote, sshCapture, sshCheck, sshExecutor } from "./ssh.ts";
 import { pollUntil } from "./time.ts";
 
+/** A connect whose box was closed after its mark: it opened no tunnel, so it closes none. */
+class TunnelRefused extends Error {}
+
 /** Ona can be slow to wake a dev container; give each SSH check this long. */
 const CHECK_TIMEOUT_MS = 5 * 60_000;
 
@@ -130,6 +133,8 @@ export function connectHelpers(bb: BbPluginApi, deps: ProviderDeps) {
     signal: AbortSignal,
     /** The box wasn't running when this began, so a start is under way (see `readiness`). */
     started = false,
+    /** The tunnels' mark taken before the caller read the machine: a close after it refuses the tunnel. */
+    since: number,
   ) {
     await waitForReady(ona, resource.envId, resource.envName, report, signal, started);
     // Safety rule 1 for every SSH command below: Ona is asked first, and the command runs only on a ready answer.
@@ -148,7 +153,11 @@ export function connectHelpers(bb: BbPluginApi, deps: ProviderDeps) {
       await sshCapture(executor, `mkdir -p ${shellQuote(deps.codexSqliteHome)}`, signal, CHECK_TIMEOUT_MS);
     }
     if (deps.machineDataDir) await ensureLocalMachineRoot(executor, deps.machineDataDir, report, signal);
-    tunnels.ensure(resource.envId);
+    if (!tunnels.ensure(resource.envId, since)) {
+      throw new TunnelRefused(
+        `bb suspended or removed the machine on ${resource.envName} while it connected, so its tunnel stays closed.`,
+      );
+    }
     await deps.markConnected(resource.envId);
     report.step("Opening SSH reverse tunnel to bb server");
     await waitForTunnel(executor, signal);
@@ -166,11 +175,13 @@ export function connectHelpers(bb: BbPluginApi, deps: ProviderDeps) {
     report: PluginMachineProviderProgress,
     signal: AbortSignal,
     started: boolean,
+    since: number,
   ) {
     try {
-      return await connect(resource, resource.key, report, signal, started);
+      return await connect(resource, resource.key, report, signal, started, since);
     } catch (error) {
-      await disconnect(resource.envId);
+      // A refused open left a newer flow's tunnel as it was; closing it would end that flow's tunnel.
+      if (!(error instanceof TunnelRefused)) await disconnect(resource.envId);
       throw error;
     }
   }
