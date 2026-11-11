@@ -480,7 +480,8 @@ test("the daemon probe answers unknown for an exit other than 0 or 1 and for a f
     [255, null],
     [new Error("ssh: connection refused"), null],
   ] as const) {
-    const { daemonAlive } = register({ found: box("RUNNING"), probeExit });
+    const { daemonAlive, calls } = register({ found: box("RUNNING"), probeExit });
     assert.equal(await daemonAlive(adoptedResource, new AbortController().signal), alive, String(probeExit));
+    assert.deepEqual(calls, ["probe"]);
   }
 });

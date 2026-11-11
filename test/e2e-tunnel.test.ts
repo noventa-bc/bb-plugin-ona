@@ -60,7 +60,7 @@ test(
   "a dropped tunnel to a box a good Ona listing leaves out is not reopened (fails if a missing box counts as running)",
   local,
   async () => {
-    const { provider, log, state, tunnelPids, close } = await startHost({
+    const { provider, log, state, envs, tunnelPids, close } = await startHost({
       machineBootstrap: { bootstrap: async () => ({ hostId: "host-1" }) },
       machineResource: async () => null,
     });
@@ -74,7 +74,8 @@ test(
       assert.equal(created.status, "created");
       const [pid] = tunnelPids();
       assert.ok(pid, "the create opened a tunnel");
-      writeFileSync(state, "[]");
+      // The listing still holds a running box: an empty listing reads as unknown, not as a good answer.
+      writeFileSync(state, JSON.stringify(envs().map((env) => ({ ...env, id: "env-2" }))));
       await dropTunnel(pid, log);
       assert.deepEqual(tunnelPids(), [pid], "no second tunnel");
     } finally {
