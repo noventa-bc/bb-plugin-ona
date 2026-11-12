@@ -114,6 +114,51 @@ export function decide(machine: MachineView, ona: OnaView, now: number): Decisio
   return { action: "none", reason: "disconnected briefly (waiting for it to come back)" };
 }
 
+/** A disagreement between bb's view of a box and Ona's, as the `metric mismatch` line names it (src/sync.ts). */
+export type MismatchKind = "active-stopped" | "active-gone" | "suspended-running" | "disconnected-running";
+
+/**
+ * The disagreement between bb's view and Ona's, or null. It only observes: decide() still picks the repair.
+ * An unknown Ona state is no disagreement (rule 4).
+ */
+export function mismatch(machine: MachineView, ona: OnaView): MismatchKind | null {
+  if (ona.kind === "unknown") return null;
+  if (machine.phase === "suspended") return shownRunning(ona) ? "suspended-running" : null;
+  if (machine.phase !== "active") return null;
+  // The gone test decide() uses: missing from two good listings, or Ona says deleted.
+  if (ona.kind === "missing") return ona.streak >= 2 ? "active-gone" : null;
+  if (GONE.has(ona.phase)) return "active-gone";
+  if (machine.status === "connected") return STOPPED.has(ona.phase) ? "active-stopped" : null;
+  return ona.phase === RUNNING ? "disconnected-running" : null;
+}
+
+/** How long a disagreement must last before its `metric mismatch` line is written. */
+export const MISMATCH_HOLD_MS = 120_000;
+
+/** A disagreement carried from one pass to the next; `logged` once its line is written, so each incident logs once. */
+export interface Mismatch {
+  kind: MismatchKind;
+  /** The first pass that saw this kind. */
+  since: number;
+  logged: boolean;
+}
+
+/**
+ * One pass's step for a machine's disagreement (`kind` from mismatch(), null when they agree). `entry` is what the next
+ * pass keeps: none once they agree, and a new one when the kind changes. `log` is set on the one pass where the
+ * disagreement first holds MISMATCH_HOLD_MS.
+ */
+export function trackMismatch(
+  entry: Mismatch | undefined,
+  kind: MismatchKind | null,
+  now: number,
+): { entry?: Mismatch; log?: { kind: MismatchKind; secs: number } } {
+  if (kind === null) return {};
+  const current = entry?.kind === kind ? entry : { kind, since: now, logged: false };
+  if (current.logged || now - current.since < MISMATCH_HOLD_MS) return { entry: current };
+  return { entry: { ...current, logged: true }, log: { kind, secs: Math.round((now - current.since) / 1000) } };
+}
+
 export interface Clock {
   now(): number;
   setTimeout(fn: () => void, ms: number): unknown;

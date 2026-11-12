@@ -4,7 +4,7 @@
 // schedule a pass (watchRealtime). server.ts wires them to bb's commands and
 // the lifecycle-sync service; tests drive them with a fake of the bb calls below.
 import type { BbPluginApi, PluginLogger } from "@get-bb/plugin-sdk";
-import { errorText, isArchived, isRunning, type OnaListing } from "./ona.ts";
+import { errorText, isArchived, isRunning, metric, type OnaListing } from "./ona.ts";
 import type { WakeVia } from "./provider-connect.ts";
 import { PROVIDER_ID, resourceSchema, type OnaResource } from "./provider.ts";
 import {
@@ -22,10 +22,13 @@ import {
   ALL,
   decide,
   GRACE_MS,
+  mismatch,
   NOTHING_DONE,
+  trackMismatch,
   type Decision,
   type HostGuard,
   type MachineView,
+  type Mismatch,
   type OnaView,
   type PassScheduler,
   shownRunning,
@@ -466,6 +469,9 @@ export function createSync(deps: SyncDeps) {
       });
   }
 
+  /** Each machine's disagreement with Ona, carried from pass to pass for the `metric mismatch` line (src/reconcile.ts). */
+  const mismatches = new Map<string, Mismatch>();
+
   /**
    * One reconcile pass over `keys` (host ids, or ALL). Decisions come from
    * `decide` (src/reconcile.ts); actions run in the background under the
@@ -476,6 +482,8 @@ export function createSync(deps: SyncDeps) {
       // Before the read: bb may suspend or remove a machine after it answers, and that close must win.
       const since = tunnels.mark();
       const rows = await machines();
+      // A machine bb no longer lists drops its disagreement, so a later one starts its own hold.
+      for (const hostId of mismatches.keys()) if (!rows.some((row) => row.hostId === hostId)) mismatches.delete(hostId);
       const targets = keys.has(ALL) ? rows : rows.filter((row) => keys.has(row.hostId));
       if (targets.length === 0) return;
       // Host-specific passes come from events where someone may be waiting: keep them fresher.
@@ -503,6 +511,10 @@ export function createSync(deps: SyncDeps) {
         };
         const onaState = await onaView(row.resource.envId, listing);
         const decision = decide(view, onaState, now);
+        const tracked = trackMismatch(mismatches.get(row.hostId), mismatch(view, onaState), now);
+        if (tracked.entry) mismatches.set(row.hostId, tracked.entry);
+        else mismatches.delete(row.hostId);
+        if (tracked.log) bb.log.info(metric("mismatch", { host: row.machine, ...tracked.log }));
         // With autoRepair off, only observed stops and deletions (and the resume a waiting thread asks for) reach bb; tunnels reopen after a reload, and idle releases run below.
         const skipped = !autoRepair && !["none", "suspend-observed", "ensure-tunnel"].includes(decision.action);
         const reason = skipped ? `${decision.reason} (would ${decision.action}; autoRepair is off)` : decision.reason;

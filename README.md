@@ -397,6 +397,7 @@ The plugin writes `metric` lines to its log, which `bb plugin logs ona` prints. 
 - `metric connected via=<create|resume|wake|reconnect> box=<new|stopped|running> secs=<n> ok=<1|0>`: a connect call ended. `box` is `new` once Ona has returned the created box, including a create that fails after that (`ok=0`). Otherwise it is `stopped` when the call started the box, and `running` otherwise, which includes a create that failed before Ona returned a box. `ok=0` means the call failed.
 - `metric delete env=<id> via=<remove|cleanup> git=<known|unknown>`: the plugin deleted a box. `git=known` means Ona reported the box's count of unpushed commits.
 - `metric keep env=<id> via=<remove|cleanup> commits=<n> files=<n>`: the plugin refused to delete a box with unpushed commits or uncommitted files, and kept it.
+- `metric mismatch host=<machine> kind=<active-stopped|active-gone|suspended-running|disconnected-running> secs=<n>`: bb's view of a box has disagreed with Ona's for at least 120 seconds. It is written once per incident, by the first pass that sees the disagreement hold that long, and `secs` runs from the first pass that saw this kind, so it is a lower bound on how long the disagreement lasted. `active-stopped` is bb showing the box connected while Ona has it stopped; `active-gone` is bb showing it active while Ona has deleted it or two listings in a row lack it; `suspended-running` is bb showing it suspended while Ona runs it, which an idle release causes until Ona's own timeout stops the box; `disconnected-running` is bb showing it active but disconnected while Ona runs it.
 
 To print the product numbers from the log:
 
@@ -404,7 +405,7 @@ To print the product numbers from the log:
 f=$(mktemp) && bb plugin logs ona -n 10000 > "$f" && scripts/product-numbers.sh < "$f"
 ```
 
-The script prints one `name value` line per number, in a fixed order. Every name is printed: `0` when nothing matched, and a percentile is `-` when there is no value. After them come one `hand_runs_week_<year>-W<week>` line per ISO week that has hand runs, oldest first. The weeks are UTC.
+The script prints one `name value` line per number, in a fixed order. Every name is printed: `0` when nothing matched, and a percentile is `-` when there is no value. `mismatches` counts the `metric mismatch` lines. After the fixed names come one `mismatches_<kind>` line for each kind a mismatch line names, with each `-` of the kind written as `_` (`mismatches_active_stopped`), and then one `hand_runs_week_<year>-W<week>` line per ISO week that has hand runs, oldest first. The weeks are UTC.
 
 `deletes_refused` counts the boxes a removal refused at least once, not keep lines: a box refused more than once has a keep line for each refusal. `connect_secs_stopped_*` covers the connects that worked (`ok=1`) with `box=stopped` or `box=new`, and `connect_secs_running_*` those with `box=running`. `skipped_lines` counts the input lines that are not log lines: lines that are not a JSON object, and JSON objects whose `ts` is not a number a Date can hold or whose `message` is not a string. A log line whose first word is not `metric` is ignored and is not counted in `skipped_lines`.
 

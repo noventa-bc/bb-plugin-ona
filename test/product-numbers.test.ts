@@ -64,6 +64,11 @@ const FIXTURE = lines(
   logLine("metric cmd name=resume", "2026-11-05T10:00:00Z"),
   logLine("metric cmd name=sync", "2026-11-09T08:00:00Z"),
   logLine("metric cmd name=sync", "2027-01-01T12:00:00Z"),
+  // mismatches 3: two active-stopped lines (both box-1) and one suspended-running (box-2). Each kind gets a line named with
+  // _ for -, so mismatches_active_stopped 2 and mismatches_suspended_running 1.
+  logLine("metric mismatch host=box-1 kind=active-stopped secs=120"),
+  logLine("metric mismatch host=box-1 kind=active-stopped secs=360"),
+  logLine("metric mismatch host=box-2 kind=suspended-running secs=240"),
   // Log lines that are not metric lines, and a metric line of a kind the script does not know: ignored.
   logLine("[plugin:ona] a warning"),
   logLine("metric future env=env-13"),
@@ -95,7 +100,10 @@ test("the fixture's known answer for every number, in the fixed order, with the 
       "connect_secs_stopped_p90 9",
       "connect_secs_running_p50 4",
       "connect_secs_running_p90 9",
+      "mismatches 3",
       "skipped_lines 3",
+      "mismatches_active_stopped 2",
+      "mismatches_suspended_running 1",
       "hand_runs_week_2026-W01 1",
       "hand_runs_week_2026-W45 2",
       "hand_runs_week_2026-W46 1",
@@ -126,6 +134,7 @@ test("empty input prints every number as 0 and every percentile as -", () => {
       "connect_secs_stopped_p90 -",
       "connect_secs_running_p50 -",
       "connect_secs_running_p90 -",
+      "mismatches 0",
       "skipped_lines 0",
     ),
   );
@@ -153,6 +162,7 @@ test("one connect gives its own value at both percentiles, and an empty group pr
       "connect_secs_stopped_p90 7",
       "connect_secs_running_p50 -",
       "connect_secs_running_p90 -",
+      "mismatches 0",
       "skipped_lines 0",
     ),
   );
@@ -187,6 +197,7 @@ test("reordered and unknown keys are read by key", () => {
       "connect_secs_stopped_p90 -",
       "connect_secs_running_p50 3",
       "connect_secs_running_p90 3",
+      "mismatches 0",
       "skipped_lines 0",
       "hand_runs_week_2026-W45 1",
     ),
@@ -300,6 +311,7 @@ test("the metric lines src/ona.ts writes are counted here, one of each kind (fai
       "connect_secs_stopped_p90 4",
       "connect_secs_running_p50 -",
       "connect_secs_running_p90 -",
+      "mismatches 0",
       "skipped_lines 0",
       "hand_runs_week_2026-W45 1",
     ),
