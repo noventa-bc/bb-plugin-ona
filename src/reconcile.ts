@@ -15,7 +15,7 @@ export const GRACE_MS = 45_000;
 export const COOLDOWN_MS = 5 * 60_000;
 export const MAX_BACKOFF_MS = 60 * 60_000;
 export const GIVE_UP_AFTER = 3;
-/** The idle release's action name (src/sync.ts): the one action another action's give-up does not stop (rule 5). */
+/** The idle release's action name (src/sync.ts): the one action `pastGiveUp` lets past another action's give-up (rule 5). */
 export const RELEASE_IDLE = "release-idle";
 
 export interface MachineView {
@@ -267,10 +267,14 @@ export interface HostRecord {
 /** What an action returns when it asked nothing (a listing that failed or left the box out, rule 4): `run` records nothing for it. */
 export const NOTHING_DONE = "nothing done";
 
-/** The idle release goes past another action's give-up, but not a held one: rule 3 owns that record (docs/sync.md rule 5). */
+/**
+ * The idle release goes past another action's give-up for three failed releases, but not past a held one: rule 3 owns
+ * that record (docs/sync.md rule 5).
+ */
 const pastGiveUp = (record: HostRecord, action: string | undefined) =>
   action === RELEASE_IDLE &&
   record.failures >= GIVE_UP_AFTER &&
+  record.failures < 2 * GIVE_UP_AFTER &&
   record.action !== RELEASE_IDLE &&
   !record.threadWaiting;
 

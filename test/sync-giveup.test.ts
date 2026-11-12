@@ -1,7 +1,7 @@
 // The idle release of a machine the guard gave up repairing: the box is still let go, with every hold the release has.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ALL, GIVE_UP_AFTER } from "../src/reconcile.ts";
+import { ALL, GIVE_UP_AFTER, HostGuard, RELEASE_IDLE } from "../src/reconcile.ts";
 import type { ThreadRecord } from "../src/sync.ts";
 import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
 import { HOUR, idle, world } from "./sync-fakes.ts";
@@ -81,21 +81,45 @@ test("a given-up machine is not released while Ona's listing fails (fails if the
     assert.equal(suspends(), 0);
   }));
 
-test("a release bb refuses past a give-up waits out its backoff (fails if it is retried on the next pass)", () =>
+test("a release bb refuses past a give-up backs off 40, then 60 minutes, and stops after three tries (fails if the count is not raised, the backoff is a cooldown or uncapped, or the release never stops)", () =>
   onFakeClock(async () => {
-    const { pass, suspends } = await givenUp({ refuse: REFUSED });
+    const { pass, suspends, guard } = await givenUp({ refuse: REFUSED });
+    const record = () => guard.records.get("h1")!;
     await tick(20 * 60_000);
+    for (const [tries, quietMinutes] of [
+      [1, 40],
+      [2, 60],
+    ] as const) {
+      await pass();
+      assert.equal(suspends(), tries);
+      assert.equal(record().failures, GIVE_UP_AFTER + tries);
+      assert.equal(record().quietUntil, Date.now() + quietMinutes * 60_000);
+      await tick((quietMinutes - 1) * 60_000);
+      await pass();
+      assert.equal(suspends(), tries, "inside the backoff");
+      await tick(60_000);
+    }
     await pass();
-    assert.equal(suspends(), 1);
-    await tick(60_000);
-    await pass();
-    assert.equal(suspends(), 1, "inside the fourth failure's 40-minute backoff");
-    await tick(40 * 60_000);
-    await pass();
-    assert.equal(suspends(), 2);
+    assert.equal(suspends(), 3);
+    for (let i = 0; i < 6; i++) {
+      await tick(HOUR);
+      await pass();
+    }
+    assert.equal(suspends(), 3);
   }));
 
-// The refused release overwrote the repair's record, so bb showing the box connected no longer cleared the give-up.
+test("a forced release that fails past a give-up records its own failure, count 1 (fails if a forced failure keeps the other action's record)", async () => {
+  const guard = new HostGuard();
+  guard.records.set("h1", { action: "heal-daemon", reason: "r", at: 0, failures: GIVE_UP_AFTER, quietUntil: 0 });
+  const refused = async () => {
+    throw new Error(REFUSED);
+  };
+  await assert.rejects(guard.run("h1", RELEASE_IDLE, "idle", refused, { force: true }));
+  assert.equal(guard.records.get("h1")!.action, RELEASE_IDLE);
+  assert.equal(guard.records.get("h1")!.failures, 1);
+});
+
+// A refused release past a give-up keeps the repair's record, so the recovery that clears that record still clears it.
 test("a refused release keeps the repair's give-up, which a connected box clears so a later daemon drop is repaired (fails if the release's failure replaces the repair's record)", () =>
   onFakeClock(async () => {
     const { pass, suspends, box, hosts, calls } = await givenUp({ refuse: REFUSED });
