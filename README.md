@@ -380,7 +380,7 @@ bb machine remove ona:<name>   # created: deletes the box unless it has unpushed
   one suspended in bb but running in Ona needs `bb machine resume ona:<name>`; an active one whose box Ona stopped is started with `bb ona resume <ref>`. Two lines to look for:
   - "ERROR … (run `ona login`?)" at the top: the plugin can't reach Ona, so it
     changes nothing.
-  - "gave up after 3 failures" (only for an active machine): the last error is shown next to it.
+  - "gave up after 3 failures", or a higher count (only for an active machine): the last error is shown next to it.
 
   See [How bb and Ona stay in sync](docs/sync.md).
 
