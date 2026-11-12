@@ -175,8 +175,8 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    **The check.**
    - It looks for a process whose command line names a folder under `~/.bb-machines`, the machine data folder
      (`machineDataDir`) or the box's legacy data folder.
-   - Each folder is matched as given and resolved through symlinks. A relative one is matched as given and resolved
-     against `$HOME`.
+   - Each folder is matched as given and resolved through symlinks. The legacy folder, when relative, is also matched
+     resolved against `$HOME`.
    - A process listing that can't be trusted, a folder path with a newline in it, a failed SSH connection or a timeout
      counts as unknown, and nothing is restarted.
 
@@ -184,11 +184,13 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    - `bb ona sync`, `bb ona reconnect` and `bb ona resume` skip them outright. `bb ona sync` still runs this check.
    - The thread's pass (a pass that finds a thread waiting on a box Ona shows stopped or stopping) forces while no hold
      is set. Before a thread's pass has failed on a box, the thread's pass skips what other passes left.
-   - The idle release also goes past another action's give-up, for up to three failed releases and never past a held
-     one (rule 5).
+
+   The idle release does not force: it only goes past another action's give-up, for up to three failed releases and
+   never past a held one (rule 5, "The idle release").
 
    **The hold.**
    - It starts once a thread's pass has failed on a box. A thread's pass that fails, forced or not, keeps or starts it.
+     A forced thread's pass that fails counts 1 and starts a new hold.
    - While it is set, a success of another, unforced pass does not reset the failure count, and the usual backoff and
      give-up apply.
    - It ends when bb shows the machine connected with its tunnel up on a box Ona shows running: `connected()` ends a
@@ -196,7 +198,7 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
      the box was a daemon repair's.
    - It ends when a thread's pass succeeds.
    - It ends when `bb ona sync`, `bb ona reconnect` or `bb ona resume` acts on the box. A forced run starts a fresh
-     count: its failure counts 1, and starts a new hold when the forced pass was a thread's pass.
+     count: its failure counts 1.
    - Once it ends, a thread's pass is forced again past what other passes left.
 
    **`bb ona reconnect` and `bb ona resume`.** Neither runs the daemon check.
@@ -219,10 +221,10 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    - Suspends, tunnel reopens and idle releases do not wait after a success.
 
    **Backoff and give-up.**
-   - A failure backs off for every other action: 5, then 10 min.
+   - A failure backs off every action on the machine but a CLI update (below): 5, then 10 min.
    - The give-up: the third failure, in a row or across a hold (rule 3), stops automatic tries until a forced run acts
      on the box, the hold ends or, for a daemon repair, the box recovers (rule 3).
-   - `bb ona status` says so for an active machine.
+   - `bb ona status` shows the backoff and the give-up for an active machine.
    - A forced run that fails starts the count again at 1.
    - The exceptions are in rule 3.
 
@@ -231,7 +233,7 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    - So a box whose repairs gave up is still let go once it is idle, after the last failure's quiet period and with
      every hold of the idle rule.
    - A release that fails past that give-up adds one to the count and backs off: 40 minutes, then 60.
-   - It leaves the other action's record in place, so the recovery that clears that record still clears it.
+   - A failed release leaves the other action's record in place, so the recovery that clears that record still clears it.
    - Three failed releases past the give-up stop the release too, as three failed releases in a row do from a fresh
      count.
    - A successful release ends the count and the give-up, unless a hold keeps them (rule 3), and bb's resume
