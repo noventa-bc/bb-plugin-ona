@@ -121,3 +121,20 @@ test("a box Ona lacks that bb refuses to suspend stays active, and its line foll
     await resetFakeClock();
   }
 });
+
+test("an incident first seen by a pass with a slow listing is timed from that pass's start (fails if the hold starts when the listing returns)", async () => {
+  // Bug: the hold started when Ona's listing returned, so a slow listing could delay the line by a whole cycle.
+  enableFakeClock();
+  try {
+    // Pass 1 starts at 0 and its listing takes 30 s; pass 2 starts at 120 s, and its listing is fast.
+    const options: { pluginStartedAt: number; listingMs?: number } = { pluginStartedAt: Date.now(), listingMs: 30_000 };
+    const { sync, logs } = world([idle("h1", { ona: "STOPPED" })], options);
+    await sync.reconcile(new Set([ALL]), { wait: true });
+    delete options.listingMs;
+    await tick(90_000);
+    await sync.reconcile(new Set([ALL]), { wait: true });
+    assert.deepEqual(mismatchLines(logs), [MISMATCH_LINE]);
+  } finally {
+    await resetFakeClock();
+  }
+});
