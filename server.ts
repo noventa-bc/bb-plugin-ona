@@ -148,14 +148,12 @@ export default async function plugin(bb: BbPluginApi) {
   bb.onDispose(() => proxy.close());
   // One cached `ona environment list` for everything that can live with a
   // few seconds' staleness (see OnaSnapshot).
-  // A good listing that shows a box not running ends its keep-alive; an empty
-  // one is unknown (safety rule 4) and changes nothing.
+  // A box the listing shows not running ends its keep-alive; an empty listing, or a
+  // box missing from it, ends none (safety rule 4; see endNotRunning).
   const snapshot = new OnaSnapshot(async () => {
     const envs = await ona.listEnvironments();
-    if (envs.length > 0) {
-      for (const envId of keepAlives.endNotRunning(envs.map((env) => ({ id: env.id, running: isRunning(env) })))) {
-        bb.log.info(`keep-alive for ${envId} ended: Ona no longer lists the box as running`);
-      }
+    for (const envId of keepAlives.endNotRunning(envs.map((env) => ({ id: env.id, running: isRunning(env) })))) {
+      bb.log.info(`keep-alive for ${envId} ended: Ona no longer lists the box as running`);
     }
     return envs;
   });
