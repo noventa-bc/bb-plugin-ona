@@ -6,6 +6,8 @@ import { tick as tickClock } from "./fake-clock.ts";
 
 export const HOUR = 3_600_000;
 export const NOW = Date.now();
+/** The `metric mismatch` line a pass writes for the stopped box `idle("h1")`; its machine name is `ona:env-h1`. */
+export const MISMATCH_LINE = "metric mismatch host=ona:env-h1 kind=active-stopped secs=120";
 
 interface Box {
   hostId: string;

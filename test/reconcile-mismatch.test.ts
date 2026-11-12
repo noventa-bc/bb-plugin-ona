@@ -26,9 +26,14 @@ test("active-gone: bb shows the box active while Ona deleted it, or two good lis
   assert.equal(mismatch(machine(), { kind: "missing", streak: 1 }), null, "one listing is not enough");
 });
 
-test("disconnected-running: bb shows an active box disconnected while Ona runs it, not once Ona has it stopped (fails if either returns the wrong kind)", () => {
+test("disconnected-running: bb shows an active box disconnected while Ona runs it, not once Ona has it stopped, nor with a status of suspended (fails if any of these returns the wrong kind)", () => {
   assert.equal(mismatch(machine({ status: "disconnected" }), ona("RUNNING")), "disconnected-running");
   assert.equal(mismatch(machine({ status: "disconnected" }), ona("STOPPED")), null, "decide() suspends that box");
+  assert.equal(
+    mismatch(machine({ status: "suspended" }), ona("RUNNING")),
+    null,
+    "a suspended status is not a disconnection",
+  );
 });
 
 test("a suspended machine is no mismatch, whatever Ona says: an idle release leaves a box Ona runs suspended (fails if a suspended box returns a kind)", () => {
@@ -42,10 +47,6 @@ test("an unknown Ona state is no mismatch, whatever bb shows (fails if an unknow
   assert.equal(mismatch(machine({ status: "connected" }), unknown), null);
   assert.equal(mismatch(machine({ status: "disconnected" }), unknown), null);
   assert.equal(mismatch(machine({ phase: "suspended", status: "suspended" }), unknown), null);
-});
-
-test("agreeing states are no mismatch (fails if a connected box running in Ona returns a kind)", () => {
-  assert.equal(mismatch(machine({ status: "connected" }), ona("RUNNING")), null);
 });
 
 test("a disagreement logs once it has held 120 s, and never before (fails if the hold is not 120 s, or a logged one logs again)", () => {

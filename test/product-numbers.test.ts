@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { test } from "node:test";
 import { metric } from "../src/ona.ts";
+import { MISMATCH_LINE } from "./sync-fakes.ts";
 
 const SCRIPT = join(import.meta.dirname, "..", "scripts", "product-numbers.sh");
 
@@ -79,7 +80,7 @@ const FIXTURE = lines(
   "null",
 );
 
-test("the fixture's known answer for every number, in the fixed order, with the per-week lines last", () => {
+test("the fixture's known answer for every number, in the fixed order, with the per-week lines last, and a mismatch line with no kind counted in mismatches only (fails if that line gets a kind line)", () => {
   const r = productNumbers(FIXTURE);
   assert.equal(r.status, 0, r.stderr);
   assert.equal(
@@ -290,7 +291,7 @@ test("the metric lines src/ona.ts writes are counted here, one of each kind (fai
       logLine(metric("connected", { via: "create", box: "new", secs: 4, ok: 1 })),
       logLine(metric("delete", { env: "env-2", via: "remove", git: "unknown" })),
       logLine(metric("keep", { env: "env-3", via: "remove", commits: 2, files: 0 })),
-      logLine(metric("mismatch", { host: "box-1", kind: "active-stopped", secs: 120 })),
+      logLine(MISMATCH_LINE),
     ),
   );
   assert.equal(r.status, 0, r.stderr);

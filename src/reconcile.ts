@@ -119,17 +119,18 @@ type MismatchKind = "active-stopped" | "active-gone" | "disconnected-running";
 
 /**
  * The disagreement between bb's view and Ona's, or null. It only observes: decide() still picks the repair. An unknown
- * Ona state (a failed listing) is no disagreement, and the caller then changes nothing for the machine (rule 4).
+ * Ona state (a failed listing) and a box missing from one listing are no disagreement yet; the caller leaves such a
+ * machine's entry as it was (rule 4).
  */
 export function mismatch(machine: MachineView, ona: OnaView): MismatchKind | null {
   if (ona.kind === "unknown") return null;
   if (machine.phase !== "active") return null;
-  // The gone test decide() uses: missing from two good listings, and a lookup by id finds no live box (onaView in
-  // src/sync.ts), or Ona says deleted.
+  // Gone, as decide() reads it: missing from two good listings. decide() does no lookup: onaView in src/sync.ts looks the
+  // id up and reports missing only when no live box turns up. Or Ona says deleted.
   if (ona.kind === "missing") return ona.streak >= 2 ? "active-gone" : null;
   if (GONE.has(ona.phase)) return "active-gone";
   if (machine.status === "connected") return STOPPED.has(ona.phase) ? "active-stopped" : null;
-  return ona.phase === RUNNING ? "disconnected-running" : null;
+  return machine.status === "disconnected" && ona.phase === RUNNING ? "disconnected-running" : null;
 }
 
 /** How long a disagreement must last before its `metric mismatch` line is written. */

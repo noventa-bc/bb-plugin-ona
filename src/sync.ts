@@ -511,8 +511,9 @@ export function createSync(deps: SyncDeps) {
         };
         const onaState = await onaView(row.resource.envId, listing);
         const decision = decide(view, onaState, now);
-        // A failed listing is unknown and changes nothing (rule 4): the entry stays, so the incident neither restarts nor logs twice.
-        if (onaState.kind !== "unknown") {
+        // A failed listing, or one listing that omits the box, is no reading of it (rule 4): the entry stays as it was.
+        const unread = onaState.kind === "unknown" || (onaState.kind === "missing" && onaState.streak < 2);
+        if (!unread) {
           const tracked = trackMismatch(mismatches.get(row.hostId), mismatch(view, onaState), now);
           if (tracked.entry) mismatches.set(row.hostId, tracked.entry);
           else mismatches.delete(row.hostId);

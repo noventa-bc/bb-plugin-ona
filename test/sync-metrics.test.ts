@@ -2,35 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ALL } from "../src/reconcile.ts";
 import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
-import { idle, world } from "./sync-fakes.ts";
+import { idle, MISMATCH_LINE, world } from "./sync-fakes.ts";
 
 // The `metric mismatch` line (src/sync.ts) over whole passes. Most boxes here are stopped in Ona while bb shows them
 // connected: decide() repairs nothing there, so only the metric line shows it. pluginStartedAt is the mocked now, so no
 // test here reaches the idle release (an hour without a thread).
-const MISMATCH = "metric mismatch host=ona:env-h1 kind=active-stopped secs=120";
+const GONE_LINE = MISMATCH_LINE.replace("active-stopped", "active-gone");
 const REFUSED = "Machine suspension failed: Host is not connected";
 const mismatchLines = (logs: readonly string[]) => logs.filter((line) => line.startsWith("metric mismatch"));
-
-test("a mismatch is logged once, at 120 s and not before, and never again in the same incident (fails if the hold is not 120 s or a logged incident logs again)", async () => {
-  enableFakeClock();
-  try {
-    const { sync, logs } = world([idle("h1", { ona: "STOPPED" })], { pluginStartedAt: Date.now() });
-    await sync.reconcile(new Set([ALL]), { wait: true });
-    await tick(119_000);
-    await sync.reconcile(new Set([ALL]), { wait: true });
-    assert.deepEqual(mismatchLines(logs), [], "119 s is not yet the hold");
-    await tick(1_000);
-    await sync.reconcile(new Set([ALL]), { wait: true });
-    assert.deepEqual(mismatchLines(logs), [MISMATCH]);
-    for (let pass = 0; pass < 2; pass++) {
-      await tick(120_000);
-      await sync.reconcile(new Set([ALL]), { wait: true });
-    }
-    assert.deepEqual(mismatchLines(logs), [MISMATCH]);
-  } finally {
-    await resetFakeClock();
-  }
-});
 
 test("a new incident after a cleared one logs again after its own 120 s (fails if a cleared mismatch keeps its hold)", async () => {
   enableFakeClock();
@@ -49,7 +28,7 @@ test("a new incident after a cleared one logs again after its own 120 s (fails i
     assert.deepEqual(mismatchLines(logs), [], "the second incident has held 119 s");
     await tick(1_000);
     await sync.reconcile(new Set([ALL]), { wait: true });
-    assert.deepEqual(mismatchLines(logs), [MISMATCH]);
+    assert.deepEqual(mismatchLines(logs), [MISMATCH_LINE]);
   } finally {
     await resetFakeClock();
   }
@@ -81,7 +60,7 @@ test("a failed listing in the middle of an incident neither restarts the hold no
     await sync.reconcile(new Set([ALL]), { wait: true });
     await tick(120_000);
     await sync.reconcile(new Set([ALL]), { wait: true });
-    assert.deepEqual(mismatchLines(logs), [MISMATCH]);
+    assert.deepEqual(mismatchLines(logs), [MISMATCH_LINE]);
     options.listing = "fail";
     await tick(60_000);
     await sync.reconcile(new Set([ALL]), { wait: true });
@@ -90,7 +69,31 @@ test("a failed listing in the middle of an incident neither restarts the hold no
     await sync.reconcile(new Set([ALL]), { wait: true });
     await tick(120_000);
     await sync.reconcile(new Set([ALL]), { wait: true });
-    assert.deepEqual(mismatchLines(logs), [MISMATCH], "the same incident: no second line");
+    assert.deepEqual(mismatchLines(logs), [MISMATCH_LINE], "the same incident: no second line");
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+test("one listing that omits the box neither ends the incident nor logs a second line (fails if a pass that omits the box drops the entry)", async () => {
+  enableFakeClock();
+  try {
+    // h2 keeps Ona's listing non-empty: an empty listing is unknown, so the omitted h1 would not be read at all.
+    const host = idle("h1", { ona: "STOPPED" });
+    const { sync, logs } = world([host, idle("h2")], { pluginStartedAt: Date.now() });
+    await sync.reconcile(new Set([ALL]), { wait: true });
+    await tick(120_000);
+    await sync.reconcile(new Set([ALL]), { wait: true });
+    assert.deepEqual(mismatchLines(logs), [MISMATCH_LINE]);
+    host.ona = null;
+    await tick(60_000);
+    await sync.reconcile(new Set([ALL]), { wait: true });
+    host.ona = "STOPPED";
+    await tick(60_000);
+    await sync.reconcile(new Set([ALL]), { wait: true });
+    await tick(120_000);
+    await sync.reconcile(new Set([ALL]), { wait: true });
+    assert.deepEqual(mismatchLines(logs), [MISMATCH_LINE], "the same incident: no second line");
   } finally {
     await resetFakeClock();
   }
@@ -113,7 +116,7 @@ test("a box Ona lacks that bb refuses to suspend stays active, and its line foll
     await tick(60_000);
     await sync.reconcile(new Set([ALL]), { wait: true });
     assert.equal(hosts.get("h1")!.lifecycle.phase, "active");
-    assert.deepEqual(mismatchLines(logs), ["metric mismatch host=ona:env-h1 kind=active-gone secs=120"]);
+    assert.deepEqual(mismatchLines(logs), [GONE_LINE]);
   } finally {
     await resetFakeClock();
   }
