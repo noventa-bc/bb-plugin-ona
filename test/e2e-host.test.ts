@@ -66,7 +66,7 @@ test(
 );
 
 test(
-  "a close whose disposal throws still releases the server, the env and the folder, and the disposal's error comes out (fails if the release is skipped after a failed disposal)",
+  "a close whose disposal throws still releases the server, the env and the folder, and the disposal's error comes out when the release works (fails if the release is skipped after a failed disposal)",
   local,
   async () => {
     // Bug: close awaited the disposal before it released the server, the env and the folder, so a disposal that threw left all three.
@@ -124,7 +124,7 @@ test(
         "a folder stays in the temp dir after the failed build",
       );
     } finally {
-      // Leaves the temp dir and the env empty, so a later test's listing of the whole temp dir starts clean.
+      // Empties the temp dir and the helper's env names, so the other tests' listing of the temp dir is clean in any order.
       for (const name of readdirSync(privateTmp)) rmSync(join(privateTmp, name), { recursive: true, force: true });
       for (const key of fakeEnv()) delete process.env[key];
     }
