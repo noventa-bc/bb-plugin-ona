@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { commandArg, devboxCommandInput, inputsChange, ONA_NAME_MESSAGE, savedInputs } from "../src/machine-inputs.ts";
+import {
+  commandArg,
+  devboxCommandInput,
+  inputsChange,
+  ONA_NAME_MESSAGE,
+  savedInputs,
+  switchedInputs,
+} from "../src/machine-inputs.ts";
 import { box, register } from "./provider-fake.ts";
 
 test("a blank field is ready with mode create only, so the defaultProject setting applies", () => {
@@ -72,6 +79,16 @@ test("a bad environment name is blocked quoting ONA_NAME_MESSAGE (fails if adopt
 test("a saved adopt value restores mode and environment (fails if a saved adopt reads back as create)", () => {
   assert.deepEqual(savedInputs({ mode: "adopt", environment: "brave-otter" }), { mode: "adopt", text: "brave-otter" });
   assert.deepEqual(savedInputs({ mode: "adopt" }), { mode: "create", text: "" });
+});
+
+test("a switch clears the typed text, whichever mode it picks (fails if a switch leaves text in the field)", () => {
+  assert.equal(switchedInputs("adopt").text, "");
+  assert.equal(switchedInputs("create").text, "");
+});
+
+test("a switch picks the mode its option names (fails if an option picks the other mode)", () => {
+  assert.equal(switchedInputs("adopt").mode, "adopt");
+  assert.equal(switchedInputs("create").mode, "create");
 });
 
 test("the ready adopt value parses with the provider's inputs schema (fails if the value's shape drifts from the schema)", async () => {

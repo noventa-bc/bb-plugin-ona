@@ -233,7 +233,7 @@ bb thread spawn --project <projectId> --machine ona:<name> \
 The **Ona devbox** option in the environment picker runs the thread on a devbox.
 Its selector picks **Create** (a fresh devbox from the **Ona project** field; a
 blank field uses the `defaultProject` setting) or **Adopt** (an Ona environment
-you already have, named in the **Ona environment** field; bb never deletes it).
+you already have, named in the **Ona environment** field; removing the machine keeps it).
 An environment another bb machine uses is refused.
 
 Check that the agent CLIs are installed and logged in:

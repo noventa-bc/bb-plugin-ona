@@ -35,6 +35,11 @@ export function savedInputs(value: unknown): { mode: DevboxMode; text: string } 
   return { mode: "create", text: typeof saved?.project === "string" ? saved.project : "" };
 }
 
+/** The mode and text after a select pick. The text is cleared: a name typed for one mode is wrong for the other. */
+export function switchedInputs(selected: string): { mode: DevboxMode; text: string } {
+  return { mode: selected === "adopt" ? "adopt" : "create", text: "" };
+}
+
 /** A settings field's text as a devbox command's argument, trimmed. Blank sends none: rename then picks a random
  * name, and keep-alive replies with its usage. */
 export function commandArg(text: string): string | undefined {
