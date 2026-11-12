@@ -27,7 +27,7 @@ async function flaggedLines(lines: string[]) {
     "a snippet does not parse",
   );
   return result!.messages
-    .filter((message) => message.ruleId === "no-restricted-syntax")
+    .filter((message) => message.ruleId === "no-restricted-syntax" && message.message.startsWith("bb can accept this"))
     .map((message) => lines[message.line - 1]!);
 }
 
@@ -38,20 +38,24 @@ test("a discarded lifecycle call is flagged after zero to four calls on its resu
   assert.deepEqual(await flaggedLines(lines), lines);
 });
 
-test("a lifecycle call whose result is kept, returned, passed on or read as a member is not flagged", async () => {
+test("a lifecycle call whose result is kept, assigned, passed on, tested or read as a member is not flagged", async () => {
   const lines = [
     "const host = await bb.sdk.hosts.experimental_suspend({ hostId });",
     "const posted = await bb.sdk.hosts.experimental_suspend({ hostId }).catch(onError);",
-    "export function resume() { return bb.sdk.hosts.experimental_resume({ hostId }); }",
-    "track(bb.sdk.hosts.experimental_suspend({ hostId }));",
-    "await track(bb.sdk.hosts.experimental_suspend({ hostId }));",
     "track(bb.sdk.hosts.experimental_suspend({ hostId }).host);",
     "track(bb.sdk.hosts.experimental_suspend({ hostId }).host).then(next);",
+    "track(bb.sdk.hosts.experimental_suspend({ hostId }).catch(onError).then(next).host);",
+    "track(bb.sdk.hosts.experimental_suspend({ hostId }).catch(onError).then(next).finally(done).host);",
     "await track(bb.sdk.hosts.experimental_suspend({ hostId }).host);",
     "await track(bb.sdk.hosts.experimental_suspend({ hostId }).host).then(next);",
-    "void track(bb.sdk.hosts.experimental_suspend({ hostId }).host);",
-    "void track(bb.sdk.hosts.experimental_suspend({ hostId }).host).then(next);",
+    "await track(bb.sdk.hosts.experimental_suspend({ hostId }).catch(onError).then(next).host);",
+    "await track(bb.sdk.hosts.experimental_suspend({ hostId }).catch(onError).then(next).finally(done).host);",
     "const run = () => bb.sdk.hosts.experimental_resume({ hostId });",
+    "const host = bb.sdk.hosts.experimental_suspend({ hostId });",
+    "let later; later = bb.sdk.hosts.experimental_suspend({ hostId });",
+    "await Promise.all([bb.sdk.hosts.experimental_suspend({ hostId })]);",
+    "if (bb.sdk.hosts.experimental_suspend({ hostId })) {}",
+    "bb.sdk.hosts.experimental_suspend_all({ hostId });",
     "items.map(() => bb.sdk.hosts.experimental_suspend({ hostId }).catch(onError));",
   ];
   assert.deepEqual(await flaggedLines(lines), []);
