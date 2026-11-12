@@ -73,7 +73,7 @@ FACTORY.md step 6 points here. The standing rules are in the reviewer's definiti
 
 ```
 Role: reviewer, pass `adversarial` (`.claude/agents/reviewer-adversarial.md`), `code-review` (`.claude/agents/reviewer-code.md`) or `ponytail-review` (`.claude/agents/reviewer-ponytail.md`, see below)
-Target: worktree `<absolute path>` (a fresh agent starts in the main checkout, so pass this path); commit `<sha>`; base `origin/main`; diff `git -C <worktree> diff origin/main...<sha>`; `ponytail-review` target: `branch`, or the PR link
+Target: worktree `<absolute path>` (a fresh agent starts in the main checkout, so pass this path); commit `<sha>`; base `origin/main`; diff `git -C <worktree> diff origin/main...<sha>`; `ponytail-review` target: `<branch, or the PR link>`
 Scratch folder: `<new absolute path under the session scratchpad>`; node: `<bin folder of the node version in .nvmrc>`
 Link: <the `ln -s` line, or `none`; use it only when `scripts/scratch-copy.sh` reports no `node_modules` link>
 Model: <Haiku at max effort, or Opus at medium with the reason>
