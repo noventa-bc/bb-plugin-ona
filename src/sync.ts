@@ -480,6 +480,8 @@ export function createSync(deps: SyncDeps) {
    */
   async function reconcile(keys: Set<string>, options: { force?: boolean; wait?: boolean } = {}): Promise<void> {
     try {
+      // The metric's hold counts from the pass start, so a slow read does not delay its line by a cycle.
+      const passStart = Date.now();
       // Before the read: bb may suspend or remove a machine after it answers, and that close must win.
       const since = tunnels.mark();
       const rows = await machines();
@@ -515,7 +517,7 @@ export function createSync(deps: SyncDeps) {
         // A failed listing, or one listing that omits the box, is no reading of it (rule 4): the entry stays as it was.
         const unread = onaState.kind === "unknown" || (onaState.kind === "missing" && onaState.streak < 2);
         if (!unread) {
-          const tracked = trackMismatch(mismatches.get(row.hostId), mismatch(view, onaState), now);
+          const tracked = trackMismatch(mismatches.get(row.hostId), mismatch(view, onaState), passStart);
           if (tracked.entry) mismatches.set(row.hostId, tracked.entry);
           else mismatches.delete(row.hostId);
           if (tracked.log) bb.log.info(metric("mismatch", { host: row.machine, ...tracked.log }));

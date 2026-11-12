@@ -30,7 +30,7 @@ the quick fix is right and when it is not.
   only findings with a concrete failing case. Plus the repo's `code-review`
   pass and `/ponytail-review`: the passes step 6 gives a PR, all
   independent of the orchestrator. Blocking findings go back to the builder
-  (step 6 says which block).
+  (`docs/review-standards.md` says which block).
 
 Subagents run on Haiku at max effort by default; the role definitions in
 `.claude/agents/` set it, and a brief for an agent without a definition names
@@ -60,9 +60,8 @@ lines ponytail ends with.
 ## Inputs
 
 - The roadmap is a private document the owner keeps outside the repo. The owner
-  hands its link to the orchestrator in the session. Never write that link, the
-  document's ids or its text into any file in this repo. Refer to items by their
-  roadmap label only (for example "T2", "R9").
+  hands its link to the orchestrator in the session; what of it may enter the
+  repo is `AGENTS.md` Code Review Rule 10.
 - Items carry a size and a status. Work only on items the owner names.
 
 ## Flow
@@ -91,9 +90,11 @@ lines ponytail ends with.
    version to pin, a safety rule to bend, a behaviour change users will see),
    ask before building. Batch the questions into one message.
 4. **Brief** each builder with the task fields of the template in `docs/owner.md`
-   (a reviewer gets the reviewer template there, step 6). The role definitions in
-   `.claude/agents/` hold the standing rules and the report, so a brief does not repeat them.
-5. **Build** in a worktree (slow commands in the background), by the `builder`
+   (a reviewer gets the "Reviewer brief template" there, step 6). The standing rules are in
+   `AGENTS.md` "Subagents" and, for reviewers, `docs/review-standards.md` "How
+   reviewers work" and "Report"; the role definitions in `.claude/agents/` hold
+   only what is particular to the role. A brief repeats none of them.
+5. **Build** in a worktree, by the `builder`
    definition (`.claude/agents/builder.md`): its commands, failing test first,
    mutants, checks, handoff and report are there. The builder leaves the work
    staged for the orchestrator and never commits or pushes.
@@ -104,12 +105,10 @@ lines ponytail ends with.
    files it touches and the ways it could fail, never the orchestrator's own
    verdict), `code-review` (its recipe followed by hand: the Skill itself starts
    many agents) and `/ponytail-review branch`. Brief each with the template in
-   `docs/owner.md`; `.claude/agents/reviewer-adversarial.md`,
-   `reviewer-code.md` and `reviewer-ponytail.md` hold the standing rules and the
-   report. Blocking findings go back to the builder. Code, here, is anything but
-   comments, lint messages, Markdown, a lockfile, a `package.json` override
-   and the version bump (step 7); the ten numbered Code Review Rules in
-   `AGENTS.md` and the rules table in `docs/sync.md` count as code. A PR
+   `docs/owner.md`; the standing rules and the report are where step 4 says,
+   and `.claude/agents/reviewer-adversarial.md`, `reviewer-code.md` and
+   `reviewer-ponytail.md` hold each pass's own part. Blocking findings go back to the builder. Code is what
+   `docs/review-standards.md` counts as code. A PR
    that changes code gets all three passes on its first round, however
    small the change; a PR that changes no code gets the `code-review` pass
    alone (owner, checked 2026-11-05: three passes on a two-line override
@@ -120,24 +119,12 @@ lines ponytail ends with.
    once the passes it gets have run on code that has not changed since.
    Check the ten Code Review Rules in `AGENTS.md`.
 
-   **Converge.** The item's code is the PR's scope, and reviewer briefs name
-   it and ask for anything outside it under a separate "Pre-existing" heading.
-   A finding blocks only when the branch introduced the defect or makes one
-   reachable or worse, when the branch breaks a safety rule or a coupled
-   change, leaves its own behaviour untested where a test is possible,
-   leaves a doc in the diff contradicting the code, or is a big change the
-   owner has not reviewed (`AGENTS.md` "Complexity"). A finding that was
-   already on `main` and that the branch does not make reachable or worse
-   becomes a roadmap item, with its guard, and the PR names it by its label
-   only, whatever severity the reviewer gave it; a credential or a data-loss
-   risk goes to the owner at once as well. After the first round the builder
-   adds no behaviour beyond a fix for a blocking finding: a fix that needs
-   behaviour beyond that is its own item.
+   **Converge.** `docs/review-standards.md` owns the PR's scope (reviewer
+   briefs name it), what blocks, what becomes of a finding already on `main`,
+   and what a later round may add.
    Code converges in three rounds; from round 4 on, the orchestrator opens
    the PR once nothing blocks and the passes it gets have run on the code as
-   it stands. Before a round swaps or retitles a test, run the old test
-   against the mutant its title names: a title can be right for a clause the
-   round misread.
+   it stands.
 
 7. **Open the PR.** The title is a Conventional Commit (`type(scope):
 subject`, see `AGENTS.md`): the squash merge makes it the commit on
@@ -197,7 +184,7 @@ subject`, see `AGENTS.md`): the squash merge makes it the commit on
   this file or `AGENTS.md` counts), the orchestrator may commit on `agent/*`
   branches (builders leave work staged), push them, open
   PRs, and merge a PR with `scripts/pr-merge.sh` once its review has no
-  blocking finding and CI is green. Nobody commits to `main`
+  blocking finding (`docs/review-standards.md`) and CI is green. Nobody commits to `main`
   directly.
 - Installing or bumping a dependency inside an owner-approved task is allowed;
   say in the PR which packages changed. Anything else needs a new approval.
@@ -213,7 +200,7 @@ This file is the memory of the flow. Keep it current:
 - When a bug, a source of noise or a repo hazard shows up (in the code, in CI,
   in a review or in the flow itself), add the guardrail that stops it recurring
   before the PR opens (a finding already on `main` that the branch does not
-  make reachable or worse takes its guard in its roadmap item, step 6): a test with the failing case, a lint rule, a CI step, a
+  make reachable or worse takes its guard in its roadmap item, `docs/review-standards.md`): a test with the failing case, a lint rule, a CI step, a
   `.gitignore` line, or a rule here or in `AGENTS.md`. A finding that is only
   fixed, with no guard, is not closed.
 - When a rule here conflicts with `AGENTS.md`, fix `AGENTS.md` in the same PR
@@ -227,26 +214,16 @@ This file is the memory of the flow. Keep it current:
 
 Rules the owner gave that no section above states. Checked 2026-11-11.
 
-- Several worktrees are open at once and the shell's working directory drifts
-  between them. Address every git command with `git -C <path>` and every file
-  with its absolute path; never rely on `cd`. Run npm as
-  `sh -c "cd <worktree> && npm run check"`: a `cd` at the start of a compound
-  command can be dropped, and `npm` run from a folder without `package.json`
-  walks up and installs into the live checkout.
-- Before any commit, the check runs as its own command (the `sh -c` form above)
-  and its exit code is read before the commit. Never chain `npm run check` into
-  a commit with `;` (the commit runs even when the check fails) or pipe it into
-  grep (the exit code is grep's). `.githooks/pre-commit` (set by `npm install`)
-  runs the checks on every commit; a checkout without the hook reads the exit
-  code by hand (checked 2026-11-03).
-- A subagent does not commit or push. Builders leave work staged, and the
-  orchestrator commits and pushes.
-- A builder that was stopped (the owner's credits ran out, the session ended)
-  cannot be resumed. Its worktree keeps the staged work: review it, finish the
-  handoff and the PR from there instead of starting the task again.
-- The owner may stop the session when the weekly usage limit nears 99%. The
-  orchestrator cannot see the limit; when the owner says to halt, finish the
-  step in hand, write the handoffs and report, and open no new PR.
+- The path, git, npm and exit-code rules in `AGENTS.md` "Subagents" bind the
+  orchestrator too. Before any commit, the check runs as its own command and
+  its exit code is read before the commit. `.githooks/pre-commit` (set by
+  `npm install`) runs the checks on every commit; a checkout without the hook
+  reads the exit code by hand (checked 2026-11-03).
+- A builder that was stopped cannot be resumed. Its worktree keeps the staged
+  work: review it, finish the handoff and the PR from there instead of starting
+  the task again.
+- When the owner says to halt, finish the step in hand, write the handoffs and
+  report, and open no new PR.
 - Every feature the CLI has gets a UI control too, unless the owner says it is
   not needed; the orchestrator asks the owner where it goes (checked 2026-11-05).
 - A commit subject or PR title is at most 100 characters (`scripts/conventional.sh`

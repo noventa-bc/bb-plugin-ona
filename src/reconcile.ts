@@ -149,17 +149,18 @@ export interface Mismatch {
 /**
  * One pass's step for a machine's disagreement. `kind` is mismatch()'s, and null means no kind, which drops the entry.
  * `entry` is what the next pass keeps: a new one when the kind changes, the same one otherwise. `log` is set on the one
- * pass where the disagreement first holds MISMATCH_HOLD_MS.
+ * pass where the disagreement first holds MISMATCH_HOLD_MS. `passStart` is the clock when the pass started
+ * (src/sync.ts); the hold and `secs` are counted between those starts.
  */
 export function trackMismatch(
   entry: Mismatch | undefined,
   kind: MismatchKind | null,
-  now: number,
+  passStart: number,
 ): { entry?: Mismatch; log?: { kind: MismatchKind; secs: number } } {
   if (kind === null) return {};
-  const current = entry?.kind === kind ? entry : { kind, since: now, logged: false };
-  if (current.logged || now - current.since < MISMATCH_HOLD_MS) return { entry: current };
-  return { entry: { ...current, logged: true }, log: { kind, secs: Math.round((now - current.since) / 1000) } };
+  const current = entry?.kind === kind ? entry : { kind, since: passStart, logged: false };
+  if (current.logged || passStart - current.since < MISMATCH_HOLD_MS) return { entry: current };
+  return { entry: { ...current, logged: true }, log: { kind, secs: Math.round((passStart - current.since) / 1000) } };
 }
 
 export interface Clock {

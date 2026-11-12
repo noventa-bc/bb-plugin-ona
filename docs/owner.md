@@ -45,7 +45,7 @@ nothing and don't push; you review, commit and merge. Inside it, `FACTORY.md`
 
 ### Task brief template
 
-The standing rules are in the builder's definition, `.claude/agents/builder.md`; the brief holds only the task:
+The standing rules are in `AGENTS.md` "Subagents"; the builder's definition, `.claude/agents/builder.md`, holds what is particular to the builder. The brief holds only the task:
 
 ```
 Role: builder (`.claude/agents/builder.md`)
@@ -69,13 +69,12 @@ on the settled host, not on the answer.
 
 ### Reviewer brief template
 
-FACTORY.md step 6 points here. The standing rules are in the reviewer's definition, named in `Role:`; the brief holds only the task:
+FACTORY.md step 6 points here. The standing rules are in `AGENTS.md` "Subagents" and `docs/review-standards.md` "How reviewers work" and "Report"; the reviewer's definition, named in `Role:`, holds what is particular to its pass. The brief holds only the task:
 
 ```
 Role: reviewer, pass `adversarial` (`.claude/agents/reviewer-adversarial.md`), `code-review` (`.claude/agents/reviewer-code.md`) or `ponytail-review` (`.claude/agents/reviewer-ponytail.md`, see below)
 Target: worktree `<absolute path>` (a fresh agent starts in the main checkout, so pass this path); commit `<sha>`; base `origin/main`; diff `git -C <worktree> diff origin/main...<sha>`; `ponytail-review` target: `<branch, or the PR link>`
 Scratch folder: `<new absolute path under the session scratchpad>`; node: `<bin folder of the node version in .nvmrc>`
-Link: <the `ln -s` line, or `none`; use it only when `scripts/scratch-copy.sh` reports no `node_modules` link>
 Model: <Haiku at max effort, or Opus at medium with the reason>
 Round: <n>; the passes this round are the ones FACTORY.md step 6 gives it.
 Scope: the item's code (roadmap label `<label>`); anything outside it goes under "Pre-existing".
@@ -92,7 +91,7 @@ The ponytail pass runs as the `reviewer-ponytail` definition (Haiku at max effor
    piece of complexity is worth what the handoff says it costs.
 2. Run `npm run check` in the worktree (outside the sandbox, so every test runs) and read its exit code before the commit in step 3.
 3. Stage files by name and commit.
-4. Apply "Process feedback" proposals to `AGENTS.md` yourself, if they hold up.
+4. Apply "Process feedback" proposals to `AGENTS.md` yourself, if they hold up: agents only propose them.
 5. Remove the worktree: `git worktree remove <worktree>` and `git branch -D agent/<slug>`.
 
 ## Verify after upgrading bb (or reloading the plugin)
@@ -124,6 +123,8 @@ If the release run fails, fix `main` through a PR, then rerun `release.yml`
 from the Actions tab (`workflow_dispatch`) or let the next push to `main` run
 it. Never move a tag: bb's `git:` installs resolve a semver range to tags, so
 a fix ships as a new version.
+
+Once per release, run `/doctor prompt-audit`.
 
 ## Sandbox checks (nono 0.81.0, checked 2026-10-30)
 
