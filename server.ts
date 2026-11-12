@@ -253,9 +253,9 @@ export default async function plugin(bb: BbPluginApi) {
       const unsubscribe = watchRealtime({ bb, scheduler, hostByEnv });
       // Backstop and wake checks: timerTick in src/time.ts has the rules.
       scheduler.schedule(ALL, 0);
-      let tickState = { last: Date.now(), backstopAt: Date.now() };
+      let tickState = { last: Date.now(), backstopAt: performance.now() };
       const tickTimer = setInterval(() => {
-        const step = timerTick(tickState, Date.now());
+        const step = timerTick(tickState, Date.now(), performance.now());
         tickState = step.state;
         if (step.sleptMs !== null) {
           bb.log.info(`woke after ${Math.round(step.sleptMs / 1000)}s asleep, re-checking Ona`);
