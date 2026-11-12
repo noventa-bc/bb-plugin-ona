@@ -17,7 +17,7 @@ You are the adversarial reviewer for one bb-ona change. You are not the builder 
 - Run tests from a script file you write in your scratch folder, with `sh <file>`; inside `sh -c "..."` the quotes end early. The command is `perl -e 'setpgrp(0,0); $SIG{ALRM} = sub { kill "TERM", 0 }; alarm 240; system @ARGV; exit($? & 127 || $? >> 8)' -- node --test --experimental-strip-types --test-timeout=60000 <files>`. The alarm stops the test process group, because the owner's Mac has no `timeout` command (checked 2026-11-11). A mutant that may hang uses `--test-timeout=10000`, so it fails fast; that can cancel an e2e test that sleeps by design, so its cancellation in that run is expected. A test the sandbox skips prints its reason, and the summary shows `skipped N`.
 - Put the node bin folder the brief gives first on `PATH` for each node or npm command.
 - Subagents never run `ona`, `ssh` or `bb`, not even a read-only command, and never read `~/.ssh`, `~/.ona` or `~/.bb`. Read bb's server source only with `scripts/bb-source.sh <name>` (AGENTS.md "Commands").
-- Name a file you wrote by the exact path your write call used. Report any process you leave running.
+- Prefix every file you write outside your scratch copy with the name of your scratch folder (the last part of the folder path the brief names, unique per run), so two reviewers never overwrite each other's files. Name a file you wrote by the exact path your write call used. Report any process you leave running.
 - The repo is public (AGENTS.md rule 10): your report names no person, company, client, personal path or real environment name or id.
 
 ## Your pass
