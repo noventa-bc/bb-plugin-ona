@@ -17,6 +17,7 @@ export type E2eHost = Awaited<ReturnType<typeof startHost>>;
 
 // The agent sandbox blocks localhost; the e2e files run in CI and outside the sandbox.
 export const local = { skip: process.env.NONO_CAP_FILE ? "needs local ports, blocked in the agent sandbox" : false };
+export const asRoot = process.getuid?.() === 0 && "root ignores folder permissions";
 /** Provider call context; a test that asserts on checkpoints overrides `checkpoint`. */
 export const ctx = {
   report: { step() {}, log() {} },
@@ -40,6 +41,8 @@ const FAKE_ENV = ["FAKE_ONA_ENVIRONMENTS", "FAKE_ONA_LOG", "FAKE_ONA_PROJECTS", 
 
 export async function startHost(
   options: Pick<CreateFakePluginHostOptions, "sdk" | "machineBootstrap" | "machineResource">,
+  // A test that needs a plugin failing at start passes its own (test/e2e-host.test.ts).
+  start: typeof plugin = plugin,
 ) {
   const dir = mkdtempSync(join(tmpdir(), "bb-ona-e2e-"));
   const state = join(dir, "environments.json");
@@ -67,7 +70,19 @@ export async function startHost(
       codexSqliteHome: "",
     },
   });
-  await plugin(host.bb);
+  const close = async () => {
+    await host.harness.lifecycle.dispose();
+    health.close();
+    for (const key of FAKE_ENV) delete process.env[key];
+    rmSync(dir, { recursive: true, force: true });
+  };
+  try {
+    await start(host.bb);
+  } catch (error) {
+    // The plugin's error is the one to report: a failing close must not replace it.
+    await close().catch(() => {});
+    throw error;
+  }
   const provider = host.harness.registrations.machineProviders.get("ona")!;
   const envs = (): Env[] => JSON.parse(readFileSync(state, "utf8")) as Env[];
   const patchBox = (envId: string, patch: Partial<Env["status"]>) =>
@@ -101,12 +116,6 @@ export async function startHost(
   const tunnelPids = (): number[] => {
     const file = join(dir, "tunnel-pids");
     return existsSync(file) ? readFileSync(file, "utf8").split("\n").filter(Boolean).map(Number) : [];
-  };
-  const close = async () => {
-    await host.harness.lifecycle.dispose();
-    health.close();
-    rmSync(dir, { recursive: true, force: true });
-    for (const key of FAKE_ENV) delete process.env[key];
   };
   return { host, provider, dir, state, log, envs, patchBox, onaCalls, sshCalls, tunnelPids, close };
 }

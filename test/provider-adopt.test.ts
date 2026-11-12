@@ -76,14 +76,16 @@ const creating = { id: "host-1", name: "Ona devbox 1", phase: "creating", resour
 const cleanup = (fake: ReturnType<typeof register>) =>
   fake.provider.reconcileCleanup({ key: "key-1", report: lifecycle().report, signal: new AbortController().signal });
 
-test("cleanup of an unfinished create leaves a box another machine adopted (fails if cleanup deletes by name alone)", async () => {
-  // Bug: bb's cleanup of host-1 found the box by its key-derived name and deleted the box host-2 had adopted.
-  const fake = register({ found: unfinished, tunnel: "up", machines: [creating, adoptedSince] });
-  assert.equal((await cleanup(fake)).status, "removed");
-  assert.deepEqual(fake.calls, []);
-  assert.deepEqual(fake.tunnels, []);
-  assert.deepEqual(fake.forgotten, []);
-});
+// Bug: bb's cleanup of host-1 found the box by its key-derived name and deleted the box host-2 had adopted.
+for (const phase of ["active", "removing"]) {
+  test(`cleanup of an unfinished create leaves a box another machine (${phase}) adopted (fails if cleanup deletes by name alone, or skips a removing machine)`, async () => {
+    const fake = register({ found: unfinished, tunnel: "up", machines: [creating, { ...adoptedSince, phase }] });
+    assert.equal((await cleanup(fake)).status, "removed");
+    assert.deepEqual(fake.calls, []);
+    assert.deepEqual(fake.tunnels, []);
+    assert.deepEqual(fake.forgotten, []);
+  });
+}
 
 test("cleanup leaves a box another machine adopted, unpushed work and all, without a call (fails if the work check runs first)", async () => {
   const content = { git: { branch: "feat", totalUnpushedCommits: 2 } };
@@ -120,24 +122,26 @@ async function createAgain(setup: Setup) {
   return { ...fake, result, checkpointed };
 }
 
-test("a create run again refuses a box another machine adopted since (fails if the create takes the box over as created)", async () => {
-  // Bug: the create reused the box by its name and checkpointed it as created, so host-1's remove deleted it.
-  const { result, checkpointed, calls, tunnels, forgotten } = await createAgain({
-    found: unfinished,
-    tunnel: "up",
-    machines: [creating, adoptedSince],
+// Bug: the create reused the box by its name and checkpointed it as created, so host-1's remove deleted it.
+for (const phase of ["active", "removing"]) {
+  test(`a create run again refuses a box another machine (${phase}) adopted since (fails if the create takes the box over as created, or skips a removing machine)`, async () => {
+    const { result, checkpointed, calls, tunnels, forgotten } = await createAgain({
+      found: unfinished,
+      tunnel: "up",
+      machines: [creating, { ...adoptedSince, phase }],
+    });
+    assert.ok(result instanceof Error);
+    assert.ok(
+      result.message.startsWith(
+        `ona:m2 (host-2) uses Ona environment ${unfinished.metadata.name}; a box holds one bb machine`,
+      ),
+    );
+    assert.equal(checkpointed, false);
+    assert.deepEqual(calls, []);
+    assert.deepEqual(tunnels, []);
+    assert.deepEqual(forgotten, []);
   });
-  assert.ok(result instanceof Error);
-  assert.ok(
-    result.message.startsWith(
-      `ona:m2 (host-2) uses Ona environment ${unfinished.metadata.name}; a box holds one bb machine`,
-    ),
-  );
-  assert.equal(checkpointed, false);
-  assert.deepEqual(calls, []);
-  assert.deepEqual(tunnels, []);
-  assert.deepEqual(forgotten, []);
-});
+}
 
 test("a create run again reuses its own checkpointed box (fails if the create counts its own host as another machine)", async () => {
   const own = { ...creating, resource: { ...adoptedResource, adopted: false } };
