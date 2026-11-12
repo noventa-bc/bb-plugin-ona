@@ -297,6 +297,11 @@ export class HostGuard {
     return record.failures < GIVE_UP_AFTER && this.clock.now() >= record.quietUntil;
   }
 
+  /** Given up on (rule 5) and not acting now: a forced action may be about to open its tunnel. */
+  gaveUp(hostId: string): boolean {
+    return !this.busy.has(hostId) && (this.records.get(hostId)?.failures ?? 0) >= GIVE_UP_AFTER;
+  }
+
   /**
    * A machine bb shows connected with its tunnel up, on a box Ona shows running: connected() ends a hold, clearing its
    * count and quiet period, and clears a failing daemon repair's count and quiet period. A box with no count and no
@@ -440,3 +445,23 @@ export const DAEMON_PROBE = [
   "done",
   "exit 1",
 ].join("\n");
+
+/**
+ * Closes the tunnel of each box whose active machines the guard has all given up on: an open tunnel counts as activity
+ * to Ona, so it would keep the box awake until the owner acts (docs/sync.md rule 5). A forced action reopens it.
+ */
+export function closeGivenUpTunnels(
+  rows: Array<{ hostId: string; machine: string; phase: string; resource: { envId: string } }>,
+  guard: Pick<HostGuard, "gaveUp">,
+  tunnels: { status(envId: string): string; stop(envId: string): void },
+  log: (line: string) => void,
+): void {
+  for (const { machine, phase, resource } of rows) {
+    if (phase !== "active" || tunnels.status(resource.envId) === "off") continue;
+    // Another machine on the box would reopen the tunnel on its next pass.
+    const onBox = rows.filter((row) => row.phase === "active" && row.resource.envId === resource.envId);
+    if (!onBox.every((row) => guard.gaveUp(row.hostId))) continue;
+    tunnels.stop(resource.envId);
+    log(`${machine}: gave up after ${GIVE_UP_AFTER} failures; closing the tunnel so Ona can stop the idle box`);
+  }
+}

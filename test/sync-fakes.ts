@@ -254,6 +254,7 @@ export function world(
         calls.push(`tunnel ${envId}`);
         return true;
       },
+      stop: (envId) => void calls.push(`close ${envId}`),
     },
     provider: {
       releasing,

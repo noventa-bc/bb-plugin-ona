@@ -7,6 +7,7 @@ import type { BbPluginApi, PluginLogger } from "@get-bb/plugin-sdk";
 import { errorText, isArchived, isRunning, metric, type OnaListing } from "./ona.ts";
 import type { WakeVia } from "./provider-connect.ts";
 import { PROVIDER_ID, resourceSchema, type OnaResource } from "./provider.ts";
+import type { TunnelManager } from "./ssh.ts";
 import {
   lifecycleRefusal,
   machinesToRelease,
@@ -20,6 +21,7 @@ import {
 } from "./lifecycle.ts";
 import {
   ALL,
+  closeGivenUpTunnels,
   decide,
   GRACE_MS,
   mismatch,
@@ -99,11 +101,7 @@ export interface SyncDeps {
   };
   guard: HostGuard;
   /** `mark` and `ensure`'s `since`: src/ssh.ts `TunnelManager`. */
-  tunnels: {
-    status(envId: string): "up" | "connecting" | "off";
-    mark(): number;
-    ensure(envId: string, since: number): boolean;
-  };
+  tunnels: Pick<TunnelManager, "status" | "mark" | "ensure" | "stop">;
   provider: {
     /** Boxes whose next suspend must not stop them; the provider's suspend consumes the entry. */
     releasing: Set<string>;
@@ -484,6 +482,8 @@ export function createSync(deps: SyncDeps) {
       const rows = await machines();
       // A machine bb no longer lists drops its disagreement, so a later one starts its own hold.
       for (const hostId of mismatches.keys()) if (!rows.some((row) => row.hostId === hostId)) mismatches.delete(hostId);
+      // After the mark: this pass reopens nothing it closes here, and a forced pass closes nothing (docs/sync.md rule 5).
+      if (!options.force) closeGivenUpTunnels(rows, guard, tunnels, (line) => bb.log.info(line));
       const targets = keys.has(ALL) ? rows : rows.filter((row) => keys.has(row.hostId));
       if (targets.length === 0) return;
       // Host-specific passes come from events where someone may be waiting: keep them fresher.

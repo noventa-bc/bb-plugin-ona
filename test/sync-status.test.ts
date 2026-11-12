@@ -438,7 +438,8 @@ test("a thread that starts waiting after a no-thread suspend gave up still gets 
     quietUntil: NOW + HOUR,
   });
   await sync.reconcile(new Set(["h1"]), { wait: true });
-  assert.deepEqual(calls, ["suspend h1"]);
+  // The give-up closes the tunnel first (docs/sync.md rule 5); the wake still runs after it.
+  assert.deepEqual(calls, ["close env-h1", "suspend h1"]);
   assert.deepEqual(ona.calls.slice(-connectCalls.length), connectCalls);
   assert.match(guard.records.get("h1")!.reason, /; started it for a waiting thread$/);
 });
