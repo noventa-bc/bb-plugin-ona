@@ -1,5 +1,6 @@
 // A fake host for the provider: the SDK's fake plugin host with a fake `ona`, a fake command channel and a fake
 // tunnel manager. Shared by the provider test files.
+import { after } from "node:test";
 import type { MachineExecutor } from "@get-bb/plugin-sdk";
 import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
 import type { OnaCli, OnaEnvironment } from "../src/ona.ts";
@@ -87,6 +88,13 @@ const untilAborted = (signal: AbortSignal) =>
 
 /** The next entry in turn, the last one repeated. */
 const next = <T>(list: T[]) => (list.length > 1 ? list.shift() : list[0]);
+
+// Each host makes a storage folder in the temp dir, which only its dispose removes: dispose them all when the file's
+// tests are done.
+const hosts: ReturnType<typeof createFakePluginHost>[] = [];
+after(async () => {
+  for (const host of hosts) await host.harness.lifecycle.dispose();
+});
 
 /**
  * The provider in a fake host. `calls` logs the `get` lookups by id that reach Ona, starts, stops, deletes, the
@@ -271,6 +279,7 @@ export function register({
       },
     },
   });
+  hosts.push(host);
   const {
     reconnect: reconnectWithMark,
     daemonAlive,
