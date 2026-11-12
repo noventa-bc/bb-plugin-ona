@@ -69,7 +69,7 @@ export async function capped<T>(
 
 /** The lifecycle timer ticks every 15 s. */
 export const TICK_MS = 15_000;
-/** Backstop window on performance.now(), 120 s less 1 s: 8 ticks timed by libuv's cached clock read a few ms short. */
+/** Backstop window on performance.now(), 120 s less 1 s: 8 ticks timed by libuv's cached clock can read a few ms short. */
 const BACKSTOP_MS = 119_000;
 /** A gap longer than this between two ticks is taken as a sleep: bb's SDK has no wake event. */
 const SLEEP_GAP_MS = 60_000;
