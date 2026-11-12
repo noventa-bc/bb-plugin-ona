@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
-import { capped, pollUntil, sleep } from "../src/time.ts";
+import { capped, pollUntil, sleep, TICK_MS, timerTick, type TickState } from "../src/time.ts";
 import { settle, tick, useFakeClock } from "./fake-clock.ts";
 
 const never = new AbortController().signal;
@@ -148,4 +148,63 @@ test("a cap cut whose run rethrows the cap's reason still names the last step", 
   run.catch(() => {});
   await tick(MINUTE, 30);
   await assert.rejects(run, { message: "Gave up working after 30 minutes; last step: installing" });
+});
+
+/** Feeds timerTick the tick times in order, from `state`, with one value on both clocks; returns the times that backstop. */
+function runTicks(state: TickState, times: number[]) {
+  const backstops: number[] = [];
+  for (const at of times) {
+    const step = timerTick(state, at, at);
+    state = step.state;
+    if (step.backstop) backstops.push(at);
+  }
+  return { backstops, state };
+}
+
+/** The times of `count` ticks after `from`, `gap` ms apart. */
+const ticksAfter = (from: number, count: number, gap = TICK_MS) =>
+  Array.from({ length: count }, (_, i) => from + (i + 1) * gap);
+
+test("ticks that each run late, 50 s apart and none a sleep, backstop on the first tick past the backstop period, not after 8 ticks (fails if the backstop waits for 8 ticks)", () => {
+  assert.deepEqual(runTicks({ last: 0, backstopAt: 0 }, ticksAfter(0, 6, 50_000)).backstops, [150_000, 300_000]);
+});
+
+test("the backstop comes at 119 s exactly (fails at any period but 119 s, or with > instead of >=)", () => {
+  const isBackstop = (at: number) => timerTick({ last: at - TICK_MS, backstopAt: 0 }, at, at).backstop;
+  assert.equal(isBackstop(118_999), false);
+  assert.equal(isBackstop(119_000), true);
+});
+
+test("a gap of exactly 60 s is not a sleep (fails if the sleep test is >= rather than >)", () => {
+  assert.equal(timerTick({ last: 0, backstopAt: 0 }, 60_000, 60_000).sleptMs, null);
+});
+
+test("a gap just over 60 s is a sleep, and its length is reported in ms (fails if a sleep is not reported)", () => {
+  assert.equal(timerTick({ last: 0, backstopAt: 0 }, 60_001, 60_001).sleptMs, 60_001);
+});
+
+test("a sleep's tick is not a backstop (fails if the sleep tick also backstops)", () => {
+  assert.equal(timerTick({ last: 0, backstopAt: 0 }, 10 * MINUTE, 10 * MINUTE).backstop, false);
+});
+
+test("a sleep restarts the backstop period, so the next backstop is the first tick past it after the wake (fails if backstopAt is kept across a sleep, or set from the wall clock)", () => {
+  const wake = 10 * MINUTE;
+  const { state } = runTicks({ last: 0, backstopAt: 0 }, [wake]);
+  assert.deepEqual(runTicks(state, ticksAfter(wake, 8)).backstops, [wake + 120_000]);
+  assert.equal(timerTick({ last: 0, backstopAt: 0 }, wake, 5_000).state.backstopAt, 5_000);
+});
+
+test("a wall clock set back during a long tick gap does not delay the backstop (fails if the backstop is timed on the wall clock, or set from the wall clock)", () => {
+  // The last tick read 45 s. The wall clock was set back 61 s at 90 s, so the next tick, at 121 s, reads 60 s.
+  const step = timerTick({ last: 45_000, backstopAt: 0 }, 60_000, 121_000);
+  assert.equal(step.sleptMs, null);
+  assert.equal(step.backstop, true);
+  assert.equal(step.state.backstopAt, 121_000);
+});
+
+test("a wall clock jumping forward under the sleep gap does not bring the backstop early (fails if the backstop is timed on the wall clock)", () => {
+  // The wall clock jumps 40 s; the monotonic clock has run 104 s of the 119 s window.
+  const step = timerTick({ last: 100_000, backstopAt: 0 }, 140_000, 104_000);
+  assert.equal(step.sleptMs, null);
+  assert.equal(step.backstop, false);
 });
