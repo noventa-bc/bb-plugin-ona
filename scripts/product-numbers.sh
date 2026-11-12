@@ -1,6 +1,7 @@
 #!/bin/sh
 # Prints the product numbers from this plugin's metric log lines, one "name value" line each in a fixed order, then one
-# line per ISO week that has hand runs. Give it the output of bb plugin logs, which prints one JSON log line per line:
+# line per kind of mismatch seen and one per ISO week that has hand runs. Give it the output of bb plugin logs, which
+# prints one JSON log line per line:
 #   f=$(mktemp) && bb plugin logs ona -n 10000 > "$f" && scripts/product-numbers.sh < "$f"
 # A line that is not a JSON log line is counted in skipped_lines; a log line that is not a metric line is ignored.
 set -eu
@@ -76,6 +77,7 @@ const deletes = ofKind("delete");
 // bb retries a refused removal, so one box can have a keep line per retry: the keeps are counted by env, not by line.
 const keeps = ofKind("keep");
 const handRuns = ofKind("cmd");
+const mismatches = ofKind("mismatch");
 const soonAfterLoad = starts.filter((m) => {
   const up = numberOf(m.fields.up);
   return m.fields.via === "resume" && up !== undefined && up < 300;
@@ -111,8 +113,13 @@ const rows = [
   ["connect_secs_stopped_p90", percentile(stopped, 90)],
   ["connect_secs_running_p50", percentile(running, 50)],
   ["connect_secs_running_p90", percentile(running, 90)],
+  ["mismatches", mismatches.length],
   ["skipped_lines", skipped],
 ];
+// One line per kind a mismatch line names, sorted. Each - in a kind is written _ in its name, as in the via names.
+for (const kind of [...new Set(mismatches.map((m) => m.fields.kind))].filter(Boolean).sort()) {
+  rows.push(["mismatches_" + kind.replace(/-/g, "_"), count(mismatches, "kind", kind)]);
+}
 // The labels sort oldest first as text, since the year leads and the week is zero-padded.
 for (const week of [...weeks.keys()].sort()) rows.push(["hand_runs_week_" + week, weeks.get(week)]);
 console.log(rows.map(([name, value]) => name + " " + value).join("\n"));
