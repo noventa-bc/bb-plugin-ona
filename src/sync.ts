@@ -7,7 +7,6 @@ import type { BbPluginApi, PluginLogger } from "@get-bb/plugin-sdk";
 import { errorText, isArchived, isRunning, metric, type OnaListing } from "./ona.ts";
 import type { WakeVia } from "./provider-connect.ts";
 import { PROVIDER_ID, resourceSchema, type OnaResource } from "./provider.ts";
-import type { TunnelManager } from "./ssh.ts";
 import {
   lifecycleRefusal,
   machinesToRelease,
@@ -21,7 +20,6 @@ import {
 } from "./lifecycle.ts";
 import {
   ALL,
-  closeGivenUpTunnels,
   decide,
   GRACE_MS,
   mismatch,
@@ -101,7 +99,11 @@ export interface SyncDeps {
   };
   guard: HostGuard;
   /** `mark` and `ensure`'s `since`: src/ssh.ts `TunnelManager`. */
-  tunnels: Pick<TunnelManager, "status" | "mark" | "ensure" | "stop">;
+  tunnels: {
+    status(envId: string): "up" | "connecting" | "off";
+    mark(): number;
+    ensure(envId: string, since: number): boolean;
+  };
   provider: {
     /** Boxes whose next suspend must not stop them; the provider's suspend consumes the entry. */
     releasing: Set<string>;
@@ -261,7 +263,7 @@ export function createSync(deps: SyncDeps) {
   async function releaseIdleMachines(rows: Row[], actions: Promise<void>[], force: boolean): Promise<void> {
     if (idleMs <= 0) return;
     const now = Date.now();
-    const candidates = rows.filter((row) => row.phase === "active" && guard.mayAct(row.hostId, force));
+    const candidates = rows.filter((row) => row.phase === "active" && guard.mayAct(row.hostId, force, "release-idle"));
     const activity: MachineActivity[] = [];
     for (const row of candidates) {
       const threads = await liveThreads(bb.sdk.threads, row.hostId).catch((error: unknown) => {
@@ -298,7 +300,7 @@ export function createSync(deps: SyncDeps) {
               const refusal = lifecycleRefusal(await suspendWithoutStop(row), SUSPENDED);
               if (refusal) throw new Error(refusal);
             },
-            { cooldown: false, force },
+            { cooldown: false, force, ownGiveUpOnly: true },
           )
           .then(
             () => undefined,
@@ -482,8 +484,6 @@ export function createSync(deps: SyncDeps) {
       const rows = await machines();
       // A machine bb no longer lists drops its disagreement, so a later one starts its own hold.
       for (const hostId of mismatches.keys()) if (!rows.some((row) => row.hostId === hostId)) mismatches.delete(hostId);
-      // After the mark: this pass reopens nothing it closes here, and a forced pass closes nothing (docs/sync.md rule 5).
-      if (!options.force) closeGivenUpTunnels(rows, guard, tunnels, (line) => bb.log.info(line));
       const targets = keys.has(ALL) ? rows : rows.filter((row) => keys.has(row.hostId));
       if (targets.length === 0) return;
       // Host-specific passes come from events where someone may be waiting: keep them fresher.

@@ -288,18 +288,17 @@ export class HostGuard {
     return this.busy.get(hostId);
   }
 
-  /** Whether an automatic action may run now (not busy, not cooling down, not given up). */
-  mayAct(hostId: string, force = false): boolean {
+  /**
+   * Whether an automatic action may run now (not busy, not cooling down, not given up). With `ownAction`, only that
+   * action's own give-up blocks it: the idle release still lets go of a box another action gave up on (rule 5).
+   */
+  mayAct(hostId: string, force = false, ownAction?: string): boolean {
     if (this.busy.has(hostId)) return false;
     if (force) return true;
     const record = this.records.get(hostId);
     if (!record) return true;
-    return record.failures < GIVE_UP_AFTER && this.clock.now() >= record.quietUntil;
-  }
-
-  /** Given up on (rule 5) and not acting now: a forced action may be about to open its tunnel. */
-  gaveUp(hostId: string): boolean {
-    return !this.busy.has(hostId) && (this.records.get(hostId)?.failures ?? 0) >= GIVE_UP_AFTER;
+    const gaveUp = record.failures >= GIVE_UP_AFTER && (ownAction === undefined || record.action === ownAction);
+    return !gaveUp && this.clock.now() >= record.quietUntil;
   }
 
   /**
@@ -326,11 +325,17 @@ export class HostGuard {
     action: string,
     reason: string,
     fn: () => Promise<string | void>,
-    options: { force?: boolean; heavy?: boolean; cooldown?: boolean; threadWaiting?: boolean } = {},
+    options: {
+      force?: boolean;
+      heavy?: boolean;
+      cooldown?: boolean;
+      threadWaiting?: boolean;
+      ownGiveUpOnly?: boolean;
+    } = {},
   ): Promise<boolean> {
     const flagged = this.records.get(hostId)?.threadWaiting === true;
     const force = options.force || (options.threadWaiting === true && !flagged);
-    if (!this.mayAct(hostId, force)) return false;
+    if (!this.mayAct(hostId, force, options.ownGiveUpOnly ? action : undefined)) return false;
     this.busy.set(hostId, action);
     try {
       if (options.heavy) await this.acquire();
@@ -445,23 +450,3 @@ export const DAEMON_PROBE = [
   "done",
   "exit 1",
 ].join("\n");
-
-/**
- * Closes the tunnel of each box whose active machines the guard has all given up on: an open tunnel counts as activity
- * to Ona, so it would keep the box awake until the owner acts (docs/sync.md rule 5). A forced action reopens it.
- */
-export function closeGivenUpTunnels(
-  rows: Array<{ hostId: string; machine: string; phase: string; resource: { envId: string } }>,
-  guard: Pick<HostGuard, "gaveUp">,
-  tunnels: { status(envId: string): string; stop(envId: string): void },
-  log: (line: string) => void,
-): void {
-  for (const { machine, phase, resource } of rows) {
-    if (phase !== "active" || tunnels.status(resource.envId) === "off") continue;
-    // Another machine on the box would reopen the tunnel on its next pass.
-    const onBox = rows.filter((row) => row.phase === "active" && row.resource.envId === resource.envId);
-    if (!onBox.every((row) => guard.gaveUp(row.hostId))) continue;
-    tunnels.stop(resource.envId);
-    log(`${machine}: gave up after ${GIVE_UP_AFTER} failures; closing the tunnel so Ona can stop the idle box`);
-  }
-}
