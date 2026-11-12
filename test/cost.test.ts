@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -113,8 +113,9 @@ test("provider sessions are collected once each, in order", () => {
   assert.deepEqual(ids, ["s1", "s2"]);
 });
 
-test("the Claude collector counts each API response once, including subagents", () => {
+test("the Claude collector counts each API response once, including subagents", (t) => {
   const home = mkdtempSync(join(tmpdir(), "bb-ona-cost-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
   const project = join(home, "projects", "-workspaces-app");
   mkdirSync(join(project, "s1", "subagents"), { recursive: true });
   const usage = {
