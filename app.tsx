@@ -17,6 +17,7 @@ import {
   inputsChange,
   ONA_MACHINE_PROVIDER_ID,
   savedInputs,
+  switchedInputs,
 } from "./src/machine-inputs.ts";
 import { remember } from "./src/move.ts";
 import type { Devbox, DevboxCommand, DevboxCommandReply, rpcContract, ThreadCost } from "./src/rpc.ts";
@@ -248,8 +249,7 @@ const projectInput =
 
 /** The composer's "Ona devbox" field: create from an Ona project (blank means the defaultProject setting), or adopt. */
 function OnaProjectField({ value, onChange }: PluginMachineProviderInputsProps) {
-  const [mode, setMode] = useState(() => savedInputs(value).mode);
-  const [text, setText] = useState(() => savedInputs(value).text);
+  const [{ mode, text }, setInputs] = useState(() => savedInputs(value));
   const id = useId();
   const modeId = `${id}-mode`;
   const helpId = `${id}-help`;
@@ -265,7 +265,7 @@ function OnaProjectField({ value, onChange }: PluginMachineProviderInputsProps) 
       <select
         id={modeId}
         value={mode}
-        onChange={(event) => setMode(event.target.value === "adopt" ? "adopt" : "create")}
+        onChange={(event) => setInputs(switchedInputs(event.target.value))}
         className={projectInput}
       >
         <option value="create">Create</option>
@@ -279,11 +279,11 @@ function OnaProjectField({ value, onChange }: PluginMachineProviderInputsProps) 
         value={text}
         placeholder={adopt ? "Environment name or id" : "Project name or id"}
         aria-describedby={helpId}
-        onChange={(event) => setText(event.target.value)}
+        onChange={(event) => setInputs((inputs) => ({ ...inputs, text: event.target.value }))}
         className={projectInput}
       />
       <span id={helpId} className="text-subtle-foreground">
-        {adopt ? "bb never deletes an adopted environment" : "Blank uses the plugin's defaultProject setting"}
+        {adopt ? "Removing the machine keeps the environment" : "Blank uses the plugin's defaultProject setting"}
       </span>
     </div>
   );
