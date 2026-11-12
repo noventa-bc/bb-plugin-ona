@@ -239,18 +239,25 @@ test("guard: one action per machine, cooldown after it", async () => {
   assert.equal(guard.mayAct("h1"), true);
 });
 
-test("guard: failures back off and give up, a forced run still goes", async () => {
+test("guard: each failure doubles the hold, then gives up; a forced run still goes", async () => {
   const { clock, advance } = fakeClock();
   const guard = new HostGuard(2, clock);
   const fail = async () => {
+    // The action takes time, so a hold must start when it ends, not when it starts.
+    await advance(1_000);
     throw new Error("boom");
   };
   for (let i = 1; i <= GIVE_UP_AFTER; i++) {
+    const backoff = COOLDOWN_MS * 2 ** (i - 1);
     await assert.rejects(guard.run("h1", "heal-daemon", "r", fail));
     assert.equal(guard.records.get("h1")?.failures, i);
-    await advance(COOLDOWN_MS * 2 ** (i - 1));
+    // On the give-up pass the record is the only check of the hold; mayAct stays false.
+    assert.equal(guard.records.get("h1")?.quietUntil, clock.now() + backoff, `failure ${i} backs off ${backoff} ms`);
+    await advance(backoff - 1);
+    assert.equal(guard.mayAct("h1"), false, `failure ${i}: no retry before the hold ends`);
+    await advance(1);
+    assert.equal(guard.mayAct("h1"), i < GIVE_UP_AFTER, `failure ${i}: may act after the backoff, unless it gave up`);
   }
-  assert.equal(guard.mayAct("h1"), false, "gave up");
   assert.equal(await guard.run("h1", "heal-daemon", "r", async () => "ok", { force: true }), true);
   assert.equal(guard.records.get("h1")?.failures, 0);
   assert.match(guard.records.get("h1")!.reason, /ok/);
