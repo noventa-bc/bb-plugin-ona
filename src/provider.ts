@@ -297,10 +297,14 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     }),
   );
 
-  /** A host whose resource carries `key` is this create's own (bb runs create again for a host it is still creating). */
-  async function machineUsing(envId: string, key: string) {
+  /**
+   * A host whose resource carries `key` is this create's own (bb runs create again for a host it is still creating).
+   * `skipRemoving` leaves out hosts bb is removing: bb never takes one back into use.
+   */
+  async function machineUsing(envId: string, key: string, skipRemoving = false) {
     for (const host of await bb.sdk.hosts.list({ includeCreating: true })) {
       if (host.machineProviderId !== PROVIDER_ID) continue;
+      if (skipRemoving && host.lifecycle.phase === "removing") continue;
       const stored = resourceSchema.safeParse(await bb.experimental_machines.getResource(host.id));
       if (stored.success && stored.data.envId === envId && stored.data.key !== key) return host;
     }
@@ -443,11 +447,15 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     async remove({ resource, hostId, report, signal }) {
       const owned = resourceSchema.parse(resource);
       // A box another machine still uses keeps its tunnel, keys and no-stop flag (keyed by the box's id) for that machine.
-      const other = await machineUsing(owned.envId, owned.key);
-      if (other && !owned.adopted) {
-        bb.log.warn(`${other.name} (${other.id}) uses Ona environment ${owned.envName}; removing ${hostId} kept it.`);
-        return { status: "removed" };
+      // A machine bb is also removing doesn't count, so removing both machines closes the tunnel and deletes the box.
+      const other = await machineUsing(owned.envId, owned.key, true);
+      if (other) {
+        const kept = owned.adopted ? "its tunnel and keys" : "it";
+        bb.log.warn(
+          `${other.name} (${other.id}) uses Ona environment ${owned.envName}; removing ${hostId} kept ${kept}.`,
+        );
       }
+      if (other && !owned.adopted) return { status: "removed" };
       // A removal can leave a no-stop flag behind (a suspend bb settled as removing never reaches the provider's
       // suspend). bb awaits a suspend still running before it calls remove, so none reaches the stop step after this.
       if (!other) deps.releasing.delete(owned.envId);
@@ -506,6 +514,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
               `Before adopting it again, start it and ${byHand}.`,
           );
         }
+        // The other machine keeps the box's tunnel, keys and no-stop flag.
         if (other) return { status: "removed" };
         // Closed again: a sync pass's wake can reopen the tunnel while the move-aside runs.
         await disconnect(owned.envId);

@@ -271,14 +271,14 @@ A box holds one bb machine: an adopt is refused when another bb machine has stor
 included); see `create` in `src/provider.ts`. A create run again and `reconcileCleanup()` leave alone a box another bb
 machine has stored since: the create is refused, and the cleanup ends without a delete. `remove()` first asks whether
 another bb machine uses the box: if one does, it deletes nothing and leaves the box's tunnel, keys and no-stop flag to
-that machine; if the question fails, it changes nothing and bb retries. Every other `remove()` path closes the box's
+that machine; if the question fails, it changes nothing and bb retries. A machine bb is also removing does not count
+there (bb never takes it back into use), while an adopt still counts it. Every other `remove()` path closes the box's
 tunnel (`remove` in `src/provider.ts`).
-For an adopted box, `remove()` runs `MOVE_MACHINE_ASIDE` (`src/provider.ts`) with the removed machine's host id, so it
-touches only that machine's data folder and daemon. When no other machine uses the box, `remove()` closes the tunnel
-before and again after the script, since a sync pass's wake can reopen the tunnel meanwhile. The script runs over SSH, only when
-`ona environment get`, made just before, says the box is running (safety rule 1). It stops every process whose command line names bb's
-data folder (bb's daemon among them) and moves the folder aside; the box is
-never deleted.
+For an adopted box, `remove()` runs `MOVE_MACHINE_ASIDE` (`src/provider.ts`) with the removed machine's host id: it
+picks the data folder whose `host-id` holds that id, stops every process whose command line names that folder (bb's
+daemon among them) and moves the folder aside. When no other machine uses the box, `remove()` closes the tunnel before
+and again after the script, since a sync pass's wake can reopen the tunnel meanwhile. The script runs over SSH, only
+when `ona environment get`, made just before, says the box is running (safety rule 1); the box is never deleted.
 To add or change a rule, update `decide()`, its test in
 `test/reconcile.test.ts`, and the table above, all in the same change.
 
