@@ -473,14 +473,30 @@ test("onaRef refuses a trailing newline and the empty name", () => {
   assert.equal(onaRef.safeParse("").success, false, "empty name");
 });
 
-test("devboxPath accepts the empty path and dotted absolute paths (fails if the pattern rejects either)", () => {
-  for (const path of ["", "/workspaces", "/workspaces/.codex-sqlite-bb"]) {
+test("devboxPath accepts the empty path and dotted, underscored or capitalised absolute paths (fails if the pattern rejects one)", () => {
+  for (const path of ["", "/workspaces", "/workspaces/.codex-sqlite-bb", "/my_dir", "/workspaces/Project2"]) {
     assert.equal(devboxPath.safeParse(path).success, true, JSON.stringify(path));
   }
 });
 
 test("devboxPath refuses a relative path, a root or trailing or doubled slash, a space, shell syntax and a newline (fails if the pattern lets one through)", () => {
-  for (const path of ["workspaces", "/", "/workspaces/", "//", "/a b", "/a;b", "/a\n", "/$(x)", '/a"b']) {
+  for (const path of [
+    "workspaces",
+    "/",
+    "/workspaces/",
+    "//",
+    "/a b",
+    "/a;b",
+    "/a\n",
+    "/$(x)",
+    '/a"b',
+    "/$HOME",
+    "/a`b",
+    "/a*",
+    "/a'b",
+    "/a|b",
+    "/a&b",
+  ]) {
     assert.equal(devboxPath.safeParse(path).success, false, JSON.stringify(path));
   }
 });

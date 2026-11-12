@@ -6,7 +6,6 @@ import { accessSync, constants, existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import { onaTimeoutArgs } from "./ona.ts";
-import { systemClock, type Clock } from "./reconcile.ts";
 
 const COMMON_ONA_LOCATIONS = [
   "/opt/homebrew/bin/ona",
@@ -107,15 +106,15 @@ export async function checkOnaLogin(binary: string, timeoutMs = 4_000): Promise<
 /** `check` kept for 5 minutes; `fresh` checks now. */
 export function cachedLogin(
   check: (binary: string) => Promise<OnaLogin>,
-  clock: Pick<Clock, "now"> = systemClock,
+  now: () => number = Date.now,
 ): (binary: string, fresh?: boolean) => Promise<OnaLogin> {
   let cache: { at: number; login: OnaLogin } | null = null;
   return async (binary, fresh = false) => {
-    if (!fresh && cache && clock.now() - cache.at < 5 * 60_000) return cache.login;
+    if (!fresh && cache && now() - cache.at < 5 * 60_000) return cache.login;
     const login = await check(binary);
     // Ona out of reach says nothing about the login: keep the last good one.
     const kept = !login.ok && login.reason === "network" && cache?.login.ok ? cache.login : login;
-    cache = { at: clock.now(), login: kept };
+    cache = { at: now(), login: kept };
     return kept;
   };
 }
@@ -303,7 +302,7 @@ export function createSetup({
     const binary = findOna();
     return planSetup({
       onaBinary: binary,
-      // Checked now, but a network failure keeps the last good login (see onaLogin).
+      // Checked now, but a network failure keeps the last good login (see cachedLogin).
       login: binary ? await onaLogin(binary, true) : null,
       sshConfigured: sshConfigExists(),
       settings: await readGeneralSettings(),
