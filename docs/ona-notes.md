@@ -128,7 +128,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   - `experimental_machines.register` (in-process): `validatePluginMachineProviderDeclaration`.
     The plugin's hook is the `reconcileCleanup` that `validatePluginMachineProviderDeclaration`
     copies from the declaration passed to `experimental_machines.register`.
-- bb's `DELETE /hosts/:id` for a host with a machine provider and `force` unset goes through
+- bb's `DELETE /hosts/:id` for a host with a machine provider and without `force=true` goes through
   `sweepProviderMachine` and `removeMachine`, which calls the provider's `remove` through
   `removeResource`, or the provider's `reconcileCleanup` when the host has no resource.
 - bb 0.49.0's app RPC client (`useRpc`) refuses an input with a key whose value is
