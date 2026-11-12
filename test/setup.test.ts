@@ -3,7 +3,15 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
-import { checkOnaLogin, createSetup, findOnaBinary, planSetup, type GeneralSettings } from "../src/setup.ts";
+import {
+  checkOnaLogin,
+  createSetup,
+  findOnaBinary,
+  ONA_INSTALL_HINT,
+  onaAvailability,
+  planSetup,
+  type GeneralSettings,
+} from "../src/setup.ts";
 
 test("findOnaBinary prefers the configured path, then PATH", () => {
   const dir = mkdtempSync(join(tmpdir(), "ona-bin-"));
@@ -138,6 +146,49 @@ test("planSetup says Ona could not be reached instead of asking for a login", ()
   assert.equal(login.state, "blocked");
   assert.match(login.detail, /could not be reached/);
   assert.doesNotMatch(login.detail, /ona login/);
+});
+
+const sshMissing = () => false;
+const sshPresent = () => true;
+
+test("onaAvailability asks for the ona CLI when none was found (fails if the message or status changes)", () => {
+  assert.deepEqual(onaAvailability(null, sshMissing), { status: "setup-required", message: ONA_INSTALL_HINT });
+});
+
+test("onaAvailability shows Ona as unavailable when it cannot be reached (fails if that is shown as a setup step)", () => {
+  assert.deepEqual(onaAvailability({ ok: false, message: "connection refused", reason: "network" }, sshMissing), {
+    status: "unavailable",
+    message: "Ona could not be reached. (connection refused)",
+  });
+});
+
+test("onaAvailability asks for ona login after any other failed login (fails if one failure reason is shown another way)", () => {
+  for (const reason of ["auth", "unknown"] as const) {
+    assert.deepEqual(
+      onaAvailability({ ok: false, message: "not logged in", reason }, sshMissing),
+      { status: "setup-required", message: "Ona CLI is not logged in: run `ona login`. (not logged in)" },
+      reason,
+    );
+  }
+});
+
+test("onaAvailability asks for the ssh config after a good login (fails if a missing ssh config passes)", () => {
+  assert.deepEqual(onaAvailability(ready.login, sshMissing), {
+    status: "setup-required",
+    message: "Run `ona environment ssh-config` so bb can reach Ona environments over SSH.",
+  });
+});
+
+test("onaAvailability is available after a good login with the ssh config (fails if a complete setup is refused)", () => {
+  assert.deepEqual(onaAvailability(ready.login, sshPresent), { status: "available" });
+});
+
+const neverRead = () => assert.fail("ssh config read before a good login");
+
+test("the ssh config is not read without a good login (fails if the check runs before the login result)", () => {
+  onaAvailability(null, neverRead);
+  onaAvailability({ ok: false, message: "connection refused", reason: "network" }, neverRead);
+  onaAvailability({ ok: false, message: "not logged in", reason: "auth" }, neverRead);
 });
 
 /**

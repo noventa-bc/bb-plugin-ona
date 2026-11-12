@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { envNameForKey } from "../src/names.ts";
-import { onaRef, resourceSchema } from "../src/provider.ts";
+import { devboxOf, onaRef, resourceSchema } from "../src/provider.ts";
 import { tick, useFakeClock } from "./fake-clock.ts";
 import { adoptedResource, box, connectCalls, lifecycle, register } from "./provider-fake.ts";
 
@@ -485,4 +485,39 @@ test("the daemon probe answers unknown for an exit other than 0 or 1 and for a f
     assert.equal(await daemonAlive(adoptedResource, new AbortController().signal), alive, String(probeExit));
     assert.deepEqual(calls, ["probe"]); // one probe and nothing else: an extra SSH or start could wake a stopped box
   }
+});
+
+const devboxRow = {
+  machine: "rapid-mango",
+  hostId: "host_1",
+  status: "connected",
+  resource: { envId: "env-1", envName: "rapid-mango-box", adopted: true, key: "key-1" },
+};
+
+test("devboxOf shows the machine, its box, its status and ssh command, with the tunnel it is given (fails if a field is read from the wrong place)", () => {
+  assert.deepEqual(devboxOf(devboxRow, "up"), {
+    machine: "rapid-mango",
+    hostId: "host_1",
+    envId: "env-1",
+    envName: "rapid-mango-box",
+    status: "connected",
+    tunnel: "up",
+    adopted: true,
+    sshCommand: "ssh env-1.ona.environment",
+  });
+});
+
+test("devboxOf passes each tunnel state through unchanged (fails if the tunnel is fixed to one state)", () => {
+  for (const tunnel of ["up", "connecting", "off"] as const) {
+    assert.equal(devboxOf(devboxRow, tunnel).tunnel, tunnel);
+  }
+});
+
+test("devboxOf shows a suspended, unadopted box as suspended and not adopted (fails if status or adopted is a constant)", () => {
+  const devbox = devboxOf(
+    { ...devboxRow, status: "suspended", resource: { ...devboxRow.resource, adopted: false } },
+    "off",
+  );
+  assert.equal(devbox.status, "suspended");
+  assert.equal(devbox.adopted, false);
 });

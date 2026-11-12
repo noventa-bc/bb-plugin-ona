@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { test } from "node:test";
 import { metric } from "../src/ona.ts";
+import { MISMATCH_LINE } from "./sync-fakes.ts";
 
 const SCRIPT = join(import.meta.dirname, "..", "scripts", "product-numbers.sh");
 
@@ -64,6 +65,12 @@ const FIXTURE = lines(
   logLine("metric cmd name=resume", "2026-11-05T10:00:00Z"),
   logLine("metric cmd name=sync", "2026-11-09T08:00:00Z"),
   logLine("metric cmd name=sync", "2027-01-01T12:00:00Z"),
+  // mismatches 4: two active-stopped lines (both box-1), one disconnected-running (box-2) and one with no kind, which
+  // counts in mismatches and in no kind line. So mismatches_active_stopped 2 and mismatches_disconnected_running 1.
+  logLine("metric mismatch host=box-1 kind=active-stopped secs=120"),
+  logLine("metric mismatch host=box-1 kind=active-stopped secs=360"),
+  logLine("metric mismatch host=box-2 kind=disconnected-running secs=240"),
+  logLine("metric mismatch host=box-3 secs=120"),
   // Log lines that are not metric lines, and a metric line of a kind the script does not know: ignored.
   logLine("[plugin:ona] a warning"),
   logLine("metric future env=env-13"),
@@ -73,7 +80,7 @@ const FIXTURE = lines(
   "null",
 );
 
-test("the fixture's known answer for every number, in the fixed order, with the per-week lines last", () => {
+test("the fixture's known answer for every number, in the fixed order, with the per-week lines last, and a mismatch line with no kind counted in mismatches only (fails if that line gets a kind line)", () => {
   const r = productNumbers(FIXTURE);
   assert.equal(r.status, 0, r.stderr);
   assert.equal(
@@ -95,7 +102,10 @@ test("the fixture's known answer for every number, in the fixed order, with the 
       "connect_secs_stopped_p90 9",
       "connect_secs_running_p50 4",
       "connect_secs_running_p90 9",
+      "mismatches 4",
       "skipped_lines 3",
+      "mismatches_active_stopped 2",
+      "mismatches_disconnected_running 1",
       "hand_runs_week_2026-W01 1",
       "hand_runs_week_2026-W45 2",
       "hand_runs_week_2026-W46 1",
@@ -126,6 +136,7 @@ test("empty input prints every number as 0 and every percentile as -", () => {
       "connect_secs_stopped_p90 -",
       "connect_secs_running_p50 -",
       "connect_secs_running_p90 -",
+      "mismatches 0",
       "skipped_lines 0",
     ),
   );
@@ -153,6 +164,7 @@ test("one connect gives its own value at both percentiles, and an empty group pr
       "connect_secs_stopped_p90 7",
       "connect_secs_running_p50 -",
       "connect_secs_running_p90 -",
+      "mismatches 0",
       "skipped_lines 0",
     ),
   );
@@ -187,6 +199,7 @@ test("reordered and unknown keys are read by key", () => {
       "connect_secs_stopped_p90 -",
       "connect_secs_running_p50 3",
       "connect_secs_running_p90 3",
+      "mismatches 0",
       "skipped_lines 0",
       "hand_runs_week_2026-W45 1",
     ),
@@ -278,6 +291,7 @@ test("the metric lines src/ona.ts writes are counted here, one of each kind (fai
       logLine(metric("connected", { via: "create", box: "new", secs: 4, ok: 1 })),
       logLine(metric("delete", { env: "env-2", via: "remove", git: "unknown" })),
       logLine(metric("keep", { env: "env-3", via: "remove", commits: 2, files: 0 })),
+      logLine(MISMATCH_LINE),
     ),
   );
   assert.equal(r.status, 0, r.stderr);
@@ -300,7 +314,9 @@ test("the metric lines src/ona.ts writes are counted here, one of each kind (fai
       "connect_secs_stopped_p90 4",
       "connect_secs_running_p50 -",
       "connect_secs_running_p90 -",
+      "mismatches 1",
       "skipped_lines 0",
+      "mismatches_active_stopped 1",
       "hand_runs_week_2026-W45 1",
     ),
   );

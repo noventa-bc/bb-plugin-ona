@@ -6,6 +6,8 @@ import { tick as tickClock } from "./fake-clock.ts";
 
 export const HOUR = 3_600_000;
 export const NOW = Date.now();
+/** The `metric mismatch` line a pass writes for the stopped box `idle("h1")`; its machine name is `ona:env-h1`. */
+export const MISMATCH_LINE = "metric mismatch host=ona:env-h1 kind=active-stopped secs=120";
 
 interface Box {
   hostId: string;
@@ -87,6 +89,8 @@ export function world(
   const hostReads: string[] = [];
   const kv = new Map<string, unknown>();
   const releasing = new Set<string>();
+  /** Lines the pass logs with bb.log.info, in order. */
+  const logs: string[] = [];
   const hosts = new Map<string, BbHost>(
     boxes.map((box) => [
       box.hostId,
@@ -227,7 +231,7 @@ export function world(
           set: async (key: string, value: unknown) => void kv.set(key, value),
         },
       },
-      log: { info: () => {}, warn: () => {} },
+      log: { info: (message) => void logs.push(message), warn: () => {} },
     },
     snapshot: listing,
     ona: {
@@ -280,7 +284,7 @@ export function world(
     pluginStartedAt: options.pluginStartedAt ?? NOW - 2 * HOUR,
     signal: options.signal ?? new AbortController().signal,
   });
-  return { sync, calls, guard, kv, hosts, releasing, hostReads, hostByEnv };
+  return { sync, calls, guard, kv, hosts, releasing, hostReads, hostByEnv, logs };
 }
 
 export const idle = (hostId: string, extra: Partial<Box> = {}): Box => ({ hostId, envId: `env-${hostId}`, ...extra });
