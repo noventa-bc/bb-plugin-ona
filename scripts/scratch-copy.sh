@@ -1,15 +1,15 @@
 #!/bin/sh
 # Extracts commit <sha> of <worktree> into a new folder <dir>, for a reviewer to run tests and mutants in
 # without touching <worktree>. The copy has no .git. Its node_modules links to the main checkout's when its
-# package.json and package-lock.json hold the same dependencies as the main checkout's, the package's own version
-# aside. <dir>'s parent folder must already exist, and <dir> must not lie inside any git checkout. Prints the
-# copy's absolute path on stdout; the other messages go to stderr.
+# package.json and package-lock.json are the same as the main checkout's apart from the package's own version;
+# a copy whose commit has its own node_modules keeps it. <dir>'s parent folder must already exist, and <dir>
+# must not lie inside any git checkout. Prints the copy's absolute path on stdout; the other messages go to stderr.
 #   scripts/scratch-copy.sh <worktree> <sha> <dir>
 set -eu
 usage() { echo "usage: scripts/scratch-copy.sh <worktree> <sha> <dir>" >&2; exit 2; }
-# Exits 0 when the JSON files $1 and $2 hold the same content once the package's own version is left out: the
-# top-level one and the lockfile's packages[""] one. Exits 1 when they differ or a file cannot be read or parsed,
-# and node's own message is hidden, since the caller reports the difference.
+# Exits 0 when the JSON files $1 and $2 are the same once the package's own version is left out: the top-level one
+# and the lockfile's packages[""] one. Exits 1 when they differ or a file cannot be read or parsed; node's message is
+# hidden, since the caller reports the difference.
 same_deps() {
   node -e '
     const load = (file) => {
@@ -46,12 +46,10 @@ mkdir "$phys"
 (cd -- "$phys" && tar -x -f -) < "$archive"
 if [ ! -d "$main/node_modules" ]; then
   echo "scratch-copy: did not link node_modules: $main has none" >&2
+# -e misses a link to nothing, which ln -sn would fail on; ln -sn would put the link inside a folder at that name.
+elif [ -e "$phys/node_modules" ] || [ -L "$phys/node_modules" ]; then
+  echo "scratch-copy: did not link node_modules: the commit already has node_modules" >&2
 elif same_deps "$main/package.json" "$phys/package.json" && same_deps "$main/package-lock.json" "$phys/package-lock.json"; then
-  # ln -sn puts the link inside a folder that already exists at that name, so link only where nothing is.
-  if [ -e "$phys/node_modules" ] || [ -L "$phys/node_modules" ]; then
-    echo "scratch-copy: did not link node_modules: the commit already has node_modules" >&2
-    exit 1
-  fi
   ln -sn "$main/node_modules" "$phys/node_modules"
   echo "scratch-copy: linked node_modules to $main/node_modules" >&2
 else
