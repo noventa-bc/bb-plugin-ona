@@ -150,7 +150,16 @@ export function connectHelpers(bb: BbPluginApi, deps: ProviderDeps) {
     await pollSsh(sshUp, "Could not SSH into the devbox", { minutes: 10, intervalMs: 5_000, signal });
     if (deps.waitForSharedHome) await waitForSharedHome(executor, report, signal);
     if (deps.codexSqliteHome) {
-      await sshCapture(executor, `mkdir -p ${shellQuote(deps.codexSqliteHome)}`, signal, CHECK_TIMEOUT_MS);
+      const folder = deps.codexSqliteHome;
+      const { exitCode, output } = await sshCapture(
+        executor,
+        `mkdir -p ${shellQuote(folder)}`,
+        signal,
+        CHECK_TIMEOUT_MS,
+      );
+      if (exitCode !== 0) {
+        throw new Error(`Could not create Codex's folder ${folder}: ${output.trim() || `exit ${exitCode}`}`);
+      }
     }
     if (deps.machineDataDir) await ensureLocalMachineRoot(executor, deps.machineDataDir, report, signal);
     if (!tunnels.ensure(resource.envId, since)) {

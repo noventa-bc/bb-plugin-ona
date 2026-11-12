@@ -28,8 +28,9 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * `rootExits`: the `~/.bb-machines` script's exit codes in turn, the last one repeated.
  * `preflightExit`: the prerequisites check's exit code. Every other command exits 0 unless an option here says
  * otherwise.
- * `sshExits`, `mountExits`, `curlExits`: the SSH, shared-home and tunnel probes' exit codes in turn, the last one
- * repeated (default 0). A failed SSH probe prints "refused". Listing `mountExits` turns the shared-home wait on.
+ * `sshExits`, `mountExits`, `mkdirExits`, `curlExits`: the SSH, shared-home, Codex folder and tunnel probes' exit codes
+ * in turn, the last one repeated (default 0). A failed SSH probe prints "refused", a failed `mkdir` prints "mkdir:
+ * cannot create directory: Not a directory". Listing `mountExits` turns the shared-home wait on.
  * `probeExit`: the daemon probe's exit code, or the error its SSH throws (default 0).
  * `codexHome`: the Codex home is set, so connect runs its `mkdir`.
  * `tunnel`: the box's tunnel is already open, in this state.
@@ -58,6 +59,7 @@ export type Setup = {
   preflightExit?: number;
   sshExits?: number[];
   mountExits?: number[];
+  mkdirExits?: number[];
   curlExits?: number[];
   probeExit?: number | Error;
   codexHome?: boolean;
@@ -116,6 +118,7 @@ export function register({
   preflightExit = 0,
   sshExits = [0],
   mountExits = [],
+  mkdirExits = [],
   curlExits = [],
   probeExit = 0,
   codexHome,
@@ -211,7 +214,7 @@ export function register({
       const probes: [string, string, number[]][] = [
         ["true", "ssh", sshExits],
         ["mountpoint", "mount", mountExits],
-        ["mkdir", "mkdir", []],
+        ["mkdir", "mkdir", mkdirExits],
         ["curl", "curl", curlExits],
         ["bootstrap", "bootstrap", []],
       ];
@@ -219,8 +222,9 @@ export function register({
       if (probe) {
         calls.push(probe[1]);
         const exitCode = next(probe[2]) ?? 0;
-        // As the real probes: only the SSH probe prints why; `mountpoint -q` and `curl -sf` fail silently.
+        // As the real probes: `ssh` and `mkdir` print why; `mountpoint -q` and `curl -sf` fail silently.
         if (exitCode !== 0 && probe[1] === "ssh") onOutput("refused");
+        if (exitCode !== 0 && probe[1] === "mkdir") onOutput("mkdir: cannot create directory: Not a directory");
         return { exitCode };
       }
       if (command[2]?.startsWith("missing=")) {

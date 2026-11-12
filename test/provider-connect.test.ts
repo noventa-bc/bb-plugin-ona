@@ -28,6 +28,25 @@ test("~/.bb-machines exit 6 past the deadline throws with the script output (fai
   assert.equal(calls.filter((call) => call === "root").length, 12, "one try every 10s for 2 minutes");
 });
 
+// Bug: connect ran Codex's mkdir and ignored its exit code, so a folder that was not made still marked the machine
+// connected and started the daemon with CODEX_SQLITE_HOME naming it (Code Review Rule 8).
+test("a Codex folder that cannot be created throws with the mkdir output and connects nothing (fails if the mkdir's exit code is ignored)", async () => {
+  const { created, calls, connected } = start({ found: box("RUNNING"), codexHome: true, mkdirExits: [1] });
+  await assert.rejects(
+    created,
+    /^Error: Could not create Codex's folder \/local\/codex: mkdir: cannot create directory: Not a directory$/,
+  );
+  assert.deepEqual(connected, []);
+  assert.deepEqual(calls, ["get RUNNING", ...gated("ssh", "mkdir")]);
+});
+
+test("a Codex folder that is created connects as before (fails if the check rejects a folder that was made)", async () => {
+  const { created, calls, connected } = start({ found: box("RUNNING"), codexHome: true });
+  assert.equal((await created).status, "created");
+  assert.deepEqual(connected, ["env-1"]);
+  assert.deepEqual(calls, ["get RUNNING", ...gated("ssh", "mkdir", "curl", "preflight", "bootstrap")]);
+});
+
 test("a STARTING box that settles to STOPPING waits for the stop, then starts (fails if it starts a stopping box)", async () => {
   const { created, calls, tunnels } = start({
     found: box("STARTING"),
