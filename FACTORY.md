@@ -224,6 +224,8 @@ Rules the owner gave that no section above states. Checked 2026-11-11.
   the task again.
 - When the owner says to halt, finish the step in hand, write the handoffs and
   report, and open no new PR.
+- Removing a command or a setting is released as a minor version: its PR title is
+  `feat`, never `feat!`, and the PR body says what users lose (checked 2026-11-12).
 - Every feature the CLI has gets a UI control too, unless the owner says it is
   not needed; the orchestrator asks the owner where it goes (checked 2026-11-05).
 - A commit subject or PR title is at most 100 characters (`scripts/conventional.sh`

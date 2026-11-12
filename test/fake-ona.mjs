@@ -4,7 +4,6 @@
 // `environment get` answers from that file, then $FAKE_ONA_GET, then the real
 // CLI's not-found messages. argv is logged to $FAKE_ONA_LOG; $FAKE_ONA_FAIL
 // fails every call with that message.
-import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 
 const { FAKE_ONA_FAIL, FAKE_ONA_LOG, FAKE_ONA_ENVIRONMENTS, FAKE_ONA_GET, FAKE_ONA_PROJECTS } = process.env;
@@ -76,9 +75,5 @@ if (group === "project" && verb === "list") {
       env.metadata.name = flag("--name");
       save();
       break;
-    case "keep-alive": {
-      const command = args.slice(args.indexOf("--") + 1);
-      process.exit(spawnSync(command[0], command.slice(1), { stdio: "inherit" }).status ?? 1);
-    }
   }
 }

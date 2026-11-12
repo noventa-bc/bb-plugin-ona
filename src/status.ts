@@ -1,6 +1,5 @@
 // `bb ona status`: statusRows builds one row per Ona-backed machine from a sync pass's state (bb's view beside Ona's,
 // the box facts and the last action), and formatStatus prints the rows as text.
-import { clockTime } from "./keepalive.ts";
 import { boxFacts, errorText, reasonOf, type BoxFacts } from "./ona.ts";
 import { GIVE_UP_AFTER, RELEASE_IDLE, type HostGuard } from "./reconcile.ts";
 import type { Row, SyncBb, SyncDeps } from "./sync.ts";
@@ -23,8 +22,6 @@ export interface StatusRow {
   /** The last action the plugin took (or the one in flight). */
   last: { action: string; reason: string; at: number; error?: string } | null;
   retry: string | null;
-  /** When a `bb ona keep-alive` ends, epoch ms. */
-  keepAliveUntil: number | null;
   /** Workspaces bb gave up on, or whose retry is over a minute late (see workspaceWork); null when bb's workspace list couldn't be read. */
   needsRecovery: number | null;
   /** Busy threads with no update for `STUCK_THREAD_MS`; they hold the box. Null when bb's thread list couldn't be read. */
@@ -84,7 +81,6 @@ export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()
       );
     }
     if (row.retry) rowLines.push(`  ${row.retry}`);
-    if (row.keepAliveUntil) rowLines.push(`  keep-alive until ${clockTime(row.keepAliveUntil)}`);
     if (row.needsRecovery === null || row.stuckThreads === null) {
       rowLines.push("  bb's workspace or thread list couldn't be read; an active box stays awake until it can");
     }
@@ -113,12 +109,11 @@ interface StatusRowsDeps {
   guard: HostGuard;
   tunnels: SyncDeps["tunnels"];
   workspaces(hostId: string, now: number): Promise<{ needsRecovery: number } | null>;
-  keepAliveUntil: SyncDeps["keepAliveUntil"];
 }
 
 /** The `statusRows(ref?)` of a sync pass: one row per Ona-backed machine, or only the machine `ref` names. */
 export function createStatusRows(deps: StatusRowsDeps) {
-  const { bb, snapshot, machines, matchesRef, missing, guard, tunnels, workspaces, keepAliveUntil } = deps;
+  const { bb, snapshot, machines, matchesRef, missing, guard, tunnels, workspaces } = deps;
 
   async function statusRows(ref?: string): Promise<StatusRow[]> {
     const listing = await snapshot.get().catch(() => snapshot.latest);
@@ -171,7 +166,6 @@ export function createStatusRows(deps: StatusRowsDeps) {
                 : record.quietUntil > now
                   ? `retrying after ${new Date(record.quietUntil).toLocaleTimeString()}`
                   : null,
-          keepAliveUntil: keepAliveUntil(row.resource.envId),
           needsRecovery: work?.needsRecovery ?? null,
           stuckThreads: threads === null ? null : stuckThreads(threads, now),
         };
