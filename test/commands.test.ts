@@ -189,6 +189,10 @@ function fakeRun(
       },
       log: { info: (message: string) => void logs.push(message) },
     },
+    updateClis: async (options: { ref?: string; force?: boolean }) => {
+      calls.push(`updateClis ${options.ref} ${options.force}`);
+      return ["up to date"];
+    },
     tunnels: { status: () => "up", mark: () => 0 },
     statusRows: async () => [],
     onaHealth: () => ({ lastError: null, listedAt: null, autoRepair: false }),
@@ -317,6 +321,12 @@ test("reconnect on an active machine reconnects it", async () => {
   const { run, calls } = fakeRun();
   assert.deepEqual(await run("reconnect", "box"), { exitCode: 0, stdout: "Reconnected ona:box" });
   assert.deepEqual(calls, ["reconnect env_1"]);
+});
+
+test("update <host id> runs the CLI update for that box with no force, as the Update CLIs button sends it (fails if the ref or the force flag changes)", async () => {
+  const { run, calls } = fakeRun();
+  assert.deepEqual(await run("update", "host_1"), { exitCode: 0, stdout: "up to date" });
+  assert.deepEqual(calls, ["updateClis host_1 false"]);
 });
 
 test("reconnect refuses when a guard action takes the machine while Ona is listed, and never calls the provider", async () => {

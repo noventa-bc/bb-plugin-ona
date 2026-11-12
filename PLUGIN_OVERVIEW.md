@@ -18,8 +18,8 @@ and you drive them from bb as usual.
 - **Move to devbox** in a devbox thread's menu (or `bb ona move <thread-id> <ref>`)
   continues the thread in a new thread on another devbox, at the same path.
 - **Ona devboxes** in the plugin's settings: each devbox's status (`bb ona status`), with a Sync all button,
-  and per devbox Sync, Reconnect and Resume buttons plus Rename and Keep awake controls, all running the same
-  `bb ona` commands.
+  and per devbox Sync, Reconnect, Resume and Update CLIs buttons plus Rename and Keep awake controls, all running
+  the same `bb ona` commands.
 - **Shell access**: `ssh "$(bb ona host <ref>)"` (or `bb ona ssh <ref>`, which prints the command),
   `bb ona shell <ref> -- <command>` to run one command in the checkout, `bb ona open <ref>` for your
   Ona editor, and bb's terminal panel on the devbox.
