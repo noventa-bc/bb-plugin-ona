@@ -29,8 +29,9 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * `preflightExit`: the prerequisites check's exit code. Every other command exits 0 unless an option here says
  * otherwise.
  * `sshExits`, `mountExits`, `mkdirExits`, `curlExits`: the SSH, shared-home, Codex folder and tunnel probes' exit codes
- * in turn, the last one repeated (default 0). A failed SSH probe prints "refused", a failed `mkdir` prints "mkdir:
- * cannot create directory: Not a directory". Listing `mountExits` turns the shared-home wait on.
+ * in turn, the last one repeated (default 0). A failed SSH probe prints "refused". Listing `mountExits` turns the
+ * shared-home wait on. `mkdirOutput`: what a failed `mkdir` prints, by default:
+ * "mkdir: cannot create directory: Not a directory".
  * `probeExit`: the daemon probe's exit code, or the error its SSH throws (default 0).
  * `codexHome`: the Codex home is set, so connect runs its `mkdir`.
  * `tunnel`: the box's tunnel is already open, in this state.
@@ -60,6 +61,7 @@ export type Setup = {
   sshExits?: number[];
   mountExits?: number[];
   mkdirExits?: number[];
+  mkdirOutput?: string;
   curlExits?: number[];
   probeExit?: number | Error;
   codexHome?: boolean;
@@ -119,6 +121,7 @@ export function register({
   sshExits = [0],
   mountExits = [],
   mkdirExits = [],
+  mkdirOutput = "mkdir: cannot create directory: Not a directory",
   curlExits = [],
   probeExit = 0,
   codexHome,
@@ -224,7 +227,7 @@ export function register({
         const exitCode = next(probe[2]) ?? 0;
         // As the real probes: `ssh` and `mkdir` print why; `mountpoint -q` and `curl -sf` fail silently.
         if (exitCode !== 0 && probe[1] === "ssh") onOutput("refused");
-        if (exitCode !== 0 && probe[1] === "mkdir") onOutput("mkdir: cannot create directory: Not a directory");
+        if (exitCode !== 0 && probe[1] === "mkdir") onOutput(mkdirOutput);
         return { exitCode };
       }
       if (command[2]?.startsWith("missing=")) {

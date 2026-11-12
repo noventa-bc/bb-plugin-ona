@@ -158,7 +158,10 @@ export function connectHelpers(bb: BbPluginApi, deps: ProviderDeps) {
         CHECK_TIMEOUT_MS,
       );
       if (exitCode !== 0) {
-        throw new Error(`Could not create Codex's folder ${folder}: ${output.trim() || `exit ${exitCode}`}`);
+        const why = output.trim().slice(-300) || `exit ${exitCode}`;
+        throw new Error(
+          `Could not create Codex's folder ${folder}: ${why}. Set the plugin's \`codexSqliteHome\` setting to a folder the devbox can create.`,
+        );
       }
     }
     if (deps.machineDataDir) await ensureLocalMachineRoot(executor, deps.machineDataDir, report, signal);
