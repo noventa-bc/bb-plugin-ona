@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { mismatch, trackMismatch, type Mismatch, type MachineView, type OnaView } from "../src/reconcile.ts";
-import { ona } from "./sync-fakes.ts";
 
 const machine = (overrides: Partial<MachineView> = {}): MachineView => ({
   hostId: "h1",
@@ -12,6 +11,7 @@ const machine = (overrides: Partial<MachineView> = {}): MachineView => ({
   threadWaiting: false,
   ...overrides,
 });
+const ona = (phase: string): OnaView => ({ kind: "env", phase: `ENVIRONMENT_PHASE_${phase}` });
 
 test("active-stopped: bb shows the box connected while Ona has it stopped (fails if that state returns no kind)", () => {
   assert.equal(mismatch(machine({ status: "connected" }), ona("STOPPED")), "active-stopped");
