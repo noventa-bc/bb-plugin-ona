@@ -15,7 +15,7 @@ same_deps() {
     const load = (file) => {
       const json = JSON.parse(require("node:fs").readFileSync(file, "utf8"));
       delete json.version;
-      if (json.packages && json.packages[""]) delete json.packages[""].version;
+      delete json.packages?.[""]?.version;
       return JSON.stringify(json);
     };
     process.exitCode = load(process.argv[1]) === load(process.argv[2]) ? 0 : 1;

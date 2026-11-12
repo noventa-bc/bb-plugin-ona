@@ -111,7 +111,10 @@ test("the copy holds the commit with no .git, and its node_modules links to the 
 
 test("node_modules is not linked when the commit's package-lock.json differs from the main checkout's, and says why", () => {
   const { worktree } = checkouts();
-  writeFileSync(join(worktree, "package-lock.json"), '{ "lockfileVersion": 4 }\n');
+  writeFileSync(
+    join(worktree, "package-lock.json"),
+    lockfile("1.0.0").replace('"lockfileVersion": 3', '"lockfileVersion": 4'),
+  );
   git(worktree, env, "add", "package-lock.json");
   const sha = commit(worktree, "lock");
   const dir = newDir();
