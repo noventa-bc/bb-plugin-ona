@@ -475,8 +475,8 @@ test("reconnect names the first non-blank line of Ona's error, or no listing whe
 
 const TERMINAL_ID = "run-7f3";
 
-/** `bb ona shell box -- make` with bb reporting `terminal` for its run (null: bb no longer knows it). */
-function shellRun(terminal: TerminalInfo | null) {
+/** `bb ona shell box -- make` with bb reporting `terminal` for its run (null: bb no longer knows it), in context `ctx`. */
+function shellRun(terminal: TerminalInfo | null, ctx: { signal?: AbortSignal } = {}) {
   const backend: ShellBackend = {
     createTerminal: async () => ({ id: TERMINAL_ID, status: "running", exitCode: null }),
     getTerminal: async () => terminal,
@@ -486,7 +486,7 @@ function shellRun(terminal: TerminalInfo | null) {
     shellTarget: async () => ({ hostId: "host_1", cwd: null, boxName: "box" }),
     shellBackend: backend,
   } as unknown as OnaCommandDeps;
-  return onaCommands(deps)(["shell", "box", "--", "make"], {});
+  return onaCommands(deps)(["shell", "box", "--", "make"], ctx);
 }
 
 // Bug: a run whose exit code bb could not read exited 1 with no message, so it looked like a failed command.
@@ -520,4 +520,14 @@ test("a run still alive when its 10-minute wait ends exits 124 with the Still ru
   } finally {
     await resetFakeClock();
   }
+});
+
+test("a run whose signal is aborted before its first poll exits 124 with the Still running note, as today (fails if a poll runs after the abort, or a run created as running is not counted as still running)", async () => {
+  // Were it polled, bb would report an exit 0: the 124 shows that the wait never polled.
+  const signal = AbortSignal.abort();
+  assert.deepEqual(await shellRun({ id: TERMINAL_ID, status: "exited", exitCode: 0 }, { signal }), {
+    exitCode: 124,
+    stdout: "out\n",
+    stderr: `Still running after 10 minutes. Follow it with: bb terminal attach ${TERMINAL_ID}`,
+  });
 });
