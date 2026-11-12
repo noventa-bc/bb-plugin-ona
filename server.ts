@@ -251,14 +251,14 @@ export default async function plugin(bb: BbPluginApi) {
     async start(signal) {
       scheduler.start();
       const unsubscribe = watchRealtime({ bb, scheduler, hostByEnv });
-      // Backstop: a pass now, then every 8th 15s tick. A gap over 60s between ticks is a sleep (no SDK wake event).
+      // Backstop and wake checks: timerTick in src/time.ts has the rules.
       scheduler.schedule(ALL, 0);
-      let tickState = { last: Date.now(), count: 0 };
+      let tickState = { last: Date.now(), backstopAt: Date.now() };
       const tickTimer = setInterval(() => {
         const step = timerTick(tickState, Date.now());
         tickState = step.state;
-        if (step.slept !== null) {
-          bb.log.info(`woke after ${Math.round(step.slept / 1000)}s asleep, re-checking Ona`);
+        if (step.sleptMs !== null) {
+          bb.log.info(`woke after ${Math.round(step.sleptMs / 1000)}s asleep, re-checking Ona`);
           void snapshot
             .refresh()
             .catch((error: unknown) => bb.log.warn(`Ona listing after wake failed: ${errorText(error)}`))

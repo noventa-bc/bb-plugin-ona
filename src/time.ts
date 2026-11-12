@@ -67,29 +67,32 @@ export async function capped<T>(
   }
 }
 
-/** The lifecycle timer ticks every 15 s; every BACKSTOP_TICKS-th tick is the backstop, 2 minutes apart. */
+/** The lifecycle timer ticks every 15 s. */
 export const TICK_MS = 15_000;
-const BACKSTOP_TICKS = 8;
-/** A gap longer than this between two ticks means the process slept: bb's SDK has no wake event. */
+/** A backstop pass comes on the first tick at least this long after the last backstop or wake. */
+const BACKSTOP_MS = 120_000;
+/** A timer can fire a few ms early, so a tick 1 s short of BACKSTOP_MS still counts, not a whole tick later. */
+const BACKSTOP_SLACK_MS = 1_000;
+/** A gap longer than this between two ticks is taken as a sleep: bb's SDK has no wake event. */
 const SLEEP_GAP_MS = 60_000;
 
-/** What timerTick keeps between ticks: when the last tick ran, and the ticks since the last backstop or sleep. */
+/** What timerTick keeps between ticks: when the last tick ran, and when the last backstop or wake was. */
 export interface TickState {
   last: number;
-  count: number;
+  backstopAt: number;
 }
 
 /**
- * One tick at `now`. `slept` is the gap in ms when the tick came after a sleep, else null. A sleep restarts the count
- * and its tick is never a backstop: the pass the sleep schedules covers that moment, so no second pass follows it.
+ * One tick at `now`. `sleptMs` is the gap in ms when the tick is taken as a sleep, else null. A sleep sets
+ * `backstopAt`, and its tick is never a backstop: the pass the sleep schedules covers that moment, so the tick adds
+ * no pass of its own. A clock that stepped back is a backstop, since `backstopAt` would otherwise stay in the future.
  */
 export function timerTick(
   state: TickState,
   now: number,
-): { state: TickState; slept: number | null; backstop: boolean } {
+): { state: TickState; sleptMs: number | null; backstop: boolean } {
   const gap = now - state.last;
-  if (gap > SLEEP_GAP_MS) return { state: { last: now, count: 0 }, slept: gap, backstop: false };
-  const count = state.count + 1;
-  const backstop = count === BACKSTOP_TICKS;
-  return { state: { last: now, count: backstop ? 0 : count }, slept: null, backstop };
+  if (gap > SLEEP_GAP_MS) return { state: { last: now, backstopAt: now }, sleptMs: gap, backstop: false };
+  const backstop = now < state.backstopAt || now - state.backstopAt >= BACKSTOP_MS - BACKSTOP_SLACK_MS;
+  return { state: { last: now, backstopAt: backstop ? now : state.backstopAt }, sleptMs: null, backstop };
 }
