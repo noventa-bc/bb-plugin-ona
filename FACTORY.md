@@ -51,10 +51,11 @@ The ponytail plugin (`docs/owner.md` has the install) is the "least code"
 ruleset for every agent in the flow. At session start the orchestrator checks
 its skills are listed (`/reload-plugins` after an install) and sets `/ponytail full`. Its hooks inject the ruleset into
 subagents, so briefs state the scope and need not repeat it. Reviews run
-`/ponytail-review` on a named target (`branch`, or the PR link). A
-builder marks a known limit with a `shortcut:` comment (never an unfixed
-weakness: that goes to the private roadmap); its handoff carries
-those and the "skipped or not checked" lines ponytail ends with.
+`/ponytail-review` on a named target (`branch`, or the PR link) in the
+`reviewer-ponytail` agent, briefed as `docs/owner.md` says. A builder marks a
+known limit with a `shortcut:` comment (never an unfixed weakness: that goes to
+the private roadmap); its handoff carries those and the "skipped or not checked"
+lines ponytail ends with.
 
 ## Inputs
 
@@ -103,11 +104,9 @@ those and the "skipped or not checked" lines ponytail ends with.
    files it touches and the ways it could fail, never the orchestrator's own
    verdict), `code-review` (its recipe followed by hand: the Skill itself starts
    many agents) and `/ponytail-review branch`. Brief each with the template in
-   `docs/owner.md`; `.claude/agents/reviewer-adversarial.md` and
-   `reviewer-code.md` hold the standing rules: read-only, scratch folder, tests and
-   report. The ponytail pass runs as a general-purpose agent on Haiku at max
-   effort, briefed as `docs/owner.md` says. Blocking findings go back to the
-   builder. Code, here, is anything but
+   `docs/owner.md`; `.claude/agents/reviewer-adversarial.md`,
+   `reviewer-code.md` and `reviewer-ponytail.md` hold the standing rules and the
+   report. Blocking findings go back to the builder. Code, here, is anything but
    comments, lint messages, Markdown, a lockfile, a `package.json` override
    and the version bump (step 7); the ten numbered Code Review Rules in
    `AGENTS.md` and the rules table in `docs/sync.md` count as code. A PR

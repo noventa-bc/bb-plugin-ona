@@ -72,7 +72,7 @@ on the settled host, not on the answer.
 FACTORY.md step 6 points here. The standing rules are in the reviewer's definition, named in `Role:`; the brief holds only the task:
 
 ```
-Role: reviewer, pass `adversarial` (`.claude/agents/reviewer-adversarial.md`), `code-review` (`.claude/agents/reviewer-code.md`) or `ponytail-review` (a general-purpose agent, see below)
+Role: reviewer, pass `adversarial` (`.claude/agents/reviewer-adversarial.md`), `code-review` (`.claude/agents/reviewer-code.md`) or `ponytail-review` (`.claude/agents/reviewer-ponytail.md`, see below)
 Target: worktree `<absolute path>` (a fresh agent starts in the main checkout, so pass this path); commit `<sha>`; base `origin/main`; diff `git -C <worktree> diff origin/main...<sha>`
 Scratch folder: `<new absolute path under the session scratchpad>`; node: `<bin folder of the node version in .nvmrc>`
 Link: <the `ln -s` line, or `none`; use it only when `scripts/scratch-copy.sh` reports no `node_modules` link>
@@ -83,7 +83,7 @@ Known roadmap items, not to re-report: <labels only>.
 Check list: <what to check in this diff: the coupled changes it touches, the docs it changes against the code, each new test against the rule its title names, the checks to run>.
 ```
 
-The ponytail pass runs as a general-purpose agent on Haiku at max effort (`model: haiku` and `effort: max` on the call). It gets this brief, which names the `## Standing rules` and `## Report` sections of `.claude/agents/reviewer-code.md`, and it runs `/ponytail-review branch`.
+The ponytail pass runs as the `reviewer-ponytail` definition (Haiku at max effort, set there). It gets this brief and runs `/ponytail-review` on the target the brief names (`branch`, or a PR link), against the worktree on its `Target:` line.
 
 ## Review a handoff outside the orchestrated flow
 
