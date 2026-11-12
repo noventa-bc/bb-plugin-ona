@@ -239,7 +239,7 @@ test("guard: one action per machine; its cooldown lasts exactly COOLDOWN_MS from
   await advance(COOLDOWN_MS - 1);
   assert.equal(guard.mayAct("h1"), false, "no action before COOLDOWN_MS after the end");
   await advance(1);
-  assert.equal(guard.mayAct("h1"), true);
+  assert.equal(guard.mayAct("h1"), true, "action again at COOLDOWN_MS after the end");
 });
 
 test("guard: each failure doubles the hold, then gives up; a forced run still goes", async () => {
