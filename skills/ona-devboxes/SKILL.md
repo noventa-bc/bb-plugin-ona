@@ -33,7 +33,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
   `bb machine create --provider ona --inputs '{"mode":"adopt","environment":"box-1"}'`
 - Create a new one from an Ona project (deleted on `bb machine remove`, which
   fails and keeps the box while Ona reports unpushed commits or uncommitted
-  files on it):
+  files on it, and keeps it without failing while another bb machine uses it):
   `bb machine create --provider ona --inputs '{"mode":"create","project":"my-app"}'`
   (optional `"classId"` from `ona environment list-classes`). New devboxes get
   the plugin's `inactivityTimeout` (default `3h`; `bb plugin config ona set inactivityTimeout 6h`, then `bb plugin reload ona` once the user agrees).

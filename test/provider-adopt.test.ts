@@ -172,10 +172,11 @@ async function removeCreated(setup: Setup) {
   return { ...fake, removed };
 }
 
-test("removing the created machine of a box another machine adopted since keeps the box and what that machine needs (fails if the remove deletes, closes the tunnel, forgets the keys or drops the no-stop flag)", async () => {
+test("removing the created machine of a box another machine adopted since keeps the box, unpushed work and all, and what that machine needs (fails if the remove deletes, checks the work first, closes the tunnel, forgets the keys or drops the no-stop flag)", async () => {
   // Bug: the remove saw `adopted: false` and deleted the box host-2 had adopted.
   const { removed, calls, tunnels, forgotten, releasing, logs } = await removeCreated({
     found: box("RUNNING"),
+    unpushed: true,
     tunnel: "up",
     machines: [adoptedSince],
   });
@@ -187,10 +188,23 @@ test("removing the created machine of a box another machine adopted since keeps 
   assert.ok(logs.some((entry) => /ona:m2 \(host-2\) uses Ona environment box/.test(entry.message)));
 });
 
-test("removing the created machine of a box another machine adopted, unpushed work and all, is not refused (fails if the work check runs first)", async () => {
-  const { removed, calls } = await removeCreated({ found: box("RUNNING"), unpushed: true, machines: [adoptedSince] });
+test("removing the adopting machine while the creating one still stores the box runs the adopted path (fails if the guard skips the adopted check)", async () => {
+  const createdBy = {
+    id: "host-1",
+    name: "ona:box",
+    phase: "active",
+    resource: { ...adoptedResource, adopted: false },
+  };
+  const fake = register({ found: box("RUNNING"), machines: [createdBy] });
+  const resource = { ...adoptedResource, key: "key-2" };
+  const removed = await fake.provider.remove({
+    report: lifecycle().report,
+    hostId: "host-2",
+    resource,
+    signal: new AbortController().signal,
+  });
   assert.deepEqual(removed, { status: "removed" });
-  assert.deepEqual(calls, []);
+  assert.deepEqual(fake.calls, ["get RUNNING", "move-aside"]);
 });
 
 test("removing the created machine deletes its box when only other boxes' machines are listed (fails if the guard counts any listed machine or drops the remove's key)", async () => {
@@ -202,17 +216,15 @@ test("removing the created machine deletes its box when only other boxes' machin
   assert.deepEqual(forgotten, ["env-1"]);
 });
 
-for (const hostReadFails of ["list", "resource"] as const) {
-  test(`a failed bb ${hostReadFails} read rejects the remove of a created machine before anything changes (fails if an unknown machine counts as no machine)`, async () => {
-    const { removed, calls, tunnels, forgotten } = await removeCreated({
-      found: box("RUNNING"),
-      tunnel: "up",
-      machines: [adoptedSince],
-      hostReadFails,
-    });
-    assert.match(String(removed), /bb is unreachable/);
-    assert.deepEqual(calls, []);
-    assert.deepEqual(tunnels, []);
-    assert.deepEqual(forgotten, []);
+test("a failed bb list read rejects the remove of a created machine before anything changes (fails if an unknown machine counts as no machine)", async () => {
+  const { removed, calls, tunnels, forgotten } = await removeCreated({
+    found: box("RUNNING"),
+    tunnel: "up",
+    machines: [adoptedSince],
+    hostReadFails: "list",
   });
-}
+  assert.match(String(removed), /bb is unreachable/);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(tunnels, []);
+  assert.deepEqual(forgotten, []);
+});

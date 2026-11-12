@@ -439,8 +439,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     }),
     async remove({ resource, hostId, report, signal }) {
       const owned = resourceSchema.parse(resource);
-      // Another machine adopted the box since this create made it: the box, its tunnel, keys and no-stop flag (all keyed
-      // by the box's id) are that machine's. A thrown lookup leaves all of them for bb's retry.
+      // A box another machine adopted since keeps its tunnel, keys and no-stop flag (keyed by the box's id) for that machine.
       const other = !owned.adopted && (await machineUsing(owned.envId, owned.key));
       if (other) {
         bb.log.warn(`${other.name} (${other.id}) uses Ona environment ${owned.envName}; removing ${hostId} kept it.`);
