@@ -136,5 +136,10 @@ test("the composer's select calls switchedInputs, its text field keeps the mode,
     app.includes("setInputs((inputs) => ({ ...inputs, text: event.target.value }))"),
     "the text field does not keep the mode",
   );
-  assert.ok(app.includes('"Removing the machine keeps the environment"'), "the adopt help text is not the new one");
+  assert.ok(
+    app.includes(
+      `{adopt ? "Removing the machine keeps the environment" : "Blank uses the plugin's defaultProject setting"}`,
+    ),
+    "the adopt help text is not the new one",
+  );
 });
