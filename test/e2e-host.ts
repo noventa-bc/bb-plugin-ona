@@ -67,6 +67,8 @@ export async function startHost(
       codexSqliteHome: "",
     },
   });
+  await plugin(host.bb);
+  const provider = host.harness.registrations.machineProviders.get("ona")!;
   const envs = (): Env[] => JSON.parse(readFileSync(state, "utf8")) as Env[];
   const patchBox = (envId: string, patch: Partial<Env["status"]>) =>
     writeFileSync(
@@ -106,13 +108,5 @@ export async function startHost(
     rmSync(dir, { recursive: true, force: true });
     for (const key of FAKE_ENV) delete process.env[key];
   };
-  // A plugin that fails to start must not leave the folder, the server or the host's storage behind.
-  try {
-    await plugin(host.bb);
-  } catch (error) {
-    await close();
-    throw error;
-  }
-  const provider = host.harness.registrations.machineProviders.get("ona")!;
   return { host, provider, dir, state, log, envs, patchBox, onaCalls, sshCalls, tunnelPids, close };
 }
