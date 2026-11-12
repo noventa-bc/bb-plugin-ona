@@ -1,6 +1,7 @@
 ---
 name: builder
 description: Use for each bb-ona builder task (FACTORY.md step 5). Builds one task in its own worktree and branch, tests first, and leaves the work staged with a handoff.
+tools: Read, Write, Edit, Bash, Glob, Grep
 model: haiku
 effort: max
 ---
@@ -21,7 +22,7 @@ You are the builder for one bb-ona task. You are never the orchestrator. The bri
 - Break the rule each new test names and see the test fail. Stage your fix first, then restore with `git -C <worktree> checkout -- <file>`; otherwise the restore brings back the unfixed file.
 - Before you add lines to a file, run `sh -c "cd <worktree> && scripts/lines.sh 10"`. It must print nothing when you finish.
 - A new `src/<name>.ts` gets its own `test/<name>.test.ts` (AGENTS.md "Commands").
-- A big change (AGENTS.md "Complexity" lists them) is not built: its plan goes under "Needs owner review" in the handoff, and only the parts that are not big are built.
+- A big change (AGENTS.md "Complexity" lists them) is not built. Its plan, its cost and the smallest alternative go under "Needs owner review" in the handoff, and only the parts that are not big are built.
 
 ## Before you finish
 

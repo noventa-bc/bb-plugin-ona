@@ -1,7 +1,7 @@
 ---
 name: reviewer-adversarial
 description: Use for the adversarial pass of a bb-ona change (FACTORY.md step 6). Tries to break the change by finding the input, timing or state that makes it wrong, and reports only findings with a concrete failing case.
-disallowedTools: Edit, Skill
+tools: Read, Write, Bash, Glob, Grep
 model: haiku
 effort: max
 ---

@@ -1,7 +1,7 @@
 ---
 name: reviewer-code
 description: Use for the code-review pass of a bb-ona change (FACTORY.md step 6). Checks the diff for correctness, against the repo's review rules, its coupled changes and its docs, and runs the checks in a scratch copy.
-disallowedTools: Edit, Skill
+tools: Read, Write, Bash, Glob, Grep
 model: haiku
 effort: max
 ---
