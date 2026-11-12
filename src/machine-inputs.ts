@@ -9,23 +9,21 @@ export const ONA_MACHINE_PROVIDER_ID = "ona";
 export const ONA_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
 export const ONA_NAME_MESSAGE = "use letters, digits, '.', '_' or '-'";
 
-export type DevboxMode = "create" | "adopt";
+type DevboxMode = "create" | "adopt";
 
 /** What the composer gets for the mode and the typed text. Create: a blank field means the defaultProject setting. */
 export function inputsChange(mode: DevboxMode, text: string): PluginMachineProviderInputsChange {
   const typed = text.trim();
-  if (mode === "adopt") {
-    if (typed === "") return { status: "blocked", reason: "Enter the Ona environment to adopt (name or id)" };
-    if (!ONA_NAME_PATTERN.test(typed)) {
-      return { status: "blocked", reason: `Invalid environment "${typed}": ${ONA_NAME_MESSAGE}` };
-    }
-    return { status: "ready", value: { mode: "adopt", environment: typed } };
+  if (typed === "") {
+    return mode === "adopt"
+      ? { status: "blocked", reason: "Enter the Ona environment to adopt (name or id)" }
+      : { status: "ready", value: { mode: "create" } };
   }
-  if (typed === "") return { status: "ready", value: { mode: "create" } };
   if (!ONA_NAME_PATTERN.test(typed)) {
-    return { status: "blocked", reason: `Invalid project "${typed}": ${ONA_NAME_MESSAGE}` };
+    const what = mode === "adopt" ? "environment" : "project";
+    return { status: "blocked", reason: `Invalid ${what} "${typed}": ${ONA_NAME_MESSAGE}` };
   }
-  return { status: "ready", value: { mode: "create", project: typed } };
+  return { status: "ready", value: mode === "adopt" ? { mode, environment: typed } : { mode, project: typed } };
 }
 
 /** The mode and text a saved value starts the field with. Anything but a saved adopt reads as create. */

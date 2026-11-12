@@ -14,7 +14,6 @@ import {
 import {
   commandArg,
   devboxCommandInput,
-  type DevboxMode,
   inputsChange,
   ONA_MACHINE_PROVIDER_ID,
   savedInputs,
@@ -249,9 +248,8 @@ const projectInput =
 
 /** The composer's "Ona devbox" field: create from an Ona project (blank means the defaultProject setting), or adopt. */
 function OnaProjectField({ value, onChange }: PluginMachineProviderInputsProps) {
-  const [saved] = useState(() => savedInputs(value));
-  const [mode, setMode] = useState(saved.mode);
-  const [text, setText] = useState(saved.text);
+  const [mode, setMode] = useState(() => savedInputs(value).mode);
+  const [text, setText] = useState(() => savedInputs(value).text);
   const id = useId();
   const modeId = `${id}-mode`;
   const helpId = `${id}-help`;
@@ -267,7 +265,7 @@ function OnaProjectField({ value, onChange }: PluginMachineProviderInputsProps) 
       <select
         id={modeId}
         value={mode}
-        onChange={(event) => setMode(event.target.value as DevboxMode)}
+        onChange={(event) => setMode(event.target.value === "adopt" ? "adopt" : "create")}
         className={projectInput}
       >
         <option value="create">Create</option>

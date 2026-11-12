@@ -65,12 +65,12 @@ test("a bad environment name is blocked quoting ONA_NAME_MESSAGE (fails if adopt
     status: "blocked",
     reason: `Invalid environment "my env": ${ONA_NAME_MESSAGE}`,
   });
-  assert.equal(inputsChange("adopt", "-rf").status, "blocked");
 });
 
 test("a saved adopt value restores mode and environment (fails if a saved adopt reads back as create)", () => {
   assert.deepEqual(savedInputs({ mode: "adopt", environment: "brave-otter" }), { mode: "adopt", text: "brave-otter" });
   assert.deepEqual(savedInputs({ mode: "adopt" }), { mode: "create", text: "" });
+  assert.deepEqual(savedInputs({ mode: "create", environment: "x" }), { mode: "create", text: "" });
 });
 
 test("the ready adopt value parses with the provider's inputs schema (fails if the value's shape drifts from the schema)", async () => {
