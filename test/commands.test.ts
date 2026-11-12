@@ -10,7 +10,9 @@ import {
 } from "../src/commands.ts";
 import type { OnaEnvironment } from "../src/ona.ts";
 import { HostGuard } from "../src/reconcile.ts";
+import type { ShellBackend, TerminalInfo } from "../src/shells.ts";
 import { AmbiguousRefError } from "../src/sync.ts";
+import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
 
 test("parseArgs: positionals, flags, --json, --thread <id> and a shell command after --", () => {
   assert.deepEqual(parseArgs(["status", "box", "--json"]), {
@@ -468,5 +470,54 @@ test("reconnect names the first non-blank line of Ona's error, or no listing whe
       JSON.stringify(listingError),
     );
     assert.deepEqual(calls, []);
+  }
+});
+
+const TERMINAL_ID = "run-7f3";
+
+/** `bb ona shell box -- make` with bb reporting `terminal` for its run (null: bb no longer knows it). */
+function shellRun(terminal: TerminalInfo | null) {
+  const backend: ShellBackend = {
+    createTerminal: async () => ({ id: TERMINAL_ID, status: "running", exitCode: null }),
+    getTerminal: async () => terminal,
+    output: async () => "out\n",
+  };
+  const deps = {
+    shellTarget: async () => ({ hostId: "host_1", cwd: null, boxName: "box" }),
+    shellBackend: backend,
+  } as unknown as OnaCommandDeps;
+  return onaCommands(deps)(["shell", "box", "--", "make"], {});
+}
+
+// Bug: a run whose exit code bb could not read exited 1 with no message, so it looked like a failed command.
+test("shell says bb reported no exit code and exits 1 when the terminal is gone or ended without one (fails if the exit code is 0 or the note is missing)", async () => {
+  const unreadable: Array<TerminalInfo | null> = [null, { id: TERMINAL_ID, status: "exited", exitCode: null }];
+  for (const terminal of unreadable) {
+    assert.deepEqual(await shellRun(terminal), {
+      exitCode: 1,
+      stdout: "out\n",
+      stderr: `bb reported no exit code for the command: it ended without one, or its result could not be read. See: bb terminal attach ${TERMINAL_ID}`,
+    });
+  }
+});
+
+test("shell passes a known exit code through with no note, 0 and 1 included (fails if a real exit 0 or 1 gets the note, or exit 0 becomes 1)", async () => {
+  for (const exitCode of [0, 1]) {
+    assert.deepEqual(await shellRun({ id: TERMINAL_ID, status: "exited", exitCode }), { exitCode, stdout: "out\n" });
+  }
+});
+
+test("a run still alive when its 10-minute wait ends exits 124 with the Still running note, not the no-code one (fails if the no-code check runs first, the 124 branch is gone, or its code changes)", async () => {
+  enableFakeClock();
+  try {
+    const run = shellRun({ id: TERMINAL_ID, status: "running", exitCode: null });
+    await tick(10 * 60_000);
+    assert.deepEqual(await run, {
+      exitCode: 124,
+      stdout: "out\n",
+      stderr: `Still running after 10 minutes. Follow it with: bb terminal attach ${TERMINAL_ID}`,
+    });
+  } finally {
+    await resetFakeClock();
   }
 });
