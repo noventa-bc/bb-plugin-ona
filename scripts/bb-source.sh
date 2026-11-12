@@ -1,7 +1,7 @@
 #!/bin/sh
 # Prints the installed bb version, then each definition of <name> in bb's server bundle with the lines after
-# it. With --sdk, prints each definition in the plugin SDK typings in node_modules instead, without the
-# version. Read-only.
+# it, except that with more than ten definitions each prints only its location and first line. With --sdk,
+# prints each definition in the plugin SDK typings in node_modules instead, without the version. Read-only.
 #   scripts/bb-source.sh <name> [lines, default 60]
 #   scripts/bb-source.sh --sdk <name> [lines]
 # BB_APP_DIR is the bb-app package folder; by default it is the one inside /Applications/bb.app.
@@ -33,19 +33,14 @@ fi
 # before the name, `==` and `=>` do not count), or a method: a line that starts with `<name>(` or `async <name>(`,
 # whose parameters hold no `(`, `)` or `;`, and that ends with `{` after a `)`. A call statement ends in `;`, and a
 # call that does not start its line (after a dot, or in an `if` header) is not a method.
-# shortcut: missed: a method with a call in a default parameter (`<name>(a = f()) {`), a generator (`*<name>(`), a space before the paren, a quoted or computed key, a one-line method, a header over several lines, `static`, `get` or `set`, an object property (`<name>: value`); wrongly printed: a comment that quotes a `const` or `<name> =` definition, and a superclass call on its own line after `class X extends` (`  <name>(Y) {`); upgrade when one of those is the definition needed
+# shortcut: missed: a method with a parenthesis in its parameters (`<name>(a = f()) {`, `<name>(cb = () => {}) {`), a generator (`*<name>(`), a space before the paren, a quoted or computed key, a one-line method, a header over several lines, `static`, `get` or `set`, an object property (`<name>: value`); wrongly printed: a comment that quotes a `function <name>(`, `interface <name>`, `const <name>` or `<name> =` definition, and a superclass call on its own line after `class X extends` (`  <name>(Y) {`); above ten definitions, a method hit shows no owner; upgrade when one of those is the definition needed
 found=$(grep -n -E "function ${name}[(<]|interface $name([^A-Za-z0-9_]|\$)|const $name([^A-Za-z0-9_]|\$)|(^|[^A-Za-z0-9_\$.])$name *=([^=>]|\$)|^[[:space:]]*(async )?$name\([^();]*\)[[:space:]]*\{[[:space:]]*\$" "$file" | cut -d: -f1) || true
 [ -n "$found" ] || { echo "bb-source: no definition of $name in $file" >&2; exit 1; }
-# Over `max` definitions, a generic name such as `create` prints each location and first line only, not the lines after.
-max=10
+# A generic name such as `create` can have many definitions: over ten, the note comes first and `lines` becomes 0.
 count=$(printf '%s\n' "$found" | wc -l | tr -d ' ')
-if [ "$count" -gt "$max" ]; then
-  for n in $found; do
-    printf -- '--- %s:%s\n' "$file" "$n"
-    sed -n "${n}p" "$file"
-  done
+if [ "$count" -gt 10 ]; then
   echo "bb-source: $count definitions of $name, so only their first lines are printed; pass a more specific name"
-  exit 0
+  lines=0
 fi
 for n in $found; do
   printf -- '--- %s:%s\n' "$file" "$n"

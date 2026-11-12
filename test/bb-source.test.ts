@@ -38,6 +38,7 @@ const bundle = [
   "  }",
   "}",
   "  getResource(1);",
+  "foo.getResource(2);",
   "if (getResource(3)) {",
   "  getResource(4); if (ok) {",
   "if (foo.getResource(5)) {",
@@ -124,7 +125,7 @@ test("an object or class method header, with or without `async`, is found", () =
   }
 });
 
-test("a call of the name is not a definition: a statement, await, return, a header or an object argument", () => {
+test("a call of the name is not a definition: a statement, a member call, await, return, a header or an object argument", () => {
   const r = bbSource(["getResource", "0"]);
   assert.equal(r.status, 0, r.output);
   const headers = r.output.split("\n").filter((row) => row.startsWith("--- "));
@@ -139,17 +140,18 @@ test("ten definitions of a name print each one's body lines", () => {
   assert.equal(r.output.split("\n").filter((row) => row === "    return x;").length, 10, r.output);
 });
 
-test("eleven definitions print each location and first line, then how many there were", () => {
+test("eleven definitions print the note first, then each location and first line", () => {
   const r = bbSource(["create", "1"], createDefinitions(11));
   assert.equal(r.status, 0, r.output);
   const rows = r.output.split("\n");
   assert.equal(rows.filter((row) => row.startsWith("--- ")).length, 11, r.output);
   assert.equal(rows.filter((row) => row === "  create(x) {").length, 11, r.output);
   assert.equal(rows.filter((row) => row === "    return x;").length, 0, r.output);
-  assert.match(
-    r.output,
-    /^bb-source: 11 definitions of create, so only their first lines are printed; pass a more specific name$/m,
+  const note = rows.indexOf(
+    "bb-source: 11 definitions of create, so only their first lines are printed; pass a more specific name",
   );
+  assert.ok(note >= 0, r.output);
+  assert.ok(note < rows.findIndex((row) => row.startsWith("--- ")), "the note comes after the listing");
 });
 
 test("a name with no definition fails and says so", () => {
