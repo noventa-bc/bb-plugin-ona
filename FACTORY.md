@@ -32,13 +32,14 @@ the quick fix is right and when it is not.
   independent of the orchestrator. Blocking findings go back to the builder
   (step 6 says which block).
 
-Subagents run on Haiku at max effort by default (for example: builders of
-small changes, reviewers of tests, docs, lint and CI, mechanical work). Use
-Opus at medium effort only with a stated reason in its brief: a change to a
-safety rule or an accepted decision, a tricky concurrency or state bug, or a
-review that must read bb's source. The orchestrator runs on Fable. It checks
-a Haiku subagent's output and briefs it with exact commands and a stop
-condition.
+Subagents run on Haiku at max effort by default; the role definitions in
+`.claude/agents/` set it, and a brief for an agent without a definition names
+its model and effort (for example: builders of small changes, reviewers of
+tests, docs, lint and CI, mechanical work). Use Opus at medium effort only per
+call, with a stated reason in its brief: a change to a safety rule or an
+accepted decision, a tricky concurrency or state bug, or a review that must read
+bb's source. The orchestrator runs on Fable. It checks a Haiku subagent's output
+and briefs it with exact commands and a stop condition.
 
 Merging on green is only as safe as CI. Every PR adds a test for the behaviour
 it changes, where a test is possible; a gap CI cannot see and the PR did not open (untested module, missing lint, unchecked
@@ -88,42 +89,25 @@ those and the "skipped or not checked" lines ponytail ends with.
 3. **Check confidence.** If a task needs a decision only the owner can make (a
    version to pin, a safety rule to bend, a behaviour change users will see),
    ask before building. Batch the questions into one message.
-4. **Brief** each builder with the template in `docs/owner.md` (a reviewer
-   gets the reviewer template there, step 6), plus: the
-   branch name `agent/<slug>`, the files involved (quote the line's text, not
-   its number: numbers drift), the tests to
-   write first, the coupled changes from `AGENTS.md`, and what to report back.
-5. **Build** in a worktree (slow commands in the background). The builder runs
-   `npm ci --ignore-scripts`, then `npm run prepare`, writes
-   a failing test first where possible (each test names, in its title or the
-   handoff, the bug it fails on, or the brief says "guard, no `// Bug:` line"
-   when `main` has no bug; a test that still passes with the rule
-   deleted is not done; stage the fix before a mutant you restore with
-   `git -C <worktree> checkout -- <file>`, or the restore brings back the
-   unfixed file), keeps
-   `npm run check` green (Semgrep and `shellcheck` run in CI, not in the check;
-   Semgrep needs an install the builder cannot run, and the handoff names any
-   check it skips), writes
-   `.agent/HANDOFF.md`, and leaves the work staged for the orchestrator.
+4. **Brief** each builder with the task fields of the template in `docs/owner.md`
+   (a reviewer gets the reviewer template there, step 6). The role definitions in
+   `.claude/agents/` hold the standing rules and the report, so a brief does not repeat them.
+5. **Build** in a worktree (slow commands in the background), by the `builder`
+   definition (`.claude/agents/builder.md`): its commands, failing test first,
+   mutants, checks, handoff and report are there. The builder leaves the work
+   staged for the orchestrator and never commits or pushes.
 6. **Review.** The orchestrator commits the builder's staged work on its
    branch (after the check passes on its own), reads the handoff and the diff,
-   runs the
-   passes the gate below gives the PR: the adversarial reviewer (brief: the
-   diff, the files it touches, the specific ways it could fail, never the
-   orchestrator's own verdict), `code-review` (its recipe followed by hand:
-   the Skill itself starts many agents) and `/ponytail-review branch`, each
-   on the branch against `origin/main`, in its own agent, briefed with the
-   template in `docs/owner.md`, the builder's worktree path (a fresh agent
-   starts in the main checkout), the three-dot diff
-   `git -C <worktree> diff origin/main...<sha>` (a two-dot diff from a stale
-   base shows main's newer commits as reverted), and told to run tests and
-   mutants in a scratch folder of its own under the
-   session scratchpad (`scripts/scratch-copy.sh <worktree> <sha> <dir>` makes
-   it: the copy has no history, so git commands stay `git -C <worktree>`; when
-   the script reports no `node_modules` link, the brief gives the `ln -s` that
-   links the builder's worktree's `node_modules`, and a reviewer never installs; the reviewer names a file by the path its
-   own write call used and reports any process it leaves running), and
-   sends blocking findings back to the builder. Code, here, is anything but
+   and runs the passes the gate below gives the PR, each in its own agent on the
+   branch against `origin/main`: the adversarial reviewer (brief: the diff, the
+   files it touches and the ways it could fail, never the orchestrator's own
+   verdict), `code-review` (its recipe followed by hand: the Skill itself starts
+   many agents) and `/ponytail-review branch`. Brief each with the template in
+   `docs/owner.md`; `.claude/agents/reviewer-adversarial.md` and
+   `reviewer-code.md` hold the standing rules: read-only, scratch folder, tests and
+   report. The ponytail pass runs as a general-purpose agent on Haiku at max
+   effort, briefed as `docs/owner.md` says. Blocking findings go back to the
+   builder. Code, here, is anything but
    comments, lint messages, Markdown, a lockfile, a `package.json` override
    and the version bump (step 7); the ten numbered Code Review Rules in
    `AGENTS.md` and the rules table in `docs/sync.md` count as code. A PR
