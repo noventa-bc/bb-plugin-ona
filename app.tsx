@@ -279,7 +279,7 @@ function OnaProjectField({ value, onChange }: PluginMachineProviderInputsProps) 
         value={text}
         placeholder={adopt ? "Environment name or id" : "Project name or id"}
         aria-describedby={helpId}
-        onChange={(event) => setInputs({ mode, text: event.target.value })}
+        onChange={(event) => setInputs((inputs) => ({ ...inputs, text: event.target.value }))}
         className={projectInput}
       />
       <span id={helpId} className="text-subtle-foreground">

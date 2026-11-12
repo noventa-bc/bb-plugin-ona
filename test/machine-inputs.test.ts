@@ -81,14 +81,9 @@ test("a saved adopt value restores mode and environment (fails if a saved adopt 
   assert.deepEqual(savedInputs({ mode: "adopt" }), { mode: "create", text: "" });
 });
 
-test("a switch clears the typed text, whichever mode it picks (fails if a switch leaves text in the field)", () => {
-  assert.equal(switchedInputs("adopt").text, "");
-  assert.equal(switchedInputs("create").text, "");
-});
-
-test("a switch picks the mode its option names (fails if an option picks the other mode)", () => {
-  assert.equal(switchedInputs("adopt").mode, "adopt");
-  assert.equal(switchedInputs("create").mode, "create");
+test("switchedInputs gives the mode its option names and an empty text (fails if the text is kept or the modes are swapped)", () => {
+  assert.deepEqual(switchedInputs("adopt"), { mode: "adopt", text: "" });
+  assert.deepEqual(switchedInputs("create"), { mode: "create", text: "" });
 });
 
 test("the ready adopt value parses with the provider's inputs schema (fails if the value's shape drifts from the schema)", async () => {
@@ -132,4 +127,14 @@ test("every devbox_command name in app.tsx is followed by devboxCommandInput( (f
 test("the settings section has an Update CLIs button (fails if its line leaves app.tsx)", () => {
   const app = readFileSync(new URL("../app.tsx", import.meta.url), "utf8");
   assert.ok(app.includes('{ command: "update", label: "Update CLIs" }'), "app.tsx has no Update CLIs button");
+});
+
+test("the composer's select calls switchedInputs, its text field keeps the mode, and its help text is the new one (fails if a handler or the help text in app.tsx reverts)", () => {
+  const app = readFileSync(new URL("../app.tsx", import.meta.url), "utf8");
+  assert.ok(app.includes("setInputs(switchedInputs(event.target.value))"), "the select does not call switchedInputs");
+  assert.ok(
+    app.includes("setInputs((inputs) => ({ ...inputs, text: event.target.value }))"),
+    "the text field does not keep the mode",
+  );
+  assert.ok(app.includes('"Removing the machine keeps the environment"'), "the adopt help text is not the new one");
 });

@@ -35,7 +35,7 @@ export function savedInputs(value: unknown): { mode: DevboxMode; text: string } 
   return { mode: "create", text: typeof saved?.project === "string" ? saved.project : "" };
 }
 
-/** The mode and text after a select pick. The text is cleared: a name typed for one mode is wrong for the other. */
+/** The mode and text after a select pick. The text is cleared: typed text belongs to the mode it was typed under. */
 export function switchedInputs(selected: string): { mode: DevboxMode; text: string } {
   return { mode: selected === "adopt" ? "adopt" : "create", text: "" };
 }
