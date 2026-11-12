@@ -51,6 +51,7 @@ test("a lifecycle call whose result is kept, returned, passed on or read as a me
     "await track(bb.sdk.hosts.experimental_suspend({ hostId }).host).then(next);",
     "void track(bb.sdk.hosts.experimental_suspend({ hostId }).host);",
     "void track(bb.sdk.hosts.experimental_suspend({ hostId }).host).then(next);",
+    "const run = () => bb.sdk.hosts.experimental_resume({ hostId });",
     "items.map(() => bb.sdk.hosts.experimental_suspend({ hostId }).catch(onError));",
   ];
   assert.deepEqual(await flaggedLines(lines), []);
