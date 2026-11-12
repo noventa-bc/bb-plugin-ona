@@ -29,7 +29,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
 ## Machines
 
 - Shortcuts: `bb ona adopt <environment>`, `bb ona new [project]`.
-- Adopt an existing environment (never deleted by bb):
+- Adopt an existing environment (never deleted by bb; refused when another bb machine uses the box):
   `bb machine create --provider ona --inputs '{"mode":"adopt","environment":"box-1"}'`
 - Create a new one from an Ona project (deleted on `bb machine remove`, which
   fails and keeps the box while Ona reports unpushed commits or uncommitted
