@@ -225,29 +225,21 @@ test("guard: one action per machine; its cooldown lasts exactly COOLDOWN_MS from
   const { clock, advance } = fakeClock();
   const guard = new HostGuard(2, clock);
   let finish!: () => void;
-  const done = new Promise<void>((resolve) => (finish = resolve));
-  // The action takes time, so the cooldown must start when it ends, not when it starts.
-  const first = guard.run(
-    "h1",
-    "heal-daemon",
-    "r",
-    async () => {
-      await advance(1_000);
-      await done;
-    },
-    { cooldown: true },
-  );
+  const first = guard.run("h1", "heal-daemon", "r", () => new Promise<void>((resolve) => (finish = resolve)), {
+    cooldown: true,
+  });
   await advance(0);
   assert.equal(guard.busyWith("h1"), "heal-daemon");
   assert.equal(await guard.run("h1", "heal-daemon", "r", async () => {}), false);
   assert.equal(await guard.run("h1", "heal-daemon", "r", async () => {}, { force: true }), false);
+  // The action takes time, so the cooldown must start when it ends, not when it starts.
+  await advance(1_000);
   finish();
   assert.equal(await first, true);
-  assert.equal(guard.mayAct("h1"), false);
   await advance(COOLDOWN_MS - 1);
   assert.equal(guard.mayAct("h1"), false, "no action before COOLDOWN_MS after the end");
   await advance(1);
-  assert.equal(guard.mayAct("h1"), true, "action again at COOLDOWN_MS after the end");
+  assert.equal(guard.mayAct("h1"), true);
 });
 
 test("guard: each failure doubles the hold, then gives up; a forced run still goes", async () => {
