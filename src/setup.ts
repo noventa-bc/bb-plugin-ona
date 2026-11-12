@@ -109,6 +109,22 @@ export type PluginMachineProviderAvailability =
 export const ONA_INSTALL_HINT =
   "Install the Ona CLI and log in (`ona login`), or set its path with `bb plugin config ona set onaPath <path>` and run `bb plugin reload ona`. Then run `bb ona setup`.";
 
+/** Ona's availability: `login` is null without a binary; `sshConfig` runs only after a good login. */
+export function onaAvailability(login: OnaLogin | null, sshConfig: () => boolean): PluginMachineProviderAvailability {
+  if (!login) return { status: "setup-required", message: ONA_INSTALL_HINT };
+  if (!login.ok && login.reason === "network")
+    return { status: "unavailable", message: `Ona could not be reached. (${login.message})` };
+  if (!login.ok)
+    return { status: "setup-required", message: `Ona CLI is not logged in: run \`ona login\`. (${login.message})` };
+  if (!sshConfig()) {
+    return {
+      status: "setup-required",
+      message: "Run `ona environment ssh-config` so bb can reach Ona environments over SSH.",
+    };
+  }
+  return { status: "available" };
+}
+
 export interface GeneralSettings {
   defaultMachineAccess: string | null;
   machineServerUrl: string | null;

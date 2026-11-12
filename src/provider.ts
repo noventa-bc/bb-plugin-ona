@@ -10,12 +10,14 @@ import {
   isRunning,
   isStopped,
   metric,
+  sshHost,
   unpushedWork,
   type OnaCli,
   type OnaEnvironment,
 } from "./ona.ts";
 import { connectHelpers, type StartTrace, type WakeVia } from "./provider-connect.ts";
 import { DAEMON_PROBE } from "./reconcile.ts";
+import type { Devbox } from "./rpc.ts";
 import type { PluginMachineProviderAvailability } from "./setup.ts";
 import { sshExecutor, type TunnelManager } from "./ssh.ts";
 import { capped } from "./time.ts";
@@ -50,6 +52,23 @@ export type OnaResource = z.infer<typeof resourceSchema>;
 
 /** Ona names/ids passed to the ona CLI: never option-like, no shell metacharacters. */
 export const onaRef = z.string().regex(ONA_NAME_PATTERN, ONA_NAME_MESSAGE);
+
+/** A bb machine row as the RPCs show it; `tunnel` is the tunnel's state for the row's box. */
+export function devboxOf(
+  row: { machine: string; hostId: string; status: string; resource: OnaResource },
+  tunnel: Devbox["tunnel"],
+): Devbox {
+  return {
+    machine: row.machine,
+    hostId: row.hostId,
+    envId: row.resource.envId,
+    envName: row.resource.envName,
+    status: row.status,
+    tunnel,
+    adopted: row.resource.adopted,
+    sshCommand: `ssh ${sshHost(row.resource.envId)}`,
+  };
+}
 
 // Inputs are persisted and readable by every plugin: references only, no secrets.
 const inputsSchema = z.preprocess(
