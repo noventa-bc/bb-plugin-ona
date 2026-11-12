@@ -7,6 +7,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   symlinkSync,
   writeFileSync,
@@ -22,8 +23,8 @@ const env = scrubbed(process.env);
 function checkouts(withModules = true) {
   const main = tempDir("scratch-copy-main-");
   git(main, env, "init", "-q", "-b", "main");
-  writeFileSync(join(main, "package.json"), '{ "name": "fixture" }\n');
-  writeFileSync(join(main, "package-lock.json"), '{ "lockfileVersion": 3 }\n');
+  writeFileSync(join(main, "package.json"), packageJson("1.0.0"));
+  writeFileSync(join(main, "package-lock.json"), lockfile("1.0.0"));
   git(main, env, "add", "package.json", "package-lock.json");
   git(main, env, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init");
   if (withModules) mkdirSync(join(main, "node_modules"));
@@ -77,6 +78,25 @@ function gitShim(before: string) {
 /** The environment for a run whose `git` is taken from the shim folder `shims`. */
 const withShim = (shims: string): NodeJS.ProcessEnv => ({ ...env, PATH: `${shims}:${env.PATH ?? ""}` });
 
+/** The text of a package.json for "fixture" at `version`, depending on `dependencies`. */
+function packageJson(version: string, dependencies: Record<string, string> = {}) {
+  return JSON.stringify({ name: "fixture", version, dependencies }, null, 2) + "\n";
+}
+
+/** The text of a package-lock.json for "fixture" at `version`, with `packages` beside the root entry. */
+function lockfile(version: string, packages: Record<string, object> = {}) {
+  const self = { name: "fixture", version };
+  return JSON.stringify({ ...self, lockfileVersion: 3, packages: { "": self, ...packages } }, null, 2) + "\n";
+}
+
+/** Writes the two manifests into `worktree` and commits them; returns the new commit's sha. */
+function commitManifests(worktree: string, pkg: string, lock: string) {
+  writeFileSync(join(worktree, "package.json"), pkg);
+  writeFileSync(join(worktree, "package-lock.json"), lock);
+  git(worktree, env, "add", "package.json", "package-lock.json");
+  return commit(worktree, "manifests");
+}
+
 test("the copy holds the commit with no .git, and its node_modules links to the main checkout's", () => {
   const { main, worktree } = checkouts();
   const dir = newDir();
@@ -91,7 +111,10 @@ test("the copy holds the commit with no .git, and its node_modules links to the 
 
 test("node_modules is not linked when the commit's package-lock.json differs from the main checkout's, and says why", () => {
   const { worktree } = checkouts();
-  writeFileSync(join(worktree, "package-lock.json"), '{ "lockfileVersion": 4 }\n');
+  writeFileSync(
+    join(worktree, "package-lock.json"),
+    lockfile("1.0.0").replace('"lockfileVersion": 3', '"lockfileVersion": 4'),
+  );
   git(worktree, env, "add", "package-lock.json");
   const sha = commit(worktree, "lock");
   const dir = newDir();
@@ -106,6 +129,39 @@ test("node_modules is not linked when only package.json differs from the main ch
   writeFileSync(join(worktree, "package.json"), '{ "name": "other" }\n');
   git(worktree, env, "add", "package.json");
   const sha = commit(worktree, "package");
+  const dir = newDir();
+  const r = scratchCopy([worktree, sha, dir]);
+  assert.equal(r.status, 0, r.messages);
+  assert.equal(hasEntry(join(dir, "node_modules")), false);
+  assert.match(r.messages, /did not link node_modules: package\.json or package-lock\.json differs from /);
+});
+
+test("a version-only difference links: the version is left out of package.json and both lockfile copies", () => {
+  const { main, worktree } = checkouts();
+  const dir = newDir();
+  const r = scratchCopy([worktree, commitManifests(worktree, packageJson("1.0.1"), lockfile("1.0.1")), dir]);
+  assert.equal(r.status, 0, r.messages);
+  assert.equal(realpathSync(join(dir, "node_modules")), realpathSync(join(main, "node_modules")));
+});
+
+test("a different dependency does not link, and says why", () => {
+  const { worktree } = checkouts();
+  const sha = commitManifests(worktree, packageJson("1.0.0", { "left-pad": "1.0.0" }), lockfile("1.0.0"));
+  const dir = newDir();
+  const r = scratchCopy([worktree, sha, dir]);
+  assert.equal(r.status, 0, r.messages);
+  assert.equal(hasEntry(join(dir, "node_modules")), false);
+  assert.match(r.messages, /did not link node_modules: package\.json or package-lock\.json differs from /);
+});
+
+test("lockfiles that differ only in a dependency's version under packages do not link, and say why", () => {
+  const { main, worktree } = checkouts();
+  writeFileSync(join(main, "package-lock.json"), lockfile("1.0.0", { "node_modules/left-pad": { version: "1.0.0" } }));
+  const sha = commitManifests(
+    worktree,
+    packageJson("1.0.0"),
+    lockfile("1.0.0", { "node_modules/left-pad": { version: "1.0.1" } }),
+  );
   const dir = newDir();
   const r = scratchCopy([worktree, sha, dir]);
   assert.equal(r.status, 0, r.messages);
@@ -222,7 +278,7 @@ test("a parent folder removed during the copy is not recreated: the copy exits 1
   assert.equal(hasEntry(parent), false);
 });
 
-test("a tracked node_modules symlink in the commit is not followed into another folder", () => {
+test("a tracked node_modules link to a folder is kept, and no link is written into that folder", () => {
   const { worktree } = checkouts();
   mkdirSync(join(worktree, "docs"));
   writeFileSync(join(worktree, "docs", "README.md"), "# Docs\n");
@@ -231,8 +287,49 @@ test("a tracked node_modules symlink in the commit is not followed into another 
   const sha = commit(worktree, "a node_modules symlink");
   const dir = newDir();
   const r = scratchCopy([worktree, sha, dir]);
-  assert.equal(r.status, 1, r.messages);
-  assert.equal(hasEntry(join(dir, "docs", "node_modules")), false);
+  assert.equal(r.status, 0, r.messages);
+  assert.match(r.messages, /did not link node_modules: the commit already has node_modules/);
+  assert.equal(readlinkSync(join(dir, "node_modules")), "docs");
+  assert.deepEqual(readdirSync(join(dir, "docs")), ["README.md"], "a link was written into docs");
+});
+
+test("a node_modules folder the commit tracks is kept: the copy exits 0 and no link goes inside it", () => {
+  const { worktree } = checkouts();
+  mkdirSync(join(worktree, "node_modules"));
+  writeFileSync(join(worktree, "node_modules", "kept.txt"), "kept\n");
+  git(worktree, env, "add", "node_modules");
+  const sha = commit(worktree, "a node_modules folder");
+  const dir = newDir();
+  const r = scratchCopy([worktree, sha, dir]);
+  assert.equal(r.status, 0, r.messages);
+  assert.match(r.messages, /did not link node_modules: the commit already has node_modules/);
+  assert.equal(hasEntry(join(dir, "node_modules", "node_modules")), false);
+  assert.equal(readFileSync(join(dir, "node_modules", "kept.txt"), "utf8"), "kept\n");
+});
+
+test("a tracked node_modules link to nothing is kept too: the copy exits 0 and the link is unchanged", () => {
+  const { worktree } = checkouts();
+  symlinkSync("missing", join(worktree, "node_modules"));
+  git(worktree, env, "add", "node_modules");
+  const sha = commit(worktree, "a dangling node_modules link");
+  const dir = newDir();
+  const r = scratchCopy([worktree, sha, dir]);
+  assert.equal(r.status, 0, r.messages);
+  assert.match(r.messages, /did not link node_modules: the commit already has node_modules/);
+  assert.equal(readlinkSync(join(dir, "node_modules")), "missing");
+});
+
+test("an unparseable package.json or lockfile means differs: no link, and the copy exits 0", () => {
+  for (const file of ["package.json", "package-lock.json"]) {
+    const { worktree } = checkouts();
+    writeFileSync(join(worktree, file), "{ not json\n");
+    git(worktree, env, "add", file);
+    const dir = newDir();
+    const r = scratchCopy([worktree, commit(worktree, `broken ${file}`), dir]);
+    assert.equal(r.status, 0, `${file}: ${r.messages}`);
+    assert.equal(hasEntry(join(dir, "node_modules")), false, file);
+    assert.match(r.messages, /did not link node_modules: package\.json or package-lock\.json differs from /, file);
+  }
 });
 
 test("two arguments are a usage error", () => {
