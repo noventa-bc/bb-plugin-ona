@@ -325,7 +325,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         adopted = false;
         const existing = await ona.findEnvironment(name, signal);
         if (existing) {
-          // A box this create made before its checkpoint can be adopted by another machine since; same refusal as above.
+          // A box this create made before its checkpoint can be adopted by another machine since; same check as above.
           const other = await machineUsing(existing.id, key);
           if (other) {
             throw new Error(

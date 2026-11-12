@@ -84,9 +84,11 @@ test("cleanup of an unfinished create leaves a box another machine adopted (fail
   assert.deepEqual(fake.forgotten, []);
 });
 
-test("cleanup still deletes its own orphaned box when no other machine stores it (fails if the guard counts any listed machine)", async () => {
+test("cleanup still deletes its own orphaned box when no other machine stores it (fails if the guard counts any listed machine or drops the cleanup's key)", async () => {
   const other = { ...adoptedSince, resource: { ...adoptedResource, envId: "env-2", key: "key-2" } };
-  const fake = register({ found: unfinished, machines: [creating, other] });
+  // The cleanup's own host stores the box under its own key, so the check must pass the cleanup's key.
+  const own = { ...creating, resource: { ...adoptedResource, adopted: false } };
+  const fake = register({ found: unfinished, machines: [own, other] });
   assert.equal((await cleanup(fake)).status, "removed");
   assert.deepEqual(fake.calls, ["delete env-1"]);
 });
@@ -116,7 +118,7 @@ test("a create run again refuses a box another machine adopted since (fails if t
     machines: [creating, adoptedSince],
   });
   assert.ok(result instanceof Error);
-  assert.match(result.message, /ona:m2 \(host-2\) uses Ona environment bold-pancake-6978; a box holds one bb machine/);
+  assert.ok(result.message.startsWith(`ona:m2 (host-2) uses Ona environment ${unfinished.metadata.name}; a box holds`));
   assert.equal(checkpointed, false);
   assert.deepEqual(calls, []);
   assert.deepEqual(tunnels, []);
@@ -129,3 +131,18 @@ test("a create run again reuses its own checkpointed box (fails if the create co
   assert.ok(!(result instanceof Error), String(result));
   assert.equal(checkpointed, true);
 });
+
+for (const hostReadFails of ["list", "resource"] as const) {
+  test(`a failed bb ${hostReadFails} read rejects the cleanup and the create run again (fails if an unknown machine counts as no machine)`, async () => {
+    const setup: Setup = { found: unfinished, tunnel: "up", machines: [creating, adoptedSince], hostReadFails };
+    const fake = register(setup);
+    await assert.rejects(cleanup(fake), /bb is unreachable/);
+    assert.deepEqual(fake.calls, []);
+    assert.deepEqual(fake.tunnels, []);
+    const again = await createAgain(setup);
+    assert.match(String(again.result), /bb is unreachable/);
+    assert.equal(again.checkpointed, false);
+    assert.deepEqual(again.calls, []);
+    assert.deepEqual(again.tunnels, []);
+  });
+}

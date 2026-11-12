@@ -43,6 +43,7 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * `reopenDuringMove`: a tunnel opens while an adopted remove's move-aside script runs.
  * `machines`: the machines bb lists, of provider "ona" unless `provider` says otherwise; as bb's list does, it leaves
  * out the creating ones unless the call sets `includeCreating`.
+ * `hostReadFails`: bb's machine listing (`list`) or a machine's stored resource (`resource`) rejects.
  */
 export type Setup = {
   found: OnaEnvironment;
@@ -68,6 +69,7 @@ export type Setup = {
   createFails?: boolean;
   reopenDuringMove?: boolean;
   machines?: { id: string; name: string; phase: string; resource: OnaResource | null; provider?: string }[];
+  hostReadFails?: "list" | "resource";
 };
 
 /** Each command as the gated executor runs it: after a `get` that says RUNNING. */
@@ -118,6 +120,7 @@ export function register({
   createFails,
   reopenDuringMove,
   machines = [],
+  hostReadFails,
 }: Setup) {
   const calls: string[] = [];
   const tunnels: string[] = [];
@@ -253,13 +256,18 @@ export function register({
         return { hostId: "host-1" };
       },
     },
-    machineResource: async (hostId) => machines.find((machine) => machine.id === hostId)?.resource ?? null,
+    machineResource: async (hostId) => {
+      if (hostReadFails === "resource") throw new Error("bb is unreachable");
+      return machines.find((machine) => machine.id === hostId)?.resource ?? null;
+    },
     sdk: {
       hosts: {
-        list: async (args?: { includeCreating?: boolean }) =>
-          machines
+        list: async (args?: { includeCreating?: boolean }) => {
+          if (hostReadFails === "list") throw new Error("bb is unreachable");
+          return machines
             .filter((machine) => args?.includeCreating || machine.phase !== "creating")
-            .map(({ id, name, provider = "ona" }) => ({ id, name, machineProviderId: provider })),
+            .map(({ id, name, provider = "ona" }) => ({ id, name, machineProviderId: provider }));
+        },
       },
     },
   });
