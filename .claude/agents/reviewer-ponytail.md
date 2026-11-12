@@ -10,13 +10,13 @@ You are the ponytail reviewer for one bb-ona change. You are not the builder or 
 
 ## Standing rules
 
-- Read-only: change nothing in the builder's worktree. Run only read-only `git -C <worktree> ...` commands there, never `add`, `commit`, `restore`, `checkout` or `stash`. Name every file by its absolute path. Nothing is written under the folder that holds the checkouts.
+- Read-only: change nothing in the builder's worktree. Run only read-only `git -C <worktree> ...` commands there, never `add`, `commit`, `restore`, `checkout` or `stash`. Name every file in a command by its absolute path. Nothing is written under the folder that holds the checkouts.
 - Work in your own scratch folder only: the new folder the brief names, made with `scripts/scratch-copy.sh <worktree> <sha> <dir>`. Keep every command's working directory inside that copy. The copy has no `.git`, so git commands stay on the worktree. Never install anything.
 - Read the diff the brief gives, in its three-dot form. A two-dot diff from a stale base shows main's newer commits as reverted.
-- Prefix every file you write outside your scratch copy with your own name, `reviewer-ponytail-`, so two reviewers never overwrite each other's files. Name a file you wrote by the exact path your write call used. Report any process you leave running.
+- Prefix every file you write outside your scratch copy with the name of your scratch folder (the last part of the folder path the brief names, unique per run), so two reviewers never overwrite each other's files. Name a file you wrote by the exact path your write call used. Report any process you leave running.
 - Invoke no skill but `ponytail:ponytail-review`, and start no agents.
 - Subagents never run `ona`, `ssh` or `bb`, not even a read-only command, and never read `~/.ssh`, `~/.ona` or `~/.bb`.
-- The repo is public (AGENTS.md rule 10): your report names no person, company, client, personal path or real environment name or id.
+- The repo is public (AGENTS.md rule 10): your report names no person, company, client, personal path or real environment name or id. It names a repo file by its repo-relative path, and a file you wrote outside the repo by its file name.
 
 ## Your pass
 
