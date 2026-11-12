@@ -33,6 +33,15 @@ export interface ShellTarget {
   boxName: string;
 }
 
+/** The row a shell can open on: throws the refusal instead when there is no machine for `ref`, or it is not connected. */
+export function connectedShellRow<R extends { machine: string; status: string }>(ref: string, row: R | null): R {
+  if (!row) throw new Error(`No Ona-backed bb machine matches "${ref}". See \`bb ona list\`.`);
+  if (row.status !== "connected") {
+    throw new Error(`${row.machine} is ${row.status}. Start it with: bb machine resume ${row.machine}`);
+  }
+  return row;
+}
+
 function isAlive(terminal: TerminalInfo | null): terminal is TerminalInfo {
   return terminal !== null && (terminal.status === "running" || terminal.status === "starting");
 }

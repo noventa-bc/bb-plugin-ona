@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { runOnce, threadTerminalPlan, type ShellBackend, type TerminalInfo } from "../src/shells.ts";
+import { connectedShellRow, runOnce, threadTerminalPlan, type ShellBackend, type TerminalInfo } from "../src/shells.ts";
 
 function fakeBackend(terminals: Record<string, TerminalInfo> = {}) {
   const created: Array<Parameters<ShellBackend["createTerminal"]>[0]> = [];
@@ -75,4 +75,23 @@ test("runOnce reports a timeout without waiting forever", async () => {
   const result = await runOnce(backend, target, ["sleep", "100"], { timeoutMs: 50, pollMs: 10 });
   assert.equal(result.timedOut, true);
   assert.equal(result.exitCode, null);
+});
+
+test("a connected machine is the shell's target, unchanged (fails if a connected row is refused)", () => {
+  const row = { machine: "rapid-mango", status: "connected", hostId: "host_1" };
+  assert.equal(connectedShellRow("rapid-mango", row), row);
+});
+
+test("a ref with no machine is refused and points at bb ona list (fails if the message changes or a missing row passes)", () => {
+  assert.throws(() => connectedShellRow("nope", null), {
+    message: 'No Ona-backed bb machine matches "nope". See `bb ona list`.',
+  });
+});
+
+test("a machine that is not connected is refused with the resume command (fails if the message changes or a status passes)", () => {
+  for (const status of ["suspended", "disconnected"]) {
+    assert.throws(() => connectedShellRow("rapid-mango", { machine: "rapid-mango", status }), {
+      message: `rapid-mango is ${status}. Start it with: bb machine resume rapid-mango`,
+    });
+  }
 });

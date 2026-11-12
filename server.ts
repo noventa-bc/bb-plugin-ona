@@ -13,7 +13,7 @@ import {
   createSetup,
   findOnaBinary,
   hasOnaSshConfig,
-  ONA_INSTALL_HINT,
+  onaAvailability,
   run,
   type OnaLogin,
 } from "./src/setup.ts";
@@ -24,8 +24,8 @@ import { connectedAtKey, createSync, forgetBox, rowForRef, watchRealtime, type R
 import { ALL, HostGuard, PassScheduler } from "./src/reconcile.ts";
 import { createThreadCost } from "./src/cost-service.ts";
 import { createMove } from "./src/move.ts";
-import { rpcContract, type Devbox } from "./src/rpc.ts";
-import { threadTerminalPlan, type ShellBackend, type ShellTarget } from "./src/shells.ts";
+import { devboxOf, rpcContract, type Devbox } from "./src/rpc.ts";
+import { connectedShellRow, threadTerminalPlan, type ShellBackend, type ShellTarget } from "./src/shells.ts";
 import { TunnelManager } from "./src/ssh.ts";
 import { createUpdateClis } from "./src/updates.ts";
 
@@ -210,19 +210,8 @@ export default async function plugin(bb: BbPluginApi) {
   const provider = registerOnaProvider(bb, {
     async availability() {
       const binary = findOnaBinary(onaPath);
-      if (!binary) return { status: "setup-required", message: ONA_INSTALL_HINT };
-      const login = await onaLogin(binary);
-      if (!login.ok && login.reason === "network")
-        return { status: "unavailable", message: `Ona could not be reached. (${login.message})` };
-      if (!login.ok)
-        return { status: "setup-required", message: `Ona CLI is not logged in: run \`ona login\`. (${login.message})` };
-      if (!hasOnaSshConfig()) {
-        return {
-          status: "setup-required",
-          message: "Run `ona environment ssh-config` so bb can reach Ona environments over SSH.",
-        };
-      }
-      return { status: "available" };
+      const login = binary ? await onaLogin(binary) : null;
+      return onaAvailability(login, login?.ok === true && hasOnaSshConfig());
     },
     ona,
     sshBinary: sshPath,
@@ -298,21 +287,8 @@ export default async function plugin(bb: BbPluginApi) {
     return rowForRef(await machines(), ref) ?? null;
   }
 
-  function devboxOf(row: Row): Devbox {
-    return {
-      machine: row.machine,
-      hostId: row.hostId,
-      envId: row.resource.envId,
-      envName: row.resource.envName,
-      status: row.status,
-      tunnel: tunnels.status(row.resource.envId),
-      adopted: row.resource.adopted,
-      sshCommand: `ssh ${sshHost(row.resource.envId)}`,
-    };
-  }
-
   async function devboxes(): Promise<Devbox[]> {
-    return (await machines()).map(devboxOf);
+    return (await machines()).map((row) => devboxOf(row, tunnels.status(row.resource.envId)));
   }
 
   const shellBackend: ShellBackend = {
@@ -342,11 +318,7 @@ export default async function plugin(bb: BbPluginApi) {
 
   /** A connected Ona machine plus its checkout path, for opening shells. */
   async function shellTarget(ref: string): Promise<ShellTarget> {
-    const row = await findMachine(ref);
-    if (!row) throw new Error(`No Ona-backed bb machine matches "${ref}". See \`bb ona list\`.`);
-    if (row.status !== "connected") {
-      throw new Error(`${row.machine} is ${row.status}. Start it with: bb machine resume ${row.machine}`);
-    }
+    const row = connectedShellRow(ref, await findMachine(ref));
     const env = await ona.getEnvironmentIfExists(row.resource.envId).catch(() => null);
     return {
       hostId: row.hostId,
@@ -359,7 +331,7 @@ export default async function plugin(bb: BbPluginApi) {
   async function workspaceDevbox(environmentId: string): Promise<Devbox | null> {
     const environment = await bb.sdk.environments.get({ environmentId });
     const row = await machineOfHost(environment.hostId);
-    return row ? devboxOf(row) : null;
+    return row ? devboxOf(row, tunnels.status(row.resource.envId)) : null;
   }
 
   /** The Ona devbox a thread runs on, if any. */
