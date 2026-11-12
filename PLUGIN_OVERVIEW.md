@@ -7,9 +7,10 @@ and you drive them from bb as usual.
 - An **Ona devbox** machine type. **Adopt** an environment you already have
   (bb never deletes it), or **create** a new one from an Ona project. New
   devboxes get fun names like `nimble-badger-ca1b` and a 3h idle timeout.
-- A **New Ona devbox** option in the environment picker, for starting a thread
-  on a fresh devbox. Its **Ona project** field picks the project; blank uses
-  `defaultProject`.
+- An **Ona devbox** option in the environment picker, for starting a thread
+  on a fresh devbox or on one you adopt. Its selector picks **Create** (the
+  **Ona project** field; blank uses `defaultProject`) or **Adopt** (the **Ona
+  environment** field).
 - **Suspend and resume**: bb's Pause/Play buttons stop and start the Ona
   environment. A devbox Ona stopped on its own shows as suspended, and a new
   thread or message on it starts it first.

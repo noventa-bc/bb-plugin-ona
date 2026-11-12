@@ -230,9 +230,11 @@ bb thread spawn --project <projectId> --machine ona:<name> \
   --environment /workspaces/<repo> --provider claude-code --prompt "..."
 ```
 
-The **New Ona devbox** option in the environment picker creates a fresh devbox
-for the thread. Its **Ona project** field picks the project for that devbox; a
-blank field uses the `defaultProject` setting.
+The **Ona devbox** option in the environment picker runs the thread on a devbox.
+Its selector picks **Create** (a fresh devbox from the **Ona project** field; a
+blank field uses the `defaultProject` setting) or **Adopt** (an Ona environment
+you already have, named in the **Ona environment** field; bb never deletes it).
+An environment another bb machine uses is refused.
 
 Check that the agent CLIs are installed and logged in:
 
