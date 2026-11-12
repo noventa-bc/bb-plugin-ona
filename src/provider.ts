@@ -580,8 +580,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
 export function registerOnaComposition(bb: BbPluginApi) {
   bb.experimental_environments.register({
     id: "ona-devbox",
-    displayName: "New Ona devbox",
-    description: "Create a fresh Ona environment and run the thread in a worktree there.",
+    displayName: "Ona devbox",
+    description: "Run the thread in a worktree on an Ona environment: a new one, or an existing one you adopt.",
     icon: "Cloud",
     machineProviderId: PROVIDER_ID,
     environmentProviderId: "git-worktree",

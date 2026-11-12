@@ -1,5 +1,5 @@
 // The Ona devbox UI in bb: a devbox thread's header (what the thread has spent so far, and an Editor
-// button), the thread menu's Move to devbox, the composer's Ona project field, and the settings section
+// button), the thread menu's Move to devbox, the composer's Ona devbox field, and the settings section
 // that lists each devbox. bb's own terminal panel already covers shells.
 import { useEffect, useId, useRef, useState } from "react";
 import type { ComponentProps } from "react";
@@ -14,9 +14,9 @@ import {
 import {
   commandArg,
   devboxCommandInput,
+  inputsChange,
   ONA_MACHINE_PROVIDER_ID,
-  projectInputsChange,
-  projectOfSavedInputs,
+  savedInputs,
 } from "./src/machine-inputs.ts";
 import { remember } from "./src/move.ts";
 import type { Devbox, DevboxCommand, DevboxCommandReply, rpcContract, ThreadCost } from "./src/rpc.ts";
@@ -246,29 +246,44 @@ function useMoveData({ threadIds }: { threadIds: readonly string[] }) {
 const projectInput =
   "h-7 rounded-md border border-border bg-background px-2.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-/** The "Ona project" field under the composer's "New Ona devbox": blank means the defaultProject setting. */
+/** The composer's "Ona devbox" field: create from an Ona project (blank means the defaultProject setting), or adopt. */
 function OnaProjectField({ value, onChange }: PluginMachineProviderInputsProps) {
-  const [text, setText] = useState(() => projectOfSavedInputs(value));
+  const [mode, setMode] = useState(() => savedInputs(value).mode);
+  const [text, setText] = useState(() => savedInputs(value).text);
   const id = useId();
+  const modeId = `${id}-mode`;
   const helpId = `${id}-help`;
   useEffect(() => {
-    onChange(projectInputsChange(text));
-  }, [text, onChange]);
+    onChange(inputsChange(mode, text));
+  }, [mode, text, onChange]);
+  const adopt = mode === "adopt";
   return (
     <div className="flex flex-col gap-1 text-xs">
+      <label htmlFor={modeId} className="font-medium text-foreground">
+        Devbox
+      </label>
+      <select
+        id={modeId}
+        value={mode}
+        onChange={(event) => setMode(event.target.value === "adopt" ? "adopt" : "create")}
+        className={projectInput}
+      >
+        <option value="create">Create</option>
+        <option value="adopt">Adopt</option>
+      </select>
       <label htmlFor={id} className="font-medium text-foreground">
-        Ona project
+        {adopt ? "Ona environment" : "Ona project"}
       </label>
       <input
         id={id}
         value={text}
-        placeholder="Project name or id"
+        placeholder={adopt ? "Environment name or id" : "Project name or id"}
         aria-describedby={helpId}
         onChange={(event) => setText(event.target.value)}
         className={projectInput}
       />
       <span id={helpId} className="text-subtle-foreground">
-        Blank uses the plugin's defaultProject setting
+        {adopt ? "bb never deletes an adopted environment" : "Blank uses the plugin's defaultProject setting"}
       </span>
     </div>
   );
