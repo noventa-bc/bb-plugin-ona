@@ -3,14 +3,18 @@ import { chmodSync, existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { local, startHost } from "./e2e-host.ts";
+import { asRoot, local, startHost } from "./e2e-host.ts";
 
 // This file runs in its own process: its TMPDIR is private to it, so the listings below show only what its starts made.
 const privateTmp = mkdtempSync(join(tmpdir(), "e2e-host-"));
 process.env.TMPDIR = privateTmp;
 after(() => rmSync(privateTmp, { recursive: true, force: true }));
 
-/** TCP servers open now, as process.getActiveResourcesInfo() lists them. */
+// A closed server stays in the list for a few loop turns, so the counts below wait for them to pass.
+async function settle() {
+  for (let turn = 0; turn < 10; turn++) await new Promise((resolve) => setImmediate(resolve));
+}
+
 const openServers = () => process.getActiveResourcesInfo().filter((name) => name === "TCPServerWrap").length;
 
 test(
@@ -18,6 +22,7 @@ test(
   local,
   async () => {
     const boom = new Error("plugin start failed");
+    await settle();
     const serversBefore = openServers();
     await assert.rejects(
       startHost({}, async () => {
@@ -25,10 +30,7 @@ test(
       }),
       (error) => error === boom,
     );
-    // A closed server still counts for one loop turn, so wait a few turns before counting.
-    for (let turn = 0; turn < 10 && openServers() > serversBefore; turn++) {
-      await new Promise((resolve) => setImmediate(resolve));
-    }
+    await settle();
     assert.equal(openServers(), serversBefore, "a server stays open after the failed start");
     assert.deepEqual(readdirSync(privateTmp), [], "a folder stays in the temp dir after the failed start");
   },
@@ -36,7 +38,7 @@ test(
 
 test(
   "a cleanup that fails after a failed start still rethrows the plugin's own error (fails if the cleanup's error is not caught)",
-  local,
+  { skip: local.skip || asRoot },
   async () => {
     const boom = new Error("plugin start failed");
     let folder = "";
@@ -53,7 +55,10 @@ test(
       );
       assert.ok(existsSync(folder), "the read-only folder is gone, so the cleanup did not fail");
     } finally {
-      if (folder) chmodSync(folder, 0o755);
+      if (existsSync(folder)) {
+        chmodSync(folder, 0o755);
+        rmSync(folder, { recursive: true, force: true });
+      }
     }
   },
 );

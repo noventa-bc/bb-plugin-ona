@@ -10,7 +10,7 @@ import { after, before, test } from "node:test";
 import { envNameForKey } from "../src/names.ts";
 import type { OnaResource } from "../src/provider.ts";
 import type { BbHost } from "../src/sync.ts";
-import { ctx as baseCtx, local, startHost, type E2eHost } from "./e2e-host.ts";
+import { asRoot, ctx as baseCtx, local, startHost, type E2eHost } from "./e2e-host.ts";
 
 const KEY = "key-1";
 const NAME = envNameForKey(KEY);
@@ -196,8 +196,6 @@ test("a remove that finds no data folder says so", local, async () => {
   assert.deepEqual(rest, []);
   assert.deepEqual(onaCalls(), ["environment get env-adopted"]);
 });
-
-const asRoot = process.getuid?.() === 0 && "root ignores folder permissions";
 
 // Bug: a failed move was told only in bb's server log.
 test(
