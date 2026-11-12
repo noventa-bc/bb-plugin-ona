@@ -9,7 +9,11 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createFakePluginHost, type CreateFakePluginHostOptions } from "@get-bb/plugin-sdk/testing";
+import {
+  createFakePluginHost,
+  type CreateFakePluginHostOptions,
+  type FakePluginHost,
+} from "@get-bb/plugin-sdk/testing";
 import plugin from "../server.ts";
 
 export type Env = { id: string; metadata: { name?: string }; status: { phase: string; content?: unknown } };
@@ -37,7 +41,7 @@ export const alive = (pid: number) => {
 };
 
 const here = (name: string) => fileURLToPath(new URL(name, import.meta.url));
-const FAKE_ENV = ["FAKE_ONA_ENVIRONMENTS", "FAKE_ONA_LOG", "FAKE_ONA_PROJECTS", "FAKE_SSH_HOME", "FAKE_SSH_LOG"];
+export const FAKE_ENV = ["FAKE_ONA_ENVIRONMENTS", "FAKE_ONA_LOG", "FAKE_ONA_PROJECTS", "FAKE_SSH_HOME", "FAKE_SSH_LOG"];
 
 export async function startHost(
   options: Pick<CreateFakePluginHostOptions, "sdk" | "machineBootstrap" | "machineResource">,
@@ -47,36 +51,41 @@ export async function startHost(
   const dir = mkdtempSync(join(tmpdir(), "bb-ona-e2e-"));
   const state = join(dir, "environments.json");
   const log = join(dir, "ona.log");
-  writeFileSync(state, "[]");
-  writeFileSync(log, "");
-  process.env.FAKE_ONA_ENVIRONMENTS = state;
-  process.env.FAKE_ONA_LOG = log;
-  process.env.FAKE_ONA_PROJECTS = here("./fixtures/ona/projects.json");
   const sshLog = join(dir, "ssh.log");
-  writeFileSync(sshLog, "");
-  process.env.FAKE_SSH_LOG = sshLog;
-  process.env.FAKE_SSH_HOME = dir;
   const health = http.createServer((req, res) => res.writeHead(req.url === "/health" ? 200 : 404).end());
-  await new Promise<void>((resolve) => health.listen(0, "127.0.0.1", resolve));
-  const host = createFakePluginHost({
-    ...options,
-    pluginId: "ona",
-    loopbackBaseUrl: `http://127.0.0.1:${(health.address() as AddressInfo).port}`,
-    settings: {
-      onaPath: here("./fake-ona.mjs"),
-      sshPath: here("./fake-ssh.sh"),
-      waitForSharedHome: false,
-      machineDataDir: "",
-      codexSqliteHome: "",
-    },
-  });
+  let host: FakePluginHost | undefined;
+  // A throwing disposal must not skip the release below; its error comes out unless the release throws as well.
   const close = async () => {
-    await host.harness.lifecycle.dispose();
-    health.close();
-    for (const key of FAKE_ENV) delete process.env[key];
-    rmSync(dir, { recursive: true, force: true });
+    try {
+      await host?.harness.lifecycle.dispose();
+    } finally {
+      health.close();
+      for (const key of FAKE_ENV) delete process.env[key];
+      rmSync(dir, { recursive: true, force: true });
+    }
   };
   try {
+    writeFileSync(state, "[]");
+    writeFileSync(log, "");
+    process.env.FAKE_ONA_ENVIRONMENTS = state;
+    process.env.FAKE_ONA_LOG = log;
+    process.env.FAKE_ONA_PROJECTS = here("./fixtures/ona/projects.json");
+    writeFileSync(sshLog, "");
+    process.env.FAKE_SSH_LOG = sshLog;
+    process.env.FAKE_SSH_HOME = dir;
+    await new Promise<void>((resolve) => health.listen(0, "127.0.0.1", resolve));
+    host = createFakePluginHost({
+      ...options,
+      pluginId: "ona",
+      loopbackBaseUrl: `http://127.0.0.1:${(health.address() as AddressInfo).port}`,
+      settings: {
+        onaPath: here("./fake-ona.mjs"),
+        sshPath: here("./fake-ssh.sh"),
+        waitForSharedHome: false,
+        machineDataDir: "",
+        codexSqliteHome: "",
+      },
+    });
     await start(host.bb);
   } catch (error) {
     // The plugin's error is the one to report: a failing close must not replace it.
