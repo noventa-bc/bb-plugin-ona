@@ -41,7 +41,7 @@ export const alive = (pid: number) => {
 };
 
 const here = (name: string) => fileURLToPath(new URL(name, import.meta.url));
-const FAKE_ENV = ["FAKE_ONA_ENVIRONMENTS", "FAKE_ONA_LOG", "FAKE_ONA_PROJECTS", "FAKE_SSH_HOME", "FAKE_SSH_LOG"];
+export const FAKE_ENV = ["FAKE_ONA_ENVIRONMENTS", "FAKE_ONA_LOG", "FAKE_ONA_PROJECTS", "FAKE_SSH_HOME", "FAKE_SSH_LOG"];
 
 export async function startHost(
   options: Pick<CreateFakePluginHostOptions, "sdk" | "machineBootstrap" | "machineResource">,
@@ -54,7 +54,7 @@ export async function startHost(
   const sshLog = join(dir, "ssh.log");
   const health = http.createServer((req, res) => res.writeHead(req.url === "/health" ? 200 : 404).end());
   let host: FakePluginHost | undefined;
-  // A throwing disposal must not skip the release below; its error still comes out.
+  // A throwing disposal must not skip the release below; its error comes out unless the release throws as well.
   const close = async () => {
     try {
       await host?.harness.lifecycle.dispose();

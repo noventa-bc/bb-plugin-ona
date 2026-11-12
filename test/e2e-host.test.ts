@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { asRoot, local, startHost } from "./e2e-host.ts";
+import { asRoot, FAKE_ENV, local, startHost } from "./e2e-host.ts";
 
 // This file runs in its own process: its TMPDIR is private to it, so the listings below show only what its starts made.
 const privateTmp = mkdtempSync(join(tmpdir(), "e2e-host-"));
@@ -16,7 +16,8 @@ async function settle() {
 }
 
 const openServers = () => process.getActiveResourcesInfo().filter((name) => name === "TCPServerWrap").length;
-const fakeEnv = () => Object.keys(process.env).filter((key) => key.startsWith("FAKE_"));
+// Counts only the variables startHost sets: another FAKE_ variable in the shell is not the helper's.
+const fakeEnv = () => FAKE_ENV.filter((key) => process.env[key] !== undefined);
 
 test(
   "a failed start rethrows the plugin's own error and leaves no folder or open server (fails if the cleanup is skipped, the error is replaced or a server stays open)",
@@ -80,7 +81,7 @@ test(
       throw boom;
     };
     try {
-      await assert.rejects(close(), (error) => error === boom);
+      await assert.rejects(close(), (error) => error === boom, "the disposal's error does not come out");
       await settle();
       assert.equal(openServers(), serversBefore, "a server stays open after the failed close");
       assert.deepEqual(fakeEnv(), [], "an env var stays set after the failed close");
@@ -93,10 +94,10 @@ test(
 );
 
 test(
-  "a throw while the fake host is built leaves no open server, env or folder (fails if the server listens before the guarded region)",
+  "a throw while the fake host is built leaves no open server, env or helper folder (fails if the server listens before the guarded region)",
   local,
   async () => {
-    // Bug: a throw in createFakePluginHost came outside the try, after the health server listened and the env was set, so nothing released them or the folder.
+    // Bug: a throw in createFakePluginHost came outside the try, after the health server listened and the env was set, so nothing released them or the helper's folder.
     const boom = new Error("host build failed");
     // The SDK reads every property of machineBootstrap while it builds the host: a getter that throws fails the build.
     const machineBootstrap = {
@@ -116,13 +117,14 @@ test(
       await settle();
       assert.equal(openServers(), serversBefore, "a server stays open after the failed build");
       assert.deepEqual(fakeEnv(), [], "an env var stays set after the failed build");
-      // The fake host keeps its storage folder after a failed build, so the check looks at the helper's folders only.
+      // The check names the helper's folders by their `bb-ona-e2e-` prefix.
       assert.deepEqual(
         readdirSync(privateTmp).filter((name) => name.startsWith("bb-ona-e2e-")),
         [],
         "a folder stays in the temp dir after the failed build",
       );
     } finally {
+      // Leaves the temp dir and the env empty, so a later test's listing of the whole temp dir starts clean.
       for (const name of readdirSync(privateTmp)) rmSync(join(privateTmp, name), { recursive: true, force: true });
       for (const key of fakeEnv()) delete process.env[key];
     }
