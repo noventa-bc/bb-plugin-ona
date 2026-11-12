@@ -38,7 +38,7 @@ test("a discarded lifecycle call is flagged after zero to four calls on its resu
   assert.deepEqual(await flaggedLines(lines), lines);
 });
 
-test("a lifecycle call whose result is kept, assigned, passed on, tested or read as a member is not flagged", async () => {
+test("a lifecycle call whose result is kept, returned, passed on, tested or read as a member is not flagged", async () => {
   const lines = [
     "const host = await bb.sdk.hosts.experimental_suspend({ hostId });",
     "const posted = await bb.sdk.hosts.experimental_suspend({ hostId }).catch(onError);",
@@ -50,13 +50,14 @@ test("a lifecycle call whose result is kept, assigned, passed on, tested or read
     "await track(bb.sdk.hosts.experimental_suspend({ hostId }).host).then(next);",
     "await track(bb.sdk.hosts.experimental_suspend({ hostId }).catch(onError).then(next).host);",
     "await track(bb.sdk.hosts.experimental_suspend({ hostId }).catch(onError).then(next).finally(done).host);",
+    "void track(bb.sdk.hosts.experimental_suspend({ hostId }).host);",
+    "void track(bb.sdk.hosts.experimental_suspend({ hostId }).host).then(next);",
+    "export function resume() { return bb.sdk.hosts.experimental_resume({ hostId }); }",
+    "track(bb.sdk.hosts.experimental_suspend({ hostId }));",
     "const run = () => bb.sdk.hosts.experimental_resume({ hostId });",
     "const host = bb.sdk.hosts.experimental_suspend({ hostId });",
-    "let later; later = bb.sdk.hosts.experimental_suspend({ hostId });",
-    "await Promise.all([bb.sdk.hosts.experimental_suspend({ hostId })]);",
     "if (bb.sdk.hosts.experimental_suspend({ hostId })) {}",
-    "bb.sdk.hosts.experimental_suspend_all({ hostId });",
-    "items.map(() => bb.sdk.hosts.experimental_suspend({ hostId }).catch(onError));",
+    "bb.sdk.hosts.experimental_suspend_all({ hostId });", // another name: the rule matches the three names whole
   ];
   assert.deepEqual(await flaggedLines(lines), []);
 });
