@@ -45,6 +45,7 @@ test("a saved project is read back for the field, and anything else reads as cre
   assert.deepEqual(savedInputs(["my-app"]), { mode: "create", text: "" });
   assert.deepEqual(savedInputs("my-app"), { mode: "create", text: "" });
   assert.deepEqual(savedInputs(null), { mode: "create", text: "" });
+  assert.deepEqual(savedInputs({ mode: "create", environment: "x" }), { mode: "create", text: "" });
 });
 
 test("adopt with a blank environment is blocked with a hint (fails if a blank adopt is sent as ready)", () => {
@@ -65,12 +66,12 @@ test("a bad environment name is blocked quoting ONA_NAME_MESSAGE (fails if adopt
     status: "blocked",
     reason: `Invalid environment "my env": ${ONA_NAME_MESSAGE}`,
   });
+  assert.equal(inputsChange("adopt", "-rf").status, "blocked");
 });
 
 test("a saved adopt value restores mode and environment (fails if a saved adopt reads back as create)", () => {
   assert.deepEqual(savedInputs({ mode: "adopt", environment: "brave-otter" }), { mode: "adopt", text: "brave-otter" });
   assert.deepEqual(savedInputs({ mode: "adopt" }), { mode: "create", text: "" });
-  assert.deepEqual(savedInputs({ mode: "create", environment: "x" }), { mode: "create", text: "" });
 });
 
 test("the ready adopt value parses with the provider's inputs schema (fails if the value's shape drifts from the schema)", async () => {
