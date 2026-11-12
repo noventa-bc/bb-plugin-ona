@@ -125,8 +125,8 @@ type MismatchKind = "active-stopped" | "active-gone" | "disconnected-running";
 export function mismatch(machine: MachineView, ona: OnaView): MismatchKind | null {
   if (ona.kind === "unknown") return null;
   if (machine.phase !== "active") return null;
-  // Gone, as decide() reads it: missing from two good listings. decide() does no lookup: onaView in src/sync.ts looks the
-  // id up and reports missing only when no live box turns up. Or Ona says deleted.
+  // Gone, as decide() reads it: missing from two good listings, which onaView in src/sync.ts reports only when a lookup
+  // by id finds no live box. Or Ona says deleted.
   if (ona.kind === "missing") return ona.streak >= 2 ? "active-gone" : null;
   if (GONE.has(ona.phase)) return "active-gone";
   if (machine.status === "connected") return STOPPED.has(ona.phase) ? "active-stopped" : null;
