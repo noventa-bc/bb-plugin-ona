@@ -90,8 +90,10 @@ lines ponytail ends with.
    version to pin, a safety rule to bend, a behaviour change users will see),
    ask before building. Batch the questions into one message.
 4. **Brief** each builder with the task fields of the template in `docs/owner.md`
-   (a reviewer gets the "Reviewer brief template" there, step 6). The role definitions in
-   `.claude/agents/` hold the standing rules and the report, so a brief does not repeat them.
+   (a reviewer gets the "Reviewer brief template" there, step 6). The standing rules are in
+   `AGENTS.md` "Subagents" and, for reviewers, `docs/review-standards.md` "How
+   reviewers work" and "Report"; the role definitions in `.claude/agents/` hold
+   only what is particular to the role. A brief repeats none of them.
 5. **Build** in a worktree, by the `builder`
    definition (`.claude/agents/builder.md`): its commands, failing test first,
    mutants, checks, handoff and report are there. The builder leaves the work
@@ -103,9 +105,9 @@ lines ponytail ends with.
    files it touches and the ways it could fail, never the orchestrator's own
    verdict), `code-review` (its recipe followed by hand: the Skill itself starts
    many agents) and `/ponytail-review branch`. Brief each with the template in
-   `docs/owner.md`; `.claude/agents/reviewer-adversarial.md`,
-   `reviewer-code.md` and `reviewer-ponytail.md` hold the standing rules and the
-   report. Blocking findings go back to the builder. Code is what
+   `docs/owner.md`; the standing rules and the report are where step 4 says,
+   and `.claude/agents/reviewer-adversarial.md`, `reviewer-code.md` and
+   `reviewer-ponytail.md` hold each pass's own part. Blocking findings go back to the builder. Code is what
    `docs/review-standards.md` counts as code. A PR
    that changes code gets all three passes on its first round, however
    small the change; a PR that changes no code gets the `code-review` pass

@@ -52,7 +52,7 @@ Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
 
 ## Subagents
 
-An agent whose brief or definition names a role (builder, reviewer) follows this list; the orchestrator follows its path, git, npm and exit-code rules too.
+This list binds an agent whose brief or definition names a role (builder, reviewer).
 
 - `AGENTS.md` is in your context; re-read it only when your branch edits it.
 - Work only in the worktree or scratch folder your brief names. Name every file by its absolute path, run git as `git -C <path> ...` and never rely on `cd`: several worktrees are open at once and the shell's directory drifts between them.
@@ -61,10 +61,10 @@ An agent whose brief or definition names a role (builder, reviewer) follows this
 - Read each exit code on its own: never chain a check into another command with `;` (the next command runs even when the check fails) or pipe it into `grep` (the exit code is grep's).
 - Quote grep globs (`--include='*.ts'`). On macOS, `sed -i` takes an empty suffix: `sed -i ''`.
 - Never kill a process you did not start. Report any process you leave running.
-- Never commit, push or open a pull request.
+- Never commit, push or open a pull request. A reviewer changes nothing in the builder's worktree.
 - Never run `ona`, `ssh` or `bb`, not even a read-only command such as `bb ona status`, and never read `~/.ssh`, `~/.ona` or `~/.bb`. Read bb's server source only with `scripts/bb-source.sh`.
 - Install nothing and never run `brew`. A builder's `npm ci` and a dependency its brief names as owner-approved are the exceptions.
-- Your report follows Code Review Rule 10.
+- Everything you write (committed files, comments, commit text, your report) follows Code Review Rule 10.
 
 ## Coupled changes
 

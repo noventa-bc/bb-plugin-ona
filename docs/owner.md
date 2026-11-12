@@ -45,7 +45,7 @@ nothing and don't push; you review, commit and merge. Inside it, `FACTORY.md`
 
 ### Task brief template
 
-The standing rules are in the builder's definition, `.claude/agents/builder.md`; the brief holds only the task:
+The standing rules are in `AGENTS.md` "Subagents"; the builder's definition, `.claude/agents/builder.md`, holds what is particular to the builder. The brief holds only the task:
 
 ```
 Role: builder (`.claude/agents/builder.md`)
@@ -69,7 +69,7 @@ on the settled host, not on the answer.
 
 ### Reviewer brief template
 
-FACTORY.md step 6 points here. The standing rules are in the reviewer's definition, named in `Role:`; the brief holds only the task:
+FACTORY.md step 6 points here. The standing rules are in `AGENTS.md` "Subagents" and `docs/review-standards.md` "How reviewers work" and "Report"; the reviewer's definition, named in `Role:`, holds what is particular to its pass. The brief holds only the task:
 
 ```
 Role: reviewer, pass `adversarial` (`.claude/agents/reviewer-adversarial.md`), `code-review` (`.claude/agents/reviewer-code.md`) or `ponytail-review` (`.claude/agents/reviewer-ponytail.md`, see below)
