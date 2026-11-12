@@ -1,4 +1,4 @@
-// The sleep and the poll loop the plugin's waits share, both abortable.
+// The sleep and the poll loop the plugin's waits share, both abortable, and the lifecycle timer's tick.
 // The default import, not the named one: node:test's mock.timers patches this object.
 import timers from "node:timers/promises";
 
@@ -65,4 +65,31 @@ export async function capped<T>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** The lifecycle timer ticks every 15 s; every BACKSTOP_TICKS-th tick is the backstop, 2 minutes apart. */
+export const TICK_MS = 15_000;
+const BACKSTOP_TICKS = 8;
+/** A gap longer than this between two ticks means the process slept: bb's SDK has no wake event. */
+const SLEEP_GAP_MS = 60_000;
+
+/** What timerTick keeps between ticks: when the last tick ran, and the ticks since the last backstop or sleep. */
+export interface TickState {
+  last: number;
+  count: number;
+}
+
+/**
+ * One tick at `now`. `slept` is the gap in ms when the tick came after a sleep, else null. A sleep restarts the count
+ * and its tick is never a backstop: the pass the sleep schedules covers that moment, so no second pass follows it.
+ */
+export function timerTick(
+  state: TickState,
+  now: number,
+): { state: TickState; slept: number | null; backstop: boolean } {
+  const gap = now - state.last;
+  if (gap > SLEEP_GAP_MS) return { state: { last: now, count: 0 }, slept: gap, backstop: false };
+  const count = state.count + 1;
+  const backstop = count === BACKSTOP_TICKS;
+  return { state: { last: now, count: backstop ? 0 : count }, slept: null, backstop };
 }
