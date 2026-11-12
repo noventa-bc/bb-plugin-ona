@@ -272,7 +272,7 @@ included); see `create` in `src/provider.ts`. A create run again and `reconcileC
 machine has stored since: the create is refused, and the cleanup ends without a delete. `remove()` first asks whether
 another bb machine uses the box: if one does, it deletes nothing and leaves the box's tunnel, keys and no-stop flag to
 that machine; if the question fails, it changes nothing and bb retries. A machine bb is also removing does not count
-there (bb never takes it back into use), while an adopt still counts it. Every other `remove()` path closes the box's
+there (bb only ever goes on to destroy it), while an adopt still counts it. Every other `remove()` path closes the box's
 tunnel (`remove` in `src/provider.ts`).
 For an adopted box, `remove()` runs `MOVE_MACHINE_ASIDE` (`src/provider.ts`) with the removed machine's host id: it
 picks the data folder whose `host-id` holds that id, stops every process whose command line names that folder (bb's

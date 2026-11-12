@@ -299,7 +299,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
 
   /**
    * A host whose resource carries `key` is this create's own (bb runs create again for a host it is still creating).
-   * `skipRemoving` leaves out hosts bb is removing: bb never takes one back into use.
+   * `skipRemoving` leaves out hosts bb is removing: bb only ever goes on to destroy one.
    */
   async function machineUsing(envId: string, key: string, skipRemoving = false) {
     for (const host of await bb.sdk.hosts.list({ includeCreating: true })) {
