@@ -274,7 +274,12 @@ export function register({
           if (hostReadFails === "list") throw new Error("bb is unreachable");
           return machines
             .filter((machine) => args?.includeCreating || machine.phase !== "creating")
-            .map(({ id, name, provider = "ona" }) => ({ id, name, machineProviderId: provider }));
+            .map(({ id, name, phase, provider = "ona" }) => ({
+              id,
+              name,
+              lifecycle: { phase },
+              machineProviderId: provider,
+            }));
         },
       },
     },

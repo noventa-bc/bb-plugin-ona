@@ -1,5 +1,5 @@
 // The provider's create on a box another bb machine may use, driven through `create` in the fake host of
-// ./provider-fake.ts, followed by bb's cleanup of a failed create, and the remove of a created machine whose box another
+// ./provider-fake.ts, followed by bb's cleanup of a failed create, and the remove of a machine whose box another
 // machine uses.
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -188,23 +188,54 @@ test("removing the created machine of a box another machine adopted since keeps 
   assert.ok(logs.some((entry) => /ona:m2 \(host-2\) uses Ona environment box/.test(entry.message)));
 });
 
-test("removing the adopting machine while the creating one still stores the box runs the adopted path (fails if the guard skips the adopted check)", async () => {
-  const createdBy = {
-    id: "host-1",
-    name: "ona:box",
-    phase: "active",
-    resource: { ...adoptedResource, adopted: false },
-  };
-  const fake = register({ found: box("RUNNING"), machines: [createdBy] });
+const createdBy = { id: "host-1", name: "ona:box", phase: "active", resource: { ...adoptedResource, adopted: false } };
+
+/** bb removes host-2, the machine that adopted the box host-1's create made; `releasing` starts with the no-stop flag set. */
+async function removeAdopting(setup: Omit<Setup, "found">) {
+  const fake = register({ found: box("RUNNING"), tunnel: "up", machines: [createdBy], ...setup });
+  fake.releasing.add("env-1");
   const resource = { ...adoptedResource, key: "key-2" };
-  const removed = await fake.provider.remove({
-    report: lifecycle().report,
-    hostId: "host-2",
-    resource,
-    signal: new AbortController().signal,
+  const removed = await fake.provider
+    .remove({ report: lifecycle().report, hostId: "host-2", resource, signal: new AbortController().signal })
+    .catch((error: unknown) => error);
+  return { ...fake, removed };
+}
+
+test("removing the adopting machine while the creating one still stores the box moves only its own folder aside and keeps what that machine needs (fails if the guard skips the adopted check, or the remove closes the tunnel, forgets the keys or drops the no-stop flag)", async () => {
+  // Bug: the adopted remove closed the box's tunnel and forgot its keys, which host-1 still runs on.
+  const { removed, calls, moves, tunnels, forgotten, releasing, logs } = await removeAdopting({});
+  assert.deepEqual(removed, { status: "removed" });
+  assert.deepEqual(calls, ["get RUNNING", "move-aside"]);
+  assert.deepEqual(moves[0]?.args, ["host-2", ""]);
+  assert.ok(
+    logs.some((entry) => /ona:box \(host-1\) uses .* removing host-2 kept its tunnel and keys/.test(entry.message)),
+  );
+  assert.deepEqual(tunnels, []);
+  assert.deepEqual(forgotten, []);
+  assert.ok(releasing.has("env-1"));
+});
+
+test("removing the adopting machine while bb also removes the creating one closes the tunnel and forgets the keys (fails if a machine being removed counts as using the box)", async () => {
+  const { removed, calls, tunnels, forgotten, releasing } = await removeAdopting({
+    machines: [{ ...createdBy, phase: "removing" }],
   });
   assert.deepEqual(removed, { status: "removed" });
-  assert.deepEqual(fake.calls, ["get RUNNING", "move-aside"]);
+  assert.deepEqual(calls, ["get RUNNING", "move-aside"]);
+  assert.deepEqual(tunnels, ["stop env-1", "stop env-1"]);
+  assert.deepEqual(forgotten, ["env-1"]);
+  assert.ok(!releasing.has("env-1"));
+});
+
+test("removing the created machine while bb also removes the adopting one deletes the box (fails if a machine being removed counts as using the box)", async () => {
+  const { removed, calls, tunnels, forgotten } = await removeCreated({
+    found: box("RUNNING"),
+    tunnel: "up",
+    machines: [{ ...adoptedSince, phase: "removing" }],
+  });
+  assert.deepEqual(removed, { status: "removed" });
+  assert.deepEqual(calls, ["get RUNNING", "delete env-1"]);
+  assert.deepEqual(tunnels, ["stop env-1"]);
+  assert.deepEqual(forgotten, ["env-1"]);
 });
 
 test("removing the created machine deletes its box when only other boxes' machines are listed (fails if the guard counts any listed machine or drops the remove's key)", async () => {
