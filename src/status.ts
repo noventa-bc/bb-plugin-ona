@@ -2,13 +2,13 @@
 // the box facts and the last action), and formatStatus prints the rows as text.
 import { clockTime } from "./keepalive.ts";
 import { boxFacts, errorText, reasonOf, type BoxFacts } from "./ona.ts";
-import { GIVE_UP_AFTER, type HostGuard } from "./reconcile.ts";
+import { GIVE_UP_AFTER, RELEASE_IDLE, type HostGuard } from "./reconcile.ts";
 import type { Row, SyncBb, SyncDeps } from "./sync.ts";
 import { liveThreads, stuckThreads } from "./updates.ts";
 
 // Only the all-boxes pass (`bb ona sync` with no ref) runs an idle release; every other action needs its machine's pass.
 const giveUpCommand = (action: string, machine: string) =>
-  action === "release-idle" ? "bb ona sync" : `bb ona sync ${machine}`;
+  action === RELEASE_IDLE ? "bb ona sync" : `bb ona sync ${machine}`;
 
 export interface StatusRow {
   machine: string;
