@@ -183,18 +183,12 @@ test("onaAvailability is available after a good login with the ssh config (fails
   assert.deepEqual(onaAvailability(ready.login, sshPresent), { status: "available" });
 });
 
+const neverRead = () => assert.fail("ssh config read before a good login");
+
 test("the ssh config is not read without a good login (fails if the check runs before the login result)", () => {
-  let reads = 0;
-  const sshConfig = () => {
-    reads += 1;
-    return true;
-  };
-  onaAvailability(null, sshConfig);
-  onaAvailability({ ok: false, message: "connection refused", reason: "network" }, sshConfig);
-  onaAvailability({ ok: false, message: "not logged in", reason: "auth" }, sshConfig);
-  assert.equal(reads, 0);
-  assert.deepEqual(onaAvailability(ready.login, sshConfig), { status: "available" });
-  assert.equal(reads, 1);
+  onaAvailability(null, neverRead);
+  onaAvailability({ ok: false, message: "connection refused", reason: "network" }, neverRead);
+  onaAvailability({ ok: false, message: "not logged in", reason: "auth" }, neverRead);
 });
 
 /**

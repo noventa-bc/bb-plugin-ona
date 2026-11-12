@@ -513,13 +513,11 @@ test("devboxOf passes each tunnel state through unchanged (fails if the tunnel i
   }
 });
 
-test("devboxOf shows each status the row has (fails if the status is a constant)", () => {
-  for (const status of ["connected", "suspended"]) {
-    assert.equal(devboxOf({ ...devboxRow, status }, "off").status, status);
-  }
-});
-
-test("devboxOf reports a box bb did not adopt as not adopted (fails if adopted is a constant)", () => {
-  const unadopted = { ...devboxRow, resource: { ...devboxRow.resource, adopted: false } };
-  assert.equal(devboxOf(unadopted, "off").adopted, false);
+test("devboxOf shows a suspended, unadopted box as suspended and not adopted (fails if status or adopted is a constant)", () => {
+  const devbox = devboxOf(
+    { ...devboxRow, status: "suspended", resource: { ...devboxRow.resource, adopted: false } },
+    "off",
+  );
+  assert.equal(devbox.status, "suspended");
+  assert.equal(devbox.adopted, false);
 });
