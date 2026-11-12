@@ -102,6 +102,7 @@ npm run check        # Node pin, typecheck, lint, format check, tests
 | `AGENTS.md`                        | Rules for changing the plugin                                 |
 | `FACTORY.md`                       | The maintainer's orchestrated agent flow                      |
 | `docs/owner.md`                    | How the maintainer runs agents, verifies a build and releases |
+| `.claude/agents/`                  | Standing rules of the builder and reviewer agents             |
 | `docs/sync.md`, `docs/security.md` | Safety rules and the security model                           |
 | `docs/ona-notes.md`                | Facts about Ona and bb, each with a checked date              |
 | `docs/decisions/`                  | Why the rules are what they are                               |
