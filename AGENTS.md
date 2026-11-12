@@ -7,6 +7,19 @@ This repo is public. Name only this plugin and public tools.
 
 Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
 
+## Where things are
+
+- Machine provider hooks (`create`, `resume`, `suspend`, `remove`, `reconcileCleanup`): `registerOnaProvider` in `src/provider.ts`; wake and connect: `connectHelpers` in `src/provider-connect.ts`.
+- Sync pass: `reconcile` inside `createSync` in `src/sync.ts`; its rules: `decide()` in `src/reconcile.ts`.
+- Cooldowns, backoff and give-up: `HostGuard` in `src/reconcile.ts`; pass timing: `PassScheduler` there.
+- Tunnel: `TunnelManager` in `src/ssh.ts`; loopback proxy: `startDaemonProxy` and `isAllowedRequest` in `src/proxy.ts`.
+- bb lifecycle calls: `experimental_suspend` and `experimental_resume` in `src/sync.ts`; their results: `settledLifecycle` and `lifecycleRefusal` in `src/lifecycle.ts`.
+- `bb ona` commands: `usage`, `commands` and `onaCommands` in `src/commands.ts`, registered with `bb.cli.register` in `server.ts`.
+- Settings: `bb.settings.define` in `server.ts`.
+- Timer: the `lifecycle-sync` service in `server.ts`; its rules: `timerTick` in `src/time.ts`.
+- Sync test fakes: `world` in `test/sync-fakes.ts`.
+- Helper scripts: "Commands" below.
+
 ## Commands
 
 - Run `npm run check` (Node pin, typecheck, lint, format check and tests) before you finish. `npm run format` fixes formatting.
@@ -31,7 +44,7 @@ Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
 - Ona devboxes cost money while they run.
 - Ona's SSH starts stopped devboxes. Any SSH to a devbox can wake it.
 - Never run `ona` actions, `ssh` to devboxes, or `bb machine` or `bb plugin` changes.
-- Never commit to `main` or push, except as `FACTORY.md` allows: for a roadmap item the owner named in the session (as its Permissions section defines it), the orchestrator commits on `agent/*` branches, pushes them, opens PRs and merges them once the review has no blocking finding (`FACTORY.md` step 6) and CI is green.
+- Never commit to `main` or push, except as `FACTORY.md` allows: for a roadmap item the owner named in the session (as its Permissions section defines it), the orchestrator commits on `agent/*` branches, pushes them, opens PRs and merges them once the review has no blocking finding (`docs/review-standards.md`) and CI is green.
 - Commit messages and PR titles are Conventional Commits, `type(scope): subject` (`scripts/conventional.sh` has the rule; `.githooks/commit-msg` and `.githooks/pre-commit` run the checks, and those files say which; `check.yml` checks the PR). `feat` bumps the minor version, `fix` and `perf` the patch, `!` the major: that PR bumps `package.json` (`scripts/bump.sh "<title>"` does it). Other types, and any Markdown-only change, need no bump. A push to `main` tags and releases the version with notes generated from the merged PR titles.
 - Read-only `bb ona status` is fine, but only when the owner is present.
 
@@ -57,7 +70,7 @@ Change these together, in the same edit.
 - Tests, fakes and stubs meet the same bar as `src/`: clear names, one job per helper, a comment only for a why. Not production code is no excuse for a mess.
 - Write the least code that solves the whole task (the ponytail ruleset, installed as a Claude Code plugin; see `docs/owner.md`). A shortcut with a known limit gets a comment `shortcut: <the limit>, <when to upgrade>`; `/ponytail-debt` lists them. A shortcut comment never describes an unfixed weakness; that goes to the private roadmap.
 - Fix a bug with a failing test first, where a test is possible. A `// Bug:` line names only a bug that was on `main`, not a design tried and dropped inside the PR (git history has it).
-- When you find a bug, a source of noise or anything that can damage the repo, add the guard that stops it recurring in the same change (a finding already on `main` that the branch does not make reachable or worse takes its guard in its roadmap item, `FACTORY.md` step 6): a test, a lint rule, a CI step, a `.gitignore` line or a written rule here. Say in the handoff which guard you added.
+- When you find a bug, a source of noise or anything that can damage the repo, add the guard that stops it recurring in the same change (a finding already on `main` that the branch does not make reachable or worse takes its guard in its roadmap item, `docs/review-standards.md`): a test, a lint rule, a CI step, a `.gitignore` line or a written rule here. Say in the handoff which guard you added.
 - A change to what a sync pass does gets a scenario in a `test/sync-*.test.ts` file (fake bb calls and Ona listing from `test/sync-fakes.ts`): one that `scripts/lines.sh` does not list, or a new `test/sync-<topic>.test.ts` when it lists them all.
 - For `server.ts` code without tests, list owner check steps in the handoff instead.
 - Put logic in `src/` as pure functions with tests.
@@ -118,7 +131,4 @@ Process feedback holds proposed edits to this file, with evidence.
 ## Improving this file
 
 - Propose an edit when the same correction was needed twice, or when a fact was missing.
-- Edit an existing rule instead of adding one.
-- The owner applies proposals.
-- Keep this file under 300 lines. A proposal that goes over the limit names the line it removes.
-- The owner runs `/doctor prompt-audit` once per release.
+- Edit an existing rule instead of adding one. This file stays under 300 lines (`scripts/docs-check.sh` checks), so a proposal that goes over names the line it removes.
