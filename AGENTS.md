@@ -7,16 +7,31 @@ This repo is public. Name only this plugin and public tools.
 
 Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
 
+## Where things are
+
+- Machine provider hooks (`create`, `resume`, `suspend`, `remove`, `reconcileCleanup`) and `wake`: `registerOnaProvider` in `src/provider.ts`; start and connect: `connectHelpers` in `src/provider-connect.ts`; `bb ona resume`: `resumeCommand` in `src/wake.ts`.
+- Sync pass: `reconcile` inside `createSync` in `src/sync.ts`; its rules: `decide()` in `src/reconcile.ts`.
+- Cooldowns, backoff and give-up: `HostGuard` in `src/reconcile.ts`; pass timing: `PassScheduler` there.
+- Tunnel: `TunnelManager` in `src/ssh.ts`; loopback proxy: `startDaemonProxy` and `isAllowedRequest` in `src/proxy.ts`.
+- bb lifecycle calls: `experimental_suspend` and `experimental_resume` in `src/sync.ts`; their results: `settledLifecycle` and `lifecycleRefusal` in `src/lifecycle.ts`; idle release: `machinesToRelease` there.
+- `bb ona` commands: `usage`, `commands` and `onaCommands` in `src/commands.ts`, registered with `bb.cli.register` in `server.ts`.
+- Settings: `bb.settings.define` in `server.ts`.
+- Timer: the `lifecycle-sync` service in `server.ts`; its rules: `timerTick` in `src/time.ts`.
+- Sync test fakes: `world` in `test/sync-fakes.ts`.
+- Other modules: `src/setup.ts` (prerequisite checks), `src/ona.ts` (ona CLI wrapper, shared listing), `src/status.ts` (`bb ona status`), `src/keepalive.ts` (keep-alive), `src/move.ts` (thread move), `src/names.ts` (fun names); agent docs: `skills/ona-devboxes/SKILL.md`.
+- Helper scripts: "Commands" below.
+
 ## Commands
 
 - Run `npm run check` (Node pin, typecheck, lint, format check and tests) before you finish. `npm run format` fixes formatting.
 - CI: `check.yml` runs `npm run check` and skips changes that touch only Markdown; `docs.yml` runs on Markdown changes and is where a job that validates `.md` files goes.
-- Before committing Markdown, run `scripts/docs-check.sh`: the Markdown checks CI runs. In a copy with no `.git` it checks every Markdown file on disk outside `node_modules`.
-- For the definitions of a name in bb's server bundle, run `scripts/bb-source.sh <name> [lines]`: it prints bb's version, then the definitions it finds with the lines after them (a comment in the script names the forms it finds). `scripts/bb-source.sh --sdk <name> [lines]` searches the plugin SDK typings instead and prints no version.
-- Before adding lines to a file, run `scripts/lines.sh [margin]`: it lists the files with fewer than `margin` (default 10) lines under the `max-lines` cap in `eslint.config.js`.
-- For the architecture numbers, run `scripts/fitness.sh`: it prints one `name value` line per number, where lower is better; CI runs `scripts/fitness.sh --check`, and the numbers must equal `scripts/fitness-baseline.txt` line for line; a rise needs the owner's yes, and a drop is recorded by lowering the baseline, in the same PR.
-- For the product numbers, the owner runs `f=$(mktemp) && bb plugin logs ona -n 10000 > "$f" && scripts/product-numbers.sh < "$f"`: it prints one `name value` line per number from the plugin's `metric` log lines; a line that is not a log line is counted in `skipped_lines`.
-- For a reviewer's scratch copy of a commit, use `scripts/scratch-copy.sh <worktree> <sha> <dir>`: the copy has no `.git`; its `node_modules` links to the main checkout's when `package.json` and `package-lock.json` are the same as the main checkout's apart from the package's own version, and a commit that has its own `node_modules` keeps it, with no link.
+- Before committing Markdown, run `scripts/docs-check.sh`: the Markdown checks CI runs.
+- For the definitions of a name in bb's server bundle (or, with `--sdk`, the plugin SDK typings), run `scripts/bb-source.sh <name> [lines]`.
+- Before adding lines to a file, run `scripts/lines.sh 10`: it lists the files near the `max-lines` cap in `eslint.config.js`.
+- For the architecture numbers, run `scripts/fitness.sh`; CI runs `scripts/fitness.sh --check` against `scripts/fitness-baseline.txt`. A rise needs the owner's yes, and a drop is recorded by lowering the baseline, in the same PR.
+- For the product numbers, the owner runs `scripts/product-numbers.sh` (its header has the command; it needs `bb`).
+- For a reviewer's scratch copy of a commit, use `scripts/scratch-copy.sh <worktree> <sha> <dir>`.
+- Each script's header says what it prints and its options.
 - CI also runs `shellcheck` on `scripts/*.sh`, `test/*.sh` and `.githooks/*`; `npm run check` does not. After changing a `.sh` file, run `shellcheck` on it (install it with `brew install shellcheck` only when the owner confirms), or say in the handoff that it was not run.
 - CI also checks that each `src/<name>.ts` has a `test/<name>.test.ts` (`check.yml` names the exceptions); `npm run check` does not, so a new module gets its own test file.
 - CI also runs the Semgrep rules in `.semgrep/rules.yml` (fixtures in `.semgrep/rules.ts`). Locally, install it with `brew install semgrep` only when the owner confirms, then run `semgrep --test --metrics=off .semgrep/` and `semgrep scan --config .semgrep/rules.yml --error --metrics=off app.tsx server.ts src`.
@@ -31,9 +46,25 @@ Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
 - Ona devboxes cost money while they run.
 - Ona's SSH starts stopped devboxes. Any SSH to a devbox can wake it.
 - Never run `ona` actions, `ssh` to devboxes, or `bb machine` or `bb plugin` changes.
-- Never commit to `main` or push, except as `FACTORY.md` allows: for a roadmap item the owner named in the session (as its Permissions section defines it), the orchestrator commits on `agent/*` branches, pushes them, opens PRs and merges them once the review has no blocking finding (`FACTORY.md` step 6) and CI is green.
+- Never commit to `main` or push, except as `FACTORY.md` "Permissions" allows the orchestrator.
 - Commit messages and PR titles are Conventional Commits, `type(scope): subject` (`scripts/conventional.sh` has the rule; `.githooks/commit-msg` and `.githooks/pre-commit` run the checks, and those files say which; `check.yml` checks the PR). `feat` bumps the minor version, `fix` and `perf` the patch, `!` the major: that PR bumps `package.json` (`scripts/bump.sh "<title>"` does it). Other types, and any Markdown-only change, need no bump. A push to `main` tags and releases the version with notes generated from the merged PR titles.
 - Read-only `bb ona status` is fine, but only when the owner is present.
+
+## Subagents
+
+This list binds an agent whose brief or definition names a role (builder, reviewer).
+
+- `AGENTS.md` is in your context; re-read it only when your branch edits it.
+- Work only in the worktree or scratch folder your brief names. Name every file by its absolute path, run git as `git -C <path> ...` and never rely on `cd`: several worktrees are open at once and the shell's directory drifts between them.
+- Put the node bin folder the brief gives first on `PATH` for each node or npm command. Run npm and repo scripts as `sh -c "cd <folder> && ..."`: a `cd` at the start of a compound command can be dropped, and `npm` run from a folder without `package.json` walks up and installs into the live checkout.
+- Run slow commands (`npm ci`, `npm run check`) in the background.
+- Read each exit code on its own: never chain a check into another command with `;` (the next command runs even when the check fails) or pipe it into `grep` (the exit code is grep's).
+- Quote grep globs (`--include='*.ts'`). On macOS, `sed -i` takes an empty suffix: `sed -i ''`.
+- Never kill a process you did not start. Report any process you leave running.
+- Never commit, push or open a pull request. A reviewer changes nothing in the builder's worktree.
+- Never run `ona`, `ssh` or `bb`, not even a read-only command such as `bb ona status`, and never read `~/.ssh`, `~/.ona` or `~/.bb`. Read bb's server source only with `scripts/bb-source.sh`.
+- Install nothing and never run `brew`. A builder's `npm ci` and a dependency its brief names as owner-approved are the exceptions.
+- Everything you write (committed files, comments, commit text, your report) follows Code Review Rule 10.
 
 ## Coupled changes
 
@@ -57,7 +88,7 @@ Change these together, in the same edit.
 - Tests, fakes and stubs meet the same bar as `src/`: clear names, one job per helper, a comment only for a why. Not production code is no excuse for a mess.
 - Write the least code that solves the whole task (the ponytail ruleset, installed as a Claude Code plugin; see `docs/owner.md`). A shortcut with a known limit gets a comment `shortcut: <the limit>, <when to upgrade>`; `/ponytail-debt` lists them. A shortcut comment never describes an unfixed weakness; that goes to the private roadmap.
 - Fix a bug with a failing test first, where a test is possible. A `// Bug:` line names only a bug that was on `main`, not a design tried and dropped inside the PR (git history has it).
-- When you find a bug, a source of noise or anything that can damage the repo, add the guard that stops it recurring in the same change (a finding already on `main` that the branch does not make reachable or worse takes its guard in its roadmap item, `FACTORY.md` step 6): a test, a lint rule, a CI step, a `.gitignore` line or a written rule here. Say in the handoff which guard you added.
+- When you find a bug, a source of noise or anything that can damage the repo, add the guard that stops it recurring in the same change (a finding already on `main` that the branch does not make reachable or worse takes its guard in its roadmap item, `docs/review-standards.md`): a test, a lint rule, a CI step, a `.gitignore` line or a written rule here. Say in the handoff which guard you added.
 - A change to what a sync pass does gets a scenario in a `test/sync-*.test.ts` file (fake bb calls and Ona listing from `test/sync-fakes.ts`): one that `scripts/lines.sh` does not list, or a new `test/sync-<topic>.test.ts` when it lists them all.
 - For `server.ts` code without tests, list owner check steps in the handoff instead.
 - Put logic in `src/` as pure functions with tests.
@@ -95,7 +126,7 @@ The safety rules behind 1–4 are in `docs/sync.md`. Cite `file:line` for each f
 7. No secrets in logs, storage or errors.
 8. A call that changes state can be accepted without taking effect (bb suspend, resume and reconcile return the host). Check the result, treat "not done" as a failure so the guard backs off, and never report an action as done on the call alone. ESLint enforces this for the bb lifecycle calls.
 9. Complexity the change doesn't justify is a finding: a simpler way to the same result, an unused option, or a big change (see "Complexity") made without the owner's review.
-10. Public content: no company, client or person names, no personal paths, no real environment names or IDs, and no description of an unfixed weakness (those go to the private roadmap as items to fix).
+10. Public content: no company, client or person names, no personal paths, no real environment names or IDs, no roadmap link, ids or text (name items by their roadmap label only, for example "T2"), and no description of an unfixed weakness (those go to the private roadmap as items to fix).
 
 ## Handoff
 
@@ -111,14 +142,11 @@ Write `.agent/HANDOFF.md` when a task ends. The file is git-ignored. Use these s
 - Weaknesses for the roadmap (private)
 - Process feedback
 
-Leave changes uncommitted for the owner to review, unless the orchestrator runs a roadmap item the owner named in the session (as `FACTORY.md` Permissions defines it), where it commits them on an `agent/*` branch and opens a PR.
+Leave changes uncommitted for the owner to review, unless `FACTORY.md` "Permissions" lets the orchestrator commit them.
 List unfixed weaknesses only under Weaknesses for the roadmap; the orchestrator adds each to the private roadmap. Never describe one in a committed file, a code comment, a commit message or PR text.
 Process feedback holds proposed edits to this file, with evidence.
 
 ## Improving this file
 
-- Propose an edit when the same correction was needed twice, or when a fact was missing.
-- Edit an existing rule instead of adding one.
-- The owner applies proposals.
-- Keep this file under 300 lines. A proposal that goes over the limit names the line it removes.
-- The owner runs `/doctor prompt-audit` once per release.
+- Propose an edit when the same correction was needed twice, or when a fact was missing; agents propose, and the owner applies.
+- Edit an existing rule instead of adding one. This file stays under 300 lines (`scripts/docs-check.sh` checks), so a proposal that goes over names the line it removes.

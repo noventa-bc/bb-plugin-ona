@@ -430,13 +430,8 @@ bb plugin install .                                            # install from th
 bb plugin reload ona                                           # after changes
 ```
 
-Source: `server.ts` (settings, tunnels, wiring), `src/provider.ts` (machine
-provider), `src/provider-connect.ts` (its connect path), `src/proxy.ts` (daemon-only proxy), `src/ssh.ts` (executor,
-tunnels), `src/setup.ts` (prerequisite checks), `src/ona.ts` (ona CLI wrapper,
-shared listing), `src/reconcile.ts` (sync rules), `src/sync.ts` (sync passes),
-`src/status.ts` (`bb ona status`), `src/commands.ts` (`bb ona` commands), `src/lifecycle.ts` (idle
-release), `src/keepalive.ts` (keep-alive), `src/move.ts` (thread move), `src/names.ts` (fun names),
-`skills/ona-devboxes/SKILL.md` (agent docs).
+Source: `server.ts` wires the plugin to the modules in `src/`; "Where things
+are" in [AGENTS.md](AGENTS.md) maps them.
 
 Working on the plugin, including with coding agents: see [AGENTS.md](AGENTS.md).
 Decision records are in [docs/decisions](docs/decisions/README.md).
