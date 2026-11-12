@@ -325,6 +325,14 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         adopted = false;
         const existing = await ona.findEnvironment(name, signal);
         if (existing) {
+          // A box this create made before its checkpoint can be adopted by another machine since; same refusal as above.
+          const other = await machineUsing(existing.id, key);
+          if (other) {
+            throw new Error(
+              `${other.name} (${other.id}) uses Ona environment ${name}; a box holds one bb machine. ` +
+                "Create a new machine instead.",
+            );
+          }
           env = existing;
         } else {
           const projectRef = inputs.project ?? deps.defaultProject;
@@ -356,7 +364,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       // Only environments this provider created carry the key-derived name;
       // adopted environments are never deleted.
       const env = await ona.findEnvironment(envNameForKey(key), signal);
-      if (env) {
+      // Another machine adopted the box since this create made it: the box is that machine's, not an orphan.
+      if (env && !(await machineUsing(env.id, key))) {
         // Same check as remove: a delete would lose the work on the box.
         const work = unpushedWork(env);
         if (work) {

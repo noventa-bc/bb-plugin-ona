@@ -1,7 +1,8 @@
-// The provider's create in adopt mode on a box another bb machine may use, driven through `create` in the fake host of
+// The provider's create on a box another bb machine may use, driven through `create` in the fake host of
 // ./provider-fake.ts, followed by bb's cleanup of a failed create.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { envNameForKey } from "../src/names.ts";
 import { adoptedResource, box, connectCalls, lifecycle, register, type Setup } from "./provider-fake.ts";
 
 /** Adopts the box under key "key-2"; a refusal before the checkpoint gets bb's cleanup, `reconcileCleanup`. */
@@ -64,4 +65,67 @@ test("a machine that is not this box's Ona machine does not refuse the adopt (fa
     ],
   });
   assert.ok(!(result instanceof Error), String(result));
+});
+
+// The box machine host-1's create made under key "key-1", before its checkpoint; host-2 has adopted it since.
+const unfinished = { ...box("RUNNING"), metadata: { name: envNameForKey("key-1") } };
+const adoptedSince = { id: "host-2", name: "ona:m2", phase: "active", resource: { ...adoptedResource, key: "key-2" } };
+const creating = { id: "host-1", name: "Ona devbox 1", phase: "creating", resource: null };
+
+const cleanup = (fake: ReturnType<typeof register>) =>
+  fake.provider.reconcileCleanup({ key: "key-1", report: lifecycle().report, signal: new AbortController().signal });
+
+test("cleanup of an unfinished create leaves a box another machine adopted (fails if cleanup deletes by name alone)", async () => {
+  // Bug: bb's cleanup of host-1 found the box by its key-derived name and deleted the box host-2 had adopted.
+  const fake = register({ found: unfinished, tunnel: "up", machines: [creating, adoptedSince] });
+  assert.equal((await cleanup(fake)).status, "removed");
+  assert.deepEqual(fake.calls, []);
+  assert.deepEqual(fake.tunnels, []);
+  assert.deepEqual(fake.forgotten, []);
+});
+
+test("cleanup still deletes its own orphaned box when no other machine stores it (fails if the guard counts any listed machine)", async () => {
+  const other = { ...adoptedSince, resource: { ...adoptedResource, envId: "env-2", key: "key-2" } };
+  const fake = register({ found: unfinished, machines: [creating, other] });
+  assert.equal((await cleanup(fake)).status, "removed");
+  assert.deepEqual(fake.calls, ["delete env-1"]);
+});
+
+/** bb runs host-1's create again under key "key-1"; returns the result or the error and whether it checkpointed. */
+async function createAgain(setup: Setup) {
+  const fake = register(setup);
+  let checkpointed = false;
+  const result = await fake.provider
+    .create({
+      report: lifecycle().report,
+      checkpoint: async () => void (checkpointed = true),
+      inputs: { mode: "create", project: "p" },
+      key: "key-1",
+      attempt: 2,
+      signal: new AbortController().signal,
+    })
+    .catch((error: unknown) => error);
+  return { ...fake, result, checkpointed };
+}
+
+test("a create run again refuses a box another machine adopted since (fails if the create takes the box over as created)", async () => {
+  // Bug: the create reused the box by its name and checkpointed it as created, so host-1's remove deleted it.
+  const { result, checkpointed, calls, tunnels, forgotten } = await createAgain({
+    found: unfinished,
+    tunnel: "up",
+    machines: [creating, adoptedSince],
+  });
+  assert.ok(result instanceof Error);
+  assert.match(result.message, /ona:m2 \(host-2\) uses Ona environment bold-pancake-6978; a box holds one bb machine/);
+  assert.equal(checkpointed, false);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(tunnels, []);
+  assert.deepEqual(forgotten, []);
+});
+
+test("a create run again reuses its own checkpointed box (fails if the create counts its own host as another machine)", async () => {
+  const own = { ...creating, resource: { ...adoptedResource, adopted: false } };
+  const { result, checkpointed } = await createAgain({ found: unfinished, machines: [own] });
+  assert.ok(!(result instanceof Error), String(result));
+  assert.equal(checkpointed, true);
 });

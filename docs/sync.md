@@ -267,7 +267,8 @@ or uncommitted files on (`unpushedWork()` in `src/ona.ts`), before it deletes
 or forgets anything. `reconcileCleanup()` in `src/provider.ts` refuses the same
 way for an orphaned created box.
 A box holds one bb machine: an adopt is refused when another bb machine has stored the box (in any phase, creating
-included); see `create` in `src/provider.ts`.
+included); see `create` in `src/provider.ts`. A create run again and `reconcileCleanup()` leave a box another bb
+machine has stored since: the create is refused, and the cleanup ends without a delete.
 Every `remove()` path closes the box's tunnel (`remove` in `src/provider.ts`).
 For an adopted box, `remove()` closes the tunnel before and again after it runs `MOVE_MACHINE_ASIDE`
 (`src/provider.ts`), since a sync pass's wake can reopen the tunnel meanwhile. The script runs over SSH, only when
