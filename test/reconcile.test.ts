@@ -246,11 +246,16 @@ test("guard: failures back off and give up, a forced run still goes", async () =
     throw new Error("boom");
   };
   for (let i = 1; i <= GIVE_UP_AFTER; i++) {
+    const backoff = COOLDOWN_MS * 2 ** (i - 1);
     await assert.rejects(guard.run("h1", "heal-daemon", "r", fail));
     assert.equal(guard.records.get("h1")?.failures, i);
-    await advance(COOLDOWN_MS * 2 ** (i - 1));
+    // The hold after the last failure never shows in mayAct, only on the record.
+    assert.equal(guard.records.get("h1")?.quietUntil, clock.now() + backoff, `failure ${i} backs off ${backoff} ms`);
+    await advance(backoff - 1);
+    assert.equal(guard.mayAct("h1"), false, `failure ${i}: held until its last millisecond`);
+    await advance(1);
+    assert.equal(guard.mayAct("h1"), i < GIVE_UP_AFTER, `failure ${i}: may act after the backoff, unless it gave up`);
   }
-  assert.equal(guard.mayAct("h1"), false, "gave up");
   assert.equal(await guard.run("h1", "heal-daemon", "r", async () => "ok", { force: true }), true);
   assert.equal(guard.records.get("h1")?.failures, 0);
   assert.match(guard.records.get("h1")!.reason, /ok/);
