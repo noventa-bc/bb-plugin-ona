@@ -15,6 +15,8 @@ export const GRACE_MS = 45_000;
 export const COOLDOWN_MS = 5 * 60_000;
 export const MAX_BACKOFF_MS = 60 * 60_000;
 export const GIVE_UP_AFTER = 3;
+/** The idle release's action name (src/sync.ts): the one action another action's give-up does not stop (rule 5). */
+export const RELEASE_IDLE = "release-idle";
 
 export interface MachineView {
   hostId: string;
@@ -251,7 +253,7 @@ export interface HostRecord {
   reason: string;
   at: number;
   error?: string;
-  /** Failures in a row, or across a hold (docs/sync.md rule 3); GIVE_UP_AFTER of them stop automatic retries. */
+  /** Failures in a row, or across a hold (docs/sync.md rule 3); GIVE_UP_AFTER of them stop automatic retries but the idle release (rule 5). */
   failures: number;
   /** No automatic action before this time. */
   quietUntil: number;
@@ -264,6 +266,13 @@ export interface HostRecord {
 
 /** What an action returns when it asked nothing (a listing that failed or left the box out, rule 4): `run` records nothing for it. */
 export const NOTHING_DONE = "nothing done";
+
+/** The idle release goes past another action's give-up, but not a held one: rule 3 owns that record (docs/sync.md rule 5). */
+const pastGiveUp = (record: HostRecord, action: string | undefined) =>
+  action === RELEASE_IDLE &&
+  record.failures >= GIVE_UP_AFTER &&
+  record.action !== RELEASE_IDLE &&
+  !record.threadWaiting;
 
 /** Safety rule 5: one action per machine at a time, with a cooldown, backoff and give-up (docs/sync.md rules 3 and 5). */
 export class HostGuard {
@@ -288,16 +297,13 @@ export class HostGuard {
     return this.busy.get(hostId);
   }
 
-  /**
-   * Whether an automatic action may run now (not busy, not cooling down, not given up). With `ownAction`, only that
-   * action's own give-up blocks it: the idle release still lets go of a box another action gave up on (rule 5).
-   */
-  mayAct(hostId: string, force = false, ownAction?: string): boolean {
+  /** Whether an automatic `action` may run now (not busy, not cooling down, not given up but as `pastGiveUp` says). */
+  mayAct(hostId: string, force = false, action?: string): boolean {
     if (this.busy.has(hostId)) return false;
     if (force) return true;
     const record = this.records.get(hostId);
     if (!record) return true;
-    const gaveUp = record.failures >= GIVE_UP_AFTER && (ownAction === undefined || record.action === ownAction);
+    const gaveUp = record.failures >= GIVE_UP_AFTER && !pastGiveUp(record, action);
     return !gaveUp && this.clock.now() >= record.quietUntil;
   }
 
@@ -317,25 +323,19 @@ export class HostGuard {
   /**
    * Run `fn` as the machine's one action; a string it returns is appended to
    * the recorded reason, and NOTHING_DONE records nothing (run still returns true). Returns false (without
-   * running it) when the machine is busy, or cooling down or given up unless forced
-   * (docs/sync.md rule 3).
+   * running it) when the machine is busy, or cooling down or given up (but as `pastGiveUp` says) unless forced
+   * (docs/sync.md rules 3 and 5).
    */
   async run(
     hostId: string,
     action: string,
     reason: string,
     fn: () => Promise<string | void>,
-    options: {
-      force?: boolean;
-      heavy?: boolean;
-      cooldown?: boolean;
-      threadWaiting?: boolean;
-      ownGiveUpOnly?: boolean;
-    } = {},
+    options: { force?: boolean; heavy?: boolean; cooldown?: boolean; threadWaiting?: boolean } = {},
   ): Promise<boolean> {
     const flagged = this.records.get(hostId)?.threadWaiting === true;
     const force = options.force || (options.threadWaiting === true && !flagged);
-    if (!this.mayAct(hostId, force, options.ownGiveUpOnly ? action : undefined)) return false;
+    if (!this.mayAct(hostId, force, action)) return false;
     this.busy.set(hostId, action);
     try {
       if (options.heavy) await this.acquire();
@@ -361,13 +361,19 @@ export class HostGuard {
       const current = this.records.get(hostId);
       const failures = (force ? 0 : (current?.failures ?? 0)) + 1;
       const now = this.clock.now();
+      const quietUntil = now + Math.min(COOLDOWN_MS * 2 ** (failures - 1), MAX_BACKOFF_MS);
+      // A failed release keeps the give-up it went past, so that action's recovery (connected()) still clears it.
+      if (!force && current && pastGiveUp(current, action)) {
+        this.records.set(hostId, { ...current, failures, quietUntil });
+        throw error;
+      }
       this.records.set(hostId, {
         action,
         reason,
         at: now,
         error: error instanceof Error ? error.message : String(error),
         failures,
-        quietUntil: now + Math.min(COOLDOWN_MS * 2 ** (failures - 1), MAX_BACKOFF_MS),
+        quietUntil,
         threadWaiting: options.threadWaiting || (!force && current?.threadWaiting === true) ? true : undefined,
       });
       throw error;

@@ -24,6 +24,7 @@ import {
   GRACE_MS,
   mismatch,
   NOTHING_DONE,
+  RELEASE_IDLE,
   trackMismatch,
   type Decision,
   type HostGuard,
@@ -263,7 +264,7 @@ export function createSync(deps: SyncDeps) {
   async function releaseIdleMachines(rows: Row[], actions: Promise<void>[], force: boolean): Promise<void> {
     if (idleMs <= 0) return;
     const now = Date.now();
-    const candidates = rows.filter((row) => row.phase === "active" && guard.mayAct(row.hostId, force, "release-idle"));
+    const candidates = rows.filter((row) => row.phase === "active" && guard.mayAct(row.hostId, force, RELEASE_IDLE));
     const activity: MachineActivity[] = [];
     for (const row of candidates) {
       const threads = await liveThreads(bb.sdk.threads, row.hostId).catch((error: unknown) => {
@@ -293,14 +294,14 @@ export function createSync(deps: SyncDeps) {
         guard
           .run(
             hostId,
-            "release-idle",
+            RELEASE_IDLE,
             reason,
             async () => {
               bb.log.info(`${row.machine}: ${reason}; closing the tunnel`);
               const refusal = lifecycleRefusal(await suspendWithoutStop(row), SUSPENDED);
               if (refusal) throw new Error(refusal);
             },
-            { cooldown: false, force, ownGiveUpOnly: true },
+            { cooldown: false, force },
           )
           .then(
             () => undefined,

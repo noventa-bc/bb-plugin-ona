@@ -81,27 +81,49 @@ test("a given-up machine is not released while Ona's listing fails (fails if the
     assert.equal(suspends(), 0);
   }));
 
-test("a release of a given-up machine that bb refuses is not retried by the next passes (fails if the release's own give-up does not stop it)", () =>
+test("a release bb refuses past a give-up waits out its backoff (fails if it is retried on the next pass)", () =>
   onFakeClock(async () => {
     const { pass, suspends } = await givenUp({ refuse: REFUSED });
     await tick(20 * 60_000);
     await pass();
     assert.equal(suspends(), 1);
-    for (let i = 0; i < 6; i++) {
-      await tick(HOUR);
-      await pass();
-    }
-    assert.equal(suspends(), 1);
+    await tick(60_000);
+    await pass();
+    assert.equal(suspends(), 1, "inside the fourth failure's 40-minute backoff");
+    await tick(40 * 60_000);
+    await pass();
+    assert.equal(suspends(), 2);
   }));
 
-test("a given-up machine is not released while another action holds it (fails if the release skips the busy check)", () =>
+// The refused release overwrote the repair's record, so bb showing the box connected no longer cleared the give-up.
+test("a refused release keeps the repair's give-up, which a connected box clears so a later daemon drop is repaired (fails if the release's failure replaces the repair's record)", () =>
   onFakeClock(async () => {
-    const { pass, suspends, guard } = await givenUp();
+    const { pass, suspends, box, hosts, calls } = await givenUp({ refuse: REFUSED });
     await tick(20 * 60_000);
-    let finish = () => {};
-    const update = guard.hold("h1", "update-cli", () => new Promise<void>((resolve) => (finish = resolve)));
     await pass();
-    finish();
-    await update;
-    assert.equal(suspends(), 0);
+    assert.equal(suspends(), 1);
+    // A live thread keeps the box from another release while it recovers.
+    box.threads = [{ id: "t1", status: "active", updatedAt: Date.now(), runtime: { displayStatus: "active" } }];
+    Object.assign(hosts.get("h1")!, { status: "connected", lastSeenAt: Date.now() });
+    await pass();
+    Object.assign(hosts.get("h1")!, { status: "disconnected", lastSeenAt: Date.now() - HOUR });
+    const probes = calls.filter((call) => call === "probe").length;
+    await pass();
+    assert.equal(calls.filter((call) => call === "probe").length, probes + 1);
   }));
+
+test("a held give-up still stops the release (fails if the release passes a give-up a thread's hold owns)", async () => {
+  const { sync, calls, guard } = world([idle("h1", { status: "disconnected" })]);
+  const held = {
+    action: "heal-daemon",
+    reason: "r",
+    at: Date.now(),
+    failures: GIVE_UP_AFTER,
+    quietUntil: Date.now(),
+    threadWaiting: true,
+  };
+  guard.records.set("h1", held);
+  await sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(calls, []);
+  assert.deepEqual(guard.records.get("h1"), held);
+});
