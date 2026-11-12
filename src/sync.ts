@@ -149,7 +149,7 @@ export const matchesRef = (row: Row, ref: string) =>
   [row.hostId, row.machine, row.resource.envId, row.resource.envName].includes(ref);
 
 /** rowForRef's refusal of a name two boxes share. */
-export class AmbiguousRefError extends Error {}
+class AmbiguousRefError extends Error {}
 
 /**
  * Host id first: another box's Ona env name can equal a host id (`bb ona rename` takes any valid name). Other
@@ -562,7 +562,7 @@ export interface RealtimeBb {
   log: Pick<PluginLogger, "warn">;
 }
 
-export interface RealtimeDeps {
+interface RealtimeDeps {
   bb: RealtimeBb;
   scheduler: Pick<PassScheduler, "schedule">;
   /** Ona env id -> bb host id, the same map the sync pass refreshes. */

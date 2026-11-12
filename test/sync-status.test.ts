@@ -4,9 +4,8 @@ import { ALL, GIVE_UP_AFTER } from "../src/reconcile.ts";
 import type { ThreadRecord } from "../src/sync.ts";
 import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
 import { box, connectCalls, register as registerOna } from "./provider-fake.ts";
-import { HOUR, idle, NOW, waitingThread, world } from "./sync-fakes.ts";
+import { HOUR, idle, NOW, REFUSED, waitingThread, world } from "./sync-fakes.ts";
 
-const REFUSED = "Machine suspension failed: Host is not connected";
 const RESUME_REFUSED = "Resume is blocked by an interrupted hook";
 const NOT_CONNECTED =
   "bb can't suspend it while a turn is still active on the box; it needs the box back to settle the turn";

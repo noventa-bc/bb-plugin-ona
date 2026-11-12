@@ -84,7 +84,7 @@ const NOT_FOUND = /\bError: (not_found: environment not found$|no environment fo
 export function onaTimeoutArgs(timeoutMs: number): string[] {
   return ["--timeout", `${Math.max(1, Math.ceil(timeoutMs / 1000))}s`];
 }
-export const ONA_TIMEOUT_GRACE_MS = 5_000;
+const ONA_TIMEOUT_GRACE_MS = 5_000;
 
 export class OnaCli {
   private readonly resolveBinary: () => string;
@@ -194,7 +194,7 @@ export class OnaCli {
 }
 
 /** Match by exact id, exact name, or unambiguous id prefix. */
-export function matchEnvironment(envs: readonly OnaEnvironment[], ref: string): OnaEnvironment | null {
+function matchEnvironment(envs: readonly OnaEnvironment[], ref: string): OnaEnvironment | null {
   const exact = envs.find((env) => env.id === ref || env.metadata.name === ref);
   if (exact) return exact;
   const prefixed = envs.filter((env) => env.id.startsWith(ref));
@@ -308,7 +308,7 @@ export function metric(event: string, fields: Record<string, string | number>): 
 }
 
 /** The first non-blank line, trimmed: one line of Ona's text for a progress line or an error. */
-export function firstLine(text: string): string | undefined {
+function firstLine(text: string): string | undefined {
   return text
     .split("\n")
     .map((line) => line.trim())

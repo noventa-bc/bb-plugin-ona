@@ -16,7 +16,7 @@ import {
 } from "@get-bb/plugin-sdk/testing";
 import plugin from "../server.ts";
 
-export type Env = { id: string; metadata: { name?: string }; status: { phase: string; content?: unknown } };
+type Env = { id: string; metadata: { name?: string }; status: { phase: string; content?: unknown } };
 export type E2eHost = Awaited<ReturnType<typeof startHost>>;
 
 // The agent sandbox blocks localhost; the e2e files run in CI and outside the sandbox.
