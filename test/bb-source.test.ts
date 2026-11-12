@@ -26,6 +26,22 @@ const bundle = [
   "declare const typedOnly: number;",
   // A `let` with a value, which only the bare `<name> =` form finds.
   "let letDefined = 1;",
+  // An object method and a class method, with and without `async`: definitions. The calls after them are not.
+  "const machines = {",
+  "  async getResource(hostId) {",
+  "    return hostId;",
+  "  },",
+  "};",
+  "class Provider {",
+  "  reconcileCleanup() {",
+  "    return null;",
+  "  }",
+  "}",
+  "  getResource(1);",
+  "foo.getResource(2);",
+  "if (getResource(3)) {",
+  "  getResource(4); if (ok) {",
+  "if (foo.getResource(5)) {",
   "",
 ].join("\n");
 
@@ -80,6 +96,26 @@ test("a `let <name> = value` line is found, through the bare `<name> =` form", (
   const r = bbSource(["letDefined", "0"]);
   assert.equal(r.status, 0, r.output);
   assert.match(r.output, /^let letDefined = 1;$/m);
+});
+
+test("an object or class method header, with or without `async`, is found", () => {
+  for (const [name, header] of [
+    ["getResource", "  async getResource(hostId) {"],
+    ["reconcileCleanup", "  reconcileCleanup() {"],
+  ] as const) {
+    const r = bbSource([name, "0"]);
+    assert.equal(r.status, 0, `${name}: ${r.output}`);
+    assert.ok(r.output.split("\n").includes(header), `${name}: ${r.output}`);
+  }
+});
+
+test("a call of the name is not printed as a definition: a statement, a member call, a call in an if, or a statement before a block on its line", () => {
+  const r = bbSource(["getResource", "0"]);
+  assert.equal(r.status, 0, r.output);
+  const headers = r.output.split("\n").filter((row) => row.startsWith("--- "));
+  const definition = bundle.split("\n").indexOf("  async getResource(hostId) {") + 1;
+  assert.equal(headers.length, 1, r.output);
+  assert.ok(headers[0]!.endsWith(`start-server.js:${definition}`), r.output);
 });
 
 test("a name with no definition fails and says so", () => {

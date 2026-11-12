@@ -105,6 +105,27 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 
 - bb's server source is the bundle `/Applications/bb.app/Contents/Resources/app.asar.unpacked/node_modules/bb-app/server/dist/start-server.js`; the installed version is the `"version"` field of `package.json` in that `bb-app` folder (`grep '"version"' /Applications/bb.app/Contents/Resources/app.asar.unpacked/node_modules/bb-app/package.json`) (bb 0.49.0, checked 2026-11-09).
 - The plugin pins `@get-bb/plugin-sdk` 0.6.133 (checked 2026-11-12).
+- bb's server functions behind the calls below, found with `scripts/bb-source.sh` on
+  bb-app 0.49.0 (checked 2026-11-12). A route is the HTTP route the SDK method calls.
+  - `hosts.list` (GET `/hosts`): `listPublicHostsWithStatus`, which calls `listPublicHosts`.
+  - `hosts.experimental_create` (POST `/hosts`): `submitMachine`, `askMachineLaunch`,
+    `startCreate`, then `runCreate`, which calls the provider's `create` through `invokeCreate`.
+  - `hosts.experimental_suspend` (POST `/hosts/:id/suspend`): `startMachineSuspension`,
+    `requestMachineSuspension`, then `suspendMachine`, which calls the provider's `suspend`.
+  - `hosts.experimental_resume` (POST `/hosts/:id/resume`): `startMachineResume`,
+    `resumeMachine`, then `resumeMachineWithIntent`, which calls the provider's `resume`.
+  - `experimental_machines.getResource(hostId)`: the method that `createPluginApi` defines
+    (no route).
+  - `hosts.delete` (DELETE `/hosts/:id`), which `bb machine remove` calls (the plugin does
+    not): `sweepProviderMachine`, then `removeMachine`, which calls the provider's `remove`
+    through `removeResource`, or its `reconcileCleanup` when the host has no resource.
+  - The provider's `reconcileCleanup`: `scripts/bb-source.sh reconcileCleanup` finds only the
+    manual machine provider's method (in `createManualMachineProviderRecord`). The plugin's hook
+    is the `reconcileCleanup` that `validatePluginMachineProviderDeclaration` copies from the
+    declaration passed to `experimental_machines.register`; the copy is an object property,
+    which the script does not find.
+  - `hosts.createJoinCode()` (POST `/hosts/join-codes`): `issueHostEnrollKey`. The plugin
+    does not call it.
 - bb 0.49.0's app RPC client (`useRpc`) refuses an input with a key whose value is
   `undefined` ("rpc input at $input.<key> is not a JSON value") before it sends, as
   the SDK's test harness does (harness checked 2026-11-06; bb's check in the app's

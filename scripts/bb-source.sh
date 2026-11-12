@@ -29,10 +29,11 @@ else
 fi
 [ -f "$file" ] || { echo "bb-source: no SDK typings at $file; run npm ci --ignore-scripts" >&2; exit 1; }
 
-# A definition is `function <name>(` or `function <name><`, `interface <name>`, `const <name>`, or `<name> =`
-# (a dot before the name, `==` and `=>` do not count).
-# shortcut: a comment that quotes a definition counts; class methods, enums, classes, interface members and `this.<name> =` are missed, upgrade when one of those is the definition needed
-found=$(grep -n -E "function ${name}[(<]|interface $name([^A-Za-z0-9_]|\$)|const $name([^A-Za-z0-9_]|\$)|(^|[^A-Za-z0-9_\$.])$name *=([^=>]|\$)" "$file" | cut -d: -f1) || true
+# A definition is `function <name>(` or `function <name><`, `interface <name>`, `const <name>`, `<name> =` (a dot
+# before the name, `==` and `=>` do not count), or a method: a line that starts with `<name>(` or `async <name>(` and
+# ends with `{` after a `)`. A call statement ends in `;`, and a call after a dot or in an `if` does not start its line.
+# shortcut: a comment that quotes a definition counts, and so does a call whose last argument is a `function` on its line (`<name>(a, function (b) {`); static, get and set methods, a method whose header is not one line ending in `{`, enums, classes, interface members, object properties (`<name>: value`) and `this.<name> =` are missed, upgrade when one of those is the definition needed
+found=$(grep -n -E "function ${name}[(<]|interface $name([^A-Za-z0-9_]|\$)|const $name([^A-Za-z0-9_]|\$)|(^|[^A-Za-z0-9_\$.])$name *=([^=>]|\$)|^[[:space:]]*(async )?$name\([^;]*\)[[:space:]]*\{[[:space:]]*\$" "$file" | cut -d: -f1) || true
 [ -n "$found" ] || { echo "bb-source: no definition of $name in $file" >&2; exit 1; }
 for n in $found; do
   printf -- '--- %s:%s\n' "$file" "$n"
