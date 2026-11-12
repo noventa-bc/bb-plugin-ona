@@ -186,7 +186,7 @@ test("cachedLogin keeps a good login through a fresh network failure, and the ke
   assert.equal(calls.count, 2);
 });
 
-test("cachedLogin replaces a good login with a fresh failure that is not a network failure, and keeps it for 5 minutes (fails if a failure with another reason keeps the good login, a fresh result or a failure is not stored, or fresh is ignored)", async () => {
+test("cachedLogin replaces a good login with a fresh failure that is not a network failure, and holds that failure for 5 minutes (fails if a failure with another reason keeps the good login, a fresh result or a failure is not stored, fresh is ignored, or a failure is held for less than 5 minutes)", async () => {
   for (const failure of [rejectedLogin, unknownLogin]) {
     let now = 0;
     const { check, calls } = loginChecks(goodLogin, failure);
@@ -194,9 +194,12 @@ test("cachedLogin replaces a good login with a fresh failure that is not a netwo
     await login("ona");
     now = 60_000;
     assert.deepEqual(await login("ona", true), failure, failure.reason);
-    now = 120_000;
+    now = 60_000 + 5 * 60_000 - 1;
     assert.deepEqual(await login("ona"), failure, failure.reason);
     assert.equal(calls.count, 2, failure.reason);
+    now = 60_000 + 5 * 60_000;
+    assert.deepEqual(await login("ona"), failure, failure.reason);
+    assert.equal(calls.count, 3, failure.reason);
   }
 });
 
