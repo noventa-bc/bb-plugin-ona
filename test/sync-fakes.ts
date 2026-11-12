@@ -277,7 +277,6 @@ export function world(
           return false;
         }),
     },
-    keepAliveUntil: () => null,
     hostByEnv,
     autoRepair: options.autoRepair ?? true,
     idleDisconnect: "1h",

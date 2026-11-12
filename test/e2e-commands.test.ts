@@ -1,5 +1,5 @@
 // The real server.ts inside the SDK's fake bb host (test/e2e-host.ts), for what a sync pass and the `bb ona`
-// commands do to a box: the idle release and the observed stop (neither may stop the box), keep-alive,
+// commands do to a box: the idle release and the observed stop (neither may stop the box),
 // reconnect, rename, update, sync by the Ona name, the settings section's devbox_command and the thread
 // event. One story in file order: run the whole file.
 import assert from "node:assert/strict";
@@ -193,26 +193,6 @@ test("bb ona sync on a box Ona stopped marks the machine suspended and touches n
   // bb's next step: the provider's suspend sees the no-stop flag and leaves the stopped box alone.
   await provider.suspend!({ ...ctx, resource, hostId: "host-1" });
   assert.deepEqual(onaCalls(), []);
-});
-
-test("bb ona keep-alive refuses a stopped box, holds a running one and ends on `off`", local, async () => {
-  const ref = resource.envId;
-  const refused = await host.harness.behavior.runCli(["keep-alive", ref, "1m"]);
-  assert.equal(refused.exitCode, 1);
-  assert.match(refused.stderr ?? "", new RegExp(`^${ref} is stopped in Ona\\. keep-alive only holds a running box`));
-  patchBox(resource.envId, { phase: RUNNING });
-  const started = await host.harness.behavior.runCli(["keep-alive", ref, "1m"]);
-  assert.equal(started.exitCode, 0, started.stderr);
-  assert.match(started.stdout ?? "", new RegExp(`^Keeping ${ref} alive until \\d\\d:\\d\\d\\.`));
-  // Wait until the fake `ona` is running so `off` has a process to end.
-  await waitForLog("keep-alive");
-  assert.match((await host.harness.behavior.runCli(["status"])).stdout ?? "", /^  keep-alive until \d\d:\d\d$/m);
-  const ended = await host.harness.behavior.runCli(["keep-alive", ref, "off"]);
-  assert.equal(ended.stdout, `Ended the keep-alive for ${ref}.`);
-  assert.doesNotMatch((await host.harness.behavior.runCli(["status"])).stdout ?? "", /keep-alive until/);
-  // The `sleep 60` the fake `ona` ran dies with its process group on `off`; a second `off` finds nothing.
-  assert.equal((await host.harness.behavior.runCli(["keep-alive", ref, "off"])).stdout, `${ref} had no keep-alive.`);
-  assert.deepEqual(onaCalls(), [`environment keep-alive --environment-id ${ref} -q -- sleep 60`]);
 });
 
 test("bb ona reconnect refuses a suspended machine (fails if it opens a tunnel or calls Ona)", local, async () => {
@@ -451,51 +431,6 @@ test(
     // A friendly name: `adjective-noun-hex4`, where the noun list has one hyphenated word ("yo-yo").
     assert.match(name ?? "", /^[a-z-]+-[0-9a-f]{4}$/, reply.stdout);
     assert.ok(onaCalls().includes(`environment update ${envId} --name ${name}`));
-  },
-);
-
-test(
-  "devbox_command keep-alive with no duration refuses with the CLI's usage text (fails if a missing duration is read as one or the text changes)",
-  local,
-  async () => {
-    const reply = (await host.harness.behavior.callRpc("devbox_command", {
-      command: "keep-alive",
-      hostId: "host-2",
-    })) as { exitCode: number; stdout?: string; stderr?: string };
-    assert.equal(reply.exitCode, 1);
-    assert.equal(
-      reply.stderr,
-      "Give a duration (e.g. `2h`, `90m`, at most `12h`) or `off`.\nUsage: bb ona keep-alive <ref> <duration|off>",
-    );
-  },
-);
-
-test(
-  "devbox_command keep-alive holds that running box until `off` (fails if the duration is dropped or Ona is not asked)",
-  local,
-  async () => {
-    const envId = extraBoxes["host-2"]!.envId;
-    patchBox(envId, { phase: RUNNING });
-    onaCalls();
-    const started = (await host.harness.behavior.callRpc("devbox_command", {
-      command: "keep-alive",
-      hostId: "host-2",
-      arg: "1m",
-    })) as { exitCode: number; stdout?: string; stderr?: string };
-    assert.equal(started.exitCode, 0, started.stderr);
-    assert.match(started.stdout ?? "", /^Keeping host-2 alive until \d\d:\d\d\./);
-    await waitForLog(`environment keep-alive --environment-id ${envId}`);
-    const status = (await host.harness.behavior.callRpc("devbox_command", {
-      command: "status",
-      hostId: "host-2",
-    })) as { stdout?: string };
-    assert.match(status.stdout ?? "", /^  keep-alive until \d\d:\d\d$/m);
-    const ended = (await host.harness.behavior.callRpc("devbox_command", {
-      command: "keep-alive",
-      hostId: "host-2",
-      arg: "off",
-    })) as { stdout?: string };
-    assert.equal(ended.stdout, "Ended the keep-alive for host-2.");
   },
 );
 

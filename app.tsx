@@ -299,7 +299,6 @@ const DEVBOX_BUTTONS: { command: DevboxCommand; label: string }[] = [
 /** A text box and the button that sends its text as the command's argument (see commandArg). */
 const DEVBOX_FIELDS: { command: DevboxCommand; label: string; placeholder: string }[] = [
   { command: "rename", label: "Rename", placeholder: "New name (blank: random)" },
-  { command: "keep-alive", label: "Keep awake", placeholder: "2h, 90m or off" },
 ];
 
 const sectionButton = `${editorButton} disabled:pointer-events-none disabled:opacity-50`;
@@ -355,7 +354,7 @@ function DevboxesSection() {
 
   /**
    * Runs one `bb ona` command for a devbox (its host id), or for every devbox when `hostId` is left out. `arg` is
-   * the new name (`rename`) or the duration (`keep-alive`).
+   * the new name (`rename`).
    */
   const run = (command: DevboxCommand, hostId?: string, arg?: string) => {
     const key = hostId ?? "all";

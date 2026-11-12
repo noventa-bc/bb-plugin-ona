@@ -4,7 +4,6 @@
 // and reaches this server through an SSH reverse tunnel, so the server stays
 // on loopback and nothing goes through a third-party relay.
 import { experimental_PluginRpcRefusal, type BbPluginApi } from "@get-bb/plugin-sdk";
-import { KeepAlives } from "./src/keepalive.ts";
 import { idleDisconnectSchema } from "./src/lifecycle.ts";
 import { errorText, isRunning, isStopped, OnaCli, OnaSnapshot, sshHost } from "./src/ona.ts";
 import {
@@ -128,12 +127,6 @@ export default async function plugin(bb: BbPluginApi) {
   // Settings path first, then PATH and common install locations.
   const resolveOna = () => findOnaBinary(onaPath) ?? onaPath;
   const ona = new OnaCli(resolveOna);
-  // `bb ona keep-alive` children, one per box. They end with the plugin.
-  const keepAlives = new KeepAlives(
-    (envId, ms) => ona.keepAlive(envId, ms),
-    (envId, detail) => bb.log.warn(`keep-alive for ${envId} ended early: ${detail}`),
-  );
-  bb.onDispose(() => keepAlives.stopAll());
   const lifetime = new AbortController();
   // Fire and forget, as the editor may take a while; a failure goes to the log.
   const openEditor = (envId: string) =>
@@ -148,15 +141,7 @@ export default async function plugin(bb: BbPluginApi) {
   bb.onDispose(() => proxy.close());
   // One cached `ona environment list` for everything that can live with a
   // few seconds' staleness (see OnaSnapshot).
-  // A box the listing shows not running ends its keep-alive; an empty listing, or a
-  // box missing from it, ends none (safety rule 4; see endNotRunning).
-  const snapshot = new OnaSnapshot(async () => {
-    const envs = await ona.listEnvironments();
-    for (const envId of keepAlives.endNotRunning(envs.map((env) => ({ id: env.id, running: isRunning(env) })))) {
-      bb.log.info(`keep-alive for ${envId} ended: Ona no longer lists the box as running`);
-    }
-    return envs;
-  });
+  const snapshot = new OnaSnapshot(() => ona.listEnvironments());
   const guard = new HostGuard();
   const scheduler = new PassScheduler(
     (keys) => reconcile(keys),
@@ -222,7 +207,6 @@ export default async function plugin(bb: BbPluginApi) {
     guard,
     tunnels,
     provider,
-    keepAliveUntil: (envId) => keepAlives.until(envId),
     hostByEnv,
     autoRepair,
     idleDisconnect,
@@ -395,7 +379,6 @@ export default async function plugin(bb: BbPluginApi) {
     snapshot,
     tunnels,
     guard,
-    keepAlives,
     provider,
     shellBackend,
     machines,
@@ -410,7 +393,6 @@ export default async function plugin(bb: BbPluginApi) {
     setup,
     addMachine,
     updateClis,
-    openEditor,
     onaHealth,
   });
   bb.rpc.register(rpcContract, {

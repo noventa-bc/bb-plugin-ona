@@ -39,20 +39,8 @@ a turn in flight also holds the box, hidden ones (workflow steps, side chats) in
 but an archived thread counts for neither busyness nor activity, whatever status bb
 still shows for it.
 
-`bb ona keep-alive <ref> <duration>` is the one way to hold a box past Ona's
-inactivity timeout, and only on your request; the plugin never starts one by
-itself. It runs `ona environment keep-alive --environment-id <id> -q -- sleep
-<seconds>` on the bb server machine, which sends Ona activity signals while the
-sleep runs. It needs no SSH. Safety rule 1 applies: it starts only when a fresh
-`ona environment list` says the box is running, and is refused otherwise
-(stopped, starting, or Ona can't be asked). It ends after the duration (at most
-`12h`), on `bb ona keep-alive <ref> off`, when a new duration replaces it, when
-a listing shows the box not running, and when the plugin reloads or bb quits.
-Keep-alives are not restored after a reload. `bb ona status` shows
-`keep-alive until HH:MM` for a box that has one.
-
-`ona environment open` runs only when you ask for it, with the Editor button or
-`bb ona open`; no sync pass calls it. It may wake a stopped box, which is what
+`ona environment open` runs only when you ask for it, with the Editor button; no
+sync pass calls it. It may wake a stopped box, which is what
 you asked for, so safety rule 1 does not gate it.
 
 `bb ona rename` runs `ona environment update <env> --name <name>` (refused while bb shows its machine in a phase other than active), then, when bb has a machine for the box, renames it to match. The Ona call changes only
