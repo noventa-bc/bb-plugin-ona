@@ -63,7 +63,7 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
 
 `bb ona new` resolves its project name with `ona project list -o json` (`resolveProjectId` in `src/ona.ts`). It is read-only and touches no box, so safety rule 1 does not gate it.
 
-`ona environment stop <id>` runs in the provider's `suspend()` (`src/provider.ts`) when Ona still has the box and does not show it stopped or deleted; a suspend the plugin makes itself skips it (safety rule 2). `ona environment delete <id>` runs in `remove()` and `reconcileCleanup()` only for a box bb created, and only when `unpushedWork()` finds no unpushed commits or uncommitted files; an adopted box is never deleted.
+`ona environment stop <id>` runs in the provider's `suspend()` (`src/provider.ts`) when Ona still has the box and does not show it stopped or deleted; a suspend the plugin makes itself skips it (safety rule 2). `ona environment delete <id>` runs in `remove()` and `reconcileCleanup()` only for a box bb created that no other bb machine has stored, and only when `unpushedWork()` finds no unpushed commits or uncommitted files; an adopted box is never deleted.
 
 **Safety rules.** Every automatic action keeps these:
 
@@ -268,8 +268,9 @@ or forgets anything. `reconcileCleanup()` in `src/provider.ts` refuses the same
 way for an orphaned created box.
 A box holds one bb machine: an adopt is refused when another bb machine has stored the box (in any phase, creating
 included); see `create` in `src/provider.ts`. A create run again and `reconcileCleanup()` leave alone a box another bb
-machine has stored since: the create is refused, and the cleanup ends without a delete.
-Every `remove()` path closes the box's tunnel (`remove` in `src/provider.ts`).
+machine has stored since: the create is refused, and the cleanup ends without a delete. So does the `remove()` of the
+machine whose create made the box: it deletes nothing and leaves the box's tunnel, keys and no-stop flag to the other
+machine. Every other `remove()` path closes the box's tunnel (`remove` in `src/provider.ts`).
 For an adopted box, `remove()` closes the tunnel before and again after it runs `MOVE_MACHINE_ASIDE`
 (`src/provider.ts`), since a sync pass's wake can reopen the tunnel meanwhile. The script runs over SSH, only when
 `ona environment get`, made just before, says the box is running (safety rule 1). It stops every process whose command line names bb's

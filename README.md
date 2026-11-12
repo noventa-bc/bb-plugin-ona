@@ -195,7 +195,7 @@ bb machine create --provider ona --inputs '{"mode":"adopt","environment":"<name-
 ```
 
 Create a new one from an Ona project. It gets a fun name such as
-`nimble-badger-ca1b`, and bb deletes it when you remove the machine. If Ona
+`nimble-badger-ca1b`, and bb deletes it when you remove the machine, unless another bb machine has adopted it since. If Ona
 reports unpushed commits or uncommitted files on the box, the remove fails and
 the box is kept: commit and push, or discard, the work, or delete the box with
 `ona environment delete <id>`, then run `bb machine retry-cleanup`:
@@ -312,7 +312,7 @@ bb ona resume <ref>            # a stopped active machine: starts its box and re
 bb ona update [ref] [--force]  # apply pending agent-CLI updates on connected devboxes (also weekdays 09:00 when `autoUpdateClis` is on); a box with an agent running is skipped unless --force; a box another action is running on is skipped
 bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
 bb machine resume ona:<name>   # starts it, reopens the tunnel, restarts the daemon (Play button); gives up after 30 minutes ("Machine resume failed: Gave up resuming <box> after 30 minutes; last step: …")
-bb machine remove ona:<name>   # created: deletes the box unless it has unpushed commits or uncommitted files; adopted: stops bb's daemon, moves its data folder aside
+bb machine remove ona:<name>   # created: deletes the box unless it has unpushed commits or uncommitted files or another machine adopted it; adopted: stops bb's daemon, moves its data folder aside
 ```
 
 ## Troubleshooting
