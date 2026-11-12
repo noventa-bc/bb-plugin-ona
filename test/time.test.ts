@@ -165,12 +165,15 @@ function runTicks(state: TickState, times: number[]) {
 const ticksAfter = (from: number, count: number, gap = TICK_MS) =>
   Array.from({ length: count }, (_, i) => from + (i + 1) * gap);
 
-test("steady 15 s ticks backstop on the 8th and again on the 16th (fails if the period is not 120 s, a backstop never runs, or a backstop does not restart the period)", () => {
-  assert.deepEqual(runTicks({ last: 0, backstopAt: 0 }, ticksAfter(0, 16)).backstops, [120_000, 240_000]);
+test("ticks that each run late, 50 s apart and none a sleep, backstop on the first tick past the backstop period, not after 8 ticks (fails if the backstop waits for 8 ticks)", () => {
+  assert.deepEqual(runTicks({ last: 0, backstopAt: 0 }, ticksAfter(0, 6, 50_000)).backstops, [150_000, 300_000]);
 });
 
-test("ticks that each run late, 50 s apart and none a sleep, backstop on the first tick past 120 s, not after 8 ticks (fails if the backstop waits for 8 ticks)", () => {
-  assert.deepEqual(runTicks({ last: 0, backstopAt: 0 }, ticksAfter(0, 6, 50_000)).backstops, [150_000, 300_000]);
+test("the backstop comes at 119 s exactly (fails at any period but 119 s, or with > instead of >=)", () => {
+  const isBackstop = (now: number) => timerTick({ last: now - TICK_MS, backstopAt: 0 }, now).backstop;
+  assert.equal(isBackstop(118_999), false);
+  assert.equal(isBackstop(119_000), true);
+  assert.equal(isBackstop(119_999), true);
 });
 
 test("a gap of exactly 60 s is not a sleep (fails if the sleep test is >= rather than >)", () => {
@@ -185,14 +188,14 @@ test("a sleep's tick is not a backstop (fails if the sleep tick also backstops)"
   assert.equal(timerTick({ last: 0, backstopAt: 0 }, 10 * MINUTE).backstop, false);
 });
 
-test("a sleep restarts the backstop period, so the next backstop is 120 s after the wake (fails if backstopAt is kept across a sleep)", () => {
+test("a sleep restarts the backstop period, so the next backstop is the first tick past it after the wake (fails if backstopAt is kept across a sleep)", () => {
   const wake = 10 * MINUTE;
   const { state } = runTicks({ last: 0, backstopAt: 0 }, [wake]);
   assert.deepEqual(runTicks(state, ticksAfter(wake, 8)).backstops, [wake + 120_000]);
 });
 
-test("a backward clock step is a backstop, and restarts the period from the step (fails if the backward-step clause is removed)", () => {
-  const step = timerTick({ last: 100_000, backstopAt: 100_000 }, 50_000);
+test("a tick that reads earlier than the last tick is a backstop, and restarts the period from it (fails if the backward clause is removed, or compares with backstopAt)", () => {
+  const step = timerTick({ last: 105_000, backstopAt: 0 }, 20_000);
   assert.equal(step.backstop, true);
-  assert.equal(step.state.backstopAt, 50_000);
+  assert.equal(step.state.backstopAt, 20_000);
 });

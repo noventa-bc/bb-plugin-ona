@@ -69,10 +69,8 @@ export async function capped<T>(
 
 /** The lifecycle timer ticks every 15 s. */
 export const TICK_MS = 15_000;
-/** A backstop pass comes on the first tick at least this long after the last backstop or wake. */
-const BACKSTOP_MS = 120_000;
-/** A timer can fire a few ms early, so a tick 1 s short of BACKSTOP_MS still counts, not a whole tick later. */
-const BACKSTOP_SLACK_MS = 1_000;
+/** First tick at least this long after the last backstop or wake: 120 s less 1 s, as 8 ticks read a few ms short. */
+const BACKSTOP_MS = 119_000;
 /** A gap longer than this between two ticks is taken as a sleep: bb's SDK has no wake event. */
 const SLEEP_GAP_MS = 60_000;
 
@@ -85,7 +83,8 @@ export interface TickState {
 /**
  * One tick at `now`. `sleptMs` is the gap in ms when the tick is taken as a sleep, else null. A sleep sets
  * `backstopAt`, and its tick is never a backstop: the pass the sleep schedules covers that moment, so the tick adds
- * no pass of its own. A clock that stepped back is a backstop, since `backstopAt` would otherwise stay in the future.
+ * no pass of its own. A tick that reads earlier than the last tick is a backstop; a smaller backward step is not seen
+ * and moves the next backstop by at most one tick.
  */
 export function timerTick(
   state: TickState,
@@ -93,6 +92,6 @@ export function timerTick(
 ): { state: TickState; sleptMs: number | null; backstop: boolean } {
   const gap = now - state.last;
   if (gap > SLEEP_GAP_MS) return { state: { last: now, backstopAt: now }, sleptMs: gap, backstop: false };
-  const backstop = now < state.backstopAt || now - state.backstopAt >= BACKSTOP_MS - BACKSTOP_SLACK_MS;
+  const backstop = now < state.last || now - state.backstopAt >= BACKSTOP_MS;
   return { state: { last: now, backstopAt: backstop ? now : state.backstopAt }, sleptMs: null, backstop };
 }
