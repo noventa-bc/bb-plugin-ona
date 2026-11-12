@@ -32,13 +32,14 @@ the quick fix is right and when it is not.
   independent of the orchestrator. Blocking findings go back to the builder
   (step 6 says which block).
 
-The role definitions in `.claude/agents/` set Haiku at max effort (for
-example: builders of small changes, reviewers of tests, docs, lint and CI,
-mechanical work). Use Opus at medium effort only per call, with a stated reason
-in its brief: a change to a safety rule or an accepted decision, a tricky
-concurrency or state bug, or a review that must read bb's source. The
-orchestrator runs on Fable. It checks a Haiku subagent's output and briefs it
-with exact commands and a stop condition.
+Subagents run on Haiku at max effort by default; the role definitions in
+`.claude/agents/` set it, and a brief for an agent without a definition names
+its model and effort (for example: builders of small changes, reviewers of
+tests, docs, lint and CI, mechanical work). Use Opus at medium effort only per
+call, with a stated reason in its brief: a change to a safety rule or an
+accepted decision, a tricky concurrency or state bug, or a review that must read
+bb's source. The orchestrator runs on Fable. It checks a Haiku subagent's output
+and briefs it with exact commands and a stop condition.
 
 Merging on green is only as safe as CI. Every PR adds a test for the behaviour
 it changes, where a test is possible; a gap CI cannot see and the PR did not open (untested module, missing lint, unchecked
@@ -104,8 +105,9 @@ those and the "skipped or not checked" lines ponytail ends with.
    many agents) and `/ponytail-review branch`. Brief each with the template in
    `docs/owner.md`; `.claude/agents/reviewer-adversarial.md` and
    `reviewer-code.md` hold the standing rules: read-only, scratch folder, tests and
-   report. The ponytail pass has no definition (`docs/owner.md` says how it is
-   briefed). Blocking findings go back to the builder. Code, here, is anything but
+   report. The ponytail pass runs as a general-purpose agent on Haiku at max
+   effort, briefed as `docs/owner.md` says. Blocking findings go back to the
+   builder. Code, here, is anything but
    comments, lint messages, Markdown, a lockfile, a `package.json` override
    and the version bump (step 7); the ten numbered Code Review Rules in
    `AGENTS.md` and the rules table in `docs/sync.md` count as code. A PR

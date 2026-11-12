@@ -52,8 +52,9 @@ Role: builder (`.claude/agents/builder.md`)
 Branch: `agent/<slug>`; worktree: `<absolute path>`; node: `<bin folder of the node version in .nvmrc>`
 Goal: <one sentence, user-visible outcome>
 Scope: <files or area, quoting the text of each line to change, not its number>; out of scope: <...>
-Tests first: <each test, and the bug or rule its title names; "guard, no `// Bug:` line" when main has no bug>
+Tests first: <each test, and the bug or rule its title or the handoff names; "guard, no `// Bug:` line" when main has no bug>
 Coupled changes: <the AGENTS.md "Coupled changes" this task touches, or none>
+Model: <Haiku at max effort, or Opus at medium with the reason>
 Constraints: <decisions or rules that matter here>
 Done when: <tests or behaviour>
 ```
@@ -71,16 +72,18 @@ on the settled host, not on the answer.
 FACTORY.md step 6 points here. The standing rules are in the reviewer's definition, named in `Role:`; the brief holds only the task:
 
 ```
-Role: reviewer, pass `adversarial` (`.claude/agents/reviewer-adversarial.md`), `code-review` (`.claude/agents/reviewer-code.md`) or `ponytail-review` (no definition, see below)
-Target: worktree `<absolute path>`; commit `<sha>`; base `origin/main`; diff `git -C <worktree> diff origin/main...<sha>`
+Role: reviewer, pass `adversarial` (`.claude/agents/reviewer-adversarial.md`), `code-review` (`.claude/agents/reviewer-code.md`) or `ponytail-review` (a general-purpose agent, see below)
+Target: worktree `<absolute path>` (a fresh agent starts in the main checkout, so pass this path); commit `<sha>`; base `origin/main`; diff `git -C <worktree> diff origin/main...<sha>`
 Scratch folder: `<new absolute path under the session scratchpad>`; node: `<bin folder of the node version in .nvmrc>`
+Link: <the `ln -s` line, or `none`; use it only when `scripts/scratch-copy.sh` reports no `node_modules` link>
+Model: <Haiku at max effort, or Opus at medium with the reason>
 Round: <n>; the passes this round are the ones FACTORY.md step 6 gives it.
 Scope: the item's code (roadmap label `<label>`); anything outside it goes under "Pre-existing".
 Known roadmap items, not to re-report: <labels only>.
 Check list: <what to check in this diff: the coupled changes it touches, the docs it changes against the code, each new test against the rule its title names, the checks to run>.
 ```
 
-The ponytail pass has no definition: run it as a general-purpose agent with this brief, which names only the `## Standing rules` section of `.claude/agents/reviewer-code.md`; the agent runs `/ponytail-review branch`.
+The ponytail pass runs as a general-purpose agent on Haiku at max effort (`model: haiku` and `effort: max` on the call). It gets this brief, which names the `## Standing rules` and `## Report` sections of `.claude/agents/reviewer-code.md`, and it runs `/ponytail-review branch`.
 
 ## Review a handoff outside the orchestrated flow
 
