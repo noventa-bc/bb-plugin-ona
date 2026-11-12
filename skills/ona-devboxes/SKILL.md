@@ -32,8 +32,8 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
 - Adopt an existing environment (never deleted by bb; refused when another bb machine uses the box):
   `bb machine create --provider ona --inputs '{"mode":"adopt","environment":"box-1"}'`
 - Create a new one from an Ona project (deleted on `bb machine remove`, which
-  fails and keeps the box while Ona reports unpushed commits or uncommitted
-  files on it):
+  keeps the box without failing while another bb machine uses it, and otherwise
+  fails and keeps it while Ona reports unpushed commits or uncommitted files on it):
   `bb machine create --provider ona --inputs '{"mode":"create","project":"my-app"}'`
   (optional `"classId"` from `ona environment list-classes`). New devboxes get
   the plugin's `inactivityTimeout` (default `3h`; `bb plugin config ona set inactivityTimeout 6h`, then `bb plugin reload ona` once the user agrees).
@@ -58,7 +58,7 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
 ## Shell access
 
 - `bb ona list` — machines, Ona env, tunnel status.
-- `bb ona shell <ref> -- <cmd…>` — run one command in the devbox checkout; prints output, keeps the exit code.
+- `bb ona shell <ref> -- <cmd…>` — run one command in the devbox checkout; prints output, keeps the exit code (exit 1 with a note when bb reports no exit code).
 - `bb ona ssh <ref> --thread <thread-id>` — open another terminal to the devbox in that thread's
   terminal panel (threads on a devbox also get an **Editor** header button and a cost-so-far chip). Agents should not type into the
   user's terminals; use your own thread terminals instead.
