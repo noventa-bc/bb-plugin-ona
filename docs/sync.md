@@ -208,8 +208,8 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
 - **30s after** a tunnel comes back up.
 - **Right away** when a tunnel finds its box stopped in Ona.
 - **After** bb's realtime connection reconnects.
-- **Every 2 minutes**, as a backstop.
-- **Right after the Mac wakes**: a 15s timer that fires 60s+ late means the process slept, so the plugin re-reads Ona and checks every machine once.
+- **About every 2 minutes**, as a backstop.
+- **Right after the Mac wakes**: two ticks of a 15s timer more than 60s apart mean the process slept, so the plugin re-reads Ona and checks every machine once.
 
 Bursts of events are merged into one check. All checks share one cached `ona
 environment list` (at most 15s old; 5s for event-driven checks), so checking a

@@ -5,7 +5,7 @@ server_lines 459
 runtime_deps 1
 settings 11
 commands 16
-intervals 4
+intervals 3
 shortcuts 9
 layering 0
 cycles 0

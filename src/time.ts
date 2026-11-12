@@ -1,4 +1,4 @@
-// The sleep and the poll loop the plugin's waits share, both abortable.
+// The sleep and the poll loop the plugin's waits share, both abortable, and the lifecycle timer's tick.
 // The default import, not the named one: node:test's mock.timers patches this object.
 import timers from "node:timers/promises";
 
@@ -65,4 +65,34 @@ export async function capped<T>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** The lifecycle timer ticks every 15 s. */
+export const TICK_MS = 15_000;
+/** Backstop window on performance.now(), 120 s less 1 s: 8 ticks timed by libuv's cached clock can read a few ms short. */
+const BACKSTOP_MS = 119_000;
+/** A gap longer than this between two ticks is taken as a sleep: bb's SDK has no wake event. */
+const SLEEP_GAP_MS = 60_000;
+
+/** What timerTick keeps: the wall time of the last tick, and the monotonic time of the last backstop or wake. */
+export interface TickState {
+  last: number;
+  backstopAt: number;
+}
+
+/**
+ * `now` is the wall clock: it shows a sleep, which a monotonic clock may not count. `mono` is performance.now(),
+ * which clock corrections cannot move, so it times the backstop. `sleptMs` is the gap in ms when the tick is taken as a
+ * sleep, else null. A sleep sets `backstopAt`, and its tick is never a backstop: the pass the sleep schedules covers
+ * that moment, so the tick adds no pass of its own.
+ */
+export function timerTick(
+  state: TickState,
+  now: number,
+  mono: number,
+): { state: TickState; sleptMs: number | null; backstop: boolean } {
+  const gap = now - state.last;
+  if (gap > SLEEP_GAP_MS) return { state: { last: now, backstopAt: mono }, sleptMs: gap, backstop: false };
+  const backstop = mono - state.backstopAt >= BACKSTOP_MS;
+  return { state: { last: now, backstopAt: backstop ? mono : state.backstopAt }, sleptMs: null, backstop };
 }

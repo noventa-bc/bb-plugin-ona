@@ -21,6 +21,7 @@ import { startDaemonProxy } from "./src/proxy.ts";
 import { commands, onaCommands } from "./src/commands.ts";
 import { connectedAtKey, createSync, forgetBox, rowForRef, watchRealtime, type Row } from "./src/sync.ts";
 import { ALL, HostGuard, PassScheduler } from "./src/reconcile.ts";
+import { timerTick, TICK_MS } from "./src/time.ts";
 import { createThreadCost } from "./src/cost-service.ts";
 import { createMove } from "./src/move.ts";
 import { rpcContract, type Devbox } from "./src/rpc.ts";
@@ -236,24 +237,23 @@ export default async function plugin(bb: BbPluginApi) {
     async start(signal) {
       scheduler.start();
       const unsubscribe = watchRealtime({ bb, scheduler, hostByEnv });
-      // Backstop for anything the events miss.
+      // Backstop and wake checks: timerTick in src/time.ts has the rules.
       scheduler.schedule(ALL, 0);
-      const timer = setInterval(() => scheduler.schedule(ALL, 0), 2 * 60_000);
-      // No wake event in the SDK: a 15s tick that comes 60s+ late means the Mac slept.
-      let lastTick = Date.now();
-      const wakeTimer = setInterval(() => {
-        const gap = Date.now() - lastTick;
-        lastTick += gap;
-        if (gap <= 60_000) return;
-        bb.log.info(`woke after ${Math.round(gap / 1000)}s asleep, re-checking Ona`);
-        void snapshot
-          .refresh()
-          .catch((error: unknown) => bb.log.warn(`Ona listing after wake failed: ${errorText(error)}`))
-          .then(() => scheduler.schedule(ALL, 0));
-      }, 15_000);
+      let tickState = { last: Date.now(), backstopAt: performance.now() };
+      const tickTimer = setInterval(() => {
+        const step = timerTick(tickState, Date.now(), performance.now());
+        tickState = step.state;
+        if (step.sleptMs !== null) {
+          bb.log.info(`woke after ${Math.round(step.sleptMs / 1000)}s asleep, re-checking Ona`);
+          void snapshot
+            .refresh()
+            .catch((error: unknown) => bb.log.warn(`Ona listing after wake failed: ${errorText(error)}`))
+            .then(() => scheduler.schedule(ALL, 0));
+        }
+        if (step.backstop) scheduler.schedule(ALL, 0);
+      }, TICK_MS);
       await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
-      clearInterval(timer);
-      clearInterval(wakeTimer);
+      clearInterval(tickTimer);
       unsubscribe();
       scheduler.stop();
     },
