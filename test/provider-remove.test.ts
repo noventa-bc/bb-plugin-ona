@@ -102,6 +102,15 @@ test("an adopted remove whose move-aside exits 5 logs that the folder is or hold
 test("an adopted remove runs the move-aside on the box's env id with hostId and dataDir as arguments, before the keys go (fails if the target, the args or the order change)", async () => {
   const { provider, moves, forgotten } = register({ found: box("RUNNING") });
   await remove(provider, { ...adoptedResource, dataDir: "/data/bb" });
-  assert.deepEqual(moves, [{ envId: "env-1", args: ["host-1", "/data/bb"], keysKept: true }]);
+  assert.deepEqual(moves, [{ envId: "env-1", args: ["host-1", "/data/bb"], keysKept: true, tunnel: "off" }]);
   assert.deepEqual(forgotten, ["env-1"]);
+});
+
+test("an adopted remove closes the box's tunnel before the move-aside and stops or deletes nothing (fails if the close comes after the move-aside)", async () => {
+  const { provider, calls, moves, tunnels } = register({ found: box("RUNNING"), tunnel: "up" });
+  const removed = await remove(provider, adoptedResource);
+  assert.equal(removed.status, "removed");
+  assert.equal(moves[0]?.tunnel, "off");
+  assert.deepEqual(tunnels, ["stop env-1", "stop env-1"]);
+  assert.deepEqual(calls, ["get RUNNING", "move-aside"]);
 });
