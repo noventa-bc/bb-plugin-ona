@@ -442,19 +442,19 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     }),
     async remove({ resource, hostId, report, signal }) {
       const owned = resourceSchema.parse(resource);
-      // A box another machine adopted since keeps its tunnel, keys and no-stop flag (keyed by the box's id) for that machine.
-      const other = !owned.adopted && (await machineUsing(owned.envId, owned.key));
-      if (other) {
+      // A box another machine still uses keeps its tunnel, keys and no-stop flag (keyed by the box's id) for that machine.
+      const other = await machineUsing(owned.envId, owned.key);
+      if (other && !owned.adopted) {
         bb.log.warn(`${other.name} (${other.id}) uses Ona environment ${owned.envName}; removing ${hostId} kept it.`);
         return { status: "removed" };
       }
       // A removal can leave a no-stop flag behind (a suspend bb settled as removing never reaches the provider's
       // suspend). bb awaits a suspend still running before it calls remove, so none reaches the stop step after this.
-      deps.releasing.delete(owned.envId);
+      if (!other) deps.releasing.delete(owned.envId);
       if (owned.adopted) {
         // Closed first: a connect that began before this close cannot reopen it (see `connect`). A thrown lookup keeps
         // the keys for bb's retry.
-        await disconnect(owned.envId);
+        if (!other) await disconnect(owned.envId);
         const env = await ona.getEnvironmentIfExists(owned.envId, signal);
         // The machine is still removed either way; a folder left behind only blocks adopting the box again.
         // Told through the plugin log: bb 0.48.1 writes `report.log` only to its server log.
@@ -506,6 +506,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
               `Before adopting it again, start it and ${byHand}.`,
           );
         }
+        if (other) return { status: "removed" };
         // Closed again: a sync pass's wake can reopen the tunnel while the move-aside runs.
         await disconnect(owned.envId);
         await deps.forgetBox(owned.envId);
