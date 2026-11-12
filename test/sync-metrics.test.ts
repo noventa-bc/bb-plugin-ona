@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import { ALL } from "../src/reconcile.ts";
 import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
 import { idle, MISMATCH_LINE, world } from "./sync-fakes.ts";
@@ -131,6 +131,30 @@ test("an incident first seen by a pass with a slow listing is timed from that pa
     const { sync, logs } = world([idle("h1", { ona: "STOPPED" })], options);
     await sync.reconcile(new Set([ALL]), { wait: true });
     delete options.listingMs;
+    await tick(90_000);
+    await sync.reconcile(new Set([ALL]), { wait: true });
+    assert.deepEqual(mismatchLines(logs), [MISMATCH_LINE]);
+  } finally {
+    await resetFakeClock();
+  }
+});
+
+test("an incident first seen by a pass with a slow bb host listing is timed from that pass's start (fails if the hold starts after bb's host listing)", async () => {
+  // Bug: the hold started after bb's host listing and Ona's listing, so a slow read of either could delay the line by a whole cycle.
+  enableFakeClock();
+  try {
+    // Pass 1 starts at 0 and bb's host listing takes 30 s; pass 2 starts at 120 s, and its host listing is fast.
+    // The hook runs inside the listing, so it moves the clock with mock.timers.tick (tick() is async).
+    let slowHostList = true;
+    const options = {
+      pluginStartedAt: Date.now(),
+      afterCall: (call: string) => {
+        if (call === "list" && slowHostList) mock.timers.tick(30_000);
+      },
+    };
+    const { sync, logs } = world([idle("h1", { ona: "STOPPED" })], options);
+    await sync.reconcile(new Set([ALL]), { wait: true });
+    slowHostList = false;
     await tick(90_000);
     await sync.reconcile(new Set([ALL]), { wait: true });
     assert.deepEqual(mismatchLines(logs), [MISMATCH_LINE]);
