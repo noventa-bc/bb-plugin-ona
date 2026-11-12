@@ -84,9 +84,18 @@ test("cleanup of an unfinished create leaves a box another machine adopted (fail
   assert.deepEqual(fake.forgotten, []);
 });
 
+test("cleanup leaves a box another machine adopted, unpushed work and all, without a call (fails if the work check runs first)", async () => {
+  const content = { git: { branch: "feat", totalUnpushedCommits: 2 } };
+  const withWork = { ...unfinished, status: { ...unfinished.status, content } };
+  const fake = register({ found: withWork, tunnel: "up", machines: [creating, adoptedSince] });
+  assert.equal((await cleanup(fake)).status, "removed");
+  assert.deepEqual(fake.calls, []);
+  assert.deepEqual(fake.tunnels, []);
+});
+
 test("cleanup still deletes its own orphaned box when no other machine stores it (fails if the guard counts any listed machine or drops the cleanup's key)", async () => {
   const other = { ...adoptedSince, resource: { ...adoptedResource, envId: "env-2", key: "key-2" } };
-  // The cleanup's own host stores the box under its own key, so the check must pass the cleanup's key.
+  // bb calls cleanup only for a host that stores nothing; this row stores the box to pin that cleanup passes its own key.
   const own = { ...creating, resource: { ...adoptedResource, adopted: false } };
   const fake = register({ found: unfinished, machines: [own, other] });
   assert.equal((await cleanup(fake)).status, "removed");
@@ -118,7 +127,11 @@ test("a create run again refuses a box another machine adopted since (fails if t
     machines: [creating, adoptedSince],
   });
   assert.ok(result instanceof Error);
-  assert.ok(result.message.startsWith(`ona:m2 (host-2) uses Ona environment ${unfinished.metadata.name}; a box holds`));
+  assert.ok(
+    result.message.startsWith(
+      `ona:m2 (host-2) uses Ona environment ${unfinished.metadata.name}; a box holds one bb machine`,
+    ),
+  );
   assert.equal(checkpointed, false);
   assert.deepEqual(calls, []);
   assert.deepEqual(tunnels, []);
