@@ -1,8 +1,6 @@
 // RPCs behind the thread header's Editor button and spend chip, the thread menu's Move to devbox, and the settings section's devbox buttons. app.tsx imports only the contract's type.
 import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
-import { sshHost } from "./ona.ts";
-import type { Row } from "./sync.ts";
 
 export const devboxSchema = z.object({
   machine: z.string(),
@@ -15,20 +13,6 @@ export const devboxSchema = z.object({
   sshCommand: z.string(),
 });
 export type Devbox = z.infer<typeof devboxSchema>;
-
-/** A bb machine row as the RPCs show it; `tunnel` is the tunnel's state for the row's box. */
-export function devboxOf(row: Row, tunnel: Devbox["tunnel"]): Devbox {
-  return {
-    machine: row.machine,
-    hostId: row.hostId,
-    envId: row.resource.envId,
-    envName: row.resource.envName,
-    status: row.status,
-    tunnel,
-    adopted: row.resource.adopted,
-    sshCommand: `ssh ${sshHost(row.resource.envId)}`,
-  };
-}
 
 export const threadCostSchema = z.object({
   provider: z.enum(["codex", "claude-code"]),

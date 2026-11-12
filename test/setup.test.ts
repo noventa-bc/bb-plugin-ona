@@ -148,12 +148,15 @@ test("planSetup says Ona could not be reached instead of asking for a login", ()
   assert.doesNotMatch(login.detail, /ona login/);
 });
 
+const sshMissing = () => false;
+const sshPresent = () => true;
+
 test("onaAvailability asks for the ona CLI when none was found (fails if the message or status changes)", () => {
-  assert.deepEqual(onaAvailability(null, false), { status: "setup-required", message: ONA_INSTALL_HINT });
+  assert.deepEqual(onaAvailability(null, sshMissing), { status: "setup-required", message: ONA_INSTALL_HINT });
 });
 
 test("onaAvailability shows Ona as unavailable when it cannot be reached (fails if that is shown as a setup step)", () => {
-  assert.deepEqual(onaAvailability({ ok: false, message: "connection refused", reason: "network" }, false), {
+  assert.deepEqual(onaAvailability({ ok: false, message: "connection refused", reason: "network" }, sshMissing), {
     status: "unavailable",
     message: "Ona could not be reached. (connection refused)",
   });
@@ -162,7 +165,7 @@ test("onaAvailability shows Ona as unavailable when it cannot be reached (fails 
 test("onaAvailability asks for ona login after any other failed login (fails if one failure reason is shown another way)", () => {
   for (const reason of ["auth", "unknown"] as const) {
     assert.deepEqual(
-      onaAvailability({ ok: false, message: "not logged in", reason }, false),
+      onaAvailability({ ok: false, message: "not logged in", reason }, sshMissing),
       { status: "setup-required", message: "Ona CLI is not logged in: run `ona login`. (not logged in)" },
       reason,
     );
@@ -170,14 +173,28 @@ test("onaAvailability asks for ona login after any other failed login (fails if 
 });
 
 test("onaAvailability asks for the ssh config after a good login (fails if a missing ssh config passes)", () => {
-  assert.deepEqual(onaAvailability(ready.login, false), {
+  assert.deepEqual(onaAvailability(ready.login, sshMissing), {
     status: "setup-required",
     message: "Run `ona environment ssh-config` so bb can reach Ona environments over SSH.",
   });
 });
 
 test("onaAvailability is available after a good login with the ssh config (fails if a complete setup is refused)", () => {
-  assert.deepEqual(onaAvailability(ready.login, true), { status: "available" });
+  assert.deepEqual(onaAvailability(ready.login, sshPresent), { status: "available" });
+});
+
+test("the ssh config is not read without a good login (fails if the check runs before the login result)", () => {
+  let reads = 0;
+  const sshConfig = () => {
+    reads += 1;
+    return true;
+  };
+  onaAvailability(null, sshConfig);
+  onaAvailability({ ok: false, message: "connection refused", reason: "network" }, sshConfig);
+  onaAvailability({ ok: false, message: "not logged in", reason: "auth" }, sshConfig);
+  assert.equal(reads, 0);
+  assert.deepEqual(onaAvailability(ready.login, sshConfig), { status: "available" });
+  assert.equal(reads, 1);
 });
 
 /**

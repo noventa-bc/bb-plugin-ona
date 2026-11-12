@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { commands } from "../src/commands.ts";
-import { devboxCommandSchema, devboxOf, rpcContract } from "../src/rpc.ts";
-import type { Row } from "../src/sync.ts";
+import { devboxCommandSchema, rpcContract } from "../src/rpc.ts";
 
 const SECTION_COMMANDS = ["status", "sync", "reconnect", "resume", "rename", "keep-alive", "update"];
 
@@ -54,37 +53,4 @@ test("update runs for one devbox only: without a host id it is refused (fails if
   const { input } = rpcContract.devbox_command;
   assert.equal(input.safeParse({ command: "update", hostId: "host_1" }).success, true);
   assert.equal(input.safeParse({ command: "update" }).success, false);
-});
-
-const row: Row = {
-  hostId: "host_1",
-  machine: "rapid-mango",
-  status: "connected",
-  phase: "active",
-  lastSeenAt: null,
-  resource: { envId: "env-1", envName: "rapid-mango-box", adopted: true, key: "key-1" },
-};
-
-test("devboxOf shows the machine, its box, its status and ssh command, with the tunnel it is given (fails if a field is read from the wrong place)", () => {
-  assert.deepEqual(devboxOf(row, "up"), {
-    machine: "rapid-mango",
-    hostId: "host_1",
-    envId: "env-1",
-    envName: "rapid-mango-box",
-    status: "connected",
-    tunnel: "up",
-    adopted: true,
-    sshCommand: "ssh env-1.ona.environment",
-  });
-});
-
-test("devboxOf passes each tunnel state through unchanged (fails if the tunnel is fixed to one state)", () => {
-  for (const tunnel of ["up", "connecting", "off"] as const) {
-    assert.equal(devboxOf(row, tunnel).tunnel, tunnel);
-  }
-});
-
-test("devboxOf reports a box bb did not adopt as not adopted (fails if adopted is a constant)", () => {
-  const unadopted = { ...row, resource: { ...row.resource, adopted: false } };
-  assert.equal(devboxOf(unadopted, "off").adopted, false);
 });

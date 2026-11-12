@@ -42,10 +42,11 @@ jobs:
       - run: scripts/fitness.sh --check
       # The personal-path check on the checkout (AGENTS.md rule 10).
       - run: scripts/leak-check.sh
-      # Every src module has a test file.
+      # Every src module has a test file. rpc.ts is a zod contract with no logic.
       - run: |
           for f in $(find src -name '*.ts'); do
             n=$(basename "$f" .ts)
+            case "$n" in rpc) continue ;; esac
             [ -f "test/$n.test.ts" ] || { echo "$f has no test/$n.test.ts"; exit 1; }
           done
       - run: shellcheck scripts/*.sh test/*.sh .githooks/*

@@ -239,6 +239,12 @@ test("bb ona reconnect refuses a suspended machine (fails if it opens a tunnel o
   assert.deepEqual(onaCalls(), []);
 });
 
+test("bb ona shell refuses a suspended machine (fails if the shell runs anyway)", local, async () => {
+  const result = await host.harness.behavior.runCli(["shell", resource.envId, "--", "pwd"]);
+  assert.equal(result.exitCode, 1);
+  assert.match(result.stderr ?? "", /is suspended\. Start it with: bb machine resume /);
+});
+
 test("bb ona reconnect refuses a box Ona shows stopped (fails if it connects without asking Ona)", local, async () => {
   bootstraps.length = 0;
   Object.assign(hosts[0]!, { status: "connected", lifecycle: { phase: "active", message: null, suspendedAt: null } });

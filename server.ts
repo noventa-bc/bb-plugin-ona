@@ -17,14 +17,14 @@ import {
   run,
   type OnaLogin,
 } from "./src/setup.ts";
-import { PROVIDER_ID, registerOnaComposition, registerOnaProvider } from "./src/provider.ts";
+import { devboxOf, PROVIDER_ID, registerOnaComposition, registerOnaProvider } from "./src/provider.ts";
 import { startDaemonProxy } from "./src/proxy.ts";
 import { commands, onaCommands } from "./src/commands.ts";
 import { connectedAtKey, createSync, forgetBox, rowForRef, watchRealtime, type Row } from "./src/sync.ts";
 import { ALL, HostGuard, PassScheduler } from "./src/reconcile.ts";
 import { createThreadCost } from "./src/cost-service.ts";
 import { createMove } from "./src/move.ts";
-import { devboxOf, rpcContract, type Devbox } from "./src/rpc.ts";
+import { rpcContract, type Devbox } from "./src/rpc.ts";
 import { connectedShellRow, threadTerminalPlan, type ShellBackend, type ShellTarget } from "./src/shells.ts";
 import { TunnelManager } from "./src/ssh.ts";
 import { createUpdateClis } from "./src/updates.ts";
@@ -210,8 +210,7 @@ export default async function plugin(bb: BbPluginApi) {
   const provider = registerOnaProvider(bb, {
     async availability() {
       const binary = findOnaBinary(onaPath);
-      const login = binary ? await onaLogin(binary) : null;
-      return onaAvailability(login, login?.ok === true && hasOnaSshConfig());
+      return onaAvailability(binary ? await onaLogin(binary) : null, hasOnaSshConfig);
     },
     ona,
     sshBinary: sshPath,

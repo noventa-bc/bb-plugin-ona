@@ -151,6 +151,13 @@ test(
   },
 );
 
+test("thread_devbox shows the tunnel of the thread's box (fails if the tunnel is fixed to off)", local, async () => {
+  const reply = (await host.harness.behavior.callRpc("thread_devbox", { threadId: "thread-1" })) as {
+    devbox: { tunnel: string } | null;
+  };
+  assert.match(reply.devbox?.tunnel ?? "", /^(up|connecting)$/);
+});
+
 test(
   "thread_devbox answers pending, from one thread read, for a thread bb has not given a workspace yet",
   local,

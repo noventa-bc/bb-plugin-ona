@@ -90,7 +90,7 @@ test("a ref with no machine is refused and points at bb ona list (fails if the m
 
 test("a machine that is not connected is refused with the resume command (fails if the message changes or a status passes)", () => {
   for (const status of ["suspended", "disconnected"]) {
-    assert.throws(() => connectedShellRow("rapid-mango", { machine: "rapid-mango", status }), {
+    assert.throws(() => connectedShellRow("env-1", { machine: "rapid-mango", status }), {
       message: `rapid-mango is ${status}. Start it with: bb machine resume rapid-mango`,
     });
   }
