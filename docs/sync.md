@@ -158,13 +158,41 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    skips the provider's stop. A suspend you ask for (Pause, `bb machine suspend`, or `bb machine reconcile` of a suspended
    machine) stops the box unless Ona shows it stopped or deleted (not deleting) or no longer has it, a STARTING or
    STOPPING box included. _Why: a wrong or stale listing must not stop a box with your work on it._
-3. **Restart a daemon only when the check finds none.** The check looks for a
-   process whose command line names a folder under `~/.bb-machines`, the machine
-   data folder (`machineDataDir`) or the box's legacy data folder (a relative one
-   is matched as given and resolved against `$HOME`), each as given and resolved
-   through symlinks. A process listing that can't be trusted, a folder path with
-   a newline in it, a failed SSH connection or a timeout counts as unknown, and
-   nothing is restarted. _Why: a restart kills running agent turns._ Four callers force the guard, skipping the cooldown, backoff and give-up: `bb ona sync`, `bb ona reconnect`, `bb ona resume`, and the thread's pass (a pass that finds a thread waiting on a box Ona shows stopped or stopping) while no hold is set. The first three skip them outright, and `bb ona sync` still runs this check. The idle release also goes past another action's give-up, for up to three failed releases and never past a held one (rule 5). Before a thread's pass has failed on a box, the thread's pass skips what other passes left. Once one has (the hold), a success of another, unforced pass does not reset the failure count, and the usual backoff and give-up apply. A thread's pass that fails, forced or not, keeps or starts the hold. The hold ends when bb shows the machine connected with its tunnel up on a box Ona shows running (connected() ends a hold, clearing its count and quiet period; with no hold, it clears them only when the last failure on the box was a daemon repair's), when a thread's pass succeeds, or when `bb ona sync`, `bb ona reconnect` or `bb ona resume` acts on the box (a forced run starts a fresh count: its failure counts 1, and starts a new hold when the forced pass was a thread's pass); a thread's pass is forced again past what other passes left. `bb ona reconnect` runs bb's daemon bootstrap on a box Ona shows running and never starts one; `bb ona resume` also starts a stopped box. Neither runs the daemon check.
+3. **Restart a daemon only when the check finds none.** _Why: a restart kills running agent turns._
+
+   **The check.**
+   - It looks for a process whose command line names a folder under `~/.bb-machines`, the machine data folder
+     (`machineDataDir`) or the box's legacy data folder.
+   - Each folder is matched as given and resolved through symlinks. The legacy folder, when relative, is also matched
+     resolved against `$HOME`.
+   - A process listing that can't be trusted, a folder path with a newline in it, a failed SSH connection or a timeout
+     counts as unknown, and nothing is restarted.
+
+   **Who forces.** Four callers force the guard, skipping the cooldown, backoff and give-up:
+   - `bb ona sync`, `bb ona reconnect` and `bb ona resume` skip them outright. `bb ona sync` still runs this check.
+   - The thread's pass (a pass that finds a thread waiting on a box Ona shows stopped or stopping) forces while no hold
+     is set. Before a thread's pass has failed on a box, the thread's pass skips what other passes left.
+
+   The idle release does not force: it only goes past another action's give-up, for up to three failed releases and
+   never past a held one (rule 5, "The idle release").
+
+   **The hold.**
+   - It starts once a thread's pass has failed on a box. A thread's pass that fails, forced or not, keeps or starts it.
+     A forced thread's pass that fails counts 1 and starts a new hold.
+   - While it is set, a success of another, unforced pass does not reset the failure count, and the usual backoff and
+     give-up apply.
+   - It ends when bb shows the machine connected with its tunnel up on a box Ona shows running: `connected()` ends a
+     hold, clearing its count and quiet period. With no hold, `connected()` clears them only when the last failure on
+     the box was a daemon repair's.
+   - It ends when a thread's pass succeeds.
+   - It ends when `bb ona sync`, `bb ona reconnect` or `bb ona resume` acts on the box. A forced run starts a fresh
+     count: its failure counts 1.
+   - Once it ends, a thread's pass is forced again past what other passes left.
+
+   **`bb ona reconnect` and `bb ona resume`.** Neither runs the daemon check.
+   - `bb ona reconnect` runs bb's daemon bootstrap on a box Ona shows running and never starts one.
+   - `bb ona resume` also starts a stopped box.
+
 4. **Unknown is not gone.** A failed or empty `ona environment list` changes
    nothing (except a daemon repair's read after its check, below), and
    "missing" needs two listings in a row. A lookup by id
@@ -174,10 +202,47 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    hold). One that fails or leaves the box out after the
    check, before the restart, is a failed
    repair with no restart: it counts toward the backoff and give-up (rule 5).
-5. **One action per machine at a time.** A daemon check or restart makes the machine wait 5 minutes after a success before its next one; suspends, tunnel
-   reopens and idle releases do not wait after a success. A CLI update (`bb ona update` and the weekday update) takes the machine's turn and keeps it while bb installs: for each CLI it installs, up to 15 minutes after bb's install request times out (75 s after it is sent; bb's own install limit is in `docs/ona-notes.md`). While another action runs on the machine, the update is skipped. It still runs on a machine in cooldown, backoff or give-up, records no success or failure, and its `--force` skips only the busy-agent check. A failure backs off for every other
-   action (5, then 10 min; the third failure, in a row or across a hold (rule 3), stops automatic tries until
-   a forced run acts on the box, the hold ends or, for a daemon repair, the box recovers, rule 3), and `bb ona status` says so for an active machine. The idle release is the one exception: another action's give-up does not stop it unless a hold is set (rule 3), so a box whose repairs gave up is still let go once it is idle, after the last failure's quiet period and with every hold of the idle rule. A release that fails past that give-up adds one to the count and backs off (40 minutes, then 60), and leaves the other action's record in place, so the recovery that clears that record still clears it; three failed releases past the give-up stop the release too, as three failed releases in a row do from a fresh count. A successful release ends the count and the give-up, unless a hold keeps them (rule 3), and bb's resume reconnects the machine afresh (decision 0003). A forced run that fails starts the count again at 1. A machine bb shows connected with its tunnel up on a box Ona shows running clears the count and quiet period, and with them the give-up, when the box is held, or its count is a failing daemon repair's (rule 3). A daemon that goes down again after each recovery, while the box's count is that repair's, is restarted each time with a fresh count, so those restarts are not capped at 3 across recoveries; each still needs Ona to show the box running and the daemon check to find the daemon dead. The exceptions are in rule 3. Daemon checks and restarts run at most 2 at a time.
+5. **One action per machine at a time.**
+
+   **Cooldown.**
+   - A daemon check or restart makes the machine wait 5 minutes after a success before its next one.
+   - Suspends, tunnel reopens and idle releases do not wait after a success.
+
+   **Backoff and give-up.**
+   - A failure backs off every action on the machine but a CLI update (below): 5, then 10 min.
+   - The give-up: the third failure, in a row or across a hold (rule 3), stops automatic tries until a forced run acts
+     on the box, the hold ends or, for a daemon repair, the box recovers (rule 3).
+   - `bb ona status` shows the backoff and the give-up for an active machine.
+   - A forced run that fails starts the count again at 1.
+   - The exceptions are in rule 3.
+
+   **The idle release.** It is the one exception: another action's give-up does not stop it unless a hold is set
+   (rule 3).
+   - So a box whose repairs gave up is still let go once it is idle, after the last failure's quiet period and with
+     every hold of the idle rule.
+   - A release that fails past that give-up adds one to the count and backs off: 40 minutes, then 60.
+   - A failed release leaves the other action's record in place, so the recovery that clears that record still clears it.
+   - Three failed releases past the give-up stop the release too, as three failed releases in a row do from a fresh
+     count.
+   - A successful release ends the count and the give-up, unless a hold keeps them (rule 3), and bb's resume
+     reconnects the machine afresh (decision 0003).
+
+   **CLI updates** (`bb ona update` and the weekday update).
+   - A CLI update takes the machine's turn and keeps it while bb installs: for each CLI it installs, up to 15 minutes
+     after bb's install request times out (75 s after it is sent; bb's own install limit is in `docs/ona-notes.md`).
+   - While another action runs on the machine, the update is skipped.
+   - It still runs on a machine in cooldown, backoff or give-up.
+   - It records no success or failure.
+   - Its `--force` skips only the busy-agent check.
+
+   **Recovery.**
+   - A machine bb shows connected with its tunnel up on a box Ona shows running clears the count and quiet period,
+     and with them the give-up, when the box is held, or its count is a failing daemon repair's (rule 3).
+   - A daemon that goes down again after each recovery, while the box's count is that repair's, is restarted each
+     time with a fresh count, so those restarts are not capped at 3 across recoveries.
+   - Each of those restarts still needs Ona to show the box running and the daemon check to find the daemon dead.
+
+   **Concurrency.** Daemon checks and restarts run at most 2 at a time.
 
 **When the plugin checks.**
 
