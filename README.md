@@ -234,8 +234,8 @@ bb thread spawn --project <projectId> --machine ona:<name> \
 The **Ona devbox** option in the environment picker runs the thread on a devbox.
 Its selector picks **Create** (a fresh devbox from the **Ona project** field; a
 blank field uses the `defaultProject` setting) or **Adopt** (an Ona environment
-you already have, named in the **Ona environment** field; bb never deletes it).
-An environment another bb machine uses is refused.
+you already have, named in the **Ona environment** field; removing the machine
+keeps it). An environment another bb machine uses is refused.
 
 Check that the agent CLIs are installed and logged in:
 
@@ -293,7 +293,7 @@ last figure, and reading it never wakes the box; a paused Codex thread whose onl
 
 ```sh
 bb ona ssh <ref> --thread <thread-id>    # a new terminal to <ref> in that thread (ssh from a Mac thread)
-bb ona shell <ref> -- git status         # run one command in the checkout, print output, keep its exit code
+bb ona shell <ref> -- git status         # run one command in the checkout, print output, keep its exit code (exit 1 with a note when bb reports no exit code)
 ssh "$(bb ona host <ref>)"               # plain ssh, outside bb
 bb ona open <ref>                        # open the devbox in your Ona editor
 ```
