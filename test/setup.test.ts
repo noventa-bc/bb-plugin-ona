@@ -15,8 +15,9 @@ import {
   type OnaLogin,
 } from "../src/setup.ts";
 
-test("findOnaBinary prefers the configured path, then PATH", () => {
+test("findOnaBinary prefers the configured path, then PATH", (t) => {
   const dir = mkdtempSync(join(tmpdir(), "ona-bin-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
   const ona = join(dir, "ona");
   writeFileSync(ona, "#!/bin/sh\n");
   chmodSync(ona, 0o755);
