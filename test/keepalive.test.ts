@@ -127,6 +127,19 @@ test("endNotRunning ends keep-alives of listed boxes that aren't running, and ke
   assert.deepEqual(h.early, []);
 });
 
+test("endNotRunning on an empty listing returns [] and ends no keep-alive", () => {
+  const h = harness();
+  h.keepAlives.start("env-a", 60_000);
+  h.keepAlives.start("env-b", 60_000);
+  assert.deepEqual(h.keepAlives.endNotRunning([]), []);
+  assert.deepEqual(
+    h.children.map((child) => child.killed),
+    [false, false],
+  );
+  assert.notEqual(h.keepAlives.until("env-a"), null);
+  assert.notEqual(h.keepAlives.until("env-b"), null);
+});
+
 test("stopAll ends every child", () => {
   const h = harness();
   h.keepAlives.start("env-a", 60_000);
