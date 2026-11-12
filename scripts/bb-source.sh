@@ -30,11 +30,23 @@ fi
 [ -f "$file" ] || { echo "bb-source: no SDK typings at $file; run npm ci --ignore-scripts" >&2; exit 1; }
 
 # A definition is `function <name>(` or `function <name><`, `interface <name>`, `const <name>`, `<name> =` (a dot
-# before the name, `==` and `=>` do not count), or a method: a line that starts with `<name>(` or `async <name>(` and
-# ends with `{` after a `)`. A call statement ends in `;`, and a call after a dot or in an `if` does not start its line.
-# shortcut: a comment that quotes a definition counts, and so does a call whose last argument is a `function` on its line (`<name>(a, function (b) {`); static, get and set methods, a method whose header is not one line ending in `{`, enums, classes, interface members, object properties (`<name>: value`) and `this.<name> =` are missed, upgrade when one of those is the definition needed
-found=$(grep -n -E "function ${name}[(<]|interface $name([^A-Za-z0-9_]|\$)|const $name([^A-Za-z0-9_]|\$)|(^|[^A-Za-z0-9_\$.])$name *=([^=>]|\$)|^[[:space:]]*(async )?$name\([^;]*\)[[:space:]]*\{[[:space:]]*\$" "$file" | cut -d: -f1) || true
+# before the name, `==` and `=>` do not count), or a method: a line that starts with `<name>(` or `async <name>(`,
+# whose parameters hold no `(`, `)` or `;`, and that ends with `{` after a `)`. A call statement ends in `;`, and a
+# call that does not start its line (after a dot, or in an `if` header) is not a method.
+# shortcut: missed: a method with a call in a default parameter (`<name>(a = f()) {`), a generator (`*<name>(`), a space before the paren, a quoted or computed key, a one-line method, a header over several lines, `static`, `get` or `set`, an object property (`<name>: value`); wrongly printed: a comment that quotes a `const` or `<name> =` definition, and a superclass call on its own line after `class X extends` (`  <name>(Y) {`); upgrade when one of those is the definition needed
+found=$(grep -n -E "function ${name}[(<]|interface $name([^A-Za-z0-9_]|\$)|const $name([^A-Za-z0-9_]|\$)|(^|[^A-Za-z0-9_\$.])$name *=([^=>]|\$)|^[[:space:]]*(async )?$name\([^();]*\)[[:space:]]*\{[[:space:]]*\$" "$file" | cut -d: -f1) || true
 [ -n "$found" ] || { echo "bb-source: no definition of $name in $file" >&2; exit 1; }
+# Over `max` definitions, a generic name such as `create` prints each location and first line only, not the lines after.
+max=10
+count=$(printf '%s\n' "$found" | wc -l | tr -d ' ')
+if [ "$count" -gt "$max" ]; then
+  for n in $found; do
+    printf -- '--- %s:%s\n' "$file" "$n"
+    sed -n "${n}p" "$file"
+  done
+  echo "bb-source: $count definitions of $name, so only their first lines are printed; pass a more specific name"
+  exit 0
+fi
 for n in $found; do
   printf -- '--- %s:%s\n' "$file" "$n"
   sed -n "$n,$((n + lines))p" "$file"

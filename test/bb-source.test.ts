@@ -38,23 +38,38 @@ const bundle = [
   "  }",
   "}",
   "  getResource(1);",
-  "foo.getResource(2);",
   "if (getResource(3)) {",
   "  getResource(4); if (ok) {",
   "if (foo.getResource(5)) {",
+  // Not definitions either: a line of a multi-line `if` header, an object argument, calls after `await` and `return`,
+  // a superclass call that does not start its line, and text with a `;` in its parameters.
+  "if (ok &&",
+  "    getResource(2)) {",
+  "getResource({ run() {",
+  "  await getResource(6);",
+  "  return getResource(7);",
+  "class Mixed extends getResource(9) {",
+  "  getResource(a; b) {",
   "",
 ].join("\n");
 
-/** A bb-app folder with `pkg` as its package.json and the bundle above as its server bundle. */
-function bbAppFolder(pkg: string) {
+/** A bb-app folder with `pkg` as its package.json and `text` (the bundle above by default) as its server bundle. */
+function bbAppFolder(pkg: string, text = bundle) {
   const dir = tempDir("bb-source-app-");
   mkdirSync(join(dir, "server", "dist"), { recursive: true });
   writeFileSync(join(dir, "package.json"), pkg);
-  writeFileSync(join(dir, "server", "dist", "start-server.js"), bundle);
+  writeFileSync(join(dir, "server", "dist", "start-server.js"), text);
   return dir;
 }
 
-const bbApp = bbAppFolder('{\n  "name": "bb-app",\n  "version": "9.9.9"\n}\n');
+const bbPkg = '{\n  "name": "bb-app",\n  "version": "9.9.9"\n}\n';
+const bbApp = bbAppFolder(bbPkg);
+
+/** A bb-app folder whose server bundle has `count` definitions of `create`, each with one body line. */
+function createDefinitions(count: number) {
+  const body = Array.from({ length: count }, () => ["  create(x) {", "    return x;", "  }"]);
+  return bbAppFolder(bbPkg, `${body.flat().join("\n")}\n`);
+}
 
 /** Runs bb-source.sh with `args` and BB_APP_DIR set to `appDir`; returns the exit status and output. */
 function bbSource(args: string[], appDir = bbApp) {
@@ -109,13 +124,32 @@ test("an object or class method header, with or without `async`, is found", () =
   }
 });
 
-test("a call of the name is not printed as a definition: a statement, a member call, a call in an if, or a statement before a block on its line", () => {
+test("a call of the name is not a definition: a statement, await, return, a header or an object argument", () => {
   const r = bbSource(["getResource", "0"]);
   assert.equal(r.status, 0, r.output);
   const headers = r.output.split("\n").filter((row) => row.startsWith("--- "));
   const definition = bundle.split("\n").indexOf("  async getResource(hostId) {") + 1;
   assert.equal(headers.length, 1, r.output);
   assert.ok(headers[0]!.endsWith(`start-server.js:${definition}`), r.output);
+});
+
+test("ten definitions of a name print each one's body lines", () => {
+  const r = bbSource(["create", "1"], createDefinitions(10));
+  assert.equal(r.status, 0, r.output);
+  assert.equal(r.output.split("\n").filter((row) => row === "    return x;").length, 10, r.output);
+});
+
+test("eleven definitions print each location and first line, then how many there were", () => {
+  const r = bbSource(["create", "1"], createDefinitions(11));
+  assert.equal(r.status, 0, r.output);
+  const rows = r.output.split("\n");
+  assert.equal(rows.filter((row) => row.startsWith("--- ")).length, 11, r.output);
+  assert.equal(rows.filter((row) => row === "  create(x) {").length, 11, r.output);
+  assert.equal(rows.filter((row) => row === "    return x;").length, 0, r.output);
+  assert.match(
+    r.output,
+    /^bb-source: 11 definitions of create, so only their first lines are printed; pass a more specific name$/m,
+  );
 });
 
 test("a name with no definition fails and says so", () => {
