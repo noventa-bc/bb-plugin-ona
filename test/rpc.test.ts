@@ -3,12 +3,13 @@ import { test } from "node:test";
 import { commands } from "../src/commands.ts";
 import { devboxCommandSchema, rpcContract } from "../src/rpc.ts";
 
-const SECTION_COMMANDS = ["status", "sync", "reconnect", "resume", "rename", "keep-alive"];
+const SECTION_COMMANDS = ["status", "sync", "reconnect", "resume", "rename", "keep-alive", "update"];
 
-test("the settings section can run only status, sync, reconnect, resume, rename and keep-alive", () => {
+test("the settings section can run only status, sync, reconnect, resume, rename, keep-alive and update", () => {
   const { input } = rpcContract.devbox_command;
   assert.deepEqual(devboxCommandSchema.options, SECTION_COMMANDS);
-  for (const command of SECTION_COMMANDS) {
+  // update needs a host id, so it is tested below.
+  for (const command of SECTION_COMMANDS.filter((name) => name !== "update")) {
     assert.equal(input.safeParse({ command }).success, true, command);
   }
   // Every other `bb ona` command is refused, so an extra enum member fails here.
@@ -41,9 +42,15 @@ test("an arg without a host id is refused, since the CLI would read it as the de
   assert.equal(input.safeParse({ command: "rename", arg: "new-name" }).success, false);
 });
 
-test("only rename and keep-alive take an arg (fails if status, sync, reconnect or resume accepts one)", () => {
+test("only rename and keep-alive take an arg (fails if status, sync, reconnect, resume or update accepts one)", () => {
   const { input } = rpcContract.devbox_command;
-  for (const command of ["status", "sync", "reconnect", "resume"]) {
+  for (const command of ["status", "sync", "reconnect", "resume", "update"]) {
     assert.equal(input.safeParse({ command, hostId: "host_1", arg: "x" }).success, false, command);
   }
+});
+
+test("update runs for one devbox only: without a host id it is refused (fails if update passes without one, or is refused with one)", () => {
+  const { input } = rpcContract.devbox_command;
+  assert.equal(input.safeParse({ command: "update", hostId: "host_1" }).success, true);
+  assert.equal(input.safeParse({ command: "update" }).success, false);
 });
