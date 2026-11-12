@@ -400,7 +400,7 @@ The plugin writes `metric` lines to its log, which `bb plugin logs ona` prints. 
 - `metric connected via=<create|resume|wake|reconnect> box=<new|stopped|running> secs=<n> ok=<1|0>`: a connect call ended. `box` is `new` once Ona has returned the created box, including a create that fails after that (`ok=0`). Otherwise it is `stopped` when the call started the box, and `running` otherwise, which includes a create that failed before Ona returned a box. `ok=0` means the call failed.
 - `metric delete env=<id> via=<remove|cleanup> git=<known|unknown>`: the plugin deleted a box. `git=known` means Ona reported the box's count of unpushed commits.
 - `metric keep env=<id> via=<remove|cleanup> commits=<n> files=<n>`: the plugin refused to delete a box with unpushed commits or uncommitted files, and kept it.
-- `metric mismatch host=<machine> kind=<kind> secs=<n>`: written once per incident, at the first pass that sees the same kind 120 seconds or more after the first pass that saw it; `secs` is the time between those two passes. A change of kind, or a pass that reads the box and finds no kind, starts a new incident, and so does a machine bb stops listing; a pass that does not read the box (a failed listing, or one listing that omits it) neither ends an incident nor restarts its count. Kinds: `active-stopped` (bb active and connected, Ona stopped or stopping); `active-gone` (bb active, Ona says deleted or deleting, or two good listings in a row lack the box and a lookup by id finds no live box); `disconnected-running` (bb active but disconnected, Ona running). Other disagreements write no line.
+- `metric mismatch host=<machine> kind=<kind> secs=<n>`: written once per incident, at the first pass that sees the same kind 120 seconds or more after the first pass that saw it (both counted from each pass's start); `secs` is the time between those two starts. A change of kind, or a pass that reads the box and finds no kind, starts a new incident, and so does a machine bb stops listing; a pass that does not read the box (a failed listing, or one listing that omits it) neither ends an incident nor restarts its count. Kinds: `active-stopped` (bb active and connected, Ona stopped or stopping); `active-gone` (bb active, Ona says deleted or deleting, or two good listings in a row lack the box and a lookup by id finds no live box); `disconnected-running` (bb active but disconnected, Ona running). Other disagreements write no line.
 
 To print the product numbers from the log:
 
@@ -430,13 +430,8 @@ bb plugin install .                                            # install from th
 bb plugin reload ona                                           # after changes
 ```
 
-Source: `server.ts` (settings, tunnels, wiring), `src/provider.ts` (machine
-provider), `src/provider-connect.ts` (its connect path), `src/proxy.ts` (daemon-only proxy), `src/ssh.ts` (executor,
-tunnels), `src/setup.ts` (prerequisite checks), `src/ona.ts` (ona CLI wrapper,
-shared listing), `src/reconcile.ts` (sync rules), `src/sync.ts` (sync passes),
-`src/status.ts` (`bb ona status`), `src/commands.ts` (`bb ona` commands), `src/lifecycle.ts` (idle
-release), `src/keepalive.ts` (keep-alive), `src/move.ts` (thread move), `src/names.ts` (fun names),
-`skills/ona-devboxes/SKILL.md` (agent docs).
+Source: `server.ts` wires the plugin to the modules in `src/`; "Where things
+are" in [AGENTS.md](AGENTS.md) maps them.
 
 Working on the plugin, including with coding agents: see [AGENTS.md](AGENTS.md).
 Decision records are in [docs/decisions](docs/decisions/README.md).
