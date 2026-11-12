@@ -60,9 +60,8 @@ lines ponytail ends with.
 ## Inputs
 
 - The roadmap is a private document the owner keeps outside the repo. The owner
-  hands its link to the orchestrator in the session. Never write that link, the
-  document's ids or its text into any file in this repo. Refer to items by their
-  roadmap label only (for example "T2", "R9").
+  hands its link to the orchestrator in the session; what of it may enter the
+  repo is `AGENTS.md` Code Review Rule 10.
 - Items carry a size and a status. Work only on items the owner names.
 
 ## Flow
@@ -93,7 +92,7 @@ lines ponytail ends with.
 4. **Brief** each builder with the task fields of the template in `docs/owner.md`
    (a reviewer gets the "Reviewer brief template" there, step 6). The role definitions in
    `.claude/agents/` hold the standing rules and the report, so a brief does not repeat them.
-5. **Build** in a worktree (slow commands in the background), by the `builder`
+5. **Build** in a worktree, by the `builder`
    definition (`.claude/agents/builder.md`): its commands, failing test first,
    mutants, checks, handoff and report are there. The builder leaves the work
    staged for the orchestrator and never commits or pushes.
@@ -183,7 +182,7 @@ subject`, see `AGENTS.md`): the squash merge makes it the commit on
   this file or `AGENTS.md` counts), the orchestrator may commit on `agent/*`
   branches (builders leave work staged), push them, open
   PRs, and merge a PR with `scripts/pr-merge.sh` once its review has no
-  blocking finding and CI is green. Nobody commits to `main`
+  blocking finding (`docs/review-standards.md`) and CI is green. Nobody commits to `main`
   directly.
 - Installing or bumping a dependency inside an owner-approved task is allowed;
   say in the PR which packages changed. Anything else needs a new approval.
@@ -213,26 +212,16 @@ This file is the memory of the flow. Keep it current:
 
 Rules the owner gave that no section above states. Checked 2026-11-11.
 
-- Several worktrees are open at once and the shell's working directory drifts
-  between them. Address every git command with `git -C <path>` and every file
-  with its absolute path; never rely on `cd`. Run npm as
-  `sh -c "cd <worktree> && npm run check"`: a `cd` at the start of a compound
-  command can be dropped, and `npm` run from a folder without `package.json`
-  walks up and installs into the live checkout.
-- Before any commit, the check runs as its own command (the `sh -c` form above)
-  and its exit code is read before the commit. Never chain `npm run check` into
-  a commit with `;` (the commit runs even when the check fails) or pipe it into
-  grep (the exit code is grep's). `.githooks/pre-commit` (set by `npm install`)
-  runs the checks on every commit; a checkout without the hook reads the exit
-  code by hand (checked 2026-11-03).
-- A subagent does not commit or push. Builders leave work staged, and the
-  orchestrator commits and pushes.
-- A builder that was stopped (the owner's credits ran out, the session ended)
-  cannot be resumed. Its worktree keeps the staged work: review it, finish the
-  handoff and the PR from there instead of starting the task again.
-- The owner may stop the session when the weekly usage limit nears 99%. The
-  orchestrator cannot see the limit; when the owner says to halt, finish the
-  step in hand, write the handoffs and report, and open no new PR.
+- The path, git, npm and exit-code rules in `AGENTS.md` "Subagents" bind the
+  orchestrator too. Before any commit, the check runs as its own command and
+  its exit code is read before the commit. `.githooks/pre-commit` (set by
+  `npm install`) runs the checks on every commit; a checkout without the hook
+  reads the exit code by hand (checked 2026-11-03).
+- A builder that was stopped cannot be resumed. Its worktree keeps the staged
+  work: review it, finish the handoff and the PR from there instead of starting
+  the task again.
+- When the owner says to halt, finish the step in hand, write the handoffs and
+  report, and open no new PR.
 - Every feature the CLI has gets a UI control too, unless the owner says it is
   not needed; the orchestrator asks the owner where it goes (checked 2026-11-05).
 - A commit subject or PR title is at most 100 characters (`scripts/conventional.sh`
