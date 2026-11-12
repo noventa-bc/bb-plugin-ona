@@ -292,7 +292,7 @@ last figure, and reading it never wakes the box; a paused Codex thread whose onl
 
 ```sh
 bb ona ssh <ref> --thread <thread-id>    # a new terminal to <ref> in that thread (ssh from a Mac thread)
-bb ona shell <ref> -- git status         # run one command in the checkout, print output, keep its exit code
+bb ona shell <ref> -- git status         # run one command in the checkout, print output, keep its exit code (exit 1 with a note if bb can't read it)
 ssh "$(bb ona host <ref>)"               # plain ssh, outside bb
 bb ona open <ref>                        # open the devbox in your Ona editor
 ```

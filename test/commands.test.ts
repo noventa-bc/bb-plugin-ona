@@ -10,6 +10,7 @@ import {
 } from "../src/commands.ts";
 import type { OnaEnvironment } from "../src/ona.ts";
 import { HostGuard } from "../src/reconcile.ts";
+import type { ShellBackend, TerminalInfo } from "../src/shells.ts";
 import { AmbiguousRefError } from "../src/sync.ts";
 
 test("parseArgs: positionals, flags, --json, --thread <id> and a shell command after --", () => {
@@ -469,4 +470,44 @@ test("reconnect names the first non-blank line of Ona's error, or no listing whe
     );
     assert.deepEqual(calls, []);
   }
+});
+
+/** `bb ona shell box -- make` where bb reports `terminal` for its run, or null when bb no longer knows it. */
+function shellRun(terminal: TerminalInfo | null) {
+  const backend: ShellBackend = {
+    async createTerminal() {
+      return { id: "term_1", status: "running", exitCode: null };
+    },
+    async getTerminal() {
+      return terminal;
+    },
+    async output() {
+      return "out\n";
+    },
+  };
+  const deps = {
+    shellTarget: async () => ({ hostId: "host_1", cwd: null, boxName: "box" }),
+    shellBackend: backend,
+  } as unknown as OnaCommandDeps;
+  return onaCommands(deps)(["shell", "box", "--", "make"], {});
+}
+
+// Bug: a run whose exit code bb could not read exited 1 with no message, so it looked like a failed command.
+test("shell says the result could not be read, names the terminal, and exits 1 when bb gives no exit code (fails if the exit code is 0 or the message is missing)", async () => {
+  const unreadable: Array<TerminalInfo | null> = [null, { id: "term_1", status: "exited", exitCode: null }];
+  for (const terminal of unreadable) {
+    assert.deepEqual(await shellRun(terminal), {
+      exitCode: 1,
+      stdout: "out\n",
+      stderr: "Could not read the command's result; it may still be running. Follow it with: bb terminal attach term_1",
+    });
+  }
+});
+
+test("shell gives a real exit 1 with no unreadable-result message (fails if a known exit 1 gets the message)", async () => {
+  assert.deepEqual(await shellRun({ id: "term_1", status: "exited", exitCode: 1 }), { exitCode: 1, stdout: "out\n" });
+});
+
+test("shell passes exit 0 through with no message (fails if exit 0 gets the message or another code)", async () => {
+  assert.deepEqual(await shellRun({ id: "term_1", status: "exited", exitCode: 0 }), { exitCode: 0, stdout: "out\n" });
 });

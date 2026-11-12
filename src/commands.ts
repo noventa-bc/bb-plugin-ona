@@ -441,7 +441,14 @@ export function onaCommands(deps: OnaCommandDeps) {
                 stderr: `Still running after 10 minutes. Follow it with: bb terminal attach ${result.terminalId}`,
               };
             }
-            return { exitCode: result.exitCode ?? 1, stdout: result.output };
+            if (result.exitCode === null) {
+              return {
+                exitCode: 1,
+                stdout: result.output,
+                stderr: `Could not read the command's result; it may still be running. Follow it with: bb terminal attach ${result.terminalId}`,
+              };
+            }
+            return { exitCode: result.exitCode, stdout: result.output };
           }
           return {
             exitCode: 1,
