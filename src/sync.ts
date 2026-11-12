@@ -511,10 +511,13 @@ export function createSync(deps: SyncDeps) {
         };
         const onaState = await onaView(row.resource.envId, listing);
         const decision = decide(view, onaState, now);
-        const tracked = trackMismatch(mismatches.get(row.hostId), mismatch(view, onaState), now);
-        if (tracked.entry) mismatches.set(row.hostId, tracked.entry);
-        else mismatches.delete(row.hostId);
-        if (tracked.log) bb.log.info(metric("mismatch", { host: row.machine, ...tracked.log }));
+        // A failed listing is unknown and changes nothing (rule 4): the entry stays, so the incident neither restarts nor logs twice.
+        if (onaState.kind !== "unknown") {
+          const tracked = trackMismatch(mismatches.get(row.hostId), mismatch(view, onaState), now);
+          if (tracked.entry) mismatches.set(row.hostId, tracked.entry);
+          else mismatches.delete(row.hostId);
+          if (tracked.log) bb.log.info(metric("mismatch", { host: row.machine, ...tracked.log }));
+        }
         // With autoRepair off, only observed stops and deletions (and the resume a waiting thread asks for) reach bb; tunnels reopen after a reload, and idle releases run below.
         const skipped = !autoRepair && !["none", "suspend-observed", "ensure-tunnel"].includes(decision.action);
         const reason = skipped ? `${decision.reason} (would ${decision.action}; autoRepair is off)` : decision.reason;

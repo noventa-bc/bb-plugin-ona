@@ -115,17 +115,17 @@ export function decide(machine: MachineView, ona: OnaView, now: number): Decisio
 }
 
 /** A disagreement between bb's view of a box and Ona's, as the `metric mismatch` line names it (src/sync.ts). */
-export type MismatchKind = "active-stopped" | "active-gone" | "suspended-running" | "disconnected-running";
+type MismatchKind = "active-stopped" | "active-gone" | "disconnected-running";
 
 /**
- * The disagreement between bb's view and Ona's, or null. It only observes: decide() still picks the repair.
- * An unknown Ona state is no disagreement (rule 4).
+ * The disagreement between bb's view and Ona's, or null. It only observes: decide() still picks the repair. An unknown
+ * Ona state (a failed listing) is no disagreement, and the caller then changes nothing for the machine (rule 4).
  */
 export function mismatch(machine: MachineView, ona: OnaView): MismatchKind | null {
   if (ona.kind === "unknown") return null;
-  if (machine.phase === "suspended") return shownRunning(ona) ? "suspended-running" : null;
   if (machine.phase !== "active") return null;
-  // The gone test decide() uses: missing from two good listings, or Ona says deleted.
+  // The gone test decide() uses: missing from two good listings, and a lookup by id finds no live box (onaView in
+  // src/sync.ts), or Ona says deleted.
   if (ona.kind === "missing") return ona.streak >= 2 ? "active-gone" : null;
   if (GONE.has(ona.phase)) return "active-gone";
   if (machine.status === "connected") return STOPPED.has(ona.phase) ? "active-stopped" : null;
@@ -133,7 +133,7 @@ export function mismatch(machine: MachineView, ona: OnaView): MismatchKind | nul
 }
 
 /** How long a disagreement must last before its `metric mismatch` line is written. */
-export const MISMATCH_HOLD_MS = 120_000;
+const MISMATCH_HOLD_MS = 120_000;
 
 /** A disagreement carried from one pass to the next; `logged` once its line is written, so each incident logs once. */
 export interface Mismatch {
@@ -144,9 +144,9 @@ export interface Mismatch {
 }
 
 /**
- * One pass's step for a machine's disagreement (`kind` from mismatch(), null when they agree). `entry` is what the next
- * pass keeps: none once they agree, and a new one when the kind changes. `log` is set on the one pass where the
- * disagreement first holds MISMATCH_HOLD_MS.
+ * One pass's step for a machine's disagreement. `kind` is mismatch()'s, and null means no kind, which drops the entry.
+ * `entry` is what the next pass keeps: a new one when the kind changes, the same one otherwise. `log` is set on the one
+ * pass where the disagreement first holds MISMATCH_HOLD_MS.
  */
 export function trackMismatch(
   entry: Mismatch | undefined,

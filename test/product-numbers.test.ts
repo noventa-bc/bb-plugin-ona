@@ -64,11 +64,12 @@ const FIXTURE = lines(
   logLine("metric cmd name=resume", "2026-11-05T10:00:00Z"),
   logLine("metric cmd name=sync", "2026-11-09T08:00:00Z"),
   logLine("metric cmd name=sync", "2027-01-01T12:00:00Z"),
-  // mismatches 3: two active-stopped lines (both box-1) and one suspended-running (box-2). Each kind gets a line named with
-  // _ for -, so mismatches_active_stopped 2 and mismatches_suspended_running 1.
+  // mismatches 4: two active-stopped lines (both box-1), one disconnected-running (box-2) and one with no kind, which
+  // counts in mismatches and in no kind line. So mismatches_active_stopped 2 and mismatches_disconnected_running 1.
   logLine("metric mismatch host=box-1 kind=active-stopped secs=120"),
   logLine("metric mismatch host=box-1 kind=active-stopped secs=360"),
-  logLine("metric mismatch host=box-2 kind=suspended-running secs=240"),
+  logLine("metric mismatch host=box-2 kind=disconnected-running secs=240"),
+  logLine("metric mismatch host=box-3 secs=120"),
   // Log lines that are not metric lines, and a metric line of a kind the script does not know: ignored.
   logLine("[plugin:ona] a warning"),
   logLine("metric future env=env-13"),
@@ -100,10 +101,10 @@ test("the fixture's known answer for every number, in the fixed order, with the 
       "connect_secs_stopped_p90 9",
       "connect_secs_running_p50 4",
       "connect_secs_running_p90 9",
-      "mismatches 3",
+      "mismatches 4",
       "skipped_lines 3",
       "mismatches_active_stopped 2",
-      "mismatches_suspended_running 1",
+      "mismatches_disconnected_running 1",
       "hand_runs_week_2026-W01 1",
       "hand_runs_week_2026-W45 2",
       "hand_runs_week_2026-W46 1",
@@ -289,6 +290,7 @@ test("the metric lines src/ona.ts writes are counted here, one of each kind (fai
       logLine(metric("connected", { via: "create", box: "new", secs: 4, ok: 1 })),
       logLine(metric("delete", { env: "env-2", via: "remove", git: "unknown" })),
       logLine(metric("keep", { env: "env-3", via: "remove", commits: 2, files: 0 })),
+      logLine(metric("mismatch", { host: "box-1", kind: "active-stopped", secs: 120 })),
     ),
   );
   assert.equal(r.status, 0, r.stderr);
@@ -311,8 +313,9 @@ test("the metric lines src/ona.ts writes are counted here, one of each kind (fai
       "connect_secs_stopped_p90 4",
       "connect_secs_running_p50 -",
       "connect_secs_running_p90 -",
-      "mismatches 0",
+      "mismatches 1",
       "skipped_lines 0",
+      "mismatches_active_stopped 1",
       "hand_runs_week_2026-W45 1",
     ),
   );
