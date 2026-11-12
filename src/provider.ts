@@ -53,6 +53,11 @@ export type OnaResource = z.infer<typeof resourceSchema>;
 /** Ona names/ids passed to the ona CLI: never option-like, no shell metacharacters. */
 export const onaRef = z.string().regex(ONA_NAME_PATTERN, ONA_NAME_MESSAGE);
 
+/** Devbox folder settings end up in remote commands: plain absolute paths only. */
+export const devboxPath = z
+  .string()
+  .regex(/^(\/[A-Za-z0-9._-]+)*$/, "use an absolute path of letters, digits, '.', '_' or '-' (or leave empty)");
+
 /** A bb machine row as the RPCs show it; `tunnel` is the tunnel's state for the row's box. */
 export function devboxOf(
   row: { machine: string; hostId: string; status: string; resource: OnaResource },

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import {
+  cachedLogin,
   checkOnaLogin,
   createSetup,
   findOnaBinary,
@@ -11,6 +12,7 @@ import {
   onaAvailability,
   planSetup,
   type GeneralSettings,
+  type OnaLogin,
 } from "../src/setup.ts";
 
 test("findOnaBinary prefers the configured path, then PATH", () => {
@@ -138,6 +140,82 @@ test("checkOnaLogin calls a missing CLI or an unexplained failure unknown", asyn
   const { bin } = fakeWhoami(t, "echo 'something odd' >&2; exit 1");
   const odd = await checkOnaLogin(bin);
   assert.deepEqual(odd, { ok: false, message: "something odd", reason: "unknown" });
+});
+
+const goodLogin: OnaLogin = { ok: true, user: "Ada", org: "example.com" };
+const rejectedLogin: OnaLogin = { ok: false, message: "not logged in", reason: "auth" };
+const unreachableLogin: OnaLogin = { ok: false, message: "connection refused", reason: "network" };
+
+/** A login check that answers from `answers` in turn, the last one again; `calls.count` counts its runs. */
+function loginChecks(...answers: OnaLogin[]) {
+  const calls = { count: 0 };
+  const check = async () => answers[Math.min(calls.count++, answers.length - 1)]!;
+  return { check, calls };
+}
+
+test("cachedLogin does not check again on a second call inside 5 minutes (fails if the cache is never read, or closes early)", async () => {
+  let now = 0;
+  const { check, calls } = loginChecks(goodLogin);
+  const login = cachedLogin(check, { now: () => now });
+  assert.deepEqual(await login("ona"), goodLogin);
+  now += 5 * 60_000 - 1;
+  assert.deepEqual(await login("ona"), goodLogin);
+  assert.equal(calls.count, 1);
+});
+
+test("cachedLogin checks again at exactly 5 minutes (fails if the cache holds at its end)", async () => {
+  let now = 0;
+  const { check, calls } = loginChecks(goodLogin);
+  const login = cachedLogin(check, { now: () => now });
+  await login("ona");
+  now += 5 * 60_000;
+  await login("ona");
+  assert.equal(calls.count, 2);
+});
+
+test("cachedLogin checks again when fresh, inside 5 minutes (fails if fresh is ignored)", async () => {
+  let now = 0;
+  const { check, calls } = loginChecks(goodLogin);
+  const login = cachedLogin(check, { now: () => now });
+  await login("ona");
+  now += 60_000;
+  assert.deepEqual(await login("ona", true), goodLogin);
+  assert.equal(calls.count, 2);
+});
+
+test("cachedLogin keeps a good login through a network failure, also when fresh (fails if a network failure replaces it)", async () => {
+  let now = 0;
+  const { check, calls } = loginChecks(goodLogin, unreachableLogin);
+  const login = cachedLogin(check, { now: () => now });
+  await login("ona");
+  now += 60_000;
+  assert.deepEqual(await login("ona", true), goodLogin);
+  now += 5 * 60_000;
+  assert.deepEqual(await login("ona"), goodLogin);
+  assert.equal(calls.count, 3);
+});
+
+test("cachedLogin lets a not-logged-in failure replace a good login (fails if any failure keeps the good login)", async () => {
+  let now = 0;
+  const { check } = loginChecks(goodLogin, rejectedLogin);
+  const login = cachedLogin(check, { now: () => now });
+  await login("ona");
+  now += 5 * 60_000;
+  assert.deepEqual(await login("ona"), rejectedLogin);
+});
+
+test("cachedLogin returns a network failure when no login came before it (fails if the kept login is read before it exists)", async () => {
+  const { check } = loginChecks(unreachableLogin);
+  assert.deepEqual(await cachedLogin(check)("ona"), unreachableLogin);
+});
+
+test("cachedLogin returns a new network failure over an earlier failed login (fails if a network failure keeps an earlier failure)", async () => {
+  let now = 0;
+  const { check } = loginChecks(rejectedLogin, unreachableLogin);
+  const login = cachedLogin(check, { now: () => now });
+  await login("ona");
+  now += 5 * 60_000;
+  assert.deepEqual(await login("ona"), unreachableLogin);
 });
 
 test("planSetup says Ona could not be reached instead of asking for a login", () => {

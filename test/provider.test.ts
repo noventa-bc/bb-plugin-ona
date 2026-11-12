@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { envNameForKey } from "../src/names.ts";
-import { devboxOf, onaRef, resourceSchema } from "../src/provider.ts";
+import { devboxOf, devboxPath, onaRef, resourceSchema } from "../src/provider.ts";
 import { tick, useFakeClock } from "./fake-clock.ts";
 import { adoptedResource, box, connectCalls, lifecycle, register } from "./provider-fake.ts";
 
@@ -471,6 +471,18 @@ test("wake keeps the tunnel when Ona settles a STOPPING box as running and the c
 test("onaRef refuses a trailing newline and the empty name", () => {
   assert.equal(onaRef.safeParse("a\n").success, false, "trailing newline");
   assert.equal(onaRef.safeParse("").success, false, "empty name");
+});
+
+test("devboxPath accepts the empty path and dotted absolute paths (fails if the pattern rejects either)", () => {
+  for (const path of ["", "/workspaces", "/workspaces/.codex-sqlite-bb"]) {
+    assert.equal(devboxPath.safeParse(path).success, true, JSON.stringify(path));
+  }
+});
+
+test("devboxPath refuses a relative path, a root or trailing or doubled slash, a space, shell syntax and a newline (fails if the pattern lets one through)", () => {
+  for (const path of ["workspaces", "/", "/workspaces/", "//", "/a b", "/a;b", "/a\n", "/$(x)", '/a"b']) {
+    assert.equal(devboxPath.safeParse(path).success, false, JSON.stringify(path));
+  }
 });
 
 test("the daemon probe answers unknown for an exit other than 0 or 1 and for a failed SSH (fails if either reads as no daemon)", async () => {
