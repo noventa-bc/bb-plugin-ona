@@ -2,7 +2,7 @@
 import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 
-export const devboxSchema = z.object({
+const devboxSchema = z.object({
   machine: z.string(),
   hostId: z.string(),
   envId: z.string(),
@@ -14,7 +14,7 @@ export const devboxSchema = z.object({
 });
 export type Devbox = z.infer<typeof devboxSchema>;
 
-export const threadCostSchema = z.object({
+const threadCostSchema = z.object({
   provider: z.enum(["codex", "claude-code"]),
   usd: z.number(),
   /** openai-estimate: OpenAI's own per-thread figure; list-price: tokens x Anthropic list prices. */

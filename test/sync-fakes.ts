@@ -1,6 +1,6 @@
 import { OnaSnapshot, type OnaEnvironment } from "../src/ona.ts";
 import type { WorkspaceView } from "../src/lifecycle.ts";
-import { HostGuard } from "../src/reconcile.ts";
+import { HostGuard, type OnaView } from "../src/reconcile.ts";
 import { createSync, type BbHost, type SyncDeps, type ThreadRecord } from "../src/sync.ts";
 import { tick as tickClock } from "./fake-clock.ts";
 
@@ -8,6 +8,8 @@ export const HOUR = 3_600_000;
 export const NOW = Date.now();
 /** The `metric mismatch` line a pass writes for the stopped box `idle("h1")`; its machine name is `ona:env-h1`. */
 export const MISMATCH_LINE = "metric mismatch host=ona:env-h1 kind=active-stopped secs=120";
+export const REFUSED = "Machine suspension failed: Host is not connected";
+export const ona = (phase: string): OnaView => ({ kind: "env", phase: `ENVIRONMENT_PHASE_${phase}` });
 
 interface Box {
   hostId: string;

@@ -89,7 +89,7 @@ export interface UpdatesBb {
   };
 }
 
-export interface UpdatesDeps {
+interface UpdatesDeps {
   bb: UpdatesBb;
   machines(): Promise<Row[]>;
   /** The `autoUpdateProviders` setting. */

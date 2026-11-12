@@ -55,7 +55,7 @@ export function run(
 }
 
 /** Why `ona whoami` failed: a rejected login, Ona out of reach, or something else. */
-export type OnaLoginFailure = "auth" | "network" | "unknown";
+type OnaLoginFailure = "auth" | "network" | "unknown";
 
 export type OnaLogin =
   { ok: true; user: string; org: string } | { ok: false; message: string; reason: OnaLoginFailure };
@@ -71,7 +71,7 @@ const WEAK_AUTH_ERROR = /login|token/i;
  * deadline exceeded" is network: it has no strong marker, and the deadline
  * means Ona was not reached.
  */
-export function classifyLoginFailure(error: ExecFileException | null, stderr: string): OnaLoginFailure {
+function classifyLoginFailure(error: ExecFileException | null, stderr: string): OnaLoginFailure {
   if (error?.code === "ENOENT" || error?.code === "EACCES") return "unknown";
   if (error?.killed) return "network";
   if (STRONG_AUTH_ERROR.test(stderr)) return "auth";
@@ -147,7 +147,7 @@ export interface GeneralSettings {
   machineGitCredentialsEnabled: boolean;
 }
 
-export interface SetupStep {
+interface SetupStep {
   id: "ona" | "login" | "ssh-config" | "access" | "server-url" | "git-credentials";
   title: string;
   /** ok: nothing to do; change: setup will apply it; blocked: needs the user. */
@@ -235,12 +235,12 @@ export function planSetup(input: {
   return steps;
 }
 
-export function formatSteps(steps: SetupStep[]): string {
+function formatSteps(steps: SetupStep[]): string {
   const mark = { ok: "✓", change: "→", blocked: "✗" } as const;
   return steps.map((step) => `${mark[step.state]} ${step.title}: ${step.detail}`).join("\n");
 }
 
-export interface SetupDeps {
+interface SetupDeps {
   server: Pick<BbPluginApi["server"], "loopbackBaseUrl" | "experimental_dataDir">;
   run: typeof run;
   /** The ona CLI if found (`findOnaBinary` with the settings path). */

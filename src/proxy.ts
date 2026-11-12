@@ -101,7 +101,7 @@ function deny(res: http.ServerResponse) {
   res.end(body);
 }
 
-export interface DaemonProxy {
+interface DaemonProxy {
   port: number;
   close(): Promise<void>;
 }

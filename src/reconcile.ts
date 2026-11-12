@@ -13,7 +13,7 @@
 
 export const GRACE_MS = 45_000;
 export const COOLDOWN_MS = 5 * 60_000;
-export const MAX_BACKOFF_MS = 60 * 60_000;
+const MAX_BACKOFF_MS = 60 * 60_000;
 export const GIVE_UP_AFTER = 3;
 /** The idle release's action name (src/sync.ts): the one action `pastGiveUp` lets past another action's give-up (rule 5). */
 export const RELEASE_IDLE = "release-idle";
@@ -43,7 +43,7 @@ export type OnaView =
   | { kind: "missing"; streak: number; archived?: boolean }
   | { kind: "env"; phase: string };
 
-export type Action =
+type Action =
   | "none"
   /** Mark suspended in bb without stopping anything (rule 2). */
   | "suspend-observed"
@@ -169,7 +169,7 @@ export interface Clock {
   clearTimeout(handle: unknown): void;
 }
 
-export const systemClock: Clock = {
+const systemClock: Clock = {
   now: () => Date.now(),
   setTimeout: (fn, ms) => setTimeout(fn, ms),
   clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),

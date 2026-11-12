@@ -16,9 +16,9 @@ import {
   PassScheduler,
   type Clock,
   type MachineView,
-  type OnaView,
 } from "../src/reconcile.ts";
 import { brokenTools, partialPs, sandboxed, standIn } from "./sandbox.ts";
+import { ona } from "./sync-fakes.ts";
 
 const NOW = 10_000_000;
 const machine = (overrides: Partial<MachineView> = {}): MachineView => ({
@@ -30,7 +30,6 @@ const machine = (overrides: Partial<MachineView> = {}): MachineView => ({
   threadWaiting: false,
   ...overrides,
 });
-const ona = (phase: string): OnaView => ({ kind: "env", phase: `ENVIRONMENT_PHASE_${phase}` });
 
 // --- decide: one test per rule (docs/sync.md) ---
 
