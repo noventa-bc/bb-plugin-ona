@@ -480,11 +480,15 @@ test("devboxPath accepts exactly a letter, digit, '.', '_', '-' or '/' in a path
   }
 });
 
-test("devboxPath accepts the empty path and one segment, and refuses a relative path, a root, a trailing or doubled slash, and a newline (fails if the empty path is refused, or one of those is accepted)", () => {
-  for (const path of ["", "/workspaces/.codex-sqlite-bb"]) {
+// Bug: devboxPath accepted a '.' or '..' part, so machineDataDir "/.." linked ~/.bb-machines to / on the box.
+test("devboxPath accepts the empty path and names with dots, and refuses a relative path, a root, a trailing or doubled slash, a newline, and a '.' or '..' part (fails if the empty path is refused, or one of those is accepted)", () => {
+  for (const path of ["", "/workspaces/.codex-sqlite-bb", "/a/..b", "/a/b.", "/a/...", "/.a"]) {
     assert.equal(devboxPath.safeParse(path).success, true, JSON.stringify(path));
   }
   for (const path of ["workspaces", "/", "/workspaces/", "//", "/a\n"]) {
+    assert.equal(devboxPath.safeParse(path).success, false, JSON.stringify(path));
+  }
+  for (const path of ["/.", "/..", "/a/..", "/a/../b", "/./a", "/a/."]) {
     assert.equal(devboxPath.safeParse(path).success, false, JSON.stringify(path));
   }
 });
