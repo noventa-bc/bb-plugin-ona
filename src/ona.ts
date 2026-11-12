@@ -1,8 +1,7 @@
 // Thin wrapper around the `ona` CLI. Every call shells out to the already
 // authenticated CLI on the server machine; no Ona credentials pass through bb.
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { z } from "zod";
-import { keepAliveArgs, type KeepAliveChild } from "./keepalive.ts";
 import { pollUntil } from "./time.ts";
 
 const environmentSchema = z.object({
@@ -185,51 +184,12 @@ export class OnaCli {
 
   /**
    * Opens the box in the user's editor. Callers need not wait, but should log a
-   * rejection. User-initiated only (Editor button, `bb ona open`), never from a
-   * sync pass: it may wake a stopped box, which the user asked for (see
-   * `docs/sync.md`, `ona environment open`).
+   * rejection. User-initiated only (the Editor button), never from a sync pass:
+   * it may wake a stopped box, which the user asked for (see `docs/sync.md`,
+   * `ona environment open`).
    */
   async openEditor(envId: string): Promise<void> {
     await this.run(["environment", "open", envId], undefined, 10 * 60_000);
-  }
-
-  /**
-   * Runs `ona environment keep-alive` on this machine for `ms`. Caller must
-   * have a fresh listing that says the box is RUNNING (safety rule 1).
-   */
-  keepAlive(envId: string, ms: number): KeepAliveChild {
-    // Its own process group, so ending it also ends the `sleep` the CLI started.
-    const child = spawn(this.binary, keepAliveArgs(envId, ms), { stdio: ["ignore", "ignore", "pipe"], detached: true });
-    let stderr = "";
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr = (stderr + chunk.toString()).slice(-2_000);
-    });
-    let exited: string | null = null;
-    const listeners: Array<(detail: string) => void> = [];
-    const finish = (detail: string) => {
-      if (exited !== null) return;
-      exited = detail;
-      for (const listener of listeners) listener(detail);
-    };
-    child.on("error", (error) => finish(error.message));
-    child.on("close", (code, signal) => {
-      const tail = stderr.trim().split("\n").slice(-3).join("\n");
-      finish(tail || (signal ? `killed by ${signal}` : `exit code ${code}`));
-    });
-    return {
-      kill: () => {
-        if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) return;
-        try {
-          process.kill(-child.pid, "SIGTERM");
-        } catch {
-          child.kill();
-        }
-      },
-      onExit: (listener) => {
-        if (exited !== null) listener(exited);
-        else listeners.push(listener);
-      },
-    };
   }
 }
 

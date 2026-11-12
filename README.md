@@ -168,12 +168,11 @@ as a real folder, setup stops and asks you to move it aside
 
 **In settings:** the plugin's settings page has an **Ona devboxes** section. It shows `bb ona status` and
 each devbox's bb status, with **Sync all** above the list and, per devbox, **Sync**, **Reconnect**, **Resume** and **Update CLIs**
-buttons, plus **Rename** (a new name; empty gives a random one; refused while bb shows its machine in a phase other than active) and **Keep awake** (a duration such as `2h` or `90m`, a bare number being minutes, or
-`off`), each with its own field. Each control runs the same `bb ona sync`, `bb ona reconnect`, `bb ona resume`, `bb ona update`,
-`bb ona rename` or `bb ona keep-alive` as the terminal, for that devbox (**Sync all** runs `bb ona sync` for every
+buttons, plus **Rename** (a new name; empty gives a random one; refused while bb shows its machine in a phase other than active)
+with its own field. Each control runs the same `bb ona sync`, `bb ona reconnect`, `bb ona resume`, `bb ona update`
+or `bb ona rename` as the terminal, for that devbox (**Sync all** runs `bb ona sync` for every
 devbox). **Update CLIs** never passes `--force`, so a box with a running agent is skipped: click again once the agent is idle. A row's controls show their reply or refusal under that row; **Sync all** has no row, so it shows none, and
-the status is read again after it. **Keep awake** holds a box for at most `12h`, as the CLI does, and ends on a plugin
-reload, and is not restored after one.
+the status is read again after it.
 A **Resume** or **Reconnect** started here keeps running after the page closes and ends on a plugin reload. An **Update CLIs** started here also keeps running after the page closes: it runs on the plugin's lifetime, not the page's.
 The status and the devbox list are read again every 30 seconds while the page is open.
 
@@ -295,7 +294,6 @@ last figure, and reading it never wakes the box; a paused Codex thread whose onl
 bb ona ssh <ref> --thread <thread-id>    # a new terminal to <ref> in that thread (ssh from a Mac thread)
 bb ona shell <ref> -- git status         # run one command in the checkout, print output, keep its exit code (exit 1 with a note when bb reports no exit code)
 ssh "$(bb ona host <ref>)"               # plain ssh, outside bb
-bb ona open <ref>                        # open the devbox in your Ona editor
 ```
 
 ### Manage devboxes
@@ -304,8 +302,6 @@ bb ona open <ref>                        # open the devbox in your Ona editor
 bb ona list                    # machines, Ona env, tunnel status
 bb ona status [ref]            # bb's view next to Ona's, the box's start, idle timeout, activity, branch and unpushed commits, and what the plugin last did
 bb ona sync [ref]              # re-check Ona now and repair out-of-step machines; a resume it starts is waited for up to 32 minutes after bb answers `resuming`
-bb ona keep-alive <ref> 2h     # keep a running box from Ona's idle timeout (at most 12h)
-bb ona keep-alive <ref> off    # end it early
 bb ona move <thread-id> <ref>  # continue a thread in a new thread on another devbox, at the same path
 bb ona rename <ref> [name]     # rename env + bb machine (random fun name if omitted); refused while bb shows its machine in a phase other than active
 bb ona reconnect <ref>         # active machines: reopen the tunnel and restart the bb daemon; refused unless bb shows the machine active and Ona shows its box running; gives up after 30 minutes ("Gave up …; last step: …")

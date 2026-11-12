@@ -145,21 +145,6 @@ test("bb ona resume on a STOPPING box starts it only after the stop has settled 
   assert.ok(calls.indexOf("start") > calls.indexOf("get STOPPED"), calls.join(", "));
 });
 
-// Bug: keep-alive returned its promise without await, so a rejected lookup inside it skipped the dispatcher's catch.
-test("bb ona keep-alive reports a rejected lookup as exit 1, not a rejection (fails without the await in the keep-alive case)", async () => {
-  const run = onaCommands({
-    snapshot: { refresh: async () => ({ at: Date.now(), envs: [] }), lastError: null },
-    findMachine: async () => {
-      throw new Error("bb is down");
-    },
-    resolveEnvId: async (ref: string) => ref,
-    keepAlives: { start: () => 0, stop: () => false },
-  } as unknown as OnaCommandDeps);
-  const result = await run(["keep-alive", "box", "2h"], {});
-  assert.equal(result.exitCode, 1);
-  assert.match(result.stderr ?? "", /bb is down/);
-});
-
 test("bb ona resume on a STOPPING box that Ona settles as running reports a reconnect, not a start (fails if the done line claims a start that was not called)", async () => {
   const { deps, calls } = fixture(box("STOPPING"), ["STOPPING", "RUNNING"]);
   const result = await dispatch(deps)("box");

@@ -124,7 +124,6 @@ export interface SyncDeps {
       since: number,
     ): Promise<boolean>;
   };
-  keepAliveUntil(envId: string): number | null;
   /** Ona env id -> bb host id, refreshed on every pass; shared with the tunnels and events. */
   hostByEnv: Map<string, string>;
   autoRepair: boolean;
@@ -549,7 +548,6 @@ export function createSync(deps: SyncDeps) {
     guard,
     tunnels,
     workspaces,
-    keepAliveUntil: deps.keepAliveUntil,
   });
 
   return { machines, machineOfHost, reconcile, statusRows, missing, suspendWithoutStop };

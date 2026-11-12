@@ -41,7 +41,7 @@ export function switchedInputs(selected: string): { mode: DevboxMode; text: stri
 }
 
 /** A settings field's text as a devbox command's argument, trimmed. Blank sends none: rename then picks a random
- * name, and keep-alive replies with its usage. */
+ * name. */
 export function commandArg(text: string): string | undefined {
   return text.trim() || undefined;
 }

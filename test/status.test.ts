@@ -14,7 +14,6 @@ const statusRow = (overrides: Partial<StatusRow> = {}): StatusRow => ({
   now: null,
   last: null,
   retry: null,
-  keepAliveUntil: null,
   needsRecovery: 0,
   stuckThreads: [],
   facts: null,

@@ -1,17 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  keepAliveCommand,
-  onaCommands,
-  parseArgs,
-  usage,
-  type KeepAliveDeps,
-  type OnaCommandDeps,
-} from "../src/commands.ts";
-import type { OnaEnvironment } from "../src/ona.ts";
+import { commands, onaCommands, parseArgs, usage, type OnaCommandDeps } from "../src/commands.ts";
 import { HostGuard } from "../src/reconcile.ts";
 import type { ShellBackend, TerminalInfo } from "../src/shells.ts";
-import { AmbiguousRefError } from "../src/sync.ts";
 import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
 
 test("parseArgs: positionals, flags, --json, --thread <id> and a shell command after --", () => {
@@ -37,94 +28,7 @@ test("parseArgs: positionals, flags, --json, --thread <id> and a shell command a
   assert.equal(parseArgs([]).command, undefined);
 });
 
-function keepAlive(phase: string | null, options: { listing?: "fail"; listingError?: string; machine?: boolean } = {}) {
-  const started: Array<[string, number]> = [];
-  const stopped: string[] = [];
-  const envs: OnaEnvironment[] =
-    phase === null
-      ? []
-      : [{ id: "env-1", metadata: { name: "brave-otter" }, status: { phase: `ENVIRONMENT_PHASE_${phase}` } }];
-  const error = options.listingError ?? "not logged in";
-  const deps: KeepAliveDeps = {
-    snapshot: {
-      refresh: async () => {
-        if (options.listing === "fail") throw new Error(error);
-        return { envs, at: 0 };
-      },
-      lastError: options.listing === "fail" ? error : null,
-    },
-    findMachine: async () => (options.machine ? { resource: { envId: "env-1" } } : null),
-    resolveEnvId: async (ref) => (ref === "brave-otter" ? "env-1" : ref),
-    keepAlives: {
-      start: (envId, ms) => {
-        started.push([envId, ms]);
-        return 0;
-      },
-      stop: (envId) => {
-        stopped.push(envId);
-        return envId === "env-1";
-      },
-    },
-  };
-  return { deps, started, stopped };
-}
-
-test("keep-alive starts only on a box a fresh listing shows running, found by machine or Ona name", async () => {
-  for (const machine of [true, false]) {
-    const { deps, started } = keepAlive("RUNNING", { machine });
-    const result = await keepAliveCommand(deps, "brave-otter", "2h");
-    assert.equal(result.exitCode, 0);
-    assert.deepEqual(started, [["env-1", 2 * 3_600_000]]);
-  }
-});
-
-test("keep-alive refuses, and starts nothing, for a stopped, unknown or unlistable box", async () => {
-  const cases: Array<[ReturnType<typeof keepAlive>, RegExp]> = [
-    [keepAlive("STOPPED"), /is stopped in Ona.*never starts one/],
-    [keepAlive("STARTING"), /is starting in Ona/],
-    [keepAlive(null), /Ona lists no devbox matching/],
-    [keepAlive("RUNNING", { listing: "fail" }), /Can't ask Ona.*not logged in.*nothing changed/],
-    [keepAlive("RUNNING", { listing: "fail", listingError: "" }), /Can't ask Ona.*\(no listing\); nothing changed/],
-    [keepAlive("RUNNING", { listing: "fail", listingError: "\nnot logged in" }), /\(not logged in\); nothing changed/],
-    [
-      keepAlive("RUNNING", { listing: "fail", listingError: "unauthenticated\nRun 'ona login' first" }),
-      /Can't ask Ona.*\(unauthenticated\nRun 'ona login' first\); nothing changed/,
-    ],
-  ];
-  for (const [{ deps, started }, message] of cases) {
-    const result = await keepAliveCommand(deps, "brave-otter", "1h");
-    assert.equal(result.exitCode, 1);
-    assert.match(result.stderr ?? "", message);
-    assert.deepEqual(started, []);
-  }
-});
-
-test("keep-alive checks the duration before asking Ona", async () => {
-  for (const value of [undefined, "13h", "forever", "0"]) {
-    const { deps, started } = keepAlive("RUNNING", { listing: "fail" });
-    const result = await keepAliveCommand(deps, "brave-otter", value);
-    assert.equal(result.exitCode, 1);
-    assert.match(result.stderr ?? "", /Usage: bb ona keep-alive/);
-    assert.deepEqual(started, []);
-  }
-});
-
-test("keep-alive off ends it by machine, Ona name or a box Ona no longer lists", async () => {
-  const { deps, stopped } = keepAlive(null);
-  assert.match((await keepAliveCommand(deps, "brave-otter", "off")).stdout ?? "", /Ended the keep-alive/);
-  assert.match((await keepAliveCommand(deps, "env-9", "off")).stdout ?? "", /had no keep-alive/);
-  assert.deepEqual(stopped, ["env-1", "env-9"]);
-});
-
-// Guard: keep-alive off on a shared name must refuse, not answer "had no keep-alive" and leave the keep-alive running.
-test("keep-alive off on a name two devboxes share is refused, and stops nothing (fails if the ambiguity is swallowed)", async () => {
-  const { deps, stopped } = keepAlive(null);
-  const shared = { ...deps, resolveEnvId: async () => Promise.reject(new AmbiguousRefError("shared matches 2")) };
-  await assert.rejects(keepAliveCommand(shared, "shared", "off"), AmbiguousRefError);
-  assert.deepEqual(stopped, []);
-});
-
-// Dispatch only; list, sync, status and keep-alive also run end to end in
+// Dispatch only; list, sync and status also run end to end in
 // test/e2e-commands.test.ts. The fake holds just what these cases call.
 
 const ROW = { hostId: "host_1", machine: "ona:box", status: "active", phase: "active", resource: { envId: "env_1" } };
@@ -199,12 +103,6 @@ function fakeRun(
     statusRows: async () => [],
     onaHealth: () => ({ lastError: null, listedAt: null, autoRepair: false }),
     resolveEnvId: (ref: string) => Promise.resolve(ref === "box" ? "env_1" : ref),
-    keepAlives: {
-      stop: (envId: string) => {
-        calls.push(`keepAlives.stop ${envId}`);
-        return true;
-      },
-    },
   } as unknown as OnaCommandDeps;
   const run = onaCommands(deps);
   return { calls, guard, logs, run: (...argv: string[]) => run(argv, {}) };
@@ -224,10 +122,19 @@ test("list --json prints the machines with their tunnel status", async () => {
   assert.deepEqual(JSON.parse(result.stdout ?? ""), [{ ...ROW, tunnel: "up" }]);
 });
 
-test("keep-alive <ref> off stops the keep-alive of the resolved box", async () => {
+test("keep-alive and open are neither listed, in the usage nor run (fails if either comes back)", async () => {
   const { run, calls } = fakeRun();
-  assert.deepEqual(await run("keep-alive", "box", "off"), { exitCode: 0, stdout: "Ended the keep-alive for box." });
-  assert.deepEqual(calls, ["keepAlives.stop env_1"]);
+  for (const name of ["keep-alive", "open"]) {
+    assert.equal(
+      commands.some((c) => c.name === name),
+      false,
+      name,
+    );
+    assert.doesNotMatch(usage, new RegExp(`bb ona ${name}\\b`), name);
+  }
+  assert.deepEqual(await run("keep-alive", "box", "2h"), { exitCode: 1, stderr: usage });
+  assert.deepEqual(await run("open", "box"), { exitCode: 1, stderr: usage });
+  assert.deepEqual(calls, []);
 });
 
 test("an unknown command, or one missing its <ref>, exits 1 with the usage", async () => {

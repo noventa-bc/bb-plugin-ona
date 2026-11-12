@@ -1,26 +1,15 @@
-// The `bb ona` command: argument parsing, the keep-alive command's checks, the usage and
+// The `bb ona` command: argument parsing, the usage and
 // subcommand list, and the dispatch. server.ts builds the deps from its settings and services
 // and registers it.
 import type { BbPluginApi, PluginCliCommandInfo, PluginCliContext } from "@get-bb/plugin-sdk";
-import { clockTime, parseKeepAlive, type KeepAlives } from "./keepalive.ts";
 import { randomFriendlyName } from "./names.ts";
-import {
-  errorText,
-  isRunning,
-  matchEnvironment,
-  metric,
-  reasonOf,
-  sshHost,
-  type OnaCli,
-  type OnaListing,
-  type OnaSnapshot,
-} from "./ona.ts";
+import { errorText, isRunning, metric, reasonOf, sshHost, type OnaCli, type OnaSnapshot } from "./ona.ts";
 import { onaRef, type registerOnaProvider } from "./provider.ts";
-import { ALL, short, type HostGuard } from "./reconcile.ts";
+import { ALL, type HostGuard } from "./reconcile.ts";
 import { runOnce, type ShellBackend, type ShellTarget, type ThreadTerminalPlan } from "./shells.ts";
 import type { TunnelManager } from "./ssh.ts";
 import { formatStatus, type OnaHealth } from "./status.ts";
-import { AmbiguousRefError, type Row, type Sync } from "./sync.ts";
+import type { Row, Sync } from "./sync.ts";
 import { notActiveRefusal, notRunningInOna, resumeCommand } from "./wake.ts";
 
 export interface CliResult {
@@ -45,62 +34,6 @@ export function parseArgs(rawArgv: readonly string[]) {
   return { command, ref, newName, json, threadFlag: threadAt !== -1, threadId, flags, commandArgv };
 }
 
-export interface KeepAliveDeps {
-  snapshot: { refresh(): Promise<OnaListing>; readonly lastError: string | null };
-  findMachine(ref: string): Promise<{ resource: { envId: string } } | null>;
-  resolveEnvId(ref: string): Promise<string>;
-  keepAlives: { start(envId: string, ms: number): number; stop(envId: string): boolean };
-}
-
-/** `bb ona keep-alive <ref> <duration|off>` (see src/keepalive.ts). */
-export async function keepAliveCommand(
-  deps: KeepAliveDeps,
-  ref: string,
-  value: string | undefined,
-): Promise<CliResult> {
-  const { snapshot, findMachine, resolveEnvId, keepAlives } = deps;
-  const request = parseKeepAlive(value);
-  if (request.kind === "invalid") {
-    return { exitCode: 1, stderr: `${request.message}\nUsage: bb ona keep-alive <ref> <duration|off>` };
-  }
-  if (request.kind === "off") {
-    // A box Ona no longer lists can still have a keep-alive under its id.
-    const envId = await resolveEnvId(ref).catch((error: unknown) => {
-      if (error instanceof AmbiguousRefError) throw error;
-      return ref;
-    });
-    return {
-      exitCode: 0,
-      stdout: keepAlives.stop(envId) ? `Ended the keep-alive for ${ref}.` : `${ref} had no keep-alive.`,
-    };
-  }
-  // Safety rule 1: only a box a fresh listing says is RUNNING. The
-  // keep-alive runs on this Mac through the ona CLI, never over SSH.
-  const listing = await snapshot.refresh().catch(() => null);
-  if (!listing) {
-    return {
-      exitCode: 1,
-      // The whole error, not reasonOf(): keep-alive is the one place a login hint on a later line shows.
-      stderr: `Can't ask Ona whether ${ref} is running (${snapshot.lastError?.trim() || "no listing"}); nothing changed.`,
-    };
-  }
-  const row = await findMachine(ref);
-  const env = row ? listing.envs.find((e) => e.id === row.resource.envId) : matchEnvironment(listing.envs, ref);
-  if (!env) return { exitCode: 1, stderr: `Ona lists no devbox matching "${ref}"; nothing changed.` };
-  if (!isRunning(env)) {
-    const phase = short(env.status?.phase ?? "unknown");
-    return {
-      exitCode: 1,
-      stderr: `${ref} is ${phase} in Ona. keep-alive only holds a running box and never starts one.`,
-    };
-  }
-  const until = keepAlives.start(env.id, request.ms);
-  return {
-    exitCode: 0,
-    stdout: `Keeping ${ref} alive until ${clockTime(until)}. End it early with: bb ona keep-alive ${ref} off`,
-  };
-}
-
 export const usage = [
   "Usage:",
   "  bb ona setup [--yes]          Check prerequisites; with --yes apply SSH and bb settings",
@@ -111,7 +44,6 @@ export const usage = [
   '  bb ona host <ref>             SSH host alias (use: ssh "$(bb ona host <ref>)")',
   "  bb ona ssh <ref>              Print the ssh command for a devbox",
   "  bb ona ssh <ref> --thread <id>  Open another terminal to the devbox in that thread's terminal panel",
-  "  bb ona open <ref>             Open the devbox in your Ona editor",
   "  bb ona shell <ref> -- <cmd…>  Run one command in the devbox checkout and print its output",
   "  bb ona rename <ref> [name]    Rename the Ona environment (random fun name if omitted) and its bb machine.",
   "                                Refused while bb shows its machine in a phase other than active.",
@@ -120,7 +52,6 @@ export const usage = [
   "  bb ona resume <ref>           Start a stopped box and reconnect bb's daemon (your action; a running box is only reconnected; gives up after 30 minutes)",
   "  bb ona status [ref] [--json]  bb's view of each devbox next to Ona's, its box facts, and what the plugin last did",
   "  bb ona sync [ref]             Re-check Ona now and repair (ignores cooldowns, backoff and the give-up, keeps the safety rules); waits up to 32 min for a resume bb answers `resuming`",
-  "  bb ona keep-alive <ref> <duration|off>  Keep a running devbox from Ona's inactivity timeout (at most 12h)",
   "  bb ona move <thread-id> <ref>  Continue a thread in a new one on another devbox at the same path",
   "  bb ona update [ref] [--force] Apply pending updates of the CLIs in `autoUpdateProviders` now",
   "                                Also weekdays 09:00 when `autoUpdateClis` is on",
@@ -143,7 +74,6 @@ export const commands = [
     summary: "Print the ssh command, or open a devbox terminal in a thread",
     usage: "bb ona ssh <ref> [--thread <thread-id>]",
   },
-  { name: "open", summary: "Open a devbox in your Ona editor", usage: "bb ona open <ref>" },
   {
     name: "shell",
     summary: "Run one command in a devbox checkout",
@@ -181,11 +111,6 @@ export const commands = [
     usage: "bb ona sync [ref]",
   },
   { name: "move", summary: "Continue a thread on another devbox, same path", usage: "bb ona move <thread-id> <ref>" },
-  {
-    name: "keep-alive",
-    summary: "Keep a running devbox from Ona's inactivity timeout for a while",
-    usage: "bb ona keep-alive <ref> <duration|off>",
-  },
 ] as const satisfies readonly PluginCliCommandInfo[];
 
 type CommandName = (typeof commands)[number]["name"];
@@ -197,7 +122,6 @@ export interface OnaCommandDeps {
   snapshot: OnaSnapshot;
   tunnels: TunnelManager;
   guard: HostGuard;
-  keepAlives: KeepAlives;
   provider: Pick<ReturnType<typeof registerOnaProvider>, "reconnect" | "wake">;
   shellBackend: ShellBackend;
   machines: Sync["machines"];
@@ -217,7 +141,6 @@ export interface OnaCommandDeps {
   setup(apply: boolean, keepGitCredentials: boolean): Promise<CliResult>;
   addMachine(inputs: Record<string, string>): Promise<string>;
   updateClis(options: { ref?: string; force?: boolean }): Promise<string[]>;
-  openEditor(envId: string): void;
   onaHealth(): OnaHealth;
 }
 
@@ -229,7 +152,6 @@ export function onaCommands(deps: OnaCommandDeps) {
     snapshot,
     tunnels,
     guard,
-    keepAlives,
     provider,
     shellBackend,
     machines,
@@ -244,7 +166,6 @@ export function onaCommands(deps: OnaCommandDeps) {
     setup,
     addMachine,
     updateClis,
-    openEditor,
     onaHealth,
   } = deps;
   return async function run(rawArgv: string[], ctx: PluginCliContext) {
@@ -422,10 +343,6 @@ export function onaCommands(deps: OnaCommandDeps) {
           const moved = await move({ threadId: ref, hostId: row.hostId });
           return { exitCode: 0, stdout: `Started ${moved.threadId} on ${row.machine}; ${ref} stays as it is.` };
         }
-        case "keep-alive": {
-          if (!ref) break;
-          return await keepAliveCommand({ snapshot, findMachine, resolveEnvId, keepAlives }, ref, newName);
-        }
         case "shell": {
           if (!ref) break;
           const target = await shellTarget(ref);
@@ -456,12 +373,6 @@ export function onaCommands(deps: OnaCommandDeps) {
         }
         case "update":
           return { exitCode: 0, stdout: (await updateClis({ ref, force: flags.has("--force") })).join("\n") };
-        case "open": {
-          if (!ref) break;
-          const envId = await resolveEnvId(ref);
-          openEditor(envId);
-          return { exitCode: 0, stdout: `Opening ${envId}` };
-        }
       }
     } catch (error) {
       return { exitCode: 1, stderr: errorText(error) };
