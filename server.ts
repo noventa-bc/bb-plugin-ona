@@ -4,20 +4,19 @@
 // and reaches this server through an SSH reverse tunnel, so the server stays
 // on loopback and nothing goes through a third-party relay.
 import { experimental_PluginRpcRefusal, type BbPluginApi } from "@get-bb/plugin-sdk";
-import { z } from "zod";
 import { KeepAlives } from "./src/keepalive.ts";
 import { idleDisconnectSchema } from "./src/lifecycle.ts";
 import { errorText, isRunning, isStopped, OnaCli, OnaSnapshot, sshHost } from "./src/ona.ts";
 import {
+  cachedLogin,
   checkOnaLogin,
   createSetup,
   findOnaBinary,
   hasOnaSshConfig,
   onaAvailability,
   run,
-  type OnaLogin,
 } from "./src/setup.ts";
-import { devboxOf, PROVIDER_ID, registerOnaComposition, registerOnaProvider } from "./src/provider.ts";
+import { devboxOf, devboxPath, PROVIDER_ID, registerOnaComposition, registerOnaProvider } from "./src/provider.ts";
 import { startDaemonProxy } from "./src/proxy.ts";
 import { commands, onaCommands } from "./src/commands.ts";
 import { connectedAtKey, createSync, forgetBox, rowForRef, watchRealtime, type Row } from "./src/sync.ts";
@@ -29,11 +28,6 @@ import { rpcContract, type Devbox } from "./src/rpc.ts";
 import { connectedShellRow, threadTerminalPlan, type ShellBackend, type ShellTarget } from "./src/shells.ts";
 import { TunnelManager } from "./src/ssh.ts";
 import { createUpdateClis } from "./src/updates.ts";
-
-/** Devbox folder settings end up in remote commands: plain absolute paths only. */
-const devboxPath = z
-  .string()
-  .regex(/^(\/[A-Za-z0-9._-]+)*$/, "use an absolute path of letters, digits, '.', '_' or '-' (or leave empty)");
 
 export default async function plugin(bb: BbPluginApi) {
   const settings = bb.settings.define({
@@ -146,15 +140,7 @@ export default async function plugin(bb: BbPluginApi) {
     void ona.openEditor(envId).catch((error: unknown) => bb.log.warn(`opening ${envId} failed: ${errorText(error)}`));
 
   // `ona whoami` is a network call; cache it so availability stays fast.
-  let loginCache: { at: number; login: OnaLogin } | null = null;
-  async function onaLogin(binary: string, fresh = false): Promise<OnaLogin> {
-    if (!fresh && loginCache && Date.now() - loginCache.at < 5 * 60_000) return loginCache.login;
-    const login = await checkOnaLogin(binary);
-    // Ona out of reach says nothing about the login: keep the last good one.
-    const kept = !login.ok && login.reason === "network" && loginCache?.login.ok ? loginCache.login : login;
-    loginCache = { at: Date.now(), login: kept };
-    return kept;
-  }
+  const onaLogin = cachedLogin(checkOnaLogin);
   const port = () => Number(new URL(bb.server.loopbackBaseUrl).port);
   // Tunnels land on this daemon-only proxy, never on the bb server's port:
   // bb trusts loopback, so a raw tunnel would expose its whole API to devboxes.

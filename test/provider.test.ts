@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { envNameForKey } from "../src/names.ts";
-import { devboxOf, onaRef, resourceSchema } from "../src/provider.ts";
+import { devboxOf, devboxPath, onaRef, resourceSchema } from "../src/provider.ts";
 import { tick, useFakeClock } from "./fake-clock.ts";
 import { adoptedResource, box, connectCalls, lifecycle, register } from "./provider-fake.ts";
 
@@ -471,6 +471,22 @@ test("wake keeps the tunnel when Ona settles a STOPPING box as running and the c
 test("onaRef refuses a trailing newline and the empty name", () => {
   assert.equal(onaRef.safeParse("a\n").success, false, "trailing newline");
   assert.equal(onaRef.safeParse("").success, false, "empty name");
+});
+
+test("devboxPath accepts exactly a letter, digit, '.', '_', '-' or '/' in a path (fails if one of those is refused, or another character is accepted, such as z, 0-9, >, ~, a backslash or a space)", () => {
+  const printable = Array.from({ length: 95 }, (_, i) => String.fromCharCode(32 + i));
+  for (const c of [...printable, "\n"]) {
+    assert.equal(devboxPath.safeParse(`/a${c}b`).success, /[A-Za-z0-9._/-]/.test(c), JSON.stringify(c));
+  }
+});
+
+test("devboxPath accepts the empty path and one segment, and refuses a relative path, a root, a trailing or doubled slash, and a newline (fails if the empty path is refused, or one of those is accepted)", () => {
+  for (const path of ["", "/workspaces/.codex-sqlite-bb"]) {
+    assert.equal(devboxPath.safeParse(path).success, true, JSON.stringify(path));
+  }
+  for (const path of ["workspaces", "/", "/workspaces/", "//", "/a\n"]) {
+    assert.equal(devboxPath.safeParse(path).success, false, JSON.stringify(path));
+  }
 });
 
 test("the daemon probe answers unknown for an exit other than 0 or 1 and for a failed SSH (fails if either reads as no daemon)", async () => {
