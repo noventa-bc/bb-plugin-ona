@@ -23,6 +23,11 @@ if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
   credential=(--env-credential-map claude_code_oauth_token CLAUDE_CODE_OAUTH_TOKEN)
 fi
 
+# Sessions can write the agent's own config; warn if a run changed it. A missing
+# file reads as empty; any other read error stops here, before the worktree exists.
+settings() { [ -e "$HOME/.claude/settings.json" ] || return 0; shasum "$HOME/.claude/settings.json"; }
+before=$(settings)
+
 git -C "$repo" worktree add -q -b "agent/$slug" "$tree" HEAD
 cp -c -R "$repo/node_modules" "$tree/node_modules" 2>/dev/null || cp -R "$repo/node_modules" "$tree/node_modules"
 mkdir -p "$tree/.agent"
@@ -30,10 +35,6 @@ mkdir -p "$tree/.agent"
 prompt="$brief
 
 You are running unattended. Follow AGENTS.md. Don't ask questions: decide, or record the question in the handoff. Finish by writing .agent/HANDOFF.md."
-
-# Sessions can write the agent's own config; warn if a run changed it.
-watched=("$HOME/.claude/settings.json")
-before=$(cat "${watched[@]}" 2>/dev/null | shasum)
 
 sandbox=(nono run -s --allow-cwd --profile "$repo/.nono/agent.jsonc"
   --read "$repo/.git" --allow "$repo/.git/worktrees/$slug" ${credential[@]+"${credential[@]}"} --)
@@ -44,7 +45,7 @@ status=0
   --settings '{"permissions":{"deny":["Bash(git commit:*)","Bash(git push:*)"]}}' \
   </dev/null || status=$?
 
-[ "$before" = "$(cat "${watched[@]}" 2>/dev/null | shasum)" ] ||
+[ "$before" = "$(settings)" ] ||
   echo "WARNING: the run changed ~/.claude/settings.json. Check it before your next session." >&2
 echo "Worktree: $tree"
 echo "Handoff:  $tree/.agent/HANDOFF.md"
