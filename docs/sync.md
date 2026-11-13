@@ -289,11 +289,11 @@ again.
 
 ```
 Ona CLI: ok, listed 12s ago
-ona:amber-otter  bb:connected  tunnel:up  ona:running
+ona:amber-otter  host_1  bb:connected  tunnel:up  ona:running  env:amber-otter  created
   box: last started 4h ago, idle timeout 3h, last activity SSH connections 2m ago, branch main
   now: connected (since 2m ago)
   last action: heal-daemon: running in Ona but the daemon isn't connected; daemon was down; restarted it (3m ago)
-ona:brisk-heron  bb:suspended  tunnel:off  ona:running
+ona:brisk-heron  host_2  bb:suspended  tunnel:off  ona:running  env:brisk-heron  adopted
   now: suspended in bb, running in Ona (since 1h ago)
 ```
 

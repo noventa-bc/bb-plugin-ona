@@ -13,7 +13,7 @@ bb ona setup                                                                   #
 bb ona setup --yes                                                             # 3. apply the one-time settings
 bb ona adopt <ona-environment>                                                 # 4a. use an environment you already have
 bb ona new <ona-project>                                                       # 4b. or create a fresh devbox
-bb ona list                                                                    # 5. wait until it says "connected"
+bb ona status                                                                  # 5. wait until it says "bb:connected"
 ```
 
 Then pick the machine in bb's composer. Threads running on a devbox show what
@@ -27,7 +27,7 @@ bb server (your Mac, 127.0.0.1:<port>)
        ├─ machine provider "ona"   create / adopt / suspend / resume / remove
        ├─ daemon-only proxy        127.0.0.1:<random port>, forwards only daemon routes
        ├─ SSH reverse tunnel       ssh -N -R <port>:127.0.0.1:<proxy port> <envId>.ona.environment
-       └─ bb ona …                 list / status / sync / host / ssh / open / rename / reconnect / resume
+       └─ bb ona …                 status / sync / host / ssh / open / rename / reconnect / resume
 Ona devbox ── bb daemon ──(tunnel)── proxy ── bb server
           └─ claude / codex run here
 ```
@@ -301,8 +301,7 @@ ssh "$(bb ona host <ref>)"               # plain ssh, outside bb
 ### Manage devboxes
 
 ```sh
-bb ona list                    # machines, Ona env, tunnel status
-bb ona status [ref]            # bb's view next to Ona's, the box's start, idle timeout, activity, branch and unpushed commits, and what the plugin last did
+bb ona status [ref]            # each machine's host id, Ona environment, adopted or created, tunnel, bb's view next to Ona's, the box's start, idle timeout, activity, branch and unpushed commits, and what the plugin last did
 bb ona sync [ref]              # re-check Ona now and repair out-of-step machines; a resume it starts is waited for up to 32 minutes after bb answers `resuming`
 bb ona move <thread-id> <ref>  # continue a thread in a new thread on another devbox, at the same path
 bb ona rename <ref> [name]     # rename env + bb machine (random fun name if omitted); refused while bb shows its machine in a phase other than active

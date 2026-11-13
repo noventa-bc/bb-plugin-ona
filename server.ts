@@ -313,7 +313,7 @@ export default async function plugin(bb: BbPluginApi) {
   async function openThreadTerminal(threadId: string, ref: string, size: { cols: number; rows: number }) {
     const machineRows = await machines();
     const row = rowForRef(machineRows, ref);
-    if (!row) throw new Error(`No Ona-backed bb machine matches "${ref}". See \`bb ona list\`.`);
+    if (!row) throw new Error(`No Ona-backed bb machine matches "${ref}". See \`bb ona status\`.`);
     const thread = await bb.sdk.threads.get({ threadId });
     if (!thread.environmentId) throw new Error("This thread has no environment yet; try again once it has started.");
     const environment = await bb.sdk.environments.get({ environmentId: thread.environmentId });

@@ -82,9 +82,9 @@ test("a connected machine is the shell's target, unchanged (fails if a connected
   assert.equal(connectedShellRow("rapid-mango", row), row);
 });
 
-test("a ref with no machine is refused and points at bb ona list (fails if the message changes or a missing row passes)", () => {
+test("a ref with no machine is refused and points at bb ona status (fails if the message changes or a missing row passes)", () => {
   assert.throws(() => connectedShellRow("nope", null), {
-    message: 'No Ona-backed bb machine matches "nope". See `bb ona list`.',
+    message: 'No Ona-backed bb machine matches "nope". See `bb ona status`.',
   });
 });
 

@@ -8,6 +8,9 @@ import { HOUR, idle, NOW, world } from "./sync-fakes.ts";
 const statusRow = (overrides: Partial<StatusRow> = {}): StatusRow => ({
   machine: "ona:brave-otter",
   hostId: "host_1",
+  envId: "env-1",
+  envName: "brave-otter",
+  adopted: false,
   bb: "connected",
   tunnel: "up",
   ona: "running",
@@ -66,7 +69,7 @@ test("status text: one block per machine with what the plugin saw, did and is wa
     NOW,
   );
   const lines = text.split("\n");
-  assert.equal(lines[1], "ona:brave-otter  bb:connected  tunnel:up  ona:running");
+  assert.equal(lines[1], "ona:brave-otter  host_1  bb:connected  tunnel:up  ona:running  env:brave-otter  created");
   assert.equal(lines[2], "  now: connected (since 2m ago)");
   assert.equal(lines[3], "  last action: release-idle: idle for 1h (3h ago) ERROR bb kept the machine active");
   assert.equal(lines[4], "  retrying after 10:00:00");
@@ -201,4 +204,12 @@ test("the retry and give-up lines show only for an active machine (fails if eith
   }
   assert.match((await retryIn("active", 1)) ?? "", /^retrying after /);
   assert.match((await retryIn("active", GIVE_UP_AFTER)) ?? "", /^gave up after /);
+});
+
+test("status shows the host id, Ona environment and adopted or created (fails if a row drops any of them)", async () => {
+  const { sync } = world([idle("h1")]);
+  const [row] = await sync.statusRows();
+  assert.deepEqual([row!.hostId, row!.envId, row!.envName, row!.adopted], ["h1", "env-h1", "box", true]);
+  const line = formatStatus([statusRow({ adopted: true })], HEALTHY, NOW).split("\n")[1];
+  assert.equal(line, "ona:brave-otter  host_1  bb:connected  tunnel:up  ona:running  env:brave-otter  adopted");
 });
