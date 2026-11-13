@@ -25,7 +25,7 @@ fi
 
 # Sessions can write the agent's own config; warn if a run changed it. A missing
 # file reads as empty; any other read error stops here, before the worktree exists.
-settings() { [ -e "$HOME/.claude/settings.json" ] || return 0; cksum "$HOME/.claude/settings.json"; }
+settings() { [ -e "$HOME/.claude/settings.json" ] || return 0; shasum "$HOME/.claude/settings.json"; }
 before=$(settings)
 
 git -C "$repo" worktree add -q -b "agent/$slug" "$tree" HEAD
