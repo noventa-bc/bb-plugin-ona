@@ -162,6 +162,20 @@ test(
 );
 
 test(
+  "devboxes_list shows the connected devbox by its host (fails if the list is empty or a row loses its host or status)",
+  local,
+  async () => {
+    const reply = (await host.harness.behavior.callRpc("devboxes_list", null)) as {
+      devboxes: { hostId: string; status: string }[];
+    };
+    assert.deepEqual(
+      reply.devboxes.map(({ hostId, status }) => ({ hostId, status })),
+      [{ hostId: "host-1", status: "connected" }],
+    );
+  },
+);
+
+test(
   "thread_devbox answers pending, from one thread read, for a thread bb has not given a workspace yet",
   local,
   async () => {
