@@ -236,7 +236,7 @@ test("bb's resume of a box whose tunnel was closed before the call opens the tun
 });
 
 // Bug: connect stamped the idle clock, so each daemon heal (a reconnect from the sync pass), failed or not, restarted it
-// and a box whose daemon kept dropping was never let go; a resume that failed before the stamp kept the old clock.
+// and a box whose daemon kept dropping was never let go.
 test("a reconnect, ok or failed, leaves the idle clock alone (fails if connect stamps it)", async () => {
   const ok = register({ found: box("RUNNING") });
   await ok.reconnect(adoptedResource, lifecycle().report, new AbortController().signal);
@@ -261,5 +261,21 @@ test("a wake the user asked for stamps the idle clock, a waiting thread's does n
     const { wake, connected } = register({ found: box("RUNNING") });
     await wake(adoptedResource, lifecycle().report, new AbortController().signal, cause);
     assert.deepEqual(connected, stamped, cause);
+  }
+});
+
+test("a rejected stamp in bb ona resume's wake or bb's resume still drops the no-stop flag, so the next suspend stops the box (fails if the stamp runs before the drop)", async () => {
+  const signal = new AbortController().signal;
+  for (const via of ["wake", "resume"] as const) {
+    const { provider, wake, releasing, calls } = register({ found: box("RUNNING"), markFails: true });
+    releasing.add("env-1");
+    const call =
+      via === "wake"
+        ? wake(adoptedResource, lifecycle().report, signal, "wake-cmd")
+        : provider.resume!({ ...lifecycle(), hostId: "host-1", resource: adoptedResource, signal });
+    await assert.rejects(call, /bb storage is unreachable/, via);
+    assert.equal(releasing.has("env-1"), false, via);
+    await provider.suspend!({ ...lifecycle(), hostId: "host-1", resource: adoptedResource, signal });
+    assert.ok(calls.includes("stop env-1"), via);
   }
 });

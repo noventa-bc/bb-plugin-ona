@@ -115,8 +115,8 @@ export interface ProviderDeps {
   waitForSharedHome: boolean;
   port: () => number;
   /**
-   * Restart the box's idle window: bb's create and resume, and a wake the user asked for (`bb ona resume`). A daemon
-   * heal and a waiting thread's wake do not, so a box whose daemon keeps dropping is still let go.
+   * Restart the box's idle window: bb's create and resume, `bb ona resume` and `bb ona reconnect` (src/commands.ts). A
+   * daemon heal and a waiting thread's wake do not, so a box whose daemon keeps dropping is still let go.
    */
   markConnected(envId: string): Promise<void>;
   /**
@@ -288,9 +288,9 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
    */
   const wake = timedWake(bb, (resource, progress, outer, trace, since) =>
     capped(`waking ${resource.envName}`, CAP_MINUTES, outer, progress, async (signal, report) => {
-      // The waiting thread is the activity for its own wake.
-      if (trace.via === "wake-cmd") await deps.markConnected(resource.envId);
       deps.releasing.delete(resource.envId);
+      // Only a wake the user asked for restarts the idle window; a waiting thread's wake has the thread as its activity.
+      if (trace.via === "wake-cmd") await deps.markConnected(resource.envId);
       const env = await ona.getEnvironmentIfExists(resource.envId, signal);
       if (!env) throw new Error(`Ona environment "${resource.envId}" not found. Run \`ona environment list\`.`);
       const startCalled = await ensureRunning(env, report, signal, trace);
@@ -413,6 +413,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         report.step(`Deleting orphaned Ona environment ${env.metadata.name ?? env.id}`);
         await disconnect(env.id);
         await ona.delete(env.id, signal);
+        // The create stamped the box's idle clock before it failed.
+        await deps.forgetBox(env.id);
         bb.log.info(metric("delete", { env: env.id, via: "cleanup", git: gitKnown(env) ? "known" : "unknown" }));
       }
       return { status: "removed" };
@@ -436,11 +438,11 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     resume: timed(bb, "resume", async ({ resource, checkpoint, report: progress, signal: outer }, trace) => {
       const owned = resourceSchema.parse(resource);
       const since = tunnels.mark();
-      // Before the connect: the window restarts even when the tunnel never comes up.
-      await deps.markConnected(owned.envId);
       return capped(`resuming ${owned.envName}`, CAP_MINUTES, outer, progress, async (signal, report) => {
         // Drop a no-stop flag a failed suspend may have left; the next suspend is the user's.
         deps.releasing.delete(owned.envId);
+        // Before the connect: the window restarts even when the tunnel never comes up.
+        await deps.markConnected(owned.envId);
         const env = await ona.getEnvironmentIfExists(owned.envId, signal);
         if (!env) throw new Error(`Ona environment "${owned.envId}" not found. Run \`ona environment list\`.`);
         await ensureRunning(env, report, signal, trace);

@@ -111,6 +111,7 @@ function fakeRun(
     statusRows: async () => [],
     onaHealth: () => ({ lastError: null, listedAt: null, autoRepair: false }),
     resolveEnvId: (ref: string) => Promise.resolve(ref === "box" ? "env_1" : ref),
+    markConnected: async (envId: string) => void calls.push(`mark ${envId}`),
   } as unknown as OnaCommandDeps;
   const run = onaCommands(deps);
   return { calls, guard, logs, run: (...argv: string[]) => run(argv, extra.ctx ?? {}) };
@@ -236,10 +237,11 @@ test("rename on an active machine renames the box in Ona and its bb machine", as
   assert.deepEqual(calls, ["rename env_1 new-name", "hosts.update ona:new-name"]);
 });
 
-test("reconnect on an active machine reconnects it", async () => {
+// The refusal tests below pin that a refused reconnect stamps nothing: their `calls` stay empty.
+test("reconnect on an active machine restarts its idle clock and reconnects it (fails if the next pass can let go the box it just reconnected)", async () => {
   const { run, calls } = fakeRun();
   assert.deepEqual(await run("reconnect", "box"), { exitCode: 0, stdout: "Reconnected ona:box" });
-  assert.deepEqual(calls, ["reconnect env_1"]);
+  assert.deepEqual(calls, ["mark env_1", "reconnect env_1"]);
 });
 
 test("update <host id> runs the CLI update for that box with no force, as the Update CLIs button sends it (fails if the ref or the force flag changes)", async () => {

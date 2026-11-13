@@ -231,10 +231,14 @@ test("a daemon heal leaves the box's idle clock as it was (fails if the heal sta
   assert.equal(await host.bb.storage.kv.get(connectedAtKey(resource.envId)), twoHoursAgo);
 });
 
-test("a healed box without thread activity for idleDisconnect is let go at the next pass", local, async () => {
-  hosts[0]!.status = "connected";
-  const result = await host.harness.behavior.runCli(["sync"]);
-  assert.equal(result.exitCode, 0, result.stderr);
-  assert.match(result.stdout ?? "", /last action: release-idle:/);
-  assert.deepEqual(host.harness.inspection.sdk.callsTo("hosts.experimental_suspend"), [[{ hostId: "host-1" }]]);
-});
+test(
+  "the healed box, its idle clock still two hours old and no thread on it, is let go at the next pass",
+  local,
+  async () => {
+    hosts[0]!.status = "connected";
+    const result = await host.harness.behavior.runCli(["sync"]);
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.match(result.stdout ?? "", /last action: release-idle:/);
+    assert.deepEqual(host.harness.inspection.sdk.callsTo("hosts.experimental_suspend"), [[{ hostId: "host-1" }]]);
+  },
+);

@@ -261,10 +261,10 @@ test("a refused remove of a bb-created machine closes its tunnel and keeps its k
 });
 
 // An adopted box keeps its own name, so the key-derived name never finds it.
-test("reconcileCleanup deletes the box its key names, running or stopped, and closes its tunnel (fails if a stopped orphan is kept)", async () => {
+test("reconcileCleanup deletes the box its key names, running or stopped, closes its tunnel and drops its keys (fails if a stopped orphan or its idle clock is kept)", async () => {
   for (const phase of ["RUNNING", "STOPPED"]) {
     const created = { ...box(phase), metadata: { name: envNameForKey("key-1") } };
-    const { provider, calls, tunnels } = register({ found: created });
+    const { provider, calls, tunnels, forgotten } = register({ found: created });
     const cleaned = await provider.reconcileCleanup({
       key: "key-1",
       report: lifecycle().report,
@@ -273,6 +273,7 @@ test("reconcileCleanup deletes the box its key names, running or stopped, and cl
     assert.equal(cleaned.status, "removed", phase);
     assert.deepEqual(calls, ["delete env-1"], phase);
     assert.deepEqual(tunnels, ["stop env-1"], phase);
+    assert.deepEqual(forgotten, ["env-1"], `${phase}: the idle clock the create stamped goes with the box`);
   }
 });
 
