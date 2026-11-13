@@ -142,6 +142,8 @@ export interface OnaCommandDeps {
   addMachine(inputs: Record<string, string>): Promise<string>;
   updateClis(options: { ref?: string; force?: boolean }): Promise<string[]>;
   onaHealth(): OnaHealth;
+  /** Restarts a box's idle window (the provider's `markConnected`). */
+  markConnected(envId: string): Promise<void>;
 }
 
 /** The `run` handler for `bb.cli.register`. */
@@ -167,6 +169,7 @@ export function onaCommands(deps: OnaCommandDeps) {
     addMachine,
     updateClis,
     onaHealth,
+    markConnected,
   } = deps;
   return async function run(rawArgv: string[], ctx: PluginCliContext) {
     const { command, ref, newName, json, threadFlag, threadId, flags, commandArgv } = parseArgs(rawArgv);
@@ -299,6 +302,8 @@ export function onaCommands(deps: OnaCommandDeps) {
             "reconnect",
             "requested with bb ona reconnect",
             async () => {
+              // The user's reconnect restarts the idle window; the sync pass's heal, which shares provider.reconnect, does not.
+              await markConnected(row.resource.envId);
               await provider.reconnect(row.resource, report, ctx.signal ?? new AbortController().signal, since);
             },
             { force: true, cooldown: false },

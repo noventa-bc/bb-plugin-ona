@@ -173,6 +173,7 @@ export default async function plugin(bb: BbPluginApi) {
 
   const pluginStartedAt = Date.now();
 
+  const markConnected = (envId: string) => bb.storage.kv.set(connectedAtKey(envId), Date.now());
   const provider = registerOnaProvider(bb, {
     async availability() {
       const binary = findOnaBinary(onaPath);
@@ -187,9 +188,7 @@ export default async function plugin(bb: BbPluginApi) {
     machineDataDir,
     waitForSharedHome,
     port,
-    async markConnected(envId) {
-      await bb.storage.kv.set(connectedAtKey(envId), Date.now());
-    },
+    markConnected,
     releasing: new Set(),
     forgetBox: (envId) => forgetBox(bb.storage.kv, envId),
   });
@@ -390,6 +389,7 @@ export default async function plugin(bb: BbPluginApi) {
     addMachine,
     updateClis,
     onaHealth,
+    markConnected,
   });
   bb.rpc.register(rpcContract, {
     devboxes_list: async () => ({ devboxes: await devboxes() }),
