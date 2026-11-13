@@ -155,14 +155,16 @@ test("the Rename form's typed name reaches devbox_command (fails if app.tsx rena
   assert.ok(app.includes("devboxCommandInput(command, hostId, arg)"), "run does not pass arg to devboxCommandInput");
 });
 
-test("the hidden-warning rule hides the shell_environment_policy and multi_agent warnings, each by a warning-row selector (fails if either selector is dropped or loses its row match)", () => {
+test("the hidden-warning rule hides the shell_environment_policy and multi_agent warning rows (fails if either selector is dropped or the rule stops hiding)", () => {
   const app = readFileSync(new URL("../app.tsx", import.meta.url), "utf8");
-  const declaration = app.match(/const HIDDEN_WARNING_CSS =([^;]*;[^;]*);/)?.[1] ?? "";
-  const rule = [...declaration.matchAll(/'([^']*)'/g)].map((literal) => literal[1]).join("");
-  const selectors = rule.replace(/\s*\{.*$/, "").split(/,\s*/);
-  const phrases = ["`shell_environment_policy.include` is ignored", "`[features].multi_agent` is deprecated"];
-  assert.deepEqual(
-    selectors,
-    phrases.map((phrase) => `[data-timeline-row-id*=":op:warning:"]:has([title*="${phrase}"])`),
+  assert.ok(
+    app.includes(
+      `'[data-timeline-row-id*=":op:warning:"]:has([title*="\`shell_environment_policy.include\` is ignored"]), ' +`,
+    ),
+  );
+  assert.ok(
+    app.includes(
+      `'[data-timeline-row-id*=":op:warning:"]:has([title*="\`[features].multi_agent\` is deprecated"]) { display: none !important; }';`,
+    ),
   );
 });

@@ -187,8 +187,7 @@ function DevboxEditor({ threadId, isCompactViewport }: ThreadHeaderActionProps) 
  * Codex warns on every session start when a repo's
  * .codex/config.toml has a setting it ignores (`shell_environment_policy.include`).
  * It is harmless and bb has no way to mute it, so hide those timeline rows.
- * Codex also warns that `[features].multi_agent` is deprecated whenever bb's Codex provider
- * passes `features.multi_agent=false` (a thread with provider subagents off); users cannot mute it either.
+ * The same goes for Codex's "`[features].multi_agent` is deprecated" warning (cause in docs/ona-notes.md).
  * bb renders each warning as its own row with the full text in a title.
  */
 const HIDDEN_WARNING_CSS =

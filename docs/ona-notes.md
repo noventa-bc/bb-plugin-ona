@@ -150,6 +150,11 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   header (`thread-detail-DObhspNc.js`, checked 2026-11-11) a header action sits
   after that button, and a component header action (`experimental_threadHeaderAction`,
   which `app.tsx` uses for the Editor and the cost chip) sits before it.
+- bb 0.49.0's Codex provider (`builtin-plugins/provider-codex/dist/host.js` in
+  the bb-app server folder) sets `features.multi_agent` to false in the Codex
+  config it passes when the thread's provider-subagents option is off, and Codex
+  then prints a "`[features].multi_agent` is deprecated" warning on each session
+  start (checked 2026-11-13, read not run). `app.tsx` hides that warning row.
 - SDK 0.6.109 has no `machine_busy` suspend error code (checked 2026-11-03: the
   name occurs nowhere in its typings or `dist`; bb's server does answer with it, see
   the suspend and reconcile bullets).
