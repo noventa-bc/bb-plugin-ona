@@ -34,8 +34,8 @@ the quick fix is right and when it is not.
 
 Builders run on Opus at low effort and reviewers on Haiku at max effort by
 default; the role definitions in `.claude/agents/` set it, and a brief for an
-agent without a definition names its model and effort (Haiku at max effort for
-mechanical work). Use Opus at medium effort only per call, with a stated reason
+agent without a definition names its model and effort (for example, Haiku at max
+effort for mechanical work). Use Opus at medium effort only per call, with a stated reason
 in its brief: a change to a safety rule or an accepted decision, a tricky
 concurrency or state bug, or a review that must read bb's source. The
 orchestrator runs on Fable. It checks each subagent's output
