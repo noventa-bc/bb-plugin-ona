@@ -30,13 +30,16 @@ test("~/.bb-machines exit 6 past the deadline throws with the script output (fai
 });
 
 const codexFailure = (why: string) =>
-  `Could not create Codex's folder /local/codex: ${why}. Set the plugin's \`codexSqliteHome\` setting to a folder the devbox can create.`;
+  `Could not create Codex's folder /local/codex (the \`codexSqliteHome\` setting): ${why}`;
 
 // Bug: connect ran Codex's mkdir and ignored its exit code, so a folder that was not made still marked the machine
 // connected and started the daemon with CODEX_SQLITE_HOME naming it (Code Review Rule 8).
 test("a Codex folder that cannot be created throws with the mkdir output before any tunnel opens, and connects nothing (fails if the mkdir's exit code is ignored or the check runs after the tunnel opens)", async () => {
   const { created, calls, connected, tunnels } = start({ found: box("RUNNING"), codexHome: true, mkdirExits: [1] });
-  await assert.rejects(created, { message: codexFailure("mkdir: cannot create directory: Not a directory") });
+  await assert.rejects(
+    created,
+    /^Error: Could not create Codex's folder \/local\/codex \(the `codexSqliteHome` setting\): mkdir: cannot create directory: Not a directory$/,
+  );
   assert.deepEqual(connected, []);
   assert.deepEqual(calls, ["get RUNNING", ...gated("ssh", "mkdir")]);
   assert.deepEqual(tunnels, ["stop env-1"], "no tunnel opens before the check");
