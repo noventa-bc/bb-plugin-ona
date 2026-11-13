@@ -25,7 +25,6 @@ import { createThreadCost } from "./src/cost-service.ts";
 import { rpcContract, type Devbox } from "./src/rpc.ts";
 import { connectedShellRow, threadTerminalPlan, type ShellBackend, type ShellTarget } from "./src/shells.ts";
 import { TunnelManager } from "./src/ssh.ts";
-import { createUpdateClis } from "./src/updates.ts";
 
 export default async function plugin(bb: BbPluginApi) {
   const settings = bb.settings.define({
@@ -94,20 +93,6 @@ export default async function plugin(bb: BbPluginApi) {
         "After a devbox starts, wait until its home folder (shared over NFS) is mounted before starting bb's daemon and agents. Turn off if your Ona environments don't share a home folder. A changed setting applies after `bb plugin reload ona`.",
       default: true,
     },
-    autoUpdateClis: {
-      type: "boolean",
-      label: "Auto-update agent CLIs on devboxes",
-      description:
-        "Weekdays at 09:00 (this Mac's time), apply pending updates for the CLIs below on connected Ona devboxes. Boxes with a running agent turn, or that another action is running on, are skipped until the next run. A changed setting applies after `bb plugin reload ona`.",
-      default: true,
-    },
-    autoUpdateProviders: {
-      type: "string",
-      label: "CLIs to auto-update",
-      description:
-        "bb provider ids, comma-separated. Only installed CLIs are updated; nothing new is installed. A changed setting applies after `bb plugin reload ona`.",
-      default: "claude-code,codex",
-    },
   });
   const {
     onaPath,
@@ -119,8 +104,6 @@ export default async function plugin(bb: BbPluginApi) {
     codexSqliteHome,
     machineDataDir,
     waitForSharedHome,
-    autoUpdateClis,
-    autoUpdateProviders,
   } = await settings.get();
 
   // Settings path first, then PATH and common install locations.
@@ -334,13 +317,6 @@ export default async function plugin(bb: BbPluginApi) {
     return { terminalId: terminal.id, via: plan.via };
   }
 
-  const updateClis = createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef, guard, signal: lifetime.signal });
-  if (autoUpdateClis) {
-    bb.background.schedule("cli-updates", "0 9 * * 1-5", async () => {
-      for (const line of await updateClis()) bb.log.info(`cli update: ${line}`);
-    });
-  }
-
   const setup = createSetup({
     server: bb.server,
     run,
@@ -383,7 +359,6 @@ export default async function plugin(bb: BbPluginApi) {
     openThreadTerminal,
     setup,
     addMachine,
-    updateClis,
     onaHealth,
     markConnected,
   });

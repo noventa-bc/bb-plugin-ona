@@ -52,7 +52,6 @@ it from a devbox. Use `bb` commands from a thread instead; bb routes them correc
 - Pick the box's Ona project with `--machine-inputs`: `bb thread spawn --project <id> --environment-provider ona-devbox --machine-inputs '{"mode":"create","project":"my-app"}' --prompt "..."`. `bb machine create --provider ona` takes the same inputs in `--inputs`.
 - `<ref>` is a bb machine name/id or an Ona environment name/id; a name two devboxes share is refused by commands that act on one box (use a host id); `bb ona status` lists them all.
 - `bb ona rename <ref> [name]` — rename the Ona environment and its bb machine (a random fun name if `name` is omitted); refused while bb shows its machine in a phase other than active.
-- `bb ona update [ref] [--force]` — apply pending updates of the CLIs in `autoUpdateProviders` (default Claude Code and Codex) on connected devboxes (also weekdays at 09:00 when `autoUpdateClis` is on). A box with an agent running is skipped unless `--force`; a box another action is running on is skipped.
 
 ## Shell access
 

@@ -50,8 +50,6 @@ export const usage = [
   "  bb ona resume <ref>           Start a stopped box and reconnect bb's daemon (your action; a running box is only reconnected; gives up after 30 minutes)",
   "  bb ona status [ref] [--json]  bb's view of each devbox next to Ona's, its box facts, and what the plugin last did",
   "  bb ona sync [ref]             Re-check Ona now and repair (ignores cooldowns, backoff and the give-up, keeps the safety rules); waits up to 32 min for a resume bb answers `resuming`",
-  "  bb ona update [ref] [--force] Apply pending updates of the CLIs in `autoUpdateProviders` now",
-  "                                Also weekdays 09:00 when `autoUpdateClis` is on",
   "",
   "<ref> is a bb machine name/id or an Ona environment name/id; a name two devboxes share is refused by commands that act on one box (use a host id); `status` lists them all.",
 ].join("\n");
@@ -80,11 +78,6 @@ export const commands = [
     summary:
       "Rename a devbox (random fun name if omitted); refused while bb shows its machine in a phase other than active",
     usage: "bb ona rename <ref> [name]",
-  },
-  {
-    name: "update",
-    summary: "Apply pending agent-CLI updates on devboxes",
-    usage: "bb ona update [ref] [--force]",
   },
   {
     name: "reconnect",
@@ -133,7 +126,6 @@ export interface OnaCommandDeps {
   ): Promise<{ terminalId: string; via: ThreadTerminalPlan["via"] }>;
   setup(apply: boolean, keepGitCredentials: boolean): Promise<CliResult>;
   addMachine(inputs: Record<string, string>): Promise<string>;
-  updateClis(options: { ref?: string; force?: boolean }): Promise<string[]>;
   onaHealth(): OnaHealth;
   /** Restarts a box's idle window (the provider's `markConnected`). */
   markConnected(envId: string): Promise<void>;
@@ -159,7 +151,6 @@ export function onaCommands(deps: OnaCommandDeps) {
     openThreadTerminal,
     setup,
     addMachine,
-    updateClis,
     onaHealth,
     markConnected,
   } = deps;
@@ -341,8 +332,6 @@ export function onaCommands(deps: OnaCommandDeps) {
             stderr: `Usage: bb ona shell ${ref} -- <command...>   (for an interactive shell: bb ona ssh ${ref} --thread <thread-id>)`,
           };
         }
-        case "update":
-          return { exitCode: 0, stdout: (await updateClis({ ref, force: flags.has("--force") })).join("\n") };
       }
     } catch (error) {
       return { exitCode: 1, stderr: errorText(error) };

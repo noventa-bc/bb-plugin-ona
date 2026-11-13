@@ -17,7 +17,7 @@ and you drive them from bb as usual.
 - **Spend per thread**: a devbox thread's header shows its cost so far (OpenAI's
   estimate for Codex, tokens × Anthropic list prices for Claude Code).
 - **Ona devboxes** in the plugin's settings: each devbox's status (`bb ona status`), with a Sync all button,
-  and per devbox Sync, Reconnect, Resume and Update CLIs buttons plus a Rename control, all running
+  and per devbox Sync, Reconnect and Resume buttons plus a Rename control, all running
   the same `bb ona` commands.
 - **Shell access**: `ssh "$(bb ona host <ref>)"`,
   `bb ona ssh <ref> --thread <thread-id>` to open another terminal in a thread, `bb ona shell <ref> -- <command>`
@@ -26,8 +26,6 @@ and you drive them from bb as usual.
 - `bb ona adopt <environment>` and `bb ona new [project]` to add devboxes, and
   `bb ona status [ref]`, `bb ona rename <ref>`, `bb ona reconnect <ref>`, `bb ona resume <ref>` and `bb ona sync [ref]`
   for day-to-day management.
-- `bb ona update [ref] [--force]` applies pending agent-CLI updates (Claude Code and Codex by default, from
-  `autoUpdateProviders`) to connected devboxes; the same runs weekdays at 09:00 when `autoUpdateClis` is on.
 
 ## How it works
 

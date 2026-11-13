@@ -1,10 +1,10 @@
 # The numbers must equal this file: a rise needs the owner's yes, and a drop is recorded by lowering it, in the same PR.
 near_cap_src 0
 near_cap_test 0
-server_lines 425
+server_lines 401
 runtime_deps 1
-settings 11
-commands 12
+settings 9
+commands 11
 intervals 3
 shortcuts 6
 layering 0

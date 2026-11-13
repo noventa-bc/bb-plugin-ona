@@ -1,6 +1,6 @@
 // The real server.ts inside the SDK's fake bb host (test/e2e-host.ts), for what a sync pass and the `bb ona`
 // commands do to a box: the idle release and the observed stop (neither may stop the box),
-// reconnect, rename, update, sync by the Ona name, the settings section's devbox_command and the thread
+// reconnect, rename, sync by the Ona name, the settings section's devbox_command and the thread
 // event. One story in file order: run the whole file.
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -37,11 +37,6 @@ const extraBoxes: Record<string, OnaResource> = {};
 const suspends = () => host.harness.inspection.sdk.callsTo("hosts.experimental_suspend");
 /** `environment list` calls in the fake Ona's log so far; the tunnel loop lists too, so compare with `>`. */
 const listings = () => readFileSync(log, "utf8").match(/^environment list/gm)?.length ?? 0;
-
-function cli(currentVersion: string, latestVersion: string) {
-  const needsUpdate = currentVersion !== latestVersion;
-  return { installed: true, currentVersion, latestVersion, needsUpdate, installAction: { kind: "update" } };
-}
 
 /** Adds a box to the fake Ona and to bb's hosts, as the first test does for host-1. */
 async function addDevbox(key: string, hostId: string, project: string) {
@@ -107,12 +102,6 @@ before(async () => {
             hosts.find((h) => h.id === hostId)!,
             { name },
           ),
-        // Claude Code has an update pending, Codex is current.
-        providerCliStatus: async () => ({
-          "claude-code": cli("1.0.0", "1.1.0"),
-          codex: cli("0.5.0", "0.5.0"),
-        }),
-        installProviderCli: async () => [{ type: "completed", exitCode: 0 }],
       },
       threads: { list: async () => threads, get: async () => ({ environmentId: "ws-1" }) },
       environments: { list: async () => [], get: async () => ({ hostId: "host-1" }) },
@@ -288,20 +277,9 @@ test("bb ona rename renames the box in Ona and its bb machine (fails if bb keeps
   assert.deepEqual(host.harness.inspection.sdk.callsTo("hosts.update"), [[{ hostId: "host-1", name: "ona:new-name" }]]);
 });
 
-test("bb ona update installs only the pending CLI (fails if a current CLI is reinstalled)", local, async () => {
-  Object.assign(hosts[0]!, { status: "connected", lifecycle: { phase: "active", message: null, suspendedAt: null } });
-  const result = await host.harness.behavior.runCli(["update"]);
-  assert.equal(result.exitCode, 0, result.stderr);
-  // The box was renamed in the test above.
-  assert.equal(result.stdout, "new-name: claude-code 1.0.0 -> 1.1.0");
-  assert.deepEqual(host.harness.inspection.sdk.callsTo("hosts.installProviderCli"), [
-    [{ hostId: "host-1", provider: "claude-code", actionKind: "update" }],
-  ]);
-  assert.deepEqual(onaCalls(), []);
-});
-
 // Bug: `bb ona sync <name>` looked the name up before refreshing the listing, so a box renamed in Ona was "not found".
 test("bb ona sync finds a box by the name it was given in Ona, not through bb", local, async () => {
+  Object.assign(hosts[0]!, { status: "connected", lifecycle: { phase: "active", message: null, suspendedAt: null } });
   writeFileSync(
     state,
     JSON.stringify(
