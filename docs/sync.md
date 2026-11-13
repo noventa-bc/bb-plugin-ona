@@ -222,7 +222,7 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    - So a box whose repairs gave up is still let go once it is idle, after the last failure's quiet period and with
      every hold of the idle rule.
    - A release that fails past that give-up adds one to the count and backs off: 40 minutes, then 60.
-   - A failed release leaves the other action's record in place, so the recovery that clears that record still clears it.
+   - A release that fails past that give-up leaves the other action's record in place, so the recovery that clears that record still clears it.
    - Three failed releases past the give-up stop the release too, as three failed releases in a row do from a fresh
      count.
    - A successful release ends the count and the give-up, unless a hold keeps them (rule 3), and bb's resume
