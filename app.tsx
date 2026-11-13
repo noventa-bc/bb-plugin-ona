@@ -187,10 +187,13 @@ function DevboxEditor({ threadId, isCompactViewport }: ThreadHeaderActionProps) 
  * Codex warns on every session start when a repo's
  * .codex/config.toml has a setting it ignores (`shell_environment_policy.include`).
  * It is harmless and bb has no way to mute it, so hide those timeline rows.
+ * Codex also warns that `[features].multi_agent` is deprecated whenever bb's Codex provider
+ * passes `features.multi_agent=false` (a thread with provider subagents off); users cannot mute it either.
  * bb renders each warning as its own row with the full text in a title.
  */
 const HIDDEN_WARNING_CSS =
-  '[data-timeline-row-id*=":op:warning:"]:has([title*="`shell_environment_policy.include` is ignored"]) { display: none !important; }';
+  '[data-timeline-row-id*=":op:warning:"]:has([title*="`shell_environment_policy.include` is ignored"]), ' +
+  '[data-timeline-row-id*=":op:warning:"]:has([title*="`[features].multi_agent` is deprecated"]) { display: none !important; }';
 
 function hideKnownWarnings() {
   if (typeof document === "undefined" || document.getElementById("bb-ona-hidden-warnings")) return;
