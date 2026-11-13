@@ -1,8 +1,10 @@
 // The provider's remove of an adopted machine and of a bb-created one, driven through `remove` in the fake host of
 // ./provider-fake.ts. The remove paths wait on nothing, so no fake clock is needed.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { adoptedResource, box, lifecycle, register } from "./provider-fake.ts";
+import { envNameForKey } from "../src/names.ts";
+import { adoptedResource, box, cleanBox, lifecycle, register } from "./provider-fake.ts";
 
 const createdResource = { envId: "env-1", envName: "box", adopted: false, key: "key-1" };
 
@@ -35,7 +37,7 @@ test("an adopted remove of a box Ona no longer has forgets the box and deletes n
 });
 
 test("a remove of a bb-created box deletes it and forgets the box (fails if the created remove drops forgetBox)", async () => {
-  const { provider, calls, forgotten } = register({ found: box("RUNNING") });
+  const { provider, calls, forgotten } = register({ found: cleanBox("RUNNING") });
   const removed = await remove(provider, createdResource);
   assert.equal(removed.status, "removed");
   assert.deepEqual(calls, ["get RUNNING", "delete env-1"]);
@@ -77,7 +79,7 @@ test("an adopted remove whose move-aside throws still removes the machine and wa
 });
 
 test("a remove of a bb-created box Ona shows STOPPED deletes it and forgets the box (fails if a stopped created box is kept)", async () => {
-  const { provider, calls, forgotten } = register({ found: box("STOPPED") });
+  const { provider, calls, forgotten } = register({ found: cleanBox("STOPPED") });
   const removed = await remove(provider, createdResource);
   assert.equal(removed.status, "removed");
   assert.deepEqual(calls, ["get STOPPED", "delete env-1"]);
@@ -113,4 +115,66 @@ test("an adopted remove closes the box's tunnel before the move-aside and stops 
   assert.equal(moves[0]?.tunnel, "off");
   assert.deepEqual(tunnels, ["stop env-1", "stop env-1"]);
   assert.deepEqual(calls, ["get RUNNING", "move-aside"]);
+});
+
+const cleanup = (provider: ReturnType<typeof register>["provider"]) =>
+  provider.reconcileCleanup({ key: "key-1", report: lifecycle().report, signal: new AbortController().signal });
+
+/** The box an orphan cleanup finds by its key-derived name, with this status. */
+const orphan = (status: NonNullable<ReturnType<typeof box>["status"]>) => ({
+  ...box("RUNNING"),
+  metadata: { name: envNameForKey("key-1") },
+  status,
+});
+
+const deletes = (calls: string[]) => calls.filter((call) => call.startsWith("delete"));
+
+const manualDelete = (envId: string) =>
+  new RegExp(
+    "Ona did not report its git state, so it may hold unpushed commits or uncommitted files\\. Commit and push, " +
+      `or discard, them, and delete the box in Ona with \`ona environment delete ${envId}\`, then run ` +
+      "`bb machine retry-cleanup` again\\.",
+  );
+
+test("a remove of a bb-created box with no git block is refused, deletes nothing and keeps its keys (fails if a box whose work Ona didn't report is deleted)", async () => {
+  // Bug: unpushedWork read a missing git block as no work, so remove deleted a box whose work nobody had seen.
+  const { provider, calls, forgotten, tunnels } = register({ found: box("RUNNING"), tunnel: "up" });
+  const removed = await remove(provider, createdResource);
+  assert.equal(removed.status, "failed");
+  if (removed.status !== "failed") return;
+  assert.match(removed.message, manualDelete("env-1"));
+  assert.deepEqual(deletes(calls), []);
+  assert.deepEqual(forgotten, []);
+  assert.deepEqual(tunnels, ["stop env-1"]);
+});
+
+test("a remove of a bb-created box Ona archived, whose get has no git block, is refused and names the manual delete (fails if an archived box is deleted)", async () => {
+  const archived = JSON.parse(
+    readFileSync(new URL("./fixtures/ona/archived-environment.json", import.meta.url), "utf8"),
+  );
+  const { provider, calls, forgotten } = register({ found: archived });
+  const removed = await remove(provider, { ...createdResource, envId: archived.id });
+  assert.equal(removed.status, "failed");
+  if (removed.status !== "failed") return;
+  assert.match(removed.message, manualDelete(archived.id));
+  assert.deepEqual(deletes(calls), []);
+  assert.deepEqual(forgotten, []);
+});
+
+test("an orphan cleanup deletes a box with no git block, which the failed create made and never handed over (fails if the cleanup refuses it)", async () => {
+  const { provider, calls } = register({ found: orphan({ phase: "ENVIRONMENT_PHASE_RUNNING" }) });
+  assert.equal((await cleanup(provider)).status, "removed");
+  assert.deepEqual(deletes(calls), ["delete env-1"]);
+});
+
+test("a git block with no counts or with both counts zero is clean, so remove and orphan cleanup delete the box (fails if a clean box is refused)", async () => {
+  for (const git of [{ branch: "main" }, { branch: "main", totalUnpushedCommits: 0, totalChangedFiles: 0 }]) {
+    const status = { phase: "ENVIRONMENT_PHASE_RUNNING", content: { git } };
+    const removing = register({ found: { ...box("RUNNING"), status } });
+    assert.equal((await remove(removing.provider, createdResource)).status, "removed", JSON.stringify(git));
+    assert.deepEqual(deletes(removing.calls), ["delete env-1"]);
+    const cleaning = register({ found: orphan(status) });
+    assert.equal((await cleanup(cleaning.provider)).status, "removed", JSON.stringify(git));
+    assert.deepEqual(deletes(cleaning.calls), ["delete env-1"]);
+  }
 });

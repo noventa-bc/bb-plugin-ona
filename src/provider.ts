@@ -178,20 +178,25 @@ export const MOVE_MACHINE_ASIDE = [
   "exit 3",
 ].join("\n");
 
-/** The refusal a remove or an orphan cleanup gives when a delete would lose work on the box; both paths say the same. */
-function notDeletingMessage(
-  name: string,
-  envId: string,
-  work: { branch?: string; count: number; files: number },
-): string {
+/** What a delete of the box would lose; "unknown" when Ona reports no git state for it. */
+type DeleteBlocker = { branch?: string; count: number; files: number } | "unknown";
+
+/** The refusal a remove or an orphan cleanup gives when a delete could lose work on the box; both paths say the same. */
+function notDeletingMessage(name: string, envId: string, work: DeleteBlocker): string {
+  const manualDelete = `delete the box in Ona with \`ona environment delete ${envId}\`, then run \`bb machine retry-cleanup\` again.`;
+  if (work === "unknown") {
+    return (
+      `Not deleting Ona environment ${name}: Ona did not report its git state, so it may hold unpushed commits or ` +
+      `uncommitted files. Commit and push, or discard, them, and ${manualDelete}`
+    );
+  }
   const where = work.branch ? `on branch ${work.branch}` : "on its current branch";
   const found: string[] = [];
   if (work.count > 0) found.push(`${work.count} unpushed commit(s)`);
   if (work.files > 0) found.push(`${work.files} uncommitted file(s)`);
   return (
     `Not deleting Ona environment ${name}: it has ${found.join(" and ")} ${where}. ` +
-    `Commit and push, or discard, the work, or delete the box in Ona with \`ona environment delete ${envId}\`, ` +
-    "then run `bb machine retry-cleanup` again."
+    `Commit and push, or discard, the work, or ${manualDelete}`
   );
 }
 
@@ -419,7 +424,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       const env = await ona.findEnvironment(envNameForKey(key), signal);
       // Another machine adopted the box since this create made it: the box is that machine's, not an orphan.
       if (env && !(await machineUsing(env.id, key))) {
-        // Same check as remove: a delete would lose the work on the box.
+        // Remove's check on the counts. A missing git block does not block here, unlike in remove: the box is the
+        // leftover of a create that failed, and no machine uses it.
         const work = unpushedWork(env);
         if (work) {
           bb.log.info(metric("keep", { env: env.id, via: "cleanup", commits: work.count, files: work.files }));
@@ -431,7 +437,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         await ona.delete(env.id, signal);
         // A failed create may already have stamped the box's idle clock; forget it.
         await deps.forgetBox(env.id);
-        bb.log.info(metric("delete", { env: env.id, via: "cleanup", git: gitKnown(env) ? "known" : "unknown" }));
+        bb.log.info(metric("delete", { env: env.id, via: "cleanup" }));
       }
       return { status: "removed" };
     },
@@ -555,9 +561,11 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         throw error;
       });
       const live = env && !isDeleted(env) ? env : null;
-      const work = live && unpushedWork(live);
+      const work = live && (gitKnown(live) ? unpushedWork(live) : "unknown");
       if (work) {
-        bb.log.info(metric("keep", { env: owned.envId, via: "remove", commits: work.count, files: work.files }));
+        const kept: Record<string, string | number> =
+          work === "unknown" ? { git: "unknown" } : { commits: work.count, files: work.files };
+        bb.log.info(metric("keep", { env: owned.envId, via: "remove", ...kept }));
         await disconnect(owned.envId);
         return { status: "failed", message: notDeletingMessage(nameOf(live, owned), owned.envId, work) };
       }
@@ -566,7 +574,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       if (live) {
         report.step(`Deleting Ona environment ${nameOf(live, owned)}`);
         await ona.delete(owned.envId, signal);
-        bb.log.info(metric("delete", { env: owned.envId, via: "remove", git: gitKnown(live) ? "known" : "unknown" }));
+        bb.log.info(metric("delete", { env: owned.envId, via: "remove" }));
       }
       return { status: "removed" };
     },

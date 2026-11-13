@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { envNameForKey } from "../src/names.ts";
 import { devboxOf, devboxPath, onaRef, resourceSchema } from "../src/provider.ts";
 import { tick, useFakeClock } from "./fake-clock.ts";
-import { adoptedResource, box, connectCalls, lifecycle, register } from "./provider-fake.ts";
+import { adoptedResource, box, cleanBox, connectCalls, lifecycle, register } from "./provider-fake.ts";
 
 useFakeClock();
 
@@ -263,7 +263,7 @@ test("a refused remove of a bb-created machine closes its tunnel and keeps its k
 // An adopted box keeps its own name, so the key-derived name never finds it.
 test("reconcileCleanup deletes the box its key names, running or stopped, closes its tunnel and drops its keys (fails if a stopped orphan or its idle clock is kept)", async () => {
   for (const phase of ["RUNNING", "STOPPED"]) {
-    const created = { ...box(phase), metadata: { name: envNameForKey("key-1") } };
+    const created = { ...cleanBox(phase), metadata: { name: envNameForKey("key-1") } };
     const { provider, calls, tunnels, forgotten } = register({ found: created });
     const cleaned = await provider.reconcileCleanup({
       key: "key-1",

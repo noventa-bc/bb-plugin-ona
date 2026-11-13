@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { envNameForKey } from "../src/names.ts";
-import { adoptedResource, box, connectCalls, lifecycle, register, type Setup } from "./provider-fake.ts";
+import { adoptedResource, box, cleanBox, connectCalls, lifecycle, register, type Setup } from "./provider-fake.ts";
 
 /** Adopts the box under key "key-2"; a refusal before the checkpoint gets bb's cleanup, `reconcileCleanup`. */
 async function adopt(setup: Setup) {
@@ -69,7 +69,7 @@ test("a machine that is not this box's Ona machine does not refuse the adopt (fa
 });
 
 // The box machine host-1's create made under key "key-1", before its checkpoint; host-2 has adopted it since.
-const unfinished = { ...box("RUNNING"), metadata: { name: envNameForKey("key-1") } };
+const unfinished = { ...cleanBox("RUNNING"), metadata: { name: envNameForKey("key-1") } };
 const adoptedSince = { id: "host-2", name: "ona:m2", phase: "active", resource: { ...adoptedResource, key: "key-2" } };
 const creating = { id: "host-1", name: "Ona devbox 1", phase: "creating", resource: null };
 
@@ -232,7 +232,7 @@ test("removing the adopting machine while bb also removes the creating one close
 
 test("removing the created machine while bb also removes the adopting one deletes the box (fails if a machine being removed counts as using the box)", async () => {
   const { removed, calls, tunnels, forgotten } = await removeCreated({
-    found: box("RUNNING"),
+    found: cleanBox("RUNNING"),
     tunnel: "up",
     machines: [{ ...adoptedSince, phase: "removing" }],
   });
@@ -245,7 +245,7 @@ test("removing the created machine while bb also removes the adopting one delete
 test("removing the created machine deletes its box when only other boxes' machines are listed (fails if the guard counts any listed machine or drops the remove's key)", async () => {
   const own = { id: "host-1", name: "ona:box", phase: "removing", resource: { ...adoptedResource, adopted: false } };
   const other = { ...adoptedSince, resource: { ...adoptedResource, envId: "env-2", key: "key-2" } };
-  const { removed, calls, forgotten } = await removeCreated({ found: box("RUNNING"), machines: [own, other] });
+  const { removed, calls, forgotten } = await removeCreated({ found: cleanBox("RUNNING"), machines: [own, other] });
   assert.deepEqual(removed, { status: "removed" });
   assert.deepEqual(calls, ["get RUNNING", "delete env-1"]);
   assert.deepEqual(forgotten, ["env-1"]);

@@ -137,7 +137,8 @@ test("remove refuses a created box with unpushed commits and closes its tunnel",
   assert.deepEqual(onaCalls(), [`environment get ${resource.envId}`]);
   // A refused remove closes the tunnel too: nothing in it needs one (decision 0003).
   assert.match((await host.harness.behavior.runCli(["status"])).stdout ?? "", /tunnel:off/);
-  patchBox(resource.envId, { content: undefined });
+  // Clean again: Ona leaves out a zero count.
+  patchBox(resource.envId, { content: { git: { branch: "feature-x" } } });
 });
 
 test("remove deletes a clean created box", local, async () => {
