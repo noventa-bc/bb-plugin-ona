@@ -228,7 +228,7 @@ export function isDeleted(env: OnaEnvironment): boolean {
 
 /**
  * Work on the box that a delete would lose: `count` unpushed commits and `files` uncommitted files.
- * Null when both are zero or Ona doesn't say (older Ona, no git content): unknown must not block a delete.
+ * Null when both are zero; Ona leaves out a zero count. `gitKnown` says whether Ona reported the box's git state at all.
  */
 export function unpushedWork(env: OnaEnvironment): { branch?: string; count: number; files: number } | null {
   const git = env.status?.content?.git;
@@ -239,9 +239,9 @@ export function unpushedWork(env: OnaEnvironment): { branch?: string; count: num
   return git?.branch ? { branch: git.branch, count, files } : { count, files };
 }
 
-/** Whether `status.content.git.totalUnpushedCommits` reads as a finite number. */
+/** Whether Ona's listing has a `status.content.git` block for the box: without it, its unpushed work is unknown. */
 export function gitKnown(env: OnaEnvironment): boolean {
-  return Number.isFinite(Number(env.status?.content?.git?.totalUnpushedCommits));
+  return env.status?.content?.git != null;
 }
 
 /**

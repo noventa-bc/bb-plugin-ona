@@ -15,6 +15,12 @@ export const box = (phase: string): OnaEnvironment => ({
   status: { phase: `ENVIRONMENT_PHASE_${phase}` },
 });
 
+/** A box whose listing has a git block with no counts, as Ona shows a clean box: Ona leaves out a zero count. */
+export const cleanBox = (phase: string): OnaEnvironment => ({
+  ...box(phase),
+  status: { phase: `ENVIRONMENT_PHASE_${phase}`, content: { git: { branch: "main" } } },
+});
+
 export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, key: "key-1" };
 
 /**

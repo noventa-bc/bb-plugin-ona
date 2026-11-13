@@ -436,10 +436,11 @@ test("a box with uncommitted files and no unpushed commits is kept, with the fil
   assert.deepEqual(unpushedWork(boxWithGit({ totalUnpushedCommits: 0, totalChangedFiles: "1" })), kept);
 });
 
-test("unpushedWork is null for zero commits and files, and when Ona doesn't say", async () => {
+// Ona leaves out a zero count; no git block at all is gitKnown's case.
+test("unpushedWork is null for zero commits and files, and for counts Ona left out", async () => {
   assert.equal(unpushedWork(boxWithGit({ branch: "main", totalUnpushedCommits: 0 })), null, "zero");
   assert.equal(unpushedWork(boxWithGit({ totalUnpushedCommits: 0, totalChangedFiles: 0 })), null, "zero files");
-  assert.equal(unpushedWork(boxWithGit({ branch: "main" })), null, "no count");
+  assert.equal(unpushedWork(boxWithGit({ branch: "main" })), null, "no count: a clean box");
   assert.equal(unpushedWork(boxWithGit()), null, "no git content");
   setFake({});
   assert.equal(unpushedWork((await cli.listEnvironments())[0]!), null, "no content at all");
