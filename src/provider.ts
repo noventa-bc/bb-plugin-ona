@@ -259,6 +259,35 @@ function timedWake<T>(
   };
 }
 
+/**
+ * Drop the no-stop flag of a box whose machines bb shows active on a fresh read, with no action in flight: bb ended the
+ * plugin's suspend without running the provider's suspend (a failed drain), so the next suspend is the user's and stops
+ * the box (docs/sync.md rule 2). A failed read, any other phase or a box no listed machine uses keeps the flag. The clear
+ * waits for every action in flight, on any box: the flag is per box, and the pass may not list every machine on it.
+ * Every sync pass runs it.
+ */
+export async function clearFailedReleases(
+  rows: readonly { hostId: string; resource: { envId: string } }[],
+  releasing: Set<string>,
+  guard: { anyBusy(): boolean },
+  hosts: { get(args: { hostId: string }): Promise<{ lifecycle: { phase: string } }> },
+): Promise<void> {
+  for (const envId of [...releasing]) {
+    const hostIds = rows.filter((row) => row.resource.envId === envId).map((row) => row.hostId);
+    if (hostIds.length === 0) continue;
+    const phases = await Promise.all(
+      hostIds.map((hostId) =>
+        hosts.get({ hostId }).then(
+          (host) => host.lifecycle.phase,
+          () => "unknown",
+        ),
+      ),
+    );
+    // After the reads: the plugin's own suspend may be the one that set the flag.
+    if (phases.every((phase) => phase === "active") && !guard.anyBusy()) releasing.delete(envId);
+  }
+}
+
 export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
   const { ensureRunning, connect, connectOrClose, disconnect } = connectHelpers(bb, deps);
   /** `since`: the tunnels' mark taken before the caller read the machine (see `connect`). */

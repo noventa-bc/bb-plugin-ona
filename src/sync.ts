@@ -6,7 +6,7 @@
 import type { BbPluginApi, PluginLogger } from "@get-bb/plugin-sdk";
 import { errorText, isArchived, isRunning, metric, type OnaListing } from "./ona.ts";
 import type { WakeVia } from "./provider-connect.ts";
-import { PROVIDER_ID, resourceSchema, type OnaResource } from "./provider.ts";
+import { clearFailedReleases, PROVIDER_ID, resourceSchema, type OnaResource } from "./provider.ts";
 import {
   lifecycleRefusal,
   machinesToRelease,
@@ -248,6 +248,7 @@ export function createSync(deps: SyncDeps) {
     // The provider's suspend consumes the flag when bb reaches it, and a suspended machine has been through it. A failed
     // suspend (active) never reaches it, so the flag goes back here. The flag stays for every other outcome: a settle that
     // timed out or failed (it throws above), and any other phase, since bb may still run the provider's suspend (removing).
+    // A pass clears a flag left that way once bb shows the machine active (clearFailedReleases in provider.ts).
     if (lifecycle.phase === "active") provider.releasing.delete(row.resource.envId);
     return lifecycle;
   }
@@ -484,6 +485,7 @@ export function createSync(deps: SyncDeps) {
       // Before the read: bb may suspend or remove a machine after it answers, and that close must win.
       const since = tunnels.mark();
       const rows = await machines();
+      await clearFailedReleases(rows, provider.releasing, guard, bb.sdk.hosts);
       // A machine bb no longer lists drops its disagreement, so a later one starts its own hold.
       for (const hostId of mismatches.keys()) if (!rows.some((row) => row.hostId === hostId)) mismatches.delete(hostId);
       const targets = keys.has(ALL) ? rows : rows.filter((row) => keys.has(row.hostId));
