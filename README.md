@@ -305,7 +305,7 @@ bb machine remove ona:<name>   # created: deletes the box unless it has unpushed
   Prerequisite failures name the missing tool.
 - **"thread … holds this box" in `bb ona status`:** bb still shows that thread
   busy after more than 6 hours with no update, so the plugin won't release the
-  box or update its agent CLIs. Open the thread; if nothing is running in it,
+  box. Open the thread; if nothing is running in it,
   archive it. Archived threads never hold a box. A workflow step or side chat
   runs in a thread bb hides from its sidebar; archive it with
   `bb thread archive <id>`, or archive the thread that started it, which

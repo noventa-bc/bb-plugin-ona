@@ -57,8 +57,7 @@ export const rpcContract = defineRpcContract({
     output: z.object({ opened: z.boolean() }),
   },
   /**
-   * The settings section's buttons: a `bb ona` command, as the CLI runs it (src/commands.ts), for one devbox or all,
-   * except update, which needs a host id (the refine below).
+   * The settings section's buttons: a `bb ona` command, as the CLI runs it (src/commands.ts), for one devbox or all.
    */
   devbox_command: {
     input: z
