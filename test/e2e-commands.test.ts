@@ -165,7 +165,10 @@ test("bb ona sync lets an idle box go: bb suspends the machine and the box is no
   const result = await host.harness.behavior.runCli(["sync"]);
   assert.equal(result.exitCode, 0, result.stderr);
   assert.deepEqual(suspends(), [[{ hostId: "host-1" }]]);
-  assert.match(result.stdout ?? "", /^ona:\S+  host-1  bb:suspending  tunnel:(up|connecting)  ona:running  env:\S+  created$/m);
+  assert.match(
+    result.stdout ?? "",
+    /^ona:\S+  host-1  bb:suspending  tunnel:(up|connecting)  ona:running  env:\S+  created$/m,
+  );
   assert.match(result.stdout ?? "", /last action: release-idle:/);
   assert.deepEqual(onaCalls(), []);
   // bb's next step after accepting the suspend: the provider's suspend only closes the tunnel.
