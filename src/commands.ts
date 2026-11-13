@@ -31,7 +31,7 @@ export function parseArgs(rawArgv: readonly string[]) {
   const rest = threadAt === -1 ? argv : [...argv.slice(0, threadAt), ...argv.slice(threadAt + 2)];
   const flags = new Set(rest.filter((arg) => arg.startsWith("--")));
   const [command, ref, newName] = rest.filter((arg) => !arg.startsWith("--"));
-  return { command, ref, newName, json, threadFlag: threadAt !== -1, threadId, flags, commandArgv };
+  return { command, ref, newName, json, threadId, flags, commandArgv };
 }
 
 export const usage = [
@@ -40,9 +40,7 @@ export const usage = [
   "                                (--keep-git-credentials keeps forwarding your GitHub login)",
   "  bb ona adopt <environment>    Add an existing Ona environment as a bb machine (never deleted by bb)",
   "  bb ona new [project]          Create a new Ona devbox (defaults to the defaultProject setting)",
-  "  bb ona list [--json]          bb machines backed by Ona, with tunnel status",
   '  bb ona host <ref>             SSH host alias (use: ssh "$(bb ona host <ref>)")',
-  "  bb ona ssh <ref>              Print the ssh command for a devbox",
   "  bb ona ssh <ref> --thread <id>  Open another terminal to the devbox in that thread's terminal panel",
   "  bb ona shell <ref> -- <cmd…>  Run one command in the devbox checkout and print its output",
   "  bb ona rename <ref> [name]    Rename the Ona environment (random fun name if omitted) and its bb machine.",
@@ -67,12 +65,11 @@ export const commands = [
   },
   { name: "adopt", summary: "Add an existing Ona environment", usage: "bb ona adopt <environment>" },
   { name: "new", summary: "Create a new Ona devbox", usage: "bb ona new [project]" },
-  { name: "list", summary: "List Ona-backed machines", usage: "bb ona list [--json]" },
   { name: "host", summary: "Print a devbox's SSH host alias", usage: "bb ona host <ref>" },
   {
     name: "ssh",
-    summary: "Print the ssh command, or open a devbox terminal in a thread",
-    usage: "bb ona ssh <ref> [--thread <thread-id>]",
+    summary: "Open another devbox terminal in a thread's terminal panel",
+    usage: "bb ona ssh <ref> --thread <thread-id>",
   },
   {
     name: "shell",
@@ -172,7 +169,7 @@ export function onaCommands(deps: OnaCommandDeps) {
     markConnected,
   } = deps;
   return async function run(rawArgv: string[], ctx: PluginCliContext) {
-    const { command, ref, newName, json, threadFlag, threadId, flags, commandArgv } = parseArgs(rawArgv);
+    const { command, ref, newName, json, threadId, flags, commandArgv } = parseArgs(rawArgv);
     const subcommand = command ?? "help";
     // The switch is exhaustive over the listed names: a name without a case fails the lint (`switch-exhaustiveness-check`;
     // tsc accepts the gap), a case without a name fails the typecheck.
@@ -181,33 +178,10 @@ export function onaCommands(deps: OnaCommandDeps) {
       switch (subcommand as CommandName | "help") {
         case "help":
           return { exitCode: 0, stdout: usage };
-        case "list": {
-          const rows = (await machines()).map((row) => ({
-            ...row,
-            tunnel: tunnels.status(row.resource.envId),
-          }));
-          if (json) return { exitCode: 0, stdout: JSON.stringify(rows) };
-          if (rows.length === 0) return { exitCode: 0, stdout: "No Ona machines yet." };
-          return {
-            exitCode: 0,
-            stdout: rows
-              .map((r) =>
-                [
-                  r.machine,
-                  r.hostId,
-                  r.status,
-                  `tunnel:${r.tunnel}`,
-                  r.resource.envName,
-                  r.resource.adopted ? "adopted" : "created",
-                ].join("  "),
-              )
-              .join("\n"),
-          };
-        }
         case "host":
         case "ssh": {
           if (!ref) break;
-          if (command === "ssh" && threadFlag) {
+          if (command === "ssh") {
             if (!threadId) return { exitCode: 1, stderr: "Usage: bb ona ssh <ref> --thread <thread-id>" };
             const opened = await openThreadTerminal(threadId, ref, { cols: 120, rows: 32 });
             if (json) return { exitCode: 0, stdout: JSON.stringify(opened) };
@@ -216,8 +190,7 @@ export function onaCommands(deps: OnaCommandDeps) {
               stdout: `Opened ${opened.terminalId} (${opened.via}) in thread ${threadId}. Attach: bb terminal attach ${opened.terminalId}`,
             };
           }
-          const host = sshHost(await resolveEnvId(ref));
-          return { exitCode: 0, stdout: command === "host" ? host : `ssh ${host}` };
+          return { exitCode: 0, stdout: sshHost(await resolveEnvId(ref)) };
         }
         case "rename": {
           if (!ref) break;

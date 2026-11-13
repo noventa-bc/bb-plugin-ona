@@ -97,7 +97,7 @@ test("bb ona status shows the created box next to Ona's view", local, async () =
   assert.match(result.stdout ?? "", /^Ona CLI: ok/);
   assert.match(
     result.stdout ?? "",
-    new RegExp(`^ona:${NAME}  bb:connected  tunnel:(up|connecting)  ona:running$`, "m"),
+    new RegExp(`^ona:${NAME}  host-1  bb:connected  tunnel:(up|connecting)  ona:running  env:${NAME}  created$`, "m"),
   );
 });
 
@@ -105,7 +105,7 @@ test("a user-initiated suspend closes the tunnel and stops the box", local, asyn
   await provider.suspend!({ ...ctx, resource, hostId: "host-1" });
   assert.deepEqual(onaCalls(), [`environment get ${resource.envId}`, `environment stop ${resource.envId}`]);
   assert.equal(envs()[0]!.status.phase, "ENVIRONMENT_PHASE_STOPPED");
-  assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:off/);
+  assert.match((await host.harness.behavior.runCli(["status"])).stdout ?? "", /tunnel:off/);
 });
 
 test("resume after an Ona auto-stop starts the box once and bootstraps bb again", local, async () => {
@@ -136,7 +136,7 @@ test("remove refuses a created box with unpushed commits and closes its tunnel",
   assert.match(result.message, new RegExp(`ona environment delete ${resource.envId}`));
   assert.deepEqual(onaCalls(), [`environment get ${resource.envId}`]);
   // A refused remove closes the tunnel too: nothing in it needs one (decision 0003).
-  assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:off/);
+  assert.match((await host.harness.behavior.runCli(["status"])).stdout ?? "", /tunnel:off/);
   patchBox(resource.envId, { content: undefined });
 });
 
@@ -144,11 +144,11 @@ test("remove deletes a clean created box", local, async () => {
   // The refused remove above closed the tunnel: bring it up, so the remove below has one to close.
   await provider.resume!({ ...ctx, resource, hostId: "host-1" });
   onaCalls();
-  assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:(up|connecting)/);
+  assert.match((await host.harness.behavior.runCli(["status"])).stdout ?? "", /tunnel:(up|connecting)/);
   const result = await provider.remove({ ...ctx, resource, hostId: "host-1" });
   assert.deepEqual(result, { status: "removed" });
   assert.deepEqual(onaCalls(), [`environment get ${resource.envId}`, `environment delete ${resource.envId}`]);
-  assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:off/);
+  assert.match((await host.harness.behavior.runCli(["status"])).stdout ?? "", /tunnel:off/);
   assert.deepEqual(envs(), []);
   hosts.length = 0;
 });

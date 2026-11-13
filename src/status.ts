@@ -12,6 +12,11 @@ const giveUpCommand = (action: string, machine: string) =>
 export interface StatusRow {
   machine: string;
   hostId: string;
+  /** The Ona environment, with its name from the latest listing. */
+  envId: string;
+  envName: string;
+  /** True when bb adopted the box: removing the machine never deletes it. */
+  adopted: boolean;
   bb: string;
   tunnel: string;
   ona: string;
@@ -69,7 +74,9 @@ export function formatStatus(rows: StatusRow[], ona: OnaHealth, now = Date.now()
       : `Ona CLI: ok${ona.listedAt !== null ? `, listed ${ago(ona.listedAt)}` : ""}${ona.autoRepair ? "" : "  (autoRepair is off)"}`;
   if (rows.length === 0) return `${header}\nNo Ona machines yet.`;
   const lines = rows.map((row) => {
-    const rowLines = [`${row.machine}  bb:${row.bb}  tunnel:${row.tunnel}  ona:${row.ona}`];
+    const rowLines = [
+      `${row.machine}  ${row.hostId}  bb:${row.bb}  tunnel:${row.tunnel}  ona:${row.ona}  env:${row.envName}  ${row.adopted ? "adopted" : "created"}`,
+    ];
     if (row.ona === "unknown" && ona.lastError === null)
       rowLines.push("  Ona lists no environments; idle boxes are not released until it does");
     const box = row.facts ? boxLine(row.facts) : null;
@@ -136,6 +143,9 @@ export function createStatusRows(deps: StatusRowsDeps) {
         return {
           machine: row.machine,
           hostId: row.hostId,
+          envId: row.resource.envId,
+          envName: row.resource.envName,
+          adopted: row.resource.adopted,
           bb: row.phase === "active" ? row.status : row.phase,
           tunnel: tunnels.status(row.resource.envId),
           ona: !listing?.envs.length

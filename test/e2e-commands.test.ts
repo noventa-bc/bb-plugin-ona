@@ -9,6 +9,7 @@ import { makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import type { OnaResource } from "../src/provider.ts";
 import { sshHost } from "../src/ona.ts";
 import { connectedAtKey, type BbHost, type ThreadRecord } from "../src/sync.ts";
+import type { StatusRow } from "../src/status.ts";
 import { sleep } from "../src/time.ts";
 import { alive, ctx, local, startHost, type E2eHost } from "./e2e-host.ts";
 
@@ -124,7 +125,7 @@ after(async () => {
   if (!local.skip) await close();
 });
 
-test("create a box and connect it; bb ona list --json shows the machine", local, async () => {
+test("create a box and connect it; bb ona status --json shows the machine", local, async () => {
   const result = await provider.create({
     ...ctx,
     inputs: { mode: "create", project: "Sample Web" },
@@ -144,19 +145,17 @@ test("create a box and connect it; bb ona list --json shows the machine", local,
     lifecycle: { phase: "active", message: null, suspendedAt: null },
   });
   onaCalls();
-  const list = await host.harness.behavior.runCli(["list", "--json"]);
-  assert.equal(list.exitCode, 0, list.stderr);
-  const rows = JSON.parse(list.stdout ?? "") as {
-    hostId: string;
-    phase: string;
-    tunnel: string;
-    resource: OnaResource;
-  }[];
+  const status = await host.harness.behavior.runCli(["status", "--json"]);
+  assert.equal(status.exitCode, 0, status.stderr);
+  const rows = JSON.parse(status.stdout ?? "") as StatusRow[];
   assert.equal(rows.length, 1);
   assert.equal(rows[0]!.hostId, "host-1");
-  assert.equal(rows[0]!.phase, "active");
+  assert.equal(rows[0]!.bb, "connected", "bb shows the machine active and connected");
   assert.match(rows[0]!.tunnel, /^(up|connecting)$/);
-  assert.deepEqual(rows[0]!.resource, resource);
+  assert.deepEqual(
+    { envId: rows[0]!.envId, envName: rows[0]!.envName, adopted: rows[0]!.adopted },
+    { envId: resource.envId, envName: resource.envName, adopted: resource.adopted },
+  );
 });
 
 test("bb ona sync lets an idle box go: bb suspends the machine and the box is not stopped", local, async () => {
@@ -166,14 +165,17 @@ test("bb ona sync lets an idle box go: bb suspends the machine and the box is no
   const result = await host.harness.behavior.runCli(["sync"]);
   assert.equal(result.exitCode, 0, result.stderr);
   assert.deepEqual(suspends(), [[{ hostId: "host-1" }]]);
-  assert.match(result.stdout ?? "", /^ona:\S+  bb:suspending  tunnel:(up|connecting)  ona:running$/m);
+  assert.match(
+    result.stdout ?? "",
+    /^ona:\S+  host-1  bb:suspending  tunnel:(up|connecting)  ona:running  env:\S+  created$/m,
+  );
   assert.match(result.stdout ?? "", /last action: release-idle:/);
   assert.deepEqual(onaCalls(), []);
   // bb's next step after accepting the suspend: the provider's suspend only closes the tunnel.
   await provider.suspend!({ ...ctx, resource, hostId: "host-1" });
   assert.deepEqual(onaCalls(), []);
   assert.equal(envs()[0]!.status.phase, RUNNING);
-  assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:off/);
+  assert.match((await host.harness.behavior.runCli(["status"])).stdout ?? "", /tunnel:off/);
 });
 
 test("bb ona sync on a box Ona stopped marks the machine suspended and touches nothing in Ona", local, async () => {
@@ -187,7 +189,7 @@ test("bb ona sync on a box Ona stopped marks the machine suspended and touches n
   const result = await host.harness.behavior.runCli(["sync"]);
   assert.equal(result.exitCode, 0, result.stderr);
   assert.deepEqual(suspends().slice(-1), [[{ hostId: "host-1" }]]);
-  assert.match(result.stdout ?? "", /^ona:\S+  bb:suspending  tunnel:off  ona:stopped$/m);
+  assert.match(result.stdout ?? "", /^ona:\S+  host-1  bb:suspending  tunnel:off  ona:stopped  env:\S+  created$/m);
   assert.match(result.stdout ?? "", /last action: suspend-observed:/);
   assert.deepEqual(onaCalls(), []);
   // bb's next step: the provider's suspend sees the no-stop flag and leaves the stopped box alone.
@@ -207,14 +209,14 @@ test("bb ona reconnect refuses a suspended machine (fails if it opens a tunnel o
     status: "disconnected",
     lifecycle: { phase: "suspended", message: null, suspendedAt: 1 },
   });
-  assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:off/);
+  assert.match((await host.harness.behavior.runCli(["status"])).stdout ?? "", /tunnel:off/);
   const result = await host.harness.behavior.runCli(["reconnect", resource.envId]);
   assert.equal(result.exitCode, 1);
   assert.match(
     result.stderr ?? "",
     /is suspended in bb, so it was not reconnected\. Resume it with `bb machine resume ona:/,
   );
-  assert.match((await host.harness.behavior.runCli(["list"])).stdout ?? "", /tunnel:off/);
+  assert.match((await host.harness.behavior.runCli(["status"])).stdout ?? "", /tunnel:off/);
   assert.deepEqual(bootstraps, []);
   assert.deepEqual(onaCalls(), []);
 });

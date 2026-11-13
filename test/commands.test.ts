@@ -11,13 +11,11 @@ test("parseArgs: positionals, flags, --json, --thread <id> and a shell command a
     ref: "box",
     newName: undefined,
     json: true,
-    threadFlag: false,
     threadId: undefined,
     flags: new Set(["--json"]),
     commandArgv: [],
   });
   const ssh = parseArgs(["ssh", "box", "--thread", "thr_1"]);
-  assert.equal(ssh.threadFlag, true);
   assert.equal(ssh.threadId, "thr_1");
   assert.equal(ssh.ref, "box", "the thread id isn't read as a positional");
   assert.equal(parseArgs(["ssh", "box", "--thread"]).threadId, undefined);
@@ -28,7 +26,7 @@ test("parseArgs: positionals, flags, --json, --thread <id> and a shell command a
   assert.equal(parseArgs([]).command, undefined);
 });
 
-// Dispatch only; list, sync and status also run end to end in
+// Dispatch only; sync and status also run end to end in
 // test/e2e-commands.test.ts. The fake holds just what these cases call.
 
 const ROW = { hostId: "host_1", machine: "ona:box", status: "active", phase: "active", resource: { envId: "env_1" } };
@@ -124,16 +122,9 @@ test("help, --help and no command print the usage", async () => {
   }
 });
 
-test("list --json prints the machines with their tunnel status", async () => {
-  const { run } = fakeRun();
-  const result = await run("list", "--json");
-  assert.equal(result.exitCode, 0);
-  assert.deepEqual(JSON.parse(result.stdout ?? ""), [{ ...ROW, tunnel: "up" }]);
-});
-
-test("keep-alive and open are neither listed, in the usage nor run (fails if either comes back)", async () => {
+test("keep-alive, open and list are neither listed, in the usage nor run (fails if one comes back)", async () => {
   const { run, calls } = fakeRun();
-  for (const name of ["keep-alive", "open"]) {
+  for (const name of ["keep-alive", "open", "list"]) {
     assert.equal(
       commands.some((c) => c.name === name),
       false,
@@ -143,7 +134,18 @@ test("keep-alive and open are neither listed, in the usage nor run (fails if eit
   }
   assert.deepEqual(await run("keep-alive", "box", "2h"), { exitCode: 1, stderr: usage });
   assert.deepEqual(await run("open", "box"), { exitCode: 1, stderr: usage });
+  assert.deepEqual(await run("list"), { exitCode: 1, stderr: usage });
   assert.deepEqual(calls, []);
+});
+
+test("bb ona ssh without --thread exits 1 with the --thread usage (fails if the plain form prints an ssh command)", async () => {
+  const { run } = fakeRun();
+  for (const argv of [
+    ["ssh", "box"],
+    ["ssh", "box", "--thread"],
+  ]) {
+    assert.deepEqual(await run(...argv), { exitCode: 1, stderr: "Usage: bb ona ssh <ref> --thread <thread-id>" });
+  }
 });
 
 test("an unknown command, or one missing its <ref>, exits 1 with the usage", async () => {

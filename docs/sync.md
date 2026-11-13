@@ -152,7 +152,7 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    reads "couldn't confirm the resume for a waiting thread".
 
    **Not gated.** These commands you run yourself are not gated and may wake a box: `ona environment open` and
-   `bb ona ssh --thread`.
+   `bb ona ssh <ref> --thread`.
 
 2. **The plugin's own suspends never stop a box.** Every suspend the plugin makes
    skips the provider's stop. A suspend you ask for (Pause, `bb machine suspend`, or `bb machine reconcile` of a suspended
@@ -289,11 +289,11 @@ again.
 
 ```
 Ona CLI: ok, listed 12s ago
-ona:amber-otter  bb:connected  tunnel:up  ona:running
+ona:amber-otter  host_1  bb:connected  tunnel:up  ona:running  env:amber-otter  created
   box: last started 4h ago, idle timeout 3h, last activity SSH connections 2m ago, branch main
   now: connected (since 2m ago)
   last action: heal-daemon: running in Ona but the daemon isn't connected; daemon was down; restarted it (3m ago)
-ona:brisk-heron  bb:suspended  tunnel:off  ona:running
+ona:brisk-heron  host_2  bb:suspended  tunnel:off  ona:running  env:brisk-heron  adopted
   now: suspended in bb, running in Ona (since 1h ago)
 ```
 
