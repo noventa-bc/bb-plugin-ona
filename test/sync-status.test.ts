@@ -504,7 +504,7 @@ test("a suspend bb settles as removing wakes nothing and keeps the no-stop flag,
   assert.deepEqual(calls, ["suspend h1"]);
   assert.deepEqual(ona.calls, [], "nothing is started while bb removes the machine");
   assert.equal(guard.records.get("h1")!.error, "bb kept the machine removing: Removing the machine");
-  assert.ok(releasing.has("env-h1"), "bb may still run the suspend, so the no-stop flag stays");
+  assert.ok(releasing.has("h1"), "bb may still run the suspend, so the no-stop flag stays");
 });
 
 // Bug: bb's refused resume for a waiting thread was returned as a message, so the guard recorded a success: no failure

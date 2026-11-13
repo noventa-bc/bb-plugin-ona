@@ -165,10 +165,10 @@ for (const hostReadFails of ["list", "resource"] as const) {
   });
 }
 
-/** bb removes host-1, the machine whose create made the box; `releasing` starts with the box's no-stop flag set. */
+/** bb removes host-1, the machine whose create made the box; `releasing` starts with both machines' no-stop flags set. */
 async function removeCreated(setup: Setup) {
   const fake = register(setup);
-  fake.releasing.add("env-1");
+  fake.releasing.add("host-1").add("host-2");
   const resource = { ...adoptedResource, adopted: false };
   const removed = await fake.provider
     .remove({ report: lifecycle().report, hostId: "host-1", resource, signal: new AbortController().signal })
@@ -176,7 +176,7 @@ async function removeCreated(setup: Setup) {
   return { ...fake, removed };
 }
 
-test("removing the created machine of a box another machine adopted since keeps the box, unpushed work and all, and what that machine needs (fails if the remove deletes, checks the work first, closes the tunnel, forgets the keys or drops the no-stop flag)", async () => {
+test("removing the created machine of a box another machine adopted since keeps the box, unpushed work and all, and what that machine needs (fails if the remove deletes, checks the work first, closes the tunnel, forgets the keys, keeps its own no-stop flag or drops host-2's)", async () => {
   // Bug: the remove saw `adopted: false` and deleted the box host-2 had adopted.
   const { removed, calls, tunnels, forgotten, releasing, logs } = await removeCreated({
     found: box("RUNNING"),
@@ -188,16 +188,16 @@ test("removing the created machine of a box another machine adopted since keeps 
   assert.deepEqual(calls, []);
   assert.deepEqual(tunnels, []);
   assert.deepEqual(forgotten, []);
-  assert.ok(releasing.has("env-1"));
+  assert.deepEqual([...releasing], ["host-2"], "only the removed machine's flag goes");
   assert.ok(logs.some((entry) => /ona:m2 \(host-2\) uses Ona environment box/.test(entry.message)));
 });
 
 const createdBy = { id: "host-1", name: "ona:box", phase: "active", resource: { ...adoptedResource, adopted: false } };
 
-/** bb removes host-2, the machine that adopted the box host-1's create made; `releasing` starts with the no-stop flag set. */
+/** bb removes host-2, the machine that adopted the box host-1's create made; `releasing` starts with both machines' no-stop flags set. */
 async function removeAdopting(setup: Omit<Setup, "found">) {
   const fake = register({ found: box("RUNNING"), tunnel: "up", machines: [createdBy], ...setup });
-  fake.releasing.add("env-1");
+  fake.releasing.add("host-1").add("host-2");
   const resource = { ...adoptedResource, key: "key-2" };
   const removed = await fake.provider
     .remove({ report: lifecycle().report, hostId: "host-2", resource, signal: new AbortController().signal })
@@ -205,7 +205,7 @@ async function removeAdopting(setup: Omit<Setup, "found">) {
   return { ...fake, removed };
 }
 
-test("removing the adopting machine while the creating one still stores the box moves only its own folder aside and keeps what that machine needs (fails if the guard skips the adopted check, or the remove closes the tunnel, forgets the keys or drops the no-stop flag)", async () => {
+test("removing the adopting machine while the creating one still stores the box moves only its own folder aside and keeps what that machine needs (fails if the guard skips the adopted check, or the remove closes the tunnel, forgets the keys, keeps its own no-stop flag or drops host-1's)", async () => {
   // Bug: the adopted remove closed the box's tunnel and forgot its keys, which host-1 still runs on.
   const { removed, calls, moves, tunnels, forgotten, releasing, logs } = await removeAdopting({});
   assert.deepEqual(removed, { status: "removed" });
@@ -216,7 +216,7 @@ test("removing the adopting machine while the creating one still stores the box 
   );
   assert.deepEqual(tunnels, []);
   assert.deepEqual(forgotten, []);
-  assert.ok(releasing.has("env-1"));
+  assert.deepEqual([...releasing], ["host-1"], "only the removed machine's flag goes");
 });
 
 test("removing the adopting machine while bb also removes the creating one closes the tunnel and forgets the keys (fails if a machine being removed counts as using the box)", async () => {
@@ -227,7 +227,7 @@ test("removing the adopting machine while bb also removes the creating one close
   assert.deepEqual(calls, ["get RUNNING", "move-aside"]);
   assert.deepEqual(tunnels, ["stop env-1", "stop env-1"]);
   assert.deepEqual(forgotten, ["env-1"]);
-  assert.ok(!releasing.has("env-1"));
+  assert.deepEqual([...releasing], ["host-1"], "host-2's remove keeps host-1's flag");
 });
 
 test("removing the created machine while bb also removes the adopting one deletes the box (fails if a machine being removed counts as using the box)", async () => {

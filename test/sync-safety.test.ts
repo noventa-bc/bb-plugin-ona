@@ -43,7 +43,7 @@ async function timedOutRelease() {
   await tick(6 * 60_000);
   await settle();
   assert.equal(made.guard.busyWith("h1"), undefined, "the settle timed out");
-  assert.ok(made.releasing.has("env-h1"));
+  assert.ok(made.releasing.has("h1"));
   return made;
 }
 
@@ -82,22 +82,22 @@ test("a pass during a release's settle keeps the flag, though bb shows the machi
     showPhase(hosts, "active");
     await sync.reconcile(new Set(["h1"]), { wait: true });
     assert.equal(guard.busyWith("h1"), RELEASE_IDLE, "the release is still settling");
-    assert.ok(releasing.has("env-h1"));
+    assert.ok(releasing.has("h1"));
     await tick(6 * 60_000);
   }));
 
 test("a pass keeps the flag when bb's fresh read fails (fails if a failed read counts as active)", async () => {
   const { sync, releasing } = world([idle("h1")], { hostGet: "fail" });
-  releasing.add("env-h1");
+  releasing.add("h1");
   await sync.reconcile(new Set(["h1"]), { wait: true });
-  assert.ok(releasing.has("env-h1"));
+  assert.ok(releasing.has("h1"));
 });
 
 test("a pass keeps the flag when bb's fresh read shows suspending, though the pass's listing said active (fails if the listing's phase is used)", async () => {
   const made = world([idle("h1")], { afterCall: (call) => call === "list" && showPhase(made.hosts, "suspending") });
-  made.releasing.add("env-h1");
+  made.releasing.add("h1");
   await made.sync.reconcile(new Set(["h1"]), { wait: true });
-  assert.ok(made.releasing.has("env-h1"));
+  assert.ok(made.releasing.has("h1"));
 });
 
 test("a pass keeps the flag when an action starts on the machine during its fresh read (fails if the busy check is made before the read only)", async () => {
@@ -107,49 +107,63 @@ test("a pass keeps the flag when an action starts on the machine during its fres
       call === "get h1" &&
       void made.guard.run("h1", RELEASE_IDLE, "test", () => new Promise<void>((resolve) => (finish = resolve))),
   });
-  made.releasing.add("env-h1");
+  made.releasing.add("h1");
   await made.sync.reconcile(new Set(["h1"]), { wait: true });
-  assert.ok(made.releasing.has("env-h1"));
+  assert.ok(made.releasing.has("h1"));
   finish();
 });
 
-test("a pass keeps the flag while a machine on the box that the pass did not list has an action in flight (fails if only the listed machines' actions are checked)", async () => {
-  let finish = () => {};
-  // h2 shares h1's box and was still being created when the pass listed the machines.
-  const made = world([idle("h1"), idle("h2", { envId: "env-h1", phase: "creating" })], {
-    afterCall: (call) =>
-      call === "get h1" &&
-      void made.guard.run("h2", RELEASE_IDLE, "test", () => new Promise<void>((resolve) => (finish = resolve))),
-  });
-  made.releasing.add("env-h1");
-  await made.sync.reconcile(new Set(["h1"]), { wait: true });
-  assert.ok(made.releasing.has("env-h1"));
-  finish();
-});
-
-test("a pass keeps the flag of a box no listed machine uses (fails if an empty machine list counts as all active)", async () => {
+test("a pass keeps the flag of a machine bb no longer has (fails if a not-found read counts as active)", async () => {
   const { sync, releasing } = world([idle("h1")]);
-  releasing.add("env-gone");
+  releasing.add("gone");
   await sync.reconcile(new Set(["h1"]), { wait: true });
-  assert.ok(releasing.has("env-gone"));
+  assert.ok(releasing.has("gone"));
 });
 
-test("two machines on one box: the flag stays while the other one is busy, or not active (fails if only the pass's machine is checked)", async () => {
-  const boxes = () => [idle("h1"), idle("h2", { envId: "env-h1" })];
-  const busy = world(boxes());
-  busy.releasing.add("env-h1");
+test("a pass keeps a machine's flag while its own action is in flight, and an action on another machine does not hold it (fails if the busy check is dropped or covers every machine)", async () => {
+  const { sync, releasing, guard } = world([idle("h1"), idle("h2", { envId: "env-h1" })]);
+  releasing.add("h1");
   let finish = () => {};
-  const inFlight = busy.guard.run("h2", RELEASE_IDLE, "test", () => new Promise<void>((resolve) => (finish = resolve)));
-  await busy.sync.reconcile(new Set(["h1"]), { wait: true });
-  assert.ok(busy.releasing.has("env-h1"), "h2 busy");
+  const own = guard.run("h1", RELEASE_IDLE, "test", () => new Promise<void>((resolve) => (finish = resolve)));
+  await sync.reconcile(new Set(["h2"]), { wait: true });
+  assert.ok(releasing.has("h1"), "h1's own action holds its flag");
   finish();
-  await inFlight;
+  await own;
+  const other = guard.run("h2", RELEASE_IDLE, "test", () => new Promise<void>((resolve) => (finish = resolve)));
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.ok(!releasing.has("h1"), "h2's action does not hold h1's flag");
+  finish();
+  await other;
+});
 
-  const suspended = world(boxes());
-  suspended.releasing.add("env-h1");
-  suspended.hosts.get("h2")!.lifecycle.phase = "suspended";
-  await suspended.sync.reconcile(new Set(["h1"]), { wait: true });
-  assert.ok(suspended.releasing.has("env-h1"), "h2 suspended");
+test("two machines on one box: a pass clears the active machine's flag and keeps the suspended one's (fails if a pass clears a flag whose machine it did not read active)", async () => {
+  const { sync, releasing, hosts } = world([idle("h1"), idle("h2", { envId: "env-h1" })]);
+  releasing.add("h1");
+  releasing.add("h2");
+  hosts.get("h2")!.lifecycle.phase = "suspended";
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.deepEqual([...releasing], ["h2"]);
+});
+
+// Bug: the flag was kept per box, so bb's suspend of the second idle machine on a shared box found it consumed and stopped the box.
+test("two idle machines on one box, both let go in one pass: nothing stops the box and both end suspended (fails if the flag is kept per box)", async () => {
+  const { sync, calls, hosts } = world([idle("h1"), idle("h2", { envId: "env-h1" })]);
+  await sync.reconcile(new Set([ALL]), { wait: true });
+  assert.deepEqual(
+    calls.filter((call) => call.startsWith("stop")),
+    [],
+  );
+  assert.deepEqual([hosts.get("h1")!.lifecycle.phase, hosts.get("h2")!.lifecycle.phase], ["suspended", "suspended"]);
+});
+
+test("after the plugin lets go of one machine on a shared box, the user's suspend of the other one stops the box (fails if the flag is set for every machine on the box)", async () => {
+  const recent = { id: "t1", status: "idle", updatedAt: Date.now(), runtime: { displayStatus: "idle" } };
+  const { sync, calls, providerSuspend } = world([idle("h1"), idle("h2", { envId: "env-h1", threads: [recent] })]);
+  await sync.reconcile(new Set([ALL]), { wait: true });
+  assert.ok(calls.includes("suspend h1") && !calls.includes("suspend h2"), "only h1 is idle");
+  assert.ok(!calls.includes("stop env-h1"), "the plugin's own release stopped nothing");
+  providerSuspend("h2");
+  assert.ok(calls.includes("stop env-h1"));
 });
 
 async function onFakeClock(fn: () => Promise<void>) {

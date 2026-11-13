@@ -87,8 +87,15 @@ function fakeRun(
     },
     provider: {
       reconnect: async (resource: { envId: string }) => void calls.push(`reconnect ${resource.envId}`),
-      wake: async (resource: { envId: string }, _report: unknown, signal: AbortSignal, via: string, since: number) => {
-        calls.push(`wake ${resource.envId} ${via} since=${since} ctxSignal=${signal === extra.ctx?.signal}`);
+      wake: async (
+        resource: { envId: string },
+        _report: unknown,
+        signal: AbortSignal,
+        via: string,
+        since: number,
+        hostId: string,
+      ) => {
+        calls.push(`wake ${resource.envId} ${via} since=${since} ctxSignal=${signal === extra.ctx?.signal} ${hostId}`);
         return false;
       },
     },
@@ -324,11 +331,11 @@ test("reconnect refuses a machine a suspend finished while Ona was listed, witho
   assert.deepEqual(calls, []);
 });
 
-test("resume wakes the box with the context's signal and the tunnels' mark (fails if either is dropped)", async () => {
+test("resume wakes the box with the context's signal, the tunnels' mark and the machine's host id for its no-stop flag (fails if any is dropped)", async () => {
   const signal = new AbortController().signal;
   const { run, calls } = fakeRun("active", "RUNNING", { ctx: { signal } });
   assert.deepEqual(await run("resume", "box"), { exitCode: 0, stdout: "Reconnected ona:box" });
-  assert.deepEqual(calls, ["wake env_1 wake-cmd since=7 ctxSignal=true"]);
+  assert.deepEqual(calls, ["wake env_1 wake-cmd since=7 ctxSignal=true host_1"]);
 });
 
 // Bug: a machine replaced during the listing (same name and box, new host id) was reconnected under the old host.

@@ -113,8 +113,8 @@ export interface ProviderDeps {
    */
   markConnected(envId: string): Promise<void>;
   /**
-   * Boxes the plugin is letting go while idle: their next suspend (consumed
-   * once) only closes the tunnel, and Ona's own inactivity timeout stops the box.
+   * Machines (bb host ids) the plugin is suspending without a stop: their next suspend (consumed once) only closes the
+   * tunnel, and Ona's own inactivity timeout stops the box. Kept per machine, as two machines can share one box.
    */
   releasing: Set<string>;
   /** Drop the plugin's stored keys for a box whose machine is removed. */
@@ -243,6 +243,7 @@ function timedWake<T>(
     outer: AbortSignal,
     trace: StartTrace,
     since: number,
+    hostId: string,
   ) => Promise<T>,
 ) {
   return (
@@ -251,38 +252,31 @@ function timedWake<T>(
     outer: AbortSignal,
     cause: WakeVia,
     since: number,
+    hostId: string,
   ) => {
     const trace: StartTrace = { via: cause, started: false, created: false };
-    return timedConnect(bb, "wake", trace, () => body(resource, progress, outer, trace, since));
+    return timedConnect(bb, "wake", trace, () => body(resource, progress, outer, trace, since, hostId));
   };
 }
 
 /**
- * Drop the no-stop flag of a box whose machines bb shows active on a fresh read, with no action in flight: bb ended the
+ * Drop the no-stop flag of a machine bb shows active on a fresh read, with no action of its own in flight: bb ended the
  * plugin's suspend without running the provider's suspend (a failed drain), so the next suspend is the user's and stops
- * the box (docs/sync.md rule 2). A failed read, any other phase or a box no listed machine uses keeps the flag. The clear
- * waits for every action in flight, on any box: the flag is per box, and the pass may not list every machine on it.
- * Every sync pass runs it.
+ * the box (docs/sync.md rule 2). A failed read or any other phase keeps the flag. Only the machine's own action counts:
+ * the plugin sets a machine's flag only inside that machine's guard action. Every sync pass runs it.
  */
 export async function clearFailedReleases(
-  rows: readonly { hostId: string; resource: { envId: string } }[],
   releasing: Set<string>,
-  guard: { anyBusy(): boolean },
+  guard: { busyWith(hostId: string): string | undefined },
   hosts: { get(args: { hostId: string }): Promise<{ lifecycle: { phase: string } }> },
 ): Promise<void> {
-  for (const envId of [...releasing]) {
-    const hostIds = rows.filter((row) => row.resource.envId === envId).map((row) => row.hostId);
-    if (hostIds.length === 0) continue;
-    const phases = await Promise.all(
-      hostIds.map((hostId) =>
-        hosts.get({ hostId }).then(
-          (host) => host.lifecycle.phase,
-          () => "unknown",
-        ),
-      ),
+  for (const hostId of [...releasing]) {
+    const phase = await hosts.get({ hostId }).then(
+      (host) => host.lifecycle.phase,
+      () => "unknown",
     );
-    // After the reads: the plugin's own suspend may be the one that set the flag.
-    if (phases.every((phase) => phase === "active") && !guard.anyBusy()) releasing.delete(envId);
+    // After the read: the plugin's own suspend may be the one that set the flag.
+    if (phase === "active" && !guard.busyWith(hostId)) releasing.delete(hostId);
   }
 }
 
@@ -308,14 +302,14 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
    * Starts a box Ona shows stopped (or waits for one that is starting or stopping) and connects bb's daemon: a
    * resume's start and connect, without bb's lifecycle. A waiting thread on an active machine asks for it (decision
    * 0002), and so does `bb ona resume`; the caller checks bb's phase, since a suspended machine is bb's resume's to
-   * start. Ona's other phases (deleting, deleted, failed) are refused: the box is not started. Its no-stop flag goes
-   * first: bb shows the machine active here, so no suspend of bb's can still reach the provider's stop. Resolves true
+   * start. Ona's other phases (deleting, deleted, failed) are refused: the box is not started. The no-stop flag of the
+   * machine (`hostId`) goes first: bb shows the machine active here, so no suspend of bb's can still reach the provider's stop. Resolves true
    * when it called `ona.start`, false when no start was called. It gives up after CAP_MINUTES. `cause` names the caller
    * on the start's metric line.
    */
-  const wake = timedWake(bb, (resource, progress, outer, trace, since) =>
+  const wake = timedWake(bb, (resource, progress, outer, trace, since, hostId) =>
     capped(`waking ${resource.envName}`, CAP_MINUTES, outer, progress, async (signal, report) => {
-      deps.releasing.delete(resource.envId);
+      deps.releasing.delete(hostId);
       // Only a wake the user asked for restarts the idle window; a waiting thread's wake has the thread as its activity.
       if (trace.via === "wake-cmd") await deps.markConnected(resource.envId);
       const env = await ona.getEnvironmentIfExists(resource.envId, signal);
@@ -447,12 +441,12 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       }
       return { status: "removed" };
     },
-    async suspend({ resource, report, signal }) {
+    async suspend({ resource, hostId, report, signal }) {
       const owned = resourceSchema.parse(resource);
       await disconnect(owned.envId);
       // An idle box let go by the plugin keeps running until Ona's own timeout,
       // so an open Ona editor still keeps it alive.
-      if (deps.releasing.delete(owned.envId)) return { resource };
+      if (deps.releasing.delete(hostId)) return { resource };
       // Ona may have stopped it already (idle timeout); bb then only records the suspension.
       const env = await ona.getEnvironmentIfExists(owned.envId, signal);
       if (env && !isStopped(env)) {
@@ -463,12 +457,12 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     },
     // bb's own resume: on Resume in bb, on bb's restart recovery and on a waiting thread's resume. It gives up after
     // CAP_MINUTES, since bb puts no deadline on it.
-    resume: timed(bb, "resume", async ({ resource, checkpoint, report: progress, signal: outer }, trace) => {
+    resume: timed(bb, "resume", async ({ resource, hostId, checkpoint, report: progress, signal: outer }, trace) => {
       const owned = resourceSchema.parse(resource);
       const since = tunnels.mark();
       return capped(`resuming ${owned.envName}`, CAP_MINUTES, outer, progress, async (signal, report) => {
         // Drop a no-stop flag a failed suspend may have left; the next suspend is the user's.
-        deps.releasing.delete(owned.envId);
+        deps.releasing.delete(hostId);
         // Before the connect: the window restarts even when the tunnel never comes up.
         await deps.markConnected(owned.envId);
         const env = await ona.getEnvironmentIfExists(owned.envId, signal);
@@ -484,8 +478,11 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     }),
     async remove({ resource, hostId, report, signal }) {
       const owned = resourceSchema.parse(resource);
-      // A box another machine still uses keeps its tunnel, keys and no-stop flag (keyed by the box's id) for that machine.
-      // A machine bb is also removing doesn't count, so removing both machines closes the tunnel and deletes the box.
+      // A removal can leave this machine's no-stop flag behind (a suspend bb settled as removing never reaches the
+      // provider's suspend). bb awaits a suspend still running before it calls remove, so none reaches the stop step after this.
+      deps.releasing.delete(hostId);
+      // A box another machine still uses keeps its tunnel and keys for that machine. A machine bb is also removing
+      // doesn't count, so removing both machines closes the tunnel and deletes the box.
       const other = await machineUsing(owned.envId, owned.key, true);
       if (other) {
         const kept = owned.adopted ? "its tunnel and keys" : "it";
@@ -494,9 +491,6 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         );
       }
       if (other && !owned.adopted) return { status: "removed" };
-      // A removal can leave a no-stop flag behind (a suspend bb settled as removing never reaches the provider's
-      // suspend). bb awaits a suspend still running before it calls remove, so none reaches the stop step after this.
-      if (!other) deps.releasing.delete(owned.envId);
       if (owned.adopted) {
         // Closed first: a connect that began before this close cannot reopen it (see `connect`). A thrown lookup keeps
         // the keys for bb's retry.

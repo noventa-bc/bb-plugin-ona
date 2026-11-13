@@ -90,7 +90,7 @@ export async function resumeCommand(
     "resume",
     "requested with bb ona resume",
     async () => {
-      outcome.started = await provider.wake(row.resource, report, signal, "wake-cmd", since);
+      outcome.started = await provider.wake(row.resource, report, signal, "wake-cmd", since, row.hostId);
     },
     { force: true, cooldown: false },
   );

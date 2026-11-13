@@ -106,7 +106,7 @@ export interface SyncDeps {
     ensure(envId: string, since: number): boolean;
   };
   provider: {
-    /** Boxes whose next suspend must not stop them; the provider's suspend consumes the entry. */
+    /** Machines (bb host ids) whose next suspend must not stop their box; the provider's suspend consumes the entry. */
     releasing: Set<string>;
     daemonAlive(resource: OnaResource, signal: AbortSignal): Promise<boolean | null>;
     reconnect(
@@ -122,6 +122,7 @@ export interface SyncDeps {
       signal: AbortSignal,
       cause: WakeVia,
       since: number,
+      hostId: string,
     ): Promise<boolean>;
   };
   /** Ona env id -> bb host id, refreshed on every pass; shared with the tunnels and events. */
@@ -230,15 +231,16 @@ export function createSync(deps: SyncDeps) {
 
   /**
    * Mark a machine suspended in bb without stopping its box (the provider's
-   * suspend sees the flag in `releasing`). Used when Ona already stopped or
+   * suspend sees the machine's flag in `releasing`; another machine on the box
+   * has its own). Used when Ona already stopped or
    * lost the box, and when an idle box is let go for Ona's own timeout. Resolves
    * with bb's lifecycle once bb has settled the suspend.
    */
   async function suspendWithoutStop(row: Row): Promise<HostLifecycle> {
-    provider.releasing.add(row.resource.envId);
+    provider.releasing.add(row.hostId);
     const posted = await bb.sdk.hosts.experimental_suspend({ hostId: row.hostId }).catch((error: unknown) => {
       // Don't leave the flag behind for a later user suspend, which should stop the box.
-      provider.releasing.delete(row.resource.envId);
+      provider.releasing.delete(row.hostId);
       throw error;
     });
     const lifecycle =
@@ -249,7 +251,7 @@ export function createSync(deps: SyncDeps) {
     // suspend (active) never reaches it, so the flag goes back here. The flag stays for every other outcome: a settle that
     // timed out or failed (it throws above), and any other phase, since bb may still run the provider's suspend (removing).
     // A pass clears a flag left that way once bb shows the machine active (clearFailedReleases in provider.ts).
-    if (lifecycle.phase === "active") provider.releasing.delete(row.resource.envId);
+    if (lifecycle.phase === "active") provider.releasing.delete(row.hostId);
     return lifecycle;
   }
 
@@ -397,7 +399,7 @@ export function createSync(deps: SyncDeps) {
                 // bb's suspend failed (Ona stopped the box under a live turn) and left the machine active, where bb's
                 // resume does nothing: the plugin wakes the box (decision 0002).
                 // It gives up after 30 minutes; a plugin reload ends it sooner (docs/sync.md rule 1).
-                const startCalled = await provider.wake(resource, report, signal, "wake-thread", readAt);
+                const startCalled = await provider.wake(resource, report, signal, "wake-thread", readAt, hostId);
                 return startCalled ? "started it for a waiting thread" : "reconnected it for a waiting thread";
               }
               if (!decision.resumeAfter) return;
@@ -485,7 +487,7 @@ export function createSync(deps: SyncDeps) {
       // Before the read: bb may suspend or remove a machine after it answers, and that close must win.
       const since = tunnels.mark();
       const rows = await machines();
-      await clearFailedReleases(rows, provider.releasing, guard, bb.sdk.hosts);
+      await clearFailedReleases(provider.releasing, guard, bb.sdk.hosts);
       // A machine bb no longer lists drops its disagreement, so a later one starts its own hold.
       for (const hostId of mismatches.keys()) if (!rows.some((row) => row.hostId === hostId)) mismatches.delete(hostId);
       const targets = keys.has(ALL) ? rows : rows.filter((row) => keys.has(row.hostId));

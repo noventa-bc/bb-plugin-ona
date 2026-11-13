@@ -268,13 +268,13 @@ test("a rejected stamp in bb ona resume's wake or bb's resume still drops the no
   const signal = new AbortController().signal;
   for (const via of ["wake", "resume"] as const) {
     const { provider, wake, releasing, calls } = register({ found: box("RUNNING"), markFails: true });
-    releasing.add("env-1");
+    releasing.add("host-1");
     const call =
       via === "wake"
         ? wake(adoptedResource, lifecycle().report, signal, "wake-cmd")
         : provider.resume!({ ...lifecycle(), hostId: "host-1", resource: adoptedResource, signal });
     await assert.rejects(call, /bb storage is unreachable/, via);
-    assert.equal(releasing.has("env-1"), false, via);
+    assert.equal(releasing.has("host-1"), false, via);
     await provider.suspend!({ ...lifecycle(), hostId: "host-1", resource: adoptedResource, signal });
     assert.ok(calls.includes("stop env-1"), via);
   }
