@@ -143,3 +143,14 @@ test("the composer's select calls switchedInputs, its text field keeps the mode,
     "the adopt help text is not the new one",
   );
 });
+
+test("the Rename form's typed name reaches devbox_command (fails if app.tsx renames the input, fieldArg reads another field, run drops the name, or run stops passing arg on)", () => {
+  const app = readFileSync(new URL("../app.tsx", import.meta.url), "utf8");
+  assert.ok(app.includes('name="arg"'), "the Rename input is not named arg");
+  assert.ok(app.includes('new FormData(form).get("arg")'), "fieldArg does not read the arg field");
+  assert.ok(
+    app.includes('run("rename", box.hostId, fieldArg(event.currentTarget))'),
+    "the Rename form does not send its field's text",
+  );
+  assert.ok(app.includes("devboxCommandInput(command, hostId, arg)"), "run does not pass arg to devboxCommandInput");
+});
