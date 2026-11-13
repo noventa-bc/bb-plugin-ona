@@ -482,10 +482,15 @@ test("a run whose signal is aborted before its command starts never creates the 
   assert.deepEqual(result, { exitCode: 1, stderr: "Cancelled before the command started; it was not run." });
 });
 
-test("a run whose signal is aborted during the wait exits 124 with the stopped-waiting note (fails if the abort is read before the wait starts)", async () => {
+test("a run whose signal is aborted during the wait exits 124 with the stopped-waiting note (fails if the abort is read before the wait starts, or a poll runs after the abort)", async () => {
   const controller = new AbortController();
   const running: TerminalInfo = { id: TERMINAL_ID, status: "running", exitCode: null };
-  assert.deepEqual(await shellRun(running, { signal: controller.signal }, () => controller.abort()), {
+  const abortThenFailOnPoll = () => {
+    // sleep resolves at once when its signal is aborted, so a loop that ignores the abort would spin to its 10-minute deadline.
+    if (controller.signal.aborted) throw new Error("polled after the abort");
+    controller.abort();
+  };
+  assert.deepEqual(await shellRun(running, { signal: controller.signal }, abortThenFailOnPoll), {
     exitCode: 124,
     stdout: "out\n",
     stderr: `Stopped waiting before the command finished; it may still be running on the box. Follow it with: bb terminal attach ${TERMINAL_ID}`,
