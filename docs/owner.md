@@ -34,10 +34,9 @@ nothing and don't push; you review, commit and merge. Inside it, `FACTORY.md`
 
 ## Dispatch
 
-- Unattended: `scripts/agent-run.sh "<task brief>" [claude|codex]`. It creates
-  `../bb-ona-worktrees/<slug>` on branch `agent/<slug>`, runs the agent there
-  and prints where the handoff is. `AGENT_BUDGET_USD` caps a Claude run
-  (default 5).
+- Unattended: `scripts/agent-run.sh "<task brief>"`. It creates
+  `../bb-ona-worktrees/<slug>` on branch `agent/<slug>`, runs Claude there
+  and prints where the handoff is. `AGENT_BUDGET_USD` caps a run (default 5).
 - Attended: `scripts/agent-shell.sh [claude|codex]` from this checkout or a
   worktree. Prompts stay on.
 - bb threads opened on this repo run outside the sandbox, with only the
@@ -133,11 +132,10 @@ Once per release, run `/doctor prompt-audit`.
 - Reading `~/.ona`, `~/.ssh` and `~/.bb` fails; writing outside the working
   folder fails; a local listener on `127.0.0.1` can't be reached; a
   non-allowed domain can't be reached.
-- `agent-run.sh` warns if a run changed `~/.claude/settings.json` or
-  `~/.codex/config.toml`, the agents' own config, which the sandbox leaves
-  writable.
+- `agent-run.sh` warns if a run changed `~/.claude/settings.json`, Claude's
+  own config, which the sandbox leaves writable.
 
 ## Open items
 
-- Codex doesn't connect through nono's network proxy yet (it fails at
-  "workspace routing discovery"), so unattended runs are Claude-only for now.
+- Codex doesn't connect through nono's network proxy (it fails at
+  "workspace routing discovery"), so `scripts/agent-shell.sh codex` fails.
