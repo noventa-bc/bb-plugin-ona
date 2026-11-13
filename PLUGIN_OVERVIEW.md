@@ -16,8 +16,6 @@ and you drive them from bb as usual.
   thread or message on it starts it first.
 - **Spend per thread**: a devbox thread's header shows its cost so far (OpenAI's
   estimate for Codex, tokens × Anthropic list prices for Claude Code).
-- **Move to devbox** in a devbox thread's menu (or `bb ona move <thread-id> <ref>`)
-  continues the thread in a new thread on another devbox, at the same path.
 - **Ona devboxes** in the plugin's settings: each devbox's status (`bb ona status`), with a Sync all button,
   and per devbox Sync, Reconnect and Resume buttons plus a Rename control, all running
   the same `bb ona` commands.

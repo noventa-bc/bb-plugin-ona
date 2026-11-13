@@ -118,9 +118,9 @@ test("help, --help and no command print the usage", async () => {
   }
 });
 
-test("keep-alive, open, list and update are neither listed, in the usage nor run (fails if one comes back)", async () => {
+test("keep-alive, open, list, update and move are neither listed, in the usage nor run (fails if one comes back)", async () => {
   const { run, calls } = fakeRun();
-  for (const name of ["keep-alive", "open", "list", "update"]) {
+  for (const name of ["keep-alive", "open", "list", "update", "move"]) {
     assert.equal(
       commands.some((c) => c.name === name),
       false,
@@ -131,6 +131,7 @@ test("keep-alive, open, list and update are neither listed, in the usage nor run
   assert.deepEqual(await run("keep-alive", "box", "2h"), { exitCode: 1, stderr: usage });
   assert.deepEqual(await run("open", "box"), { exitCode: 1, stderr: usage });
   assert.deepEqual(await run("list"), { exitCode: 1, stderr: usage });
+  assert.deepEqual(await run("move", "thread-1", "box"), { exitCode: 1, stderr: usage });
   assert.deepEqual(await run("update", "host_1"), { exitCode: 1, stderr: usage });
   assert.deepEqual(calls, []);
 });

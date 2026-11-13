@@ -229,23 +229,6 @@ Check that the agent CLIs are installed and logged in:
 bb machine provider-cli status ona:<name>
 ```
 
-### Move a thread to another devbox
-
-**Move to devbox** in a devbox thread's menu (next to Archive) lists the other devboxes. Picking one
-starts a new thread on that box at the same path, with the same title, whose first message hands
-the work over: where it came from, and the old conversation in outline. The old thread stays as it
-is. From your Mac's terminal: `bb ona move <thread-id> <ref>`.
-
-- Only a thread whose workspace is a checkout path on the box can move, and the path must exist on
-  the target box. It does for the Ona project checkout (`/workspaces/<repo>`). A thread in a
-  bb-managed worktree or bb's personal workspace is refused, and so is one in bb's personal project;
-  the message says so.
-- A stopped target box is started by bb. The new thread should appear once the box is up, which can
-  take minutes. If bb is still starting the box when you move, the menu says so and asks you not to
-  move the thread again.
-- Uncommitted changes stay on the old box: commit and push a branch first. The new thread starts a
-  fresh agent session; it learns the rest from the hand-over message.
-
 ### Shell access
 
 **In a thread:** a thread that runs on a devbox shows an **Editor** button in its header, which
@@ -286,7 +269,6 @@ ssh "$(bb ona host <ref>)"               # plain ssh, outside bb
 ```sh
 bb ona status [ref]            # each machine's host id, Ona environment, adopted or created, tunnel, bb's view next to Ona's, the box's start, idle timeout, activity, branch and unpushed commits, and what the plugin last did
 bb ona sync [ref]              # re-check Ona now and repair out-of-step machines; a resume it starts is waited for up to 32 minutes after bb answers `resuming`
-bb ona move <thread-id> <ref>  # continue a thread in a new thread on another devbox, at the same path
 bb ona rename <ref> [name]     # rename env + bb machine (random fun name if omitted); refused while bb shows its machine in a phase other than active
 bb ona reconnect <ref>         # active machines: reopen the tunnel and restart the bb daemon; refused unless bb shows the machine active and Ona shows its box running; gives up after 30 minutes ("Gave up …; last step: …")
 bb ona resume <ref>            # a stopped active machine: starts its box and reconnects the bb daemon (your action); a running box is only reconnected; refused unless bb shows the machine active; gives up after 30 minutes ("Gave up …; last step: …")
