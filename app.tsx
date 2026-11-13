@@ -296,11 +296,6 @@ const DEVBOX_BUTTONS: { command: DevboxCommand; label: string }[] = [
   { command: "update", label: "Update CLIs" },
 ];
 
-/** A text box and the button that sends its text as the command's argument (see commandArg). */
-const DEVBOX_FIELDS: { command: DevboxCommand; label: string; placeholder: string }[] = [
-  { command: "rename", label: "Rename", placeholder: "New name (blank: random)" },
-];
-
 const sectionButton = `${editorButton} disabled:pointer-events-none disabled:opacity-50`;
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -402,26 +397,23 @@ function DevboxesSection() {
                   {label}
                 </button>
               ))}
-              {DEVBOX_FIELDS.map(({ command, label, placeholder }) => (
-                <form
-                  key={command}
-                  className="flex items-center gap-2"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    run(command, box.hostId, fieldArg(event.currentTarget));
-                  }}
-                >
-                  <input
-                    name="arg"
-                    placeholder={placeholder}
-                    aria-label={`${label} for ${box.machine}`}
-                    className={projectInput}
-                  />
-                  <button type="submit" className={sectionButton} disabled={busy}>
-                    {label}
-                  </button>
-                </form>
-              ))}
+              <form
+                className="flex items-center gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  run("rename", box.hostId, fieldArg(event.currentTarget));
+                }}
+              >
+                <input
+                  name="arg"
+                  placeholder="New name (blank: random)"
+                  aria-label={`Rename for ${box.machine}`}
+                  className={projectInput}
+                />
+                <button type="submit" className={sectionButton} disabled={busy}>
+                  Rename
+                </button>
+              </form>
             </div>
             {notes[box.hostId] && <p className="whitespace-pre-wrap text-muted-foreground">{notes[box.hostId]}</p>}
           </div>
