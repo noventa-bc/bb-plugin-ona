@@ -1,19 +1,16 @@
 #!/bin/sh
 # Extracts commit <sha> of <worktree> into a new folder <dir>, for a reviewer to run tests and mutants in
 # without touching <worktree>. The copy has no .git. Its node_modules links to the main checkout's when the commit's
-# package.json has the same parsed JSON as the main checkout's (key order included) apart from its version and its
-# scripts whose names contain none of install, prepare, prepublish or dependencies (npm's install hooks are among those
-# names, and an extra match only means no link); and its package-lock.json has the same parsed JSON apart from the
-# package's own version. A copy whose commit has its own node_modules keeps it. <dir>'s parent folder must already exist,
-# and <dir> must not lie inside any git checkout. Prints the copy's absolute path on stdout; the other messages go to stderr.
+# package.json and package-lock.json match the main checkout's as same_deps below defines. A copy whose commit has its
+# own node_modules keeps it. <dir>'s parent folder must already exist, and <dir> must not lie inside any git checkout.
+# Prints the copy's absolute path on stdout; the other messages go to stderr.
 #   scripts/scratch-copy.sh <worktree> <sha> <dir>
 set -eu
 usage() { echo "usage: scripts/scratch-copy.sh <worktree> <sha> <dir>" >&2; exit 2; }
 # Exits 0 when the JSON files $1 and $2 have the same parsed JSON (key order included) once a package.json's top-level
 # version and its scripts whose names contain none of install, prepare, prepublish or dependencies are left out, or once a
-# lockfile's own version fields (the top-level one and packages[""]'s) are. npm ci and a plain npm install run preinstall,
-# install, postinstall, prepublish, preprepare, prepare and postprepare on the root; predependencies, dependencies and
-# postdependencies run when an install changes node_modules. A matched name that npm does not run, such as uninstall, only
+# lockfile's own version fields (the top-level one and packages[""]'s) are. Those four words cover the scripts npm runs
+# on the root during an install (the test lists all ten); a matched name that npm does not run, such as uninstall, only
 # means no link. Exits 1 when they differ or a file cannot be read or parsed; node's message is hidden, since the caller
 # reports it.
 same_deps() {
