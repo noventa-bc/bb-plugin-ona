@@ -114,7 +114,10 @@ export interface ProviderDeps {
   /** Hold off starting anything until $HOME is a mount point (shared NFS home). */
   waitForSharedHome: boolean;
   port: () => number;
-  /** Record that the box just (re)connected; the idle window starts here. */
+  /**
+   * Restart the box's idle window: bb's create and resume, and a wake the user asked for (`bb ona resume`). A daemon
+   * heal and a waiting thread's wake do not, so a box whose daemon keeps dropping is still let go.
+   */
   markConnected(envId: string): Promise<void>;
   /**
    * Boxes the plugin is letting go while idle: their next suspend (consumed
@@ -285,6 +288,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
    */
   const wake = timedWake(bb, (resource, progress, outer, trace, since) =>
     capped(`waking ${resource.envName}`, CAP_MINUTES, outer, progress, async (signal, report) => {
+      // The waiting thread is the activity for its own wake.
+      if (trace.via === "wake-cmd") await deps.markConnected(resource.envId);
       deps.releasing.delete(resource.envId);
       const env = await ona.getEnvironmentIfExists(resource.envId, signal);
       if (!env) throw new Error(`Ona environment "${resource.envId}" not found. Run \`ona environment list\`.`);
@@ -386,6 +391,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         key,
       };
       await checkpoint(resource);
+      await deps.markConnected(resource.envId);
       await ensureRunning(env, report, signal, trace);
       // Not running when this began: Ona can lag behind a start before it reports STARTING.
       await connectOrClose(resource, report, signal, !isRunning(env), since);
@@ -430,6 +436,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
     resume: timed(bb, "resume", async ({ resource, checkpoint, report: progress, signal: outer }, trace) => {
       const owned = resourceSchema.parse(resource);
       const since = tunnels.mark();
+      // Before the connect: the window restarts even when the tunnel never comes up.
+      await deps.markConnected(owned.envId);
       return capped(`resuming ${owned.envName}`, CAP_MINUTES, outer, progress, async (signal, report) => {
         // Drop a no-stop flag a failed suspend may have left; the next suspend is the user's.
         deps.releasing.delete(owned.envId);

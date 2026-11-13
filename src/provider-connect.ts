@@ -168,7 +168,6 @@ export function connectHelpers(bb: BbPluginApi, deps: ProviderDeps) {
         `bb suspended or removed the machine on ${resource.envName} while it connected, so its tunnel stays closed.`,
       );
     }
-    await deps.markConnected(resource.envId);
     report.step("Opening SSH reverse tunnel to bb server");
     await waitForTunnel(executor, signal);
     await preflight(executor, report, signal);

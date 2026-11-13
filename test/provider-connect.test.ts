@@ -34,13 +34,12 @@ const codexFailure = (why: string) =>
 
 // Bug: connect ran Codex's mkdir and ignored its exit code, so a folder that was not made still marked the machine
 // connected and started the daemon with CODEX_SQLITE_HOME naming it (Code Review Rule 8).
-test("a Codex folder that cannot be created throws with the mkdir output before any tunnel opens, and connects nothing (fails if the mkdir's exit code is ignored or the check runs after the tunnel opens)", async () => {
-  const { created, calls, connected, tunnels } = start({ found: box("RUNNING"), codexHome: true, mkdirExits: [1] });
+test("a Codex folder that cannot be created throws with the mkdir output before any tunnel opens, and bootstraps nothing (fails if the mkdir's exit code is ignored or the check runs after the tunnel opens)", async () => {
+  const { created, calls, tunnels } = start({ found: box("RUNNING"), codexHome: true, mkdirExits: [1] });
   await assert.rejects(
     created,
     /^Error: Could not create Codex's folder \/local\/codex \(the `codexSqliteHome` setting\): mkdir: cannot create directory: Not a directory$/,
   );
-  assert.deepEqual(connected, []);
   assert.deepEqual(calls, ["get RUNNING", ...gated("ssh", "mkdir")]);
   assert.deepEqual(tunnels, ["stop env-1"], "no tunnel opens before the check");
 });
@@ -151,8 +150,8 @@ test("a resume that fails with the box's tunnel already open, connecting or up, 
 
 // Bug: a reconnect or wake that read the machine active reopened its box's tunnel after bb's suspend or remove
 // closed it, keeping awake a box bb no longer shows active (R25, R31, decision 0003).
-test("a reconnect whose box was closed after its mark throws before markConnected and opens no tunnel", async () => {
-  const { reconnect, mark, stop, open, connected, calls } = register({ found: box("RUNNING") });
+test("a reconnect whose box was closed after its mark throws and opens no tunnel", async () => {
+  const { reconnect, mark, stop, open, calls } = register({ found: box("RUNNING") });
   const since = mark();
   stop("env-1");
   await assert.rejects(
@@ -160,13 +159,12 @@ test("a reconnect whose box was closed after its mark throws before markConnecte
     /^Error: bb suspended or removed the machine on box while it connected, so its tunnel stays closed\.$/,
   );
   assert.equal(open.has("env-1"), false);
-  assert.deepEqual(connected, []);
   assert.deepEqual(calls, ["get RUNNING", ...gated("ssh")]);
 });
 
-test("a wake whose box was closed after its mark throws before markConnected and opens no tunnel", async () => {
+test("a wake whose box was closed after its mark throws and opens no tunnel", async () => {
   for (const phase of ["RUNNING", "STOPPED"]) {
-    const { wake, mark, stop, open, connected } = register({ found: box(phase), phases: [phase, "RUNNING"] });
+    const { wake, mark, stop, open } = register({ found: box(phase), phases: [phase, "RUNNING"] });
     const since = mark();
     stop("env-1");
     await assert.rejects(
@@ -175,16 +173,15 @@ test("a wake whose box was closed after its mark throws before markConnected and
       phase,
     );
     assert.equal(open.has("env-1"), false, phase);
-    assert.deepEqual(connected, [], phase);
   }
 });
 
 test("a reconnect with a mark taken after the box's last close opens the tunnel and connects", async () => {
-  const { reconnect, mark, stop, open, connected } = register({ found: box("RUNNING") });
+  const { reconnect, mark, stop, open, calls } = register({ found: box("RUNNING") });
   stop("env-1");
   await reconnect(adoptedResource, lifecycle().report, new AbortController().signal, mark());
   assert.equal(open.get("env-1"), "connecting");
-  assert.deepEqual(connected, ["env-1"]);
+  assert.deepEqual(calls, ["get RUNNING", ...connectCalls]);
 });
 
 test("a refused stale wake leaves the tunnel a newer flow opened, and that flow's mark still opens (fails if the refusal closes the box's tunnel)", async () => {
@@ -216,14 +213,14 @@ test("bb's create and resume refuse the tunnel when the box is closed during the
   await tick(5_000, 2);
   await assert.rejects(created.created, /while it connected, so its tunnel stays closed/);
   await assert.rejects(resumed.resumed, /while it connected, so its tunnel stays closed/);
-  assert.deepEqual([created.connected, resumed.connected], [[], []]);
+  assert.deepEqual([created.open.has("env-1"), resumed.open.has("env-1")], [false, false]);
 });
 
 test("bb's create refuses the tunnel when the box is closed as the call starts (fails if create takes its mark after its first await)", async () => {
   const created = start({ found: box("RUNNING"), phases: ["RUNNING"] });
   created.stop("env-1");
   await assert.rejects(created.created, /while it connected, so its tunnel stays closed/);
-  assert.deepEqual(created.connected, []);
+  assert.equal(created.open.has("env-1"), false);
 });
 
 test("bb's create on a box whose tunnel was closed before the call opens the tunnel (fails if create's mark is a constant)", async () => {
@@ -236,4 +233,33 @@ test("bb's resume of a box whose tunnel was closed before the call opens the tun
   const { resumed, open } = resume({ found: box("RUNNING"), phases: ["RUNNING"], closed: true });
   await resumed;
   assert.equal(open.get("env-1"), "connecting");
+});
+
+// Bug: connect stamped the idle clock, so each daemon heal (a reconnect from the sync pass), failed or not, restarted it
+// and a box whose daemon kept dropping was never let go; a resume that failed before the stamp kept the old clock.
+test("a reconnect, ok or failed, leaves the idle clock alone (fails if connect stamps it)", async () => {
+  const ok = register({ found: box("RUNNING") });
+  await ok.reconnect(adoptedResource, lifecycle().report, new AbortController().signal);
+  const failed = register({ found: box("RUNNING"), preflightExit: 3 });
+  await assert.rejects(failed.reconnect(adoptedResource, lifecycle().report, new AbortController().signal));
+  assert.deepEqual([ok.connected, failed.connected], [[], []]);
+});
+
+test("bb's create and resume stamp the idle clock even when the connect throws before the tunnel (fails if either leaves it to connect)", async () => {
+  const created = start({ found: box("RUNNING"), codexHome: true, mkdirExits: [1] });
+  const resumed = resume({ found: box("RUNNING"), phases: ["RUNNING"], codexHome: true, mkdirExits: [1] });
+  await assert.rejects(created.created, /Could not create Codex's folder/);
+  await assert.rejects(resumed.resumed, /Could not create Codex's folder/);
+  assert.deepEqual([created.connected, resumed.connected], [["env-1"], ["env-1"]]);
+});
+
+test("a wake the user asked for stamps the idle clock, a waiting thread's does not (fails if bb ona resume leaves the old clock)", async () => {
+  for (const [cause, stamped] of [
+    ["wake-cmd", ["env-1"]],
+    ["wake-thread", []],
+  ] as const) {
+    const { wake, connected } = register({ found: box("RUNNING") });
+    await wake(adoptedResource, lifecycle().report, new AbortController().signal, cause);
+    assert.deepEqual(connected, stamped, cause);
+  }
 });
