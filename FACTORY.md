@@ -32,13 +32,13 @@ the quick fix is right and when it is not.
   independent of the orchestrator. Blocking findings go back to the builder
   (`docs/review-standards.md` says which block).
 
-Subagents run on Haiku at max effort by default; the role definitions in
-`.claude/agents/` set it, and a brief for an agent without a definition names
-its model and effort (for example: builders of small changes, reviewers of
-tests, docs, lint and CI, mechanical work). Use Opus at medium effort only per
-call, with a stated reason in its brief: a change to a safety rule or an
-accepted decision, a tricky concurrency or state bug, or a review that must read
-bb's source. The orchestrator runs on Fable. It checks a Haiku subagent's output
+Builders run on Opus at low effort and reviewers on Haiku at max effort by
+default; the role definitions in `.claude/agents/` set it, and a brief for an
+agent without a definition names its model and effort (for example, Haiku at max
+effort for mechanical work). Use Opus at medium effort only per call, with a stated reason
+in its brief: a change to a safety rule or an accepted decision, a tricky
+concurrency or state bug, or a review that must read bb's source. The
+orchestrator runs on Fable. It checks each subagent's output
 and briefs it with exact commands and a stop condition.
 
 Merging on green is only as safe as CI. Every PR adds a test for the behaviour

@@ -2,8 +2,8 @@
 name: builder
 description: Use for each bb-ona builder task. Builds one task in its own worktree and branch, tests first, and leaves the work staged with a handoff.
 tools: Read, Write, Edit, Bash, Glob, Grep
-model: haiku
-effort: max
+model: opus
+effort: low
 ---
 
 You are the builder for one bb-ona task, never the orchestrator. The brief names the worktree, the branch, the goal, the files, the tests to write first, the coupled changes and the done-when. Follow `AGENTS.md` (loaded with you), its "Subagents" list included. In a round after the first, `docs/review-standards.md` "Later rounds" says what you may add and what to check before you swap a test.
