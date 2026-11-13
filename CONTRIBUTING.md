@@ -42,13 +42,12 @@ npm run check        # Node pin, typecheck, lint, format check, tests
 2. Fix a bug with a failing test first. Put logic in `src/` as pure functions
    with tests; a change to a sync pass gets a scenario in a
    `test/sync-*.test.ts` file (`AGENTS.md` "How to work" says which).
-   Offline end-to-end: `test/e2e.test.ts` loads the real `server.ts` in the
-   SDK's fake bb host with the fake `ona` (`test/fake-ona.mjs`, stateful) and
-   fake `ssh`, and drives the provider's create, suspend, resume and remove;
-   `test/e2e-commands.test.ts` does the same for the sync pass and the `bb ona`
-   commands, and `test/e2e-heal.test.ts` for the daemon heal, a resume during
-   an Ona start and the `thread_cost` rpc. All three need a loopback port, so
-   they skip themselves inside the agent sandbox.
+   The offline end-to-end tests, `test/e2e*.test.ts`, load the real
+   `server.ts` in the SDK's fake bb host with the fake `ona`
+   (`test/fake-ona.mjs`, stateful) and fake `ssh`, and drive the plugin as bb
+   does; for example, `test/e2e.test.ts` drives the provider's create, suspend,
+   resume and remove. They need a loopback port, so they skip themselves
+   inside the agent sandbox.
 3. Write the least code that solves the whole task. Mark a known limit with a
    `shortcut: <the limit>, <when to upgrade>` comment. Never describe an
    unfixed security weakness in a comment, issue or PR: report it as
