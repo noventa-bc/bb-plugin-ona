@@ -153,33 +153,33 @@ test("a commit that adds only scripts.test to package.json, a script no install 
   assert.equal(realpathSync(join(dir, "node_modules")), realpathSync(join(main, "node_modules")));
 });
 
-test("a commit that adds only the install hook scripts.postinstall to package.json does not link, and says why", () => {
-  const { worktree } = checkouts();
-  const sha = commitManifests(
-    worktree,
-    packageJson("1.0.0", { scripts: { postinstall: "patch-package" } }),
-    lockfile("1.0.0"),
-  );
-  const dir = newDir();
-  const r = scratchCopy([worktree, sha, dir]);
-  assert.equal(r.status, 0, r.messages);
-  assert.equal(hasEntry(join(dir, "node_modules")), false);
-  assert.match(r.messages, /did not link node_modules: package\.json or package-lock\.json differs from /);
-});
-
-test("a commit whose install hook scripts.prepare differs from the main checkout's does not link, and says why", () => {
-  const { main, worktree } = checkouts();
-  writeFileSync(join(main, "package.json"), packageJson("1.0.0", { scripts: { prepare: "husky" } }));
-  const sha = commitManifests(
-    worktree,
-    packageJson("1.0.0", { scripts: { prepare: "husky install" } }),
-    lockfile("1.0.0"),
-  );
-  const dir = newDir();
-  const r = scratchCopy([worktree, sha, dir]);
-  assert.equal(r.status, 0, r.messages);
-  assert.equal(hasEntry(join(dir, "node_modules")), false);
-  assert.match(r.messages, /did not link node_modules: package\.json or package-lock\.json differs from /);
+test("a change to any npm install hook of package.json does not link, and says why", () => {
+  const hooks = [
+    "preinstall",
+    "install",
+    "postinstall",
+    "prepublish",
+    "preprepare",
+    "prepare",
+    "postprepare",
+    "predependencies",
+    "dependencies",
+    "postdependencies",
+  ];
+  for (const name of hooks) {
+    const { main, worktree } = checkouts();
+    writeFileSync(join(main, "package.json"), packageJson("1.0.0", { scripts: { [name]: "node old.js" } }));
+    const sha = commitManifests(
+      worktree,
+      packageJson("1.0.0", { scripts: { [name]: "node new.js" } }),
+      lockfile("1.0.0"),
+    );
+    const dir = newDir();
+    const r = scratchCopy([worktree, sha, dir]);
+    assert.equal(r.status, 0, `${name}: ${r.messages}`);
+    assert.equal(hasEntry(join(dir, "node_modules")), false, name);
+    assert.match(r.messages, /did not link node_modules: package\.json or package-lock\.json differs from /, name);
+  }
 });
 
 test("a commit that removes only workspaces from package.json, with the same lockfile, does not link, and says why", () => {
