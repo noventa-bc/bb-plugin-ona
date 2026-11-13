@@ -155,7 +155,7 @@ test("the Rename form's typed name reaches devbox_command (fails if app.tsx rena
   assert.ok(app.includes("devboxCommandInput(command, hostId, arg)"), "run does not pass arg to devboxCommandInput");
 });
 
-test("the hidden-warning rule hides the shell_environment_policy and multi_agent warning rows (fails if either selector is dropped or the rule stops hiding)", () => {
+test("the hidden-warning rule hides the shell_environment_policy and multi_agent warning rows (fails if either selector is dropped, the rule stops hiding, or it is no longer applied)", () => {
   const app = readFileSync(new URL("../app.tsx", import.meta.url), "utf8");
   assert.ok(
     app.includes(
@@ -167,4 +167,5 @@ test("the hidden-warning rule hides the shell_environment_policy and multi_agent
       `'[data-timeline-row-id*=":op:warning:"]:has([title*="\`[features].multi_agent\` is deprecated"]) { display: none !important; }';`,
     ),
   );
+  assert.ok(app.includes("style.textContent = HIDDEN_WARNING_CSS;"), "the rule is not applied");
 });
