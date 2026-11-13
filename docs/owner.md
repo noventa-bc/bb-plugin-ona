@@ -54,7 +54,7 @@ Goal: <one sentence, user-visible outcome>
 Scope: <files or area, quoting the text of each line to change, not its number>; out of scope: <...>
 Tests first: <each test, and the bug or rule its title or the handoff names; "guard, no `// Bug:` line" when main has no bug>
 Coupled changes: <the AGENTS.md "Coupled changes" this task touches, or none>
-Model: <Haiku at max effort, or Opus at medium with the reason>
+Model: <Opus at low effort, or Opus at medium with the reason>
 Constraints: <decisions or rules that matter here; a dependency the owner approved, if any>
 Done when: <tests or behaviour>
 ```
