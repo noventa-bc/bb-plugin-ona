@@ -161,20 +161,19 @@ test(
   },
 );
 
-test("thread_devbox shows the tunnel of the thread's box (fails if the tunnel is fixed to off)", local, async () => {
-  const reply = (await host.harness.behavior.callRpc("thread_devbox", { threadId: "thread-1" })) as {
-    devbox: { tunnel: string } | null;
-  };
-  assert.match(reply.devbox?.tunnel ?? "", /^(up|connecting)$/);
-});
-
-test("devboxes_list shows the tunnel of each devbox (fails if the tunnel is fixed to off)", local, async () => {
-  const reply = (await host.harness.behavior.callRpc("devboxes_list", null)) as {
-    devboxes: { tunnel: string }[];
-  };
-  assert.ok(reply.devboxes.length > 0);
-  for (const devbox of reply.devboxes) assert.match(devbox.tunnel, /^(up|connecting)$/);
-});
+test(
+  "devboxes_list shows the connected devbox by its host (fails if the list is empty or a row loses its host or status)",
+  local,
+  async () => {
+    const reply = (await host.harness.behavior.callRpc("devboxes_list", null)) as {
+      devboxes: { hostId: string; status: string }[];
+    };
+    assert.deepEqual(
+      reply.devboxes.map(({ hostId, status }) => ({ hostId, status })),
+      [{ hostId: "host-1", status: "connected" }],
+    );
+  },
+);
 
 test(
   "thread_devbox answers pending, from one thread read, for a thread bb has not given a workspace yet",

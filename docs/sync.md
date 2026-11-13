@@ -152,7 +152,7 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    reads "couldn't confirm the resume for a waiting thread".
 
    **Not gated.** These commands you run yourself are not gated and may wake a box: `ona environment open` and
-   `bb ona ssh --thread`.
+   `bb ona ssh <ref> --thread`.
 
 2. **The plugin's own suspends never stop a box.** Every suspend the plugin makes
    skips the provider's stop. A suspend you ask for (Pause, `bb machine suspend`, or `bb machine reconcile` of a suspended
@@ -305,52 +305,5 @@ still marked suspended, tunnels still reopen, idle boxes are still let go after
 `idleDisconnect`, and a waiting thread still resumes or starts a stopped box; `bb ona status`
 shows what would have been done. bb's own recovery after a restart does not read this setting (decision 0002).
 
-**For contributors.** The logic lives in `src/reconcile.ts`:
-
-- `decide()` is a pure function holding the table above.
-- `PassScheduler` merges triggers into checks.
-- `HostGuard` enforces rule 5.
-- `DAEMON_PROBE` is the rule 3 check.
-
-A pass (which machines, carrying out each decision, idle release) is `createSync()` in
-`src/sync.ts`, and the status rows it returns are `createStatusRows()` in `src/status.ts`.
-`test/sync.test.ts` drives it against a fake of the bb calls it makes (in `test/sync-fakes.ts`). The events are `watchRealtime()` in
-`src/sync.ts`; `server.ts` wires them and the backstop to the `lifecycle-sync`
-service. The `bb ona` commands are in `src/commands.ts`.
-The shared listing is `OnaSnapshot` in `src/ona.ts`. Removing an Ona machine
-drops the box's stored keys (`forgetBox()` in `src/sync.ts`, called from the provider's `remove()`), unless another bb
-machine uses the box.
-`remove()` refuses to delete a created box that Ona reports unpushed commits
-or uncommitted files on (`unpushedWork()` in `src/ona.ts`), before it deletes
-or forgets anything. `reconcileCleanup()` in `src/provider.ts` refuses the same
-way for an orphaned created box.
-A box holds one bb machine: an adopt is refused when another bb machine has stored the box (in any phase, creating
-included); see `create` in `src/provider.ts`. A create run again and `reconcileCleanup()` leave alone a box another bb
-machine has stored since: the create is refused, and the cleanup ends without a delete. `remove()` first asks whether
-another bb machine uses the box: if one does, it deletes nothing and leaves the box's tunnel, keys and no-stop flag to
-that machine; if the question fails, it changes nothing and bb retries. A machine bb is also removing does not count
-there (bb only ever goes on to destroy it), while an adopt still counts it. Every other `remove()` path closes the box's
-tunnel (`remove` in `src/provider.ts`).
-For an adopted box, `remove()` runs `MOVE_MACHINE_ASIDE` (`src/provider.ts`) with the removed machine's host id: it
-picks the data folder whose `host-id` holds that id, stops every process whose command line names that folder (bb's
-daemon among them) and moves the folder aside. When no other machine uses the box, `remove()` closes the tunnel before
-and again after the script, since a sync pass's wake can reopen the tunnel meanwhile. The script runs over SSH, only
-when `ona environment get`, made just before, says the box is running (safety rule 1); the box is never deleted.
-To add or change a rule, update `decide()`, its test in
-`test/reconcile.test.ts`, and the table above, all in the same change.
-
-CI checks parts of these rules with Semgrep (`.semgrep/rules.yml`):
-
-- `child-process-outside-runners`: only `src/ona.ts`, `src/setup.ts` and
-  `src/ssh.ts` start child processes.
-- `ona-lifecycle-outside-onacli`: `ona environment start`, `stop`, `delete` and
-  `ssh` run only through `OnaCli` in `src/ona.ts` (safety rules 1 and 2).
-- `ssh-outside-runners`: `sshExecutor` and `sshCapture` are called only in
-  `src/ssh.ts`, `src/provider.ts` and `src/provider-connect.ts`; code elsewhere goes through the
-  provider's methods, each of which names its guard (safety rule 1).
-- `remote-script-interpolation`: a script sent over SSH interpolates values
-  only through `shellQuote`.
-- `console-instead-of-bb-log`: plugin code logs through `bb.log`.
-- `secret-in-kv-key`: no storage key names a token, secret or password.
-- `raw-sleep-promise`: waits go through `sleep` and `pollUntil` in `src/time.ts`,
-  which honour the abort signal.
+**For contributors.** `AGENTS.md` "Where things are" maps the modules and "Coupled changes" says what
+changes with `decide()`; `.semgrep/rules.yml` holds the Semgrep rules CI checks these safety rules with.

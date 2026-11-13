@@ -26,7 +26,7 @@ test("parseArgs: positionals, flags, --json, --thread <id> and a shell command a
   assert.equal(parseArgs([]).command, undefined);
 });
 
-// Dispatch only; list, sync and status also run end to end in
+// Dispatch only; sync and status also run end to end in
 // test/e2e-commands.test.ts. The fake holds just what these cases call.
 
 const ROW = { hostId: "host_1", machine: "ona:box", status: "active", phase: "active", resource: { envId: "env_1" } };

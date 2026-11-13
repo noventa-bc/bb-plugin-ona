@@ -8,9 +8,6 @@ const devboxSchema = z.object({
   envId: z.string(),
   envName: z.string(),
   status: z.string(),
-  tunnel: z.enum(["up", "connecting", "off"]),
-  adopted: z.boolean(),
-  sshCommand: z.string(),
 });
 export type Devbox = z.infer<typeof devboxSchema>;
 

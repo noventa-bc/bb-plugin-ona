@@ -250,7 +250,7 @@ export default async function plugin(bb: BbPluginApi) {
   }
 
   async function devboxes(): Promise<Devbox[]> {
-    return (await machines()).map((row) => devboxOf(row, tunnels.status(row.resource.envId)));
+    return (await machines()).map((row) => devboxOf(row));
   }
 
   const shellBackend: ShellBackend = {
@@ -293,7 +293,7 @@ export default async function plugin(bb: BbPluginApi) {
   async function workspaceDevbox(environmentId: string): Promise<Devbox | null> {
     const environment = await bb.sdk.environments.get({ environmentId });
     const row = await machineOfHost(environment.hostId);
-    return row ? devboxOf(row, tunnels.status(row.resource.envId)) : null;
+    return row ? devboxOf(row) : null;
   }
 
   /** The Ona devbox a thread runs on, if any. */
