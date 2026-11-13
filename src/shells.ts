@@ -87,6 +87,7 @@ export async function runOnce(
   argv: string[],
   options: { timeoutMs: number; pollMs?: number; signal?: AbortSignal },
 ): Promise<{ terminalId: string; exitCode: number | null; output: string; timedOut: boolean }> {
+  if (options.signal?.aborted) throw new Error("Cancelled before the command started; it was not run.");
   const terminal = await backend.createTerminal({
     hostId: target.hostId,
     cwd: target.cwd,
