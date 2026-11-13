@@ -187,12 +187,12 @@ test("hideKnownWarnings replaces the rule in a style element an older plugin ver
   const rule = runHideKnownWarnings({
     getElementById: (id: string) => (id === old.id ? old : null),
     createElement: () => assert.fail("created a second style element"),
-    head: { appendChild: (el: Element) => assert.equal(el, old, "appended a second style element") },
+    head: { appendChild: () => assert.fail("appended a style element again") },
   });
   assert.equal(old.textContent, rule, "the older rule was kept");
 });
 
-test("hideKnownWarnings adds one style element with the rule to a fresh window (fails if the element is not appended to head)", () => {
+test("hideKnownWarnings adds one style element with the rule to a fresh window (fails if the element is not appended to head or has no id)", () => {
   const appended: Element[] = [];
   const rule = runHideKnownWarnings({
     getElementById: () => null,

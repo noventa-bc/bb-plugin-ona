@@ -197,10 +197,11 @@ const HIDDEN_WARNING_CSS =
 function hideKnownWarnings() {
   if (typeof document === "undefined") return;
   // A plugin reload reuses the element an older version left, with this version's rule.
-  const style = document.getElementById("bb-ona-hidden-warnings") ?? document.createElement("style");
+  const existing = document.getElementById("bb-ona-hidden-warnings");
+  const style = existing ?? document.createElement("style");
   style.id = "bb-ona-hidden-warnings";
   style.textContent = HIDDEN_WARNING_CSS;
-  document.head.appendChild(style);
+  if (!existing) document.head.appendChild(style);
 }
 
 type MoveData = ReturnType<typeof useMoveData>;
