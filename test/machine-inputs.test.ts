@@ -143,3 +143,11 @@ test("the composer's select calls switchedInputs, its text field keeps the mode,
     "the adopt help text is not the new one",
   );
 });
+
+test('the Rename form sends its field\'s text (fails if app.tsx drops the third argument of run("rename", ...))', () => {
+  const app = readFileSync(new URL("../app.tsx", import.meta.url), "utf8");
+  assert.ok(
+    app.includes('run("rename", box.hostId, fieldArg(event.currentTarget))'),
+    "the Rename form does not send its field's text",
+  );
+});

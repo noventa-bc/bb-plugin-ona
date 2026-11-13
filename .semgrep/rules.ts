@@ -49,7 +49,7 @@ async function fixture2(run: (argv: string[]) => Promise<string>, envId: string)
   // ok: ona-lifecycle-outside-onacli
   await run(["environment", "list", "-o", "json"]);
   // ok: ona-lifecycle-outside-onacli
-  await run(["environment", "keep-alive", "--environment-id", envId]);
+  await run(["environment", "get", envId, "-o", "json"]);
 }
 
 // --- remote-script-interpolation.ts ---

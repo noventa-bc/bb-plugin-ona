@@ -307,7 +307,7 @@ const replyText = (reply: DevboxCommandReply) => (reply.exitCode === 0 ? reply.s
 const fieldArg = (form: HTMLFormElement) => commandArg(String(new FormData(form).get("arg") ?? ""));
 
 /**
- * Settings → Ona devboxes: `bb ona status` as the CLI prints it, each devbox's bb status, and buttons and fields
+ * Settings → Ona devboxes: `bb ona status` as the CLI prints it, each devbox's bb status, and buttons and a rename field
  * that run the same `bb ona` commands (src/commands.ts). Read on mount, every 30 s and after each action; a row's
  * buttons are disabled while its own call runs.
  */
