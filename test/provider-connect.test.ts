@@ -1,6 +1,7 @@
-// The connect path, driven through `create` (adopt mode) and `resume` in the fake host of ./provider-fake.ts: the waits
-// for a box Ona is starting or stopping, the `~/.bb-machines` step, and the tunnel a failed connect closes. setTimeout
-// and Date are mocked, so each tick is one poll interval and the tests are instant.
+// The connect path, driven through `create` (adopt mode), `resume` and `reconnect` in the fake host of
+// ./provider-fake.ts: the waits for a box Ona is starting or stopping, the Codex folder's `mkdir`,
+// the `~/.bb-machines` step, and the tunnel a failed connect closes. setTimeout and Date are mocked,
+// so each tick is one poll interval and the tests are instant.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { settle, tick, useFakeClock } from "./fake-clock.ts";
@@ -26,6 +27,55 @@ test("~/.bb-machines exit 6 past the deadline throws with the script output (fai
   await tick(10_000, 12);
   await assert.rejects(created, /Could not set up ~\/\.bb-machines: a real folder$/);
   assert.equal(calls.filter((call) => call === "root").length, 12, "one try every 10s for 2 minutes");
+});
+
+const codexFailure = (why: string) =>
+  `Could not create Codex's folder /local/codex (the \`codexSqliteHome\` setting): ${why}`;
+
+// Bug: connect ran Codex's mkdir and ignored its exit code, so a folder that was not made still marked the machine
+// connected and started the daemon with CODEX_SQLITE_HOME naming it (Code Review Rule 8).
+test("a Codex folder that cannot be created throws with the mkdir output before any tunnel opens, and connects nothing (fails if the mkdir's exit code is ignored or the check runs after the tunnel opens)", async () => {
+  const { created, calls, connected, tunnels } = start({ found: box("RUNNING"), codexHome: true, mkdirExits: [1] });
+  await assert.rejects(
+    created,
+    /^Error: Could not create Codex's folder \/local\/codex \(the `codexSqliteHome` setting\): mkdir: cannot create directory: Not a directory$/,
+  );
+  assert.deepEqual(connected, []);
+  assert.deepEqual(calls, ["get RUNNING", ...gated("ssh", "mkdir")]);
+  assert.deepEqual(tunnels, ["stop env-1"], "no tunnel opens before the check");
+});
+
+test("a Codex folder that is created connects as before (fails if the check rejects a folder that was made)", async () => {
+  const { created, calls, connected } = start({ found: box("RUNNING"), codexHome: true });
+  assert.equal((await created).status, "created");
+  assert.deepEqual(connected, ["env-1"]);
+  assert.deepEqual(calls, ["get RUNNING", ...gated("ssh", "mkdir", "curl", "preflight", "bootstrap")]);
+});
+
+test("a Codex folder's mkdir output is cut to its last 300 characters (fails if the message keeps all of it)", async () => {
+  const output = `${"a".repeat(400)}the end`;
+  const { created } = start({ found: box("RUNNING"), codexHome: true, mkdirExits: [1], mkdirOutput: output });
+  await assert.rejects(created, { message: codexFailure(output.slice(-300)) });
+});
+
+test("a Codex folder whose mkdir prints nothing reports the exit code (fails if the message is blank)", async () => {
+  const { created } = start({ found: box("RUNNING"), codexHome: true, mkdirExits: [1], mkdirOutput: "" });
+  await assert.rejects(created, { message: codexFailure("exit 1") });
+});
+
+test("a reconnect whose Codex folder cannot be created opens no tunnel and connects nothing (fails if the check runs after the tunnel opens)", async () => {
+  const { reconnect, open, tunnels, connected, calls } = register({
+    found: box("RUNNING"),
+    codexHome: true,
+    mkdirExits: [1],
+  });
+  await assert.rejects(reconnect(adoptedResource, lifecycle().report, new AbortController().signal), {
+    message: codexFailure("mkdir: cannot create directory: Not a directory"),
+  });
+  assert.equal(open.has("env-1"), false);
+  assert.deepEqual(tunnels, []);
+  assert.deepEqual(connected, []);
+  assert.deepEqual(calls, ["get RUNNING", ...gated("ssh", "mkdir")]);
 });
 
 test("a STARTING box that settles to STOPPING waits for the stop, then starts (fails if it starts a stopping box)", async () => {
