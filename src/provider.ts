@@ -413,7 +413,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         report.step(`Deleting orphaned Ona environment ${env.metadata.name ?? env.id}`);
         await disconnect(env.id);
         await ona.delete(env.id, signal);
-        // The create stamped the box's idle clock before it failed.
+        // A failed create may already have stamped the box's idle clock; forget it.
         await deps.forgetBox(env.id);
         bb.log.info(metric("delete", { env: env.id, via: "cleanup", git: gitKnown(env) ? "known" : "unknown" }));
       }
