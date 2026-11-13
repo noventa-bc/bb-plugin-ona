@@ -1,8 +1,8 @@
 # Owner guide: running agents on this repo
 
 Agents work under the nono sandbox (`.nono/agent.jsonc`). Inside it they can
-read and write their working folder and their own state (`~/.claude`,
-`~/.codex`), read the toolchain, and reach only the model APIs. They can't read
+read and write their working folder and Claude's own state
+(`~/.claude`), read the toolchain, and reach only the model APIs. They can't read
 `~/.ssh`, `~/.ona` or `~/.bb`, can't write anywhere else, and can't reach
 localhost, so `ona`, `ssh` to boxes and the live bb server are out of reach.
 Agents never commit to `main`. Outside the orchestrated flow they commit
@@ -37,7 +37,7 @@ nothing and don't push; you review, commit and merge. Inside it, `FACTORY.md`
 - Unattended: `scripts/agent-run.sh "<task brief>"`. It creates
   `../bb-ona-worktrees/<slug>` on branch `agent/<slug>`, runs Claude there
   and prints where the handoff is. `AGENT_BUDGET_USD` caps a run (default 5).
-- Attended: `scripts/agent-shell.sh [claude|codex]` from this checkout or a
+- Attended: `scripts/agent-shell.sh [claude args...]` from this checkout or a
   worktree. Prompts stay on.
 - bb threads opened on this repo run outside the sandbox, with only the
   agent's own permission prompts and `AGENTS.md`. Prefer `agent-shell.sh`.
@@ -151,8 +151,3 @@ The numbers cannot see starts made outside the plugin, or lines older than those
   non-allowed domain can't be reached.
 - `agent-run.sh` warns if a run changed `~/.claude/settings.json`, Claude's
   own config, which the sandbox leaves writable.
-
-## Open items
-
-- Codex doesn't connect through nono's network proxy (it fails at
-  "workspace routing discovery").
