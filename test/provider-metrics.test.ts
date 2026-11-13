@@ -162,7 +162,7 @@ test("a created box that ensureRunning then starts reads box=new, not stopped (f
 });
 
 test("a delete that Ona rejects writes no delete line and still rejects, in remove and in cleanup (fails if the line is written before the delete)", async () => {
-  const removing = register({ found: box("RUNNING"), deleteFails: true });
+  const removing = register({ found: boxWithGit({}), deleteFails: true });
   await assert.rejects(remove(removing.provider), /Ona delete failed/);
   assert.deepEqual(metricLines(removing.logs), []);
   const cleaning = register({
@@ -173,20 +173,19 @@ test("a delete that Ona rejects writes no delete line and still rejects, in remo
   assert.deepEqual(metricLines(cleaning.logs), []);
 });
 
-test("a remove that deletes a box with no git content writes delete with git=unknown (fails if the line is missing or says known)", async () => {
-  const { provider, calls, logs } = register({ found: box("RUNNING") });
+test("a remove of a clean box writes a delete line (fails if the line is missing)", async () => {
+  const { provider, logs } = register({ found: boxWithGit({}) });
   await remove(provider);
-  assert.deepEqual(
-    calls.filter((call) => call.startsWith("delete")),
-    ["delete env-1"],
-  );
-  assert.deepEqual(metricLines(logs), ["metric delete env=env-1 via=remove git=unknown"]);
+  assert.deepEqual(metricLines(logs), ["metric delete env=env-1 via=remove"]);
 });
 
-test("a remove of a clean box, whose listing gives only the unpushed-commit count, writes delete with git=known (fails if a clean box reads as unknown)", async () => {
-  const { provider, logs } = register({ found: boxWithGit({ totalUnpushedCommits: 0 }) });
-  await remove(provider);
-  assert.deepEqual(metricLines(logs), ["metric delete env=env-1 via=remove git=known"]);
+test("a remove and an orphan cleanup of a box with no git block write keep with git=unknown (fails if the keep line is missing or carries counts)", async () => {
+  const removing = register({ found: box("RUNNING") });
+  await remove(removing.provider);
+  assert.deepEqual(metricLines(removing.logs), ["metric keep env=env-1 via=remove git=unknown"]);
+  const cleaning = register({ found: { ...box("RUNNING"), metadata: { name: envNameForKey("key-1") } } });
+  await cleanup(cleaning.provider);
+  assert.deepEqual(metricLines(cleaning.logs), ["metric keep env=env-1 via=cleanup git=unknown"]);
 });
 
 test("a remove that finds unpushed commits writes keep with the counts and deletes nothing (fails if the keep line is missing or a delete runs)", async () => {
@@ -200,13 +199,10 @@ test("a remove that finds unpushed commits writes keep with the counts and delet
   assert.deepEqual(metricLines(logs), ["metric keep env=env-1 via=remove commits=2 files=0"]);
 });
 
-test("an orphan cleanup writes delete with git=known when the listing gives the unpushed-commit count, and git=unknown with no git content (fails if either flag is wrong)", async () => {
-  const known = register({ found: boxWithGit({ totalUnpushedCommits: 0 }) });
-  await cleanup(known.provider);
-  assert.deepEqual(metricLines(known.logs), ["metric delete env=env-1 via=cleanup git=known"]);
-  const unknown = register({ found: { ...box("RUNNING"), metadata: { name: envNameForKey("key-1") } } });
-  await cleanup(unknown.provider);
-  assert.deepEqual(metricLines(unknown.logs), ["metric delete env=env-1 via=cleanup git=unknown"]);
+test("an orphan cleanup of a clean box writes a delete line (fails if the line is missing)", async () => {
+  const { provider, logs } = register({ found: boxWithGit({}) });
+  await cleanup(provider);
+  assert.deepEqual(metricLines(logs), ["metric delete env=env-1 via=cleanup"]);
 });
 
 test("an orphan cleanup that finds unpushed commits and uncommitted files writes keep with both counts and deletes nothing (fails if the keep line is missing)", async () => {

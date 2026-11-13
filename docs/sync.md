@@ -51,7 +51,7 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
 
 `bb ona new` resolves its project name with `ona project list -o json` (`resolveProjectId` in `src/ona.ts`). It is read-only and touches no box, so safety rule 1 does not gate it.
 
-`ona environment stop <id>` runs in the provider's `suspend()` (`src/provider.ts`) when Ona still has the box and does not show it stopped or deleted; a suspend the plugin makes itself skips it (safety rule 2). `ona environment delete <id>` runs in `remove()` and `reconcileCleanup()` only for a box bb created that no other bb machine uses, and only when `unpushedWork()` finds no unpushed commits or uncommitted files; an adopted box is never deleted.
+`ona environment stop <id>` runs in the provider's `suspend()` (`src/provider.ts`) when Ona still has the box and does not show it stopped or deleted; a suspend the plugin makes itself skips it (safety rule 2). `ona environment delete <id>` runs in `remove()` and `reconcileCleanup()` only for a box bb created that no other bb machine uses, and only when Ona's listing has a git block for the box (`gitKnown()`) and `unpushedWork()` finds no unpushed commits or uncommitted files in it; an adopted box is never deleted.
 
 **Safety rules.** Every automatic action keeps these:
 

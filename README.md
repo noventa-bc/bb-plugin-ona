@@ -177,7 +177,7 @@ page closes and ends on a plugin reload. The page reads the status again every 3
 
 ```sh
 bb ona adopt <ona-environment>   # existing environment; bb never deletes it
-bb ona new [ona-project]         # new devbox; deleted when you remove the machine, unless it has unpushed commits or uncommitted files or another machine uses it
+bb ona new [ona-project]         # new devbox; deleted when you remove the machine, unless it has unpushed commits or uncommitted files, Ona reports no git state for it, or another machine uses it
 ```
 
 These are shortcuts for `bb machine create`. Adopt an existing environment;
@@ -191,8 +191,8 @@ bb machine create --provider ona --inputs '{"mode":"adopt","environment":"<name-
 Create a new one from an Ona project. It gets a fun name such as
 `nimble-badger-ca1b`, and bb deletes it when you remove the machine. While
 another bb machine uses the box, the remove succeeds and keeps it. Otherwise,
-if Ona reports unpushed commits or uncommitted files on the box, the remove
-fails and the box is kept: commit and push, or discard, the work, or delete the box with
+if Ona reports unpushed commits or uncommitted files on the box, or reports no git state
+for it, the remove fails and the box is kept: commit and push, or discard, the work, or delete the box with
 `ona environment delete <id>`, then run `bb machine retry-cleanup`:
 
 ```sh
@@ -296,7 +296,7 @@ bb ona resume <ref>            # a stopped active machine: starts its box and re
 bb ona update [ref] [--force]  # apply pending agent-CLI updates on connected devboxes (also weekdays 09:00 when `autoUpdateClis` is on); a box with an agent running is skipped unless --force; a box another action is running on is skipped
 bb machine suspend ona:<name>  # stops the Ona environment (Pause button in bb's machine list)
 bb machine resume ona:<name>   # starts it, reopens the tunnel, restarts the daemon (Play button); gives up after 30 minutes ("Machine resume failed: Gave up resuming <box> after 30 minutes; last step: …")
-bb machine remove ona:<name>   # created: deletes the box unless it has unpushed commits or uncommitted files or another machine uses it; adopted: stops bb's daemon, moves its data folder aside
+bb machine remove ona:<name>   # created: deletes the box unless it has unpushed commits or uncommitted files, Ona reports no git state for it, or another machine uses it; adopted: stops bb's daemon, moves its data folder aside
 ```
 
 ## Troubleshooting
@@ -319,7 +319,7 @@ bb machine remove ona:<name>   # created: deletes the box unless it has unpushed
   it clears (bb's retries and messages: [docs/ona-notes.md](docs/ona-notes.md)). Check
   what's left in the workspace (`bb environment list --host <machine>`, then the
   workspace path on the box). On an adopted box only (removing a created one deletes
-  it unless it has unpushed commits or uncommitted files or another bb machine uses it), once that list shows `Needs recovery:` for the workspace, start over: keep the box running, run `bb machine remove <machine>`,
+  it unless it has unpushed commits or uncommitted files, Ona reports no git state for it, or another bb machine uses it), once that list shows `Needs recovery:` for the workspace, start over: keep the box running, run `bb machine remove <machine>`,
   then `bb ona adopt <box>`. If the remove fails, stop every bb daemon on the box, and
   anything running from a checkout in it, with
   `ssh "$(bb ona host <box>)" 'pkill -f "$(readlink -f ~/.bb-machines)/"'`, run
