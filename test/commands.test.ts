@@ -461,7 +461,7 @@ test("a run still alive when its 10-minute wait ends exits 124 with the Still ru
 });
 
 // Bug: an aborted wait said "Still running after 10 minutes" though no 10 minutes had passed.
-test("a run whose signal is aborted before its first poll exits 124 with the stopped-waiting note, not the 10-minute one (fails if a poll runs after the abort, a run created as running is not counted as still running, or the abort check is gone)", async () => {
+test("a run whose signal is aborted before its first poll exits 124 with the stopped-waiting note, not the 10-minute one (fails if a poll runs after the abort, a run created as running is not counted as still running, or the wait loop's abort check is gone)", async () => {
   // Were it polled, bb would report an exit 0: the 124 shows that the wait never polled.
   const controller = new AbortController();
   const exited: TerminalInfo = { id: TERMINAL_ID, status: "exited", exitCode: 0 };
@@ -473,7 +473,7 @@ test("a run whose signal is aborted before its first poll exits 124 with the sto
 });
 
 // Bug: a run cancelled while its box was being looked up still started the command.
-test("a run whose signal is aborted before its command starts never creates the terminal and says it was not started (fails if the abort check before createTerminal is gone)", async () => {
+test("a run whose signal is aborted before its command starts never creates the terminal and says it was not run (fails if the abort check before createTerminal is gone)", async () => {
   let created = false;
   const result = await shellRun(null, { signal: AbortSignal.abort() }, undefined, () => {
     created = true;
