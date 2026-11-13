@@ -3,13 +3,13 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { tempDir } from "./sandbox.ts";
+import { scrubbed, tempDir } from "./sandbox.ts";
 
 const script = join(import.meta.dirname, "..", "scripts", "agent-shell.sh");
 
 test("agent-shell.sh starts claude with every argument (fails if the first argument is taken as the agent)", () => {
   const repo = tempDir("agent-shell-repo-");
-  execFileSync("git", ["init", "-q", repo]);
+  execFileSync("git", ["init", "-q", repo], { env: scrubbed(process.env) });
   // A stub nono that prints its arguments instead of starting a session.
   const bin = tempDir("agent-shell-bin-");
   writeFileSync(join(bin, "nono"), '#!/bin/sh\nprintf "%s\\n" "$@"\n');

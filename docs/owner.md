@@ -2,7 +2,7 @@
 
 Agents work under the nono sandbox (`.nono/agent.jsonc`). Inside it they can
 read and write their working folder and Claude's own state
-(`~/.claude`), read the toolchain, and reach only the model APIs. They can't read
+(`~/.claude` and `~/.claude.json`), read the toolchain, and reach only the model APIs. They can't read
 `~/.ssh`, `~/.ona` or `~/.bb`, can't write anywhere else, and can't reach
 localhost, so `ona`, `ssh` to boxes and the live bb server are out of reach.
 Agents never commit to `main`. Outside the orchestrated flow they commit
