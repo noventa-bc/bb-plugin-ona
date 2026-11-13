@@ -1,22 +1,28 @@
 #!/bin/sh
 # Extracts commit <sha> of <worktree> into a new folder <dir>, for a reviewer to run tests and mutants in
 # without touching <worktree>. The copy has no .git. Its node_modules links to the main checkout's when the commit's
-# package.json has the same dependencies, devDependencies, optionalDependencies, peerDependencies and overrides as the
-# main checkout's, and its package-lock.json has the same contents apart from the package's own version. A copy whose
-# commit has its own node_modules keeps it. <dir>'s parent folder must already exist, and <dir> must not lie inside
-# any git checkout. Prints the copy's absolute path on stdout; the other messages go to stderr.
+# package.json has the same text as the main checkout's (key order included) apart from its version and from its scripts
+# not named like an install hook (a name containing install, prepare, prepublish or dependencies); and its
+# package-lock.json has the same text apart from the package's own version. A copy whose commit has its own node_modules
+# keeps it. <dir>'s parent folder must already exist, and <dir> must not lie inside any git checkout. Prints the copy's
+# absolute path on stdout; the other messages go to stderr.
 #   scripts/scratch-copy.sh <worktree> <sha> <dir>
 set -eu
 usage() { echo "usage: scripts/scratch-copy.sh <worktree> <sha> <dir>" >&2; exit 2; }
-# Exits 0 when the JSON files $1 and $2 agree: for package.json, on its dependency fields and overrides (the `fields`
-# list below); for a lockfile, on everything but the package's own version (the top-level one and packages[""]'s).
-# Exits 1 when they differ or a file cannot be read or parsed; node's message is hidden, since the caller reports it.
+# Exits 0 when the JSON files $1 and $2 have the same text (key order included) once a package.json's top-level version
+# and its scripts not named like an install hook are left out, or once a lockfile's own version fields (the top-level one
+# and packages[""]'s) are. Exits 1 when they differ or a file cannot be read or parsed; node's message is hidden, since
+# the caller reports it.
 same_deps() {
   node -e '
-    const fields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies", "overrides"];
     const load = (file) => {
       const json = JSON.parse(require("node:fs").readFileSync(file, "utf8"));
-      if (file.endsWith("/package.json")) return JSON.stringify(Object.fromEntries(fields.map((f) => [f, json[f]])));
+      if (file.endsWith("/package.json")) {
+        const { scripts = {}, ...rest } = json;
+        delete rest.version;
+        const hooks = Object.entries(scripts).filter(([name]) => /install|prepare|prepublish|dependencies/.test(name));
+        return JSON.stringify([rest, hooks]);
+      }
       delete json.version;
       delete json.packages?.[""]?.version;
       return JSON.stringify(json);
