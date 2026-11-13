@@ -138,4 +138,4 @@ Once per release, run `/doctor prompt-audit`.
 ## Open items
 
 - Codex doesn't connect through nono's network proxy (it fails at
-  "workspace routing discovery"), so `scripts/agent-shell.sh codex` fails.
+  "workspace routing discovery").
