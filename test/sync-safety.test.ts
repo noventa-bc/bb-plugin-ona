@@ -120,15 +120,20 @@ test("a pass keeps the flag of a machine bb no longer has (fails if a not-found 
   assert.ok(releasing.has("gone"));
 });
 
-test("a pass keeps the flag while an action on any machine is in flight (fails if only the flagged machine's actions are checked)", async () => {
+test("a pass keeps a machine's flag while its own action is in flight, and an action on another machine does not hold it (fails if the busy check is dropped or covers every machine)", async () => {
   const { sync, releasing, guard } = world([idle("h1"), idle("h2", { envId: "env-h1" })]);
   releasing.add("h1");
   let finish = () => {};
-  const inFlight = guard.run("h2", RELEASE_IDLE, "test", () => new Promise<void>((resolve) => (finish = resolve)));
-  await sync.reconcile(new Set(["h1"]), { wait: true });
-  assert.ok(releasing.has("h1"));
+  const own = guard.run("h1", RELEASE_IDLE, "test", () => new Promise<void>((resolve) => (finish = resolve)));
+  await sync.reconcile(new Set(["h2"]), { wait: true });
+  assert.ok(releasing.has("h1"), "h1's own action holds its flag");
   finish();
-  await inFlight;
+  await own;
+  const other = guard.run("h2", RELEASE_IDLE, "test", () => new Promise<void>((resolve) => (finish = resolve)));
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.ok(!releasing.has("h1"), "h2's action does not hold h1's flag");
+  finish();
+  await other;
 });
 
 test("two machines on one box: a pass clears the active machine's flag and keeps the suspended one's (fails if a pass clears a flag whose machine it did not read active)", async () => {
@@ -156,6 +161,7 @@ test("after the plugin lets go of one machine on a shared box, the user's suspen
   const { sync, calls, providerSuspend } = world([idle("h1"), idle("h2", { envId: "env-h1", threads: [recent] })]);
   await sync.reconcile(new Set([ALL]), { wait: true });
   assert.ok(calls.includes("suspend h1") && !calls.includes("suspend h2"), "only h1 is idle");
+  assert.ok(!calls.includes("stop env-h1"), "the plugin's own release stopped nothing");
   providerSuspend("h2");
   assert.ok(calls.includes("stop env-h1"));
 });

@@ -255,13 +255,14 @@ function timedWake<T>(
 }
 
 /**
- * Drop the no-stop flag of a machine bb shows active on a fresh read, with no action in flight: bb ended the plugin's
- * suspend without running the provider's suspend (a failed drain), so the next suspend is the user's and stops the box
- * (docs/sync.md rule 2). A failed read or any other phase keeps the flag. Every sync pass runs it.
+ * Drop the no-stop flag of a machine bb shows active on a fresh read, with no action of its own in flight: bb ended the
+ * plugin's suspend without running the provider's suspend (a failed drain), so the next suspend is the user's and stops
+ * the box (docs/sync.md rule 2). A failed read or any other phase keeps the flag. Only the machine's own action counts:
+ * the plugin sets a machine's flag only inside that machine's guard action. Every sync pass runs it.
  */
 export async function clearFailedReleases(
   releasing: Set<string>,
-  guard: { anyBusy(): boolean },
+  guard: { busyWith(hostId: string): string | undefined },
   hosts: { get(args: { hostId: string }): Promise<{ lifecycle: { phase: string } }> },
 ): Promise<void> {
   for (const hostId of [...releasing]) {
@@ -270,7 +271,7 @@ export async function clearFailedReleases(
       () => "unknown",
     );
     // After the read: the plugin's own suspend may be the one that set the flag.
-    if (phase === "active" && !guard.anyBusy()) releasing.delete(hostId);
+    if (phase === "active" && !guard.busyWith(hostId)) releasing.delete(hostId);
   }
 }
 

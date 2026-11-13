@@ -302,11 +302,6 @@ export class HostGuard {
     return this.busy.get(hostId);
   }
 
-  /** Whether any machine has an action in flight. */
-  anyBusy(): boolean {
-    return this.busy.size > 0;
-  }
-
   /** Whether an automatic `action` may run now (not busy, not cooling down, not given up but as `pastGiveUp` says). */
   mayAct(hostId: string, force = false, action?: string): boolean {
     if (this.busy.has(hostId)) return false;

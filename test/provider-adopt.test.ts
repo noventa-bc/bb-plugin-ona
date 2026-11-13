@@ -227,7 +227,7 @@ test("removing the adopting machine while bb also removes the creating one close
   assert.deepEqual(calls, ["get RUNNING", "move-aside"]);
   assert.deepEqual(tunnels, ["stop env-1", "stop env-1"]);
   assert.deepEqual(forgotten, ["env-1"]);
-  assert.deepEqual([...releasing], ["host-1"], "host-1's flag goes with its own remove");
+  assert.deepEqual([...releasing], ["host-1"], "host-2's remove keeps host-1's flag");
 });
 
 test("removing the created machine while bb also removes the adopting one deletes the box (fails if a machine being removed counts as using the box)", async () => {
