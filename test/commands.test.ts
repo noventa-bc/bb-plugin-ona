@@ -106,7 +106,7 @@ function fakeRun(
       return ["up to date"];
     },
     tunnels: { status: () => "up", mark: () => 7 },
-    statusRows: async () => [],
+    statusRows: async (ref?: string) => (ref === "box" ? [{ machine: "ona:box" }] : []),
     onaHealth: () => ({ lastError: null, listedAt: null, autoRepair: false }),
     resolveEnvId: (ref: string) => Promise.resolve(ref === "box" ? "env_1" : ref),
     markConnected: async (envId: string) => void calls.push(`mark ${envId}`),
@@ -499,4 +499,20 @@ test("a run whose signal is aborted during the wait exits 124 with the stopped-w
     stdout: "out\n",
     stderr: `Stopped waiting before the command finished; it may still be running on the box. Follow it with: bb terminal attach ${TERMINAL_ID}`,
   });
+});
+
+// Bug: `status <ref>` with no matching machine printed "No Ona machines yet." and exited 0.
+test("status <ref> and status --json <ref> with no match exit 1 naming the ref; status with no ref and no machines still exits 0 (fails if the ref check is dropped)", async () => {
+  const { run } = fakeRun();
+  const refusal = { exitCode: 1, stderr: 'No Ona-backed bb machine matches "nope". See `bb ona status`.' };
+  assert.deepEqual(await run("status", "nope"), refusal);
+  assert.deepEqual(await run("status", "nope", "--json"), refusal);
+  const all = await run("status");
+  assert.equal(all.exitCode, 0);
+  assert.match(all.stdout ?? "", /No Ona machines yet\./);
+});
+
+test("status <ref> prints the machine the ref matches (fails if every ref is refused)", async () => {
+  const { run } = fakeRun();
+  assert.deepEqual(await run("status", "box", "--json"), { exitCode: 0, stdout: '[{"machine":"ona:box"}]' });
 });

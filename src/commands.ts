@@ -298,6 +298,8 @@ export function onaCommands(deps: OnaCommandDeps) {
         }
         case "status": {
           const rows = await statusRows(ref);
+          if (ref && rows.length === 0)
+            return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${ref}". See \`bb ona status\`.` };
           if (json) return { exitCode: 0, stdout: JSON.stringify(rows) };
           return { exitCode: 0, stdout: formatStatus(rows, onaHealth()) };
         }
