@@ -169,3 +169,20 @@ test("the hidden-warning rule hides the shell_environment_policy and multi_agent
   );
   assert.ok(app.includes("style.textContent = HIDDEN_WARNING_CSS;"), "the rule is not applied");
 });
+
+test("hideKnownWarnings replaces the rule in a style element an older plugin version left (fails if it returns early on an existing element)", () => {
+  // Bug: a bb window kept the older rule after `bb plugin reload ona`, so a newly hidden warning still showed.
+  const app = readFileSync(new URL("../app.tsx", import.meta.url), "utf8");
+  const start = app.indexOf("function hideKnownWarnings() {");
+  const body = app.slice(start, app.indexOf("\n}\n", start) + 2);
+  const css = /const HIDDEN_WARNING_CSS =[\s\S]*?';\n/.exec(app)?.[0] ?? "";
+  const old = { id: "bb-ona-hidden-warnings", textContent: "old rule" };
+  const document = {
+    getElementById: (id: string) => (id === old.id ? old : null),
+    createElement: () => assert.fail("created a second style element"),
+    head: { appendChild: () => assert.fail("appended a second style element") },
+  };
+  const run = new Function("document", `${css}\n${body}\nhideKnownWarnings();\nreturn HIDDEN_WARNING_CSS;`);
+  const rule = run(document);
+  assert.equal(old.textContent, rule, "the older rule was kept");
+});

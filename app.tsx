@@ -195,11 +195,12 @@ const HIDDEN_WARNING_CSS =
   '[data-timeline-row-id*=":op:warning:"]:has([title*="`[features].multi_agent` is deprecated"]) { display: none !important; }';
 
 function hideKnownWarnings() {
-  if (typeof document === "undefined" || document.getElementById("bb-ona-hidden-warnings")) return;
-  const style = document.createElement("style");
-  style.id = "bb-ona-hidden-warnings";
+  if (typeof document === "undefined") return;
+  // A plugin reload reuses the element an older version left, with this version's rule.
+  const style =
+    document.getElementById("bb-ona-hidden-warnings") ??
+    document.head.appendChild(Object.assign(document.createElement("style"), { id: "bb-ona-hidden-warnings" }));
   style.textContent = HIDDEN_WARNING_CSS;
-  document.head.appendChild(style);
 }
 
 type MoveData = ReturnType<typeof useMoveData>;
