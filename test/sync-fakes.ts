@@ -8,6 +8,8 @@ export const HOUR = 3_600_000;
 export const NOW = Date.now();
 /** The `metric mismatch` line a pass writes for the stopped box `idle("h1")`; its machine name is `ona:env-h1`. */
 export const MISMATCH_LINE = "metric mismatch host=ona:env-h1 kind=active-stopped secs=120";
+/** bb's refusal of a suspend; `suspendFailure` (src/lifecycle.ts) matches this text, so it stays in step with it. */
+export const REFUSED = "Machine suspension failed: Host is not connected";
 
 interface Box {
   hostId: string;

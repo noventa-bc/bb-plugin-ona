@@ -2,13 +2,12 @@ import assert from "node:assert/strict";
 import { mock, test } from "node:test";
 import { ALL } from "../src/reconcile.ts";
 import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
-import { idle, MISMATCH_LINE, world } from "./sync-fakes.ts";
+import { idle, MISMATCH_LINE, REFUSED, world } from "./sync-fakes.ts";
 
 // The `metric mismatch` line (src/sync.ts) over whole passes. Most boxes here are stopped in Ona while bb shows them
 // connected: decide() repairs nothing there, so only the metric line shows it. pluginStartedAt is the mocked now, so no
 // test here reaches the idle release (an hour without a thread).
 const GONE_LINE = MISMATCH_LINE.replace("active-stopped", "active-gone");
-const REFUSED = "Machine suspension failed: Host is not connected";
 const mismatchLines = (logs: readonly string[]) => logs.filter((line) => line.startsWith("metric mismatch"));
 
 test("a new incident after a cleared one logs again after its own 120 s (fails if a cleared mismatch keeps its hold)", async () => {

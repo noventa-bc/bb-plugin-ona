@@ -30,7 +30,7 @@ export const brokenTools: [string, string][] = [
 export const partialPs = (pid: number) => `/bin/ps "$@" | grep -v -E "^ *${pid} "\nexit 1`;
 
 /** Resolves once a process whose command line contains `token` is listed; throws after 5 s. */
-export async function listed(token: string): Promise<void> {
+async function listed(token: string): Promise<void> {
   for (let tick = 0; tick < 100; tick++) {
     if (execFileSync("ps", ["-e", "-o", "args="]).toString().includes(token)) return;
     await delay(50);

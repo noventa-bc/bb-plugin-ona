@@ -172,10 +172,6 @@ export default async function plugin(bb: BbPluginApi) {
   );
 
   const pluginStartedAt = Date.now();
-  // Older versions kept the idle-release flag in this key; it now lives in memory.
-  void bb.storage.kv.delete("releasing").catch(() => {});
-  // Older versions remembered open tunnels in this key; the first reconcile pass reopens them now.
-  void bb.storage.kv.delete("tunnels").catch(() => {});
 
   const provider = registerOnaProvider(bb, {
     async availability() {

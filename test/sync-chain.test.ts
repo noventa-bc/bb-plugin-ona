@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import { ALL, COOLDOWN_MS, GIVE_UP_AFTER, HostGuard } from "../src/reconcile.ts";
 import { enableFakeClock, resetFakeClock, settle, tick } from "./fake-clock.ts";
-import { HOUR, idle, waitingThread, world } from "./sync-fakes.ts";
+import { HOUR, idle, REFUSED, waitingThread, world } from "./sync-fakes.ts";
 
-const REFUSED = "Machine suspension failed: Host is not connected";
 const RESUME_REJECTED = "HTTP 409: Only an active or suspended machine can be resumed";
 const RESUME_FAILED = "Machine resume failed: Ona environment not found";
 

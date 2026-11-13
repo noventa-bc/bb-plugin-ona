@@ -4,9 +4,7 @@ import { test } from "node:test";
 import { ALL, GIVE_UP_AFTER, HostGuard, RELEASE_IDLE } from "../src/reconcile.ts";
 import type { ThreadRecord } from "../src/sync.ts";
 import { enableFakeClock, resetFakeClock, tick } from "./fake-clock.ts";
-import { HOUR, idle, world } from "./sync-fakes.ts";
-
-const REFUSED = "Machine suspension failed: Host is not connected";
+import { HOUR, idle, REFUSED, world } from "./sync-fakes.ts";
 
 /**
  * A box whose daemon restarts fail, after three all-boxes passes 5 and 10 minutes apart: the guard has given up on it,

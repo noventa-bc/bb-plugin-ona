@@ -14,7 +14,7 @@ import { errorText, isRunning, type OnaSnapshot } from "./ona.ts";
 import type { Devbox, ThreadCost } from "./rpc.ts";
 
 /** The parts of bb's plugin API the cost check uses; the real `bb` satisfies it. */
-export interface CostBb {
+interface CostBb {
   sdk: {
     threads: {
       get(args: { threadId: string }): Promise<{ providerId: string }>;
@@ -29,7 +29,7 @@ export interface CostBb {
   log: Pick<PluginLogger, "warn">;
 }
 
-export interface CostDeps {
+interface CostDeps {
   bb: CostBb;
   /** Runs a collector script on a running box; the provider's runCollector(). */
   runCollector(envId: string, script: string, ids: string[]): Promise<unknown>;
