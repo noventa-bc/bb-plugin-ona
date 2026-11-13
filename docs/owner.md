@@ -141,7 +141,7 @@ The plugin writes `metric` lines to its log, which `bb plugin logs ona` prints. 
 
 `deletes_refused` counts the boxes a removal refused at least once, not keep lines: a box refused more than once has a keep line for each refusal. `connect_secs_stopped_*` covers the connects that worked (`ok=1`) with `box=stopped` or `box=new`, and `connect_secs_running_*` those with `box=running`. `skipped_lines` counts the input lines that are not log lines: lines that are not a JSON object, and JSON objects whose `ts` is not a number a Date can hold or whose `message` is not a string. A log line whose first word is not `metric` is ignored and is not counted in `skipped_lines`.
 
-The numbers cannot see starts made outside the plugin, or lines older than the newest 10000 that the command returns. `starts_soon_after_load` counts the resume starts whose `up` is under 300 seconds.
+The numbers cannot see starts made outside the plugin, or lines older than those the command returns. `starts_soon_after_load` counts the resume starts whose `up` is under 300 seconds.
 
 ## Sandbox checks (nono 0.81.0, checked 2026-10-30)
 
