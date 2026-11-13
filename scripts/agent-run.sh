@@ -23,6 +23,11 @@ if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
   credential=(--env-credential-map claude_code_oauth_token CLAUDE_CODE_OAUTH_TOKEN)
 fi
 
+# Sessions can write the agent's own config; warn if a run changed it. A missing
+# file reads as empty; any other read error stops here, before the worktree exists.
+settings() { [ -e "$HOME/.claude/settings.json" ] || return 0; cksum "$HOME/.claude/settings.json"; }
+before=$(settings)
+
 git -C "$repo" worktree add -q -b "agent/$slug" "$tree" HEAD
 cp -c -R "$repo/node_modules" "$tree/node_modules" 2>/dev/null || cp -R "$repo/node_modules" "$tree/node_modules"
 mkdir -p "$tree/.agent"
@@ -30,11 +35,6 @@ mkdir -p "$tree/.agent"
 prompt="$brief
 
 You are running unattended. Follow AGENTS.md. Don't ask questions: decide, or record the question in the handoff. Finish by writing .agent/HANDOFF.md."
-
-# Sessions can write the agent's own config; warn if a run changed it.
-# A missing file reads as empty, so a run that creates it is reported too.
-settings() { cat "$HOME/.claude/settings.json" 2>/dev/null || true; }
-before=$(settings)
 
 sandbox=(nono run -s --allow-cwd --profile "$repo/.nono/agent.jsonc"
   --read "$repo/.git" --allow "$repo/.git/worktrees/$slug" ${credential[@]+"${credential[@]}"} --)
