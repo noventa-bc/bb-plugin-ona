@@ -42,7 +42,8 @@ npm run check        # Node pin, typecheck, lint, format check, tests
 2. Fix a bug with a failing test first. Put logic in `src/` as pure functions
    with tests; a change to a sync pass gets a scenario in a
    `test/sync-*.test.ts` file (`AGENTS.md` "How to work" says which).
-   The offline end-to-end tests, `test/e2e*.test.ts`, load the real
+   The offline end-to-end tests, `test/e2e*.test.ts` (except
+   `test/e2e-host.test.ts`, which tests the harness), load the real
    `server.ts` in the SDK's fake bb host with the fake `ona`
    (`test/fake-ona.mjs`, stateful) and fake `ssh`, and drive the plugin as bb
    does; for example, `test/e2e.test.ts` drives the provider's create, suspend,

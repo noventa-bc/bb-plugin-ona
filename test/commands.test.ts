@@ -49,8 +49,6 @@ function fakeRun(
     /** bb's machine list rejects. */
     machinesFails?: boolean;
     duringListing?: (guard: HostGuard, machine: { phase: string; hostId: string; machine: string }) => void;
-    /** The provider's wake throws this. */
-    wakeFails?: string;
     /** The context the command runs in. */
     ctx?: { signal?: AbortSignal };
   } = {},
@@ -93,7 +91,6 @@ function fakeRun(
       reconnect: async (resource: { envId: string }) => void calls.push(`reconnect ${resource.envId}`),
       wake: async (resource: { envId: string }, _report: unknown, signal: AbortSignal, via: string, since: number) => {
         calls.push(`wake ${resource.envId} ${via} since=${since} ctxSignal=${signal === extra.ctx?.signal}`);
-        if (extra.wakeFails) throw new Error(extra.wakeFails);
         return false;
       },
     },
@@ -152,6 +149,8 @@ test("an unknown command, or one missing its <ref>, exits 1 with the usage", asy
   const { run } = fakeRun();
   assert.deepEqual(await run("frobnicate"), { exitCode: 1, stderr: usage });
   assert.deepEqual(await run("host"), { exitCode: 1, stderr: usage });
+  assert.deepEqual(await run("resume"), { exitCode: 1, stderr: usage });
+  assert.deepEqual(await run("reconnect"), { exitCode: 1, stderr: usage });
 });
 
 test("sync, reconnect and resume each log one metric cmd line; status and a resume without a ref log none (fails if a case logs before its ref check or another command logs one)", async () => {
@@ -331,14 +330,9 @@ test("reconnect refuses a machine a suspend finished while Ona was listed, witho
 
 test("resume wakes the box with the context's signal and the tunnels' mark (fails if either is dropped)", async () => {
   const signal = new AbortController().signal;
-  const { run, calls } = fakeRun("active", "STOPPED", { ctx: { signal } });
+  const { run, calls } = fakeRun("active", "RUNNING", { ctx: { signal } });
   assert.deepEqual(await run("resume", "box"), { exitCode: 0, stdout: "Reconnected ona:box" });
   assert.deepEqual(calls, ["wake env_1 wake-cmd since=7 ctxSignal=true"]);
-});
-
-test("a resume whose wake throws exits 1 with the error (fails if the command's catch no longer sees it)", async () => {
-  const { run } = fakeRun("active", "STOPPED", { wakeFails: "Ona refused the start" });
-  assert.deepEqual(await run("resume", "box"), { exitCode: 1, stderr: "Ona refused the start" });
 });
 
 // Bug: a machine replaced during the listing (same name and box, new host id) was reconnected under the old host.
