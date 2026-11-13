@@ -38,7 +38,9 @@ through (see [Security model](docs/security.md)). The server stays on loopback,
 and nothing goes through getbb.app or any other third-party relay. Tunnels only
 work while your Mac is awake and bb is running. An open tunnel counts as
 activity to Ona, so the plugin keeps it open only while you use the box, or after bb's restart recovery resumes the machine. After
-`idleDisconnect` (1h by default) without thread activity, unless bb is setting up,
+`idleDisconnect` (1h by default) without thread activity (counted from the later of a thread's last activity and the box's last create, adopt,
+`bb ona resume`, `bb ona reconnect` or resume by bb: `bb machine resume`, bb's restart recovery or a waiting thread's resume;
+the plugin's own repairs, and its start of a box for a thread waiting on an active machine, do not restart it), unless bb is setting up,
 tearing down, retrying or retiring one of the machine's workspaces (retiring is bb's grace before a teardown), or one needs recovery, or
 bb's workspace or thread list can't be read, or the Ona listing fails or comes back
 empty (see [How bb and Ona stay in sync](docs/sync.md)),
