@@ -113,6 +113,13 @@ test("a pass keeps the flag when an action starts on the machine during its fres
   finish();
 });
 
+test("a pass keeps the flag of a box no listed machine uses (fails if an empty machine list counts as all active)", async () => {
+  const { sync, releasing } = world([idle("h1")]);
+  releasing.add("env-gone");
+  await sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.ok(releasing.has("env-gone"));
+});
+
 test("two machines on one box: the flag stays while the other one is busy, or not active (fails if only the pass's machine is checked)", async () => {
   const boxes = () => [idle("h1"), idle("h2", { envId: "env-h1" })];
   const busy = world(boxes());

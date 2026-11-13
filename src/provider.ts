@@ -262,7 +262,8 @@ function timedWake<T>(
 /**
  * Drop the no-stop flag of a box whose machines bb shows active on a fresh read, with no action in flight: bb ended the
  * plugin's suspend without running the provider's suspend (a failed drain), so the next suspend is the user's and stops
- * the box (docs/sync.md rule 2). A busy machine, a failed read or any other phase keeps the flag. Every sync pass runs it.
+ * the box (docs/sync.md rule 2). A busy machine, a failed read, any other phase or a box no listed machine uses keeps
+ * the flag. Every sync pass runs it.
  */
 export async function clearFailedReleases(
   rows: readonly { hostId: string; resource: { envId: string } }[],
