@@ -355,7 +355,7 @@ export function onaCommands(deps: OnaCommandDeps) {
               return {
                 exitCode: 124,
                 stdout: result.output,
-                stderr: `Still running after 10 minutes. Follow it with: bb terminal attach ${result.terminalId}`,
+                stderr: `${ctx.signal?.aborted ? "Cancelled before the command finished; it may still be running on the box." : "Still running after 10 minutes."} Follow it with: bb terminal attach ${result.terminalId}`,
               };
             }
             if (result.exitCode === null)

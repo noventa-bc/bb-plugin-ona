@@ -446,12 +446,13 @@ test("a run still alive when its 10-minute wait ends exits 124 with the Still ru
   }
 });
 
-test("a run whose signal is aborted before its first poll exits 124 with the Still running note, as today (fails if a poll runs after the abort, or a run created as running is not counted as still running)", async () => {
+// Bug: an aborted wait said "Still running after 10 minutes" though no 10 minutes had passed.
+test("a run whose signal is aborted before its first poll exits 124 with the Cancelled note, not the 10-minute one (fails if a poll runs after the abort, a run created as running is not counted as still running, or the abort check is gone)", async () => {
   // Were it polled, bb would report an exit 0: the 124 shows that the wait never polled.
   const signal = AbortSignal.abort();
   assert.deepEqual(await shellRun({ id: TERMINAL_ID, status: "exited", exitCode: 0 }, { signal }), {
     exitCode: 124,
     stdout: "out\n",
-    stderr: `Still running after 10 minutes. Follow it with: bb terminal attach ${TERMINAL_ID}`,
+    stderr: `Cancelled before the command finished; it may still be running on the box. Follow it with: bb terminal attach ${TERMINAL_ID}`,
   });
 });
