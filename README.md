@@ -202,7 +202,7 @@ bb machine create --provider ona --inputs '{"mode":"create","project":"my-app"}'
 
 Before its first SSH, setup waits up to 15 minutes for Ona to report the box and
 its dev container running, and shows Ona's progress. It fails at once, without SSH,
-when the box can't come up, for example a deleted box or one Ona is stopping or deleting;
+when the box can't come up, for example a box Ona deleted or is deleting;
 "The connect wait" in [docs/sync.md](docs/sync.md) (safety rule 1) has every case.
 
 ### Run threads on it
