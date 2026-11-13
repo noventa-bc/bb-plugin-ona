@@ -173,8 +173,9 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    - The thread's pass (a pass that finds a thread waiting on a box Ona shows stopped or stopping) forces while no hold
      is set. Before a thread's pass has failed on a box, the thread's pass skips what other passes left.
 
-   The idle release does not force: it only goes past another action's give-up, for up to three failed releases and
-   never past a held one (rule 5, "The idle release").
+   On the plugin's own passes the idle release does not force: it only goes past another action's give-up, for up to
+   three failed releases and never past a held one (rule 5, "The idle release"). `bb ona sync` with no ref forces it
+   like every other action, which ends that box's hold. `bb ona sync <ref>` runs no idle release.
 
    **The hold.**
    - It starts once a thread's pass has failed on a box. A thread's pass that fails, forced or not, keeps or starts it.
@@ -217,15 +218,18 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    - The exceptions are in rule 3.
 
    **The idle release.** It is the one exception: another action's give-up does not stop it unless a hold is set
-   (rule 3).
+   (rule 3). On the plugin's own passes:
    - So a box whose repairs gave up is still let go once it is idle, after the last failure's quiet period and with
      every hold of the idle rule.
    - A release that fails past that give-up adds one to the count and backs off: 40 minutes, then 60.
-   - A failed release leaves the other action's record in place, so the recovery that clears that record still clears it.
+   - A release that fails past that give-up leaves the other action's record in place, so the recovery that clears that record still clears it.
    - Three failed releases past the give-up stop the release too, as three failed releases in a row do from a fresh
      count.
    - A successful release ends the count and the give-up, unless a hold keeps them (rule 3), and bb's resume
      reconnects the machine afresh (decision 0003).
+
+   `bb ona sync` with no ref forces the release (rule 3): a hold does not stop it, its failure replaces the other
+   action's record with a count of 1, and its success ends the count and that box's hold.
 
    **CLI updates** (`bb ona update` and the weekday update).
    - A CLI update takes the machine's turn and keeps it while bb installs: for each CLI it installs, up to 15 minutes
