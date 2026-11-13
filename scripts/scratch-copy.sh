@@ -1,19 +1,27 @@
 #!/bin/sh
 # Extracts commit <sha> of <worktree> into a new folder <dir>, for a reviewer to run tests and mutants in
-# without touching <worktree>. The copy has no .git. Its node_modules links to the main checkout's when its
-# package.json and package-lock.json are the same as the main checkout's apart from the package's own version;
-# a copy whose commit has its own node_modules keeps it. <dir>'s parent folder must already exist, and <dir>
-# must not lie inside any git checkout. Prints the copy's absolute path on stdout; the other messages go to stderr.
+# without touching <worktree>. The copy has no .git. Its node_modules links to the main checkout's when the commit's
+# package.json and package-lock.json match the main checkout's as same_deps below defines. A copy whose commit has its
+# own node_modules keeps it. <dir>'s parent folder must already exist, and <dir> must not lie inside any git checkout.
+# Prints the copy's absolute path on stdout; the other messages go to stderr.
 #   scripts/scratch-copy.sh <worktree> <sha> <dir>
 set -eu
 usage() { echo "usage: scripts/scratch-copy.sh <worktree> <sha> <dir>" >&2; exit 2; }
-# Exits 0 when the JSON files $1 and $2 are the same once the package's own version is left out: the top-level one
-# and the lockfile's packages[""] one. Exits 1 when they differ or a file cannot be read or parsed; node's message is
-# hidden, since the caller reports the difference.
+# Exits 0 when the JSON files $1 and $2 have the same parsed JSON (key order included) once a package.json's top-level
+# version and its scripts whose names contain none of install, prepare, prepublish or dependencies are left out, or once a
+# lockfile's own version fields (the top-level one and packages[""]'s) are. Those four words cover the scripts npm runs
+# on the root during an install (the test lists all ten); a matched name that npm does not run, such as uninstall, only
+# means no link. Exits 1 when they differ or a file cannot be read or parsed; node's message is hidden, since the caller
+# reports it.
 same_deps() {
   node -e '
     const load = (file) => {
       const json = JSON.parse(require("node:fs").readFileSync(file, "utf8"));
+      if (file.endsWith("/package.json")) {
+        const { scripts = {}, version, ...rest } = json;
+        const hooks = Object.entries(scripts).filter(([name]) => /install|prepare|prepublish|dependencies/.test(name));
+        return JSON.stringify([rest, hooks]);
+      }
       delete json.version;
       delete json.packages?.[""]?.version;
       return JSON.stringify(json);

@@ -49,6 +49,8 @@ function fakeRun(
     /** bb's machine list rejects. */
     machinesFails?: boolean;
     duringListing?: (guard: HostGuard, machine: { phase: string; hostId: string; machine: string }) => void;
+    /** The context the command runs in. */
+    ctx?: { signal?: AbortSignal };
   } = {},
 ) {
   const calls: string[] = [];
@@ -85,7 +87,13 @@ function fakeRun(
       },
       lastError: extra.listingFails ? listingError : null,
     },
-    provider: { reconnect: async (resource: { envId: string }) => void calls.push(`reconnect ${resource.envId}`) },
+    provider: {
+      reconnect: async (resource: { envId: string }) => void calls.push(`reconnect ${resource.envId}`),
+      wake: async (resource: { envId: string }, _report: unknown, signal: AbortSignal, via: string, since: number) => {
+        calls.push(`wake ${resource.envId} ${via} since=${since} ctxSignal=${signal === extra.ctx?.signal}`);
+        return false;
+      },
+    },
     ona: { rename: async (envId: string, name: string) => void calls.push(`rename ${envId} ${name}`) },
     bb: {
       sdk: {
@@ -99,13 +107,13 @@ function fakeRun(
       calls.push(`updateClis ${options.ref} ${options.force}`);
       return ["up to date"];
     },
-    tunnels: { status: () => "up", mark: () => 0 },
+    tunnels: { status: () => "up", mark: () => 7 },
     statusRows: async () => [],
     onaHealth: () => ({ lastError: null, listedAt: null, autoRepair: false }),
     resolveEnvId: (ref: string) => Promise.resolve(ref === "box" ? "env_1" : ref),
   } as unknown as OnaCommandDeps;
   const run = onaCommands(deps);
-  return { calls, guard, logs, run: (...argv: string[]) => run(argv, {}) };
+  return { calls, guard, logs, run: (...argv: string[]) => run(argv, extra.ctx ?? {}) };
 }
 
 test("help, --help and no command print the usage", async () => {
@@ -141,6 +149,8 @@ test("an unknown command, or one missing its <ref>, exits 1 with the usage", asy
   const { run } = fakeRun();
   assert.deepEqual(await run("frobnicate"), { exitCode: 1, stderr: usage });
   assert.deepEqual(await run("host"), { exitCode: 1, stderr: usage });
+  assert.deepEqual(await run("resume"), { exitCode: 1, stderr: usage });
+  assert.deepEqual(await run("reconnect"), { exitCode: 1, stderr: usage });
 });
 
 test("sync, reconnect and resume each log one metric cmd line; status and a resume without a ref log none (fails if a case logs before its ref check or another command logs one)", async () => {
@@ -316,6 +326,13 @@ test("reconnect refuses a machine a suspend finished while Ona was listed, witho
     stderr: "ona:box is suspended in bb, so it was not reconnected. Resume it with `bb machine resume ona:box`.",
   });
   assert.deepEqual(calls, []);
+});
+
+test("resume wakes the box with the context's signal and the tunnels' mark (fails if either is dropped)", async () => {
+  const signal = new AbortController().signal;
+  const { run, calls } = fakeRun("active", "RUNNING", { ctx: { signal } });
+  assert.deepEqual(await run("resume", "box"), { exitCode: 0, stdout: "Reconnected ona:box" });
+  assert.deepEqual(calls, ["wake env_1 wake-cmd since=7 ctxSignal=true"]);
 });
 
 // Bug: a machine replaced during the listing (same name and box, new host id) was reconnected under the old host.
