@@ -282,6 +282,13 @@ bb ona sync [ref]              # re-check Ona now and repair (skips cooldowns, b
 
 `bb ona sync` returns once its pass has finished; a resume it asks of bb for a waiting thread is waited for until bb settles it, for up to 32 minutes after bb answers `resuming`.
 
+`bb ona reconnect <ref>` restarts the daemon of an active machine that Ona shows running; one suspended in bb but
+running in Ona needs `bb machine resume ona:<name>`; an active one whose box Ona stopped is started with
+`bb ona resume <ref>`. Two lines to look for in `bb ona status`:
+
+- "ERROR … (run `ona login`?)" at the top: the plugin can't reach Ona, so it changes nothing.
+- "gave up after 3 failures", or a higher count (only for an active machine): the last error is shown next to it.
+
 Example `bb ona status` output. `now` is what the latest check concluded, and
 `last action` is the last thing the plugin actually did. Routine checks never
 overwrite `last action`, so a repair stays visible after the box is healthy

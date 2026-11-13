@@ -126,6 +126,23 @@ a fix ships as a new version.
 
 Once per release, run `/doctor prompt-audit`.
 
+## Metric lines and product numbers
+
+The plugin writes `metric` lines to its log, which `bb plugin logs ona` prints. Each is `metric <event> key=value ...`, and a value's spaces and `=` are written as `_`:
+
+- `metric cmd name=<sync|reconnect|resume>`: a hand run. A hand run is any run of `bb ona sync`, `bb ona reconnect` or `bb ona resume`, including the buttons in the Ona devboxes section and runs by an agent.
+- `metric start env=<id> via=<create|resume|wake-thread|wake-cmd> up=<seconds>`: the plugin asked Ona to start a box; `via` says what led to it, and `up` is the seconds since the plugin loaded. The line is written when the attempt begins, so it records an attempt, not a success.
+- `metric connected via=<create|resume|wake|reconnect> box=<new|stopped|running> secs=<n> ok=<1|0>`: a connect call ended. `box` is `new` once Ona has returned the created box, including a create that fails after that (`ok=0`). Otherwise it is `stopped` when the call started the box, and `running` otherwise, which includes a create that failed before Ona returned a box. `ok=0` means the call failed.
+- `metric delete env=<id> via=<remove|cleanup> git=<known|unknown>`: the plugin deleted a box. `git=known` means Ona reported the box's count of unpushed commits.
+- `metric keep env=<id> via=<remove|cleanup> commits=<n> files=<n>`: the plugin refused to delete a box with unpushed commits or uncommitted files, and kept it.
+- `metric mismatch host=<machine> kind=<kind> secs=<n>`: written once per incident, at the first pass that sees the same kind 120 seconds or more after the first pass that saw it (both counted from each pass's start); `secs` is the time between those two starts. A change of kind, or a pass that reads the box and finds no kind, starts a new incident, and so does a machine bb stops listing; a pass that does not read the box (a failed listing, or one listing that omits it) neither ends an incident nor restarts its count. Kinds: `active-stopped` (bb active and connected, Ona stopped or stopping); `active-gone` (bb active, Ona says deleted or deleting, or two good listings in a row lack the box and a lookup by id finds no live box); `disconnected-running` (bb active but disconnected, Ona running). Other disagreements write no line.
+
+`scripts/product-numbers.sh` prints the product numbers from the log; its header has the command. It prints one `name value` line per number, in a fixed order. Every name is printed: `0` when nothing matched, and a percentile is `-` when there is no value. `mismatches` counts the `metric mismatch` lines; a line with no kind counts only there. After the fixed names come one `mismatches_<kind>` line per kind seen (`-` written as `_`), then one `hand_runs_week_<year>-W<week>` line per ISO week that has hand runs, oldest first. The weeks are UTC.
+
+`deletes_refused` counts the boxes a removal refused at least once, not keep lines: a box refused more than once has a keep line for each refusal. `connect_secs_stopped_*` covers the connects that worked (`ok=1`) with `box=stopped` or `box=new`, and `connect_secs_running_*` those with `box=running`. `skipped_lines` counts the input lines that are not log lines: lines that are not a JSON object, and JSON objects whose `ts` is not a number a Date can hold or whose `message` is not a string. A log line whose first word is not `metric` is ignored and is not counted in `skipped_lines`.
+
+The numbers cannot see starts made outside the plugin, or lines older than the newest 10000 that the command returns. `starts_soon_after_load` counts the resume starts whose `up` is under 300 seconds.
+
 ## Sandbox checks (nono 0.81.0, checked 2026-10-30)
 
 - `npm run check` passes inside the sandbox; tests that need local ports or
