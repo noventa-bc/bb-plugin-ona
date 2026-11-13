@@ -400,9 +400,17 @@ test("reconnect names the first non-blank line of Ona's error, or no listing whe
 const TERMINAL_ID = "run-7f3";
 
 /** `bb ona shell box -- make` with bb reporting `terminal` for its run (null: bb no longer knows it), in context `ctx`. */
-function shellRun(terminal: TerminalInfo | null, ctx: { signal?: AbortSignal } = {}, onPoll = () => {}) {
+function shellRun(
+  terminal: TerminalInfo | null,
+  ctx: { signal?: AbortSignal } = {},
+  onPoll = () => {},
+  onCreate = () => {},
+) {
   const backend: ShellBackend = {
-    createTerminal: async () => ({ id: TERMINAL_ID, status: "running", exitCode: null }),
+    createTerminal: async () => {
+      onCreate();
+      return { id: TERMINAL_ID, status: "running", exitCode: null };
+    },
     getTerminal: async () => {
       onPoll();
       return terminal;
@@ -455,12 +463,23 @@ test("a run still alive when its 10-minute wait ends exits 124 with the Still ru
 // Bug: an aborted wait said "Still running after 10 minutes" though no 10 minutes had passed.
 test("a run whose signal is aborted before its first poll exits 124 with the stopped-waiting note, not the 10-minute one (fails if a poll runs after the abort, a run created as running is not counted as still running, or the abort check is gone)", async () => {
   // Were it polled, bb would report an exit 0: the 124 shows that the wait never polled.
-  const signal = AbortSignal.abort();
-  assert.deepEqual(await shellRun({ id: TERMINAL_ID, status: "exited", exitCode: 0 }, { signal }), {
+  const controller = new AbortController();
+  const exited: TerminalInfo = { id: TERMINAL_ID, status: "exited", exitCode: 0 };
+  assert.deepEqual(await shellRun(exited, { signal: controller.signal }, undefined, () => controller.abort()), {
     exitCode: 124,
     stdout: "out\n",
     stderr: `Stopped waiting before the command finished; it may still be running on the box. Follow it with: bb terminal attach ${TERMINAL_ID}`,
   });
+});
+
+// Bug: a run cancelled while its box was being looked up still started the command.
+test("a run whose signal is aborted before its command starts never creates the terminal and says it was not started (fails if the abort check before createTerminal is gone)", async () => {
+  let created = false;
+  const result = await shellRun(null, { signal: AbortSignal.abort() }, undefined, () => {
+    created = true;
+  });
+  assert.equal(created, false);
+  assert.deepEqual(result, { exitCode: 1, stderr: "Cancelled before the command started; it was not run." });
 });
 
 test("a run whose signal is aborted during the wait exits 124 with the stopped-waiting note (fails if the abort is read before the wait starts)", async () => {
