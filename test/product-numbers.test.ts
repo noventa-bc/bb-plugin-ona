@@ -292,7 +292,7 @@ test("the metric lines src/ona.ts writes are counted here, one of each kind (fai
       logLine(metric("connected", { via: "create", box: "new", secs: 4, ok: 1 })),
       logLine(metric("delete", { env: "env-2", via: "remove" })),
       logLine(metric("keep", { env: "env-3", via: "remove", commits: 2, files: 0 })),
-      logLine(metric("keep", { env: "env-4", via: "cleanup", git: "unknown" })),
+      logLine(metric("keep", { env: "env-4", via: "remove", git: "unknown" })),
       logLine(MISMATCH_LINE),
     ),
   );

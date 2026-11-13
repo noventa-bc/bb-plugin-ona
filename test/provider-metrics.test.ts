@@ -179,13 +179,10 @@ test("a remove of a clean box writes a delete line (fails if the line is missing
   assert.deepEqual(metricLines(logs), ["metric delete env=env-1 via=remove"]);
 });
 
-test("a remove and an orphan cleanup of a box with no git block write keep with git=unknown (fails if the keep line is missing or carries counts)", async () => {
-  const removing = register({ found: box("RUNNING") });
-  await remove(removing.provider);
-  assert.deepEqual(metricLines(removing.logs), ["metric keep env=env-1 via=remove git=unknown"]);
-  const cleaning = register({ found: { ...box("RUNNING"), metadata: { name: envNameForKey("key-1") } } });
-  await cleanup(cleaning.provider);
-  assert.deepEqual(metricLines(cleaning.logs), ["metric keep env=env-1 via=cleanup git=unknown"]);
+test("a remove of a box with no git block writes keep with git=unknown (fails if the keep line is missing or carries counts)", async () => {
+  const { provider, logs } = register({ found: box("RUNNING") });
+  await remove(provider);
+  assert.deepEqual(metricLines(logs), ["metric keep env=env-1 via=remove git=unknown"]);
 });
 
 test("a remove that finds unpushed commits writes keep with the counts and deletes nothing (fails if the keep line is missing or a delete runs)", async () => {
