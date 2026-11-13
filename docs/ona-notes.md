@@ -210,7 +210,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   server with `archived: false`, and applies no limit when none is passed (the
   threads list route; checked 2026-11-09). `bb thread archive <id>` accepts a hidden
   thread's id, and archiving a thread also archives the hidden threads it started
-  (checked 2026-11-13).
+  (checked 2026-11-03).
 - bb 0.49.0 registers the daemon's `/internal` routes in the `registerInternal*`
   functions of `server/dist/start-server.js` and calls them from
   `host-daemon/dist/daemon-bundle.mjs` (its route-string calls, plus
