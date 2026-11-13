@@ -364,11 +364,7 @@ export default async function plugin(bb: BbPluginApi) {
   });
   bb.rpc.register(rpcContract, {
     devboxes_list: async () => ({ devboxes: await devboxes() }),
-    thread_devbox: async ({ threadId }) => {
-      const { environmentId } = await bb.sdk.threads.get({ threadId });
-      if (!environmentId) return { devbox: null };
-      return { devbox: await workspaceDevbox(environmentId) };
-    },
+    thread_devbox: async ({ threadId }) => ({ devbox: await threadDevbox(threadId) }),
     thread_cost: async ({ threadId }) => ({ cost: await costs.threadCost(threadId) }),
     devbox_open_editor: async ({ hostId }) => {
       const row = (await machines()).find((r) => r.hostId === hostId);
