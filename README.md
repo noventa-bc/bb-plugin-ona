@@ -27,7 +27,7 @@ bb server (your Mac, 127.0.0.1:<port>)
        ├─ machine provider "ona"   create / adopt / suspend / resume / remove
        ├─ daemon-only proxy        127.0.0.1:<random port>, forwards only daemon routes
        ├─ SSH reverse tunnel       ssh -N -R <port>:127.0.0.1:<proxy port> <envId>.ona.environment
-       └─ bb ona …                 list / status / sync / host / ssh / open / rename / reconnect / resume
+       └─ bb ona …                 setup / adopt / new / list / host / ssh / shell / rename / update / reconnect / resume / status / sync / move
 Ona devbox ── bb daemon ──(tunnel)── proxy ── bb server
           └─ claude / codex run here
 ```

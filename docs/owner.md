@@ -111,9 +111,9 @@ after a bb upgrade, run through this list:
 
 ## Release
 
-A release is a PR whose title is a `feat`, `fix`, `perf` or `!` Conventional
-Commit. That PR bumps `version` in `package.json` as the title requires
-(`check.yml` fails otherwise; `scripts/release-check.sh` has the rule). On
+A release is a PR whose title bumps the version (the rule is in `AGENTS.md`
+"Live systems" and `scripts/bump-kind.sh`); `check.yml` fails when its
+`package.json` does not match (`scripts/release-check.sh`). On
 merge, `release.yml` tags the squash commit `vX.Y.Z` and creates the GitHub
 release with notes generated from the PR titles merged since the previous tag
 (`https://github.com/noventa-bc/bb-plugin-ona/releases`); a version that

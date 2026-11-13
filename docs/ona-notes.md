@@ -135,15 +135,15 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   the SDK's test harness does (harness checked 2026-11-06; bb's check in the app's
   `plugin-frontend-0dkOuthv.js`, checked 2026-11-09). `app.tsx` builds the
   `devbox_command` input without its unset keys (`devboxCommandInput`).
-- SDK 0.6.109's public types do not declare an `experimental_threadHeaderAction`
-  slot (checked 2026-11-03). Its app collector accepts the slot, so `app.tsx`
+- SDK 0.6.136's public types do not declare an `experimental_threadHeaderAction`
+  slot (checked 2026-11-13). Its app collector accepts the slot, so `app.tsx`
   takes `LegacyThreadHeaderActionRegistration` from the SDK's
   `internal/plugin-app-collector` subpath. bb 0.48 draws header items
   registered through that slot (owner checked 2026-10-30), and bb 0.49.0's app
   collector still collects them (`experimental_threadHeaderAction` in the app's
   `index-UJHlXnMg.js`, checked 2026-11-09).
-- SDK 0.6.109 has `experimental_threadAction` on `app.slots` with
-  `placement: "header"` (checked 2026-11-03). A header action is a labelled
+- SDK 0.6.136 has `experimental_threadAction` on `app.slots` with
+  `placement: "header"` (checked 2026-11-13). A header action is a labelled
   button with an icon and a `run`, not a component, so it can't show the cost
   chip. bb places it after the workspace's Open button, and it cannot hide
   that button, so it cannot replace the hide in `app.tsx`. In bb 0.49.0's thread
@@ -155,7 +155,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   config it passes when the thread's provider-subagents option is off, and Codex
   then prints a "`[features].multi_agent` is deprecated" warning on each session
   start (checked 2026-11-13, read not run). `app.tsx` hides that warning row.
-- SDK 0.6.109 has no `machine_busy` suspend error code (checked 2026-11-03: the
+- SDK 0.6.136 has no `machine_busy` suspend error code (checked 2026-11-13: the
   name occurs nowhere in its typings or `dist`; bb's server does answer with it, see
   the suspend and reconcile bullets).
 - bb 0.49.0's `startMachineResume` accepts a machine that is `active`,
@@ -210,7 +210,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   server with `archived: false`, and applies no limit when none is passed (the
   threads list route; checked 2026-11-09). `bb thread archive <id>` accepts a hidden
   thread's id, and archiving a thread also archives the hidden threads it started
-  (checked 2026-11-03).
+  (checked 2026-11-13).
 - bb 0.49.0 registers the daemon's `/internal` routes in the `registerInternal*`
   functions of `server/dist/start-server.js` and calls them from
   `host-daemon/dist/daemon-bundle.mjs` (its route-string calls, plus
@@ -330,9 +330,9 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   per user or assistant message, with no limit on their number (checked 2026-11-09).
 - bb 0.49.0's app only logs an error thrown by a thread action's `run`
   (`console.error`), so a plugin shows its own (checked 2026-11-09).
-- In SDK 0.6.109 a provider resource is written by the provider's own lifecycle
+- In SDK 0.6.136 a provider resource is written by the provider's own lifecycle
   hooks (`create`, `suspend`, `resume`, through `checkpoint` or the returned
-  `resource`) and read with `bb.experimental_machines.getResource` (checked 2026-11-03).
+  `resource`) and read with `bb.experimental_machines.getResource` (checked 2026-11-13).
 - bb 0.49.0's Settings > Machines "Add a machine" dialog lists no machine provider. Its only
   provider list is the connection method (`serverAccess.providers`, labelled "Connection method").
   Its only create call sends `machineProviderId` `manual` with `inputs` null
@@ -375,13 +375,13 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 - bb 0.49.0 gives a control's blocked reason to the composer's prompt as `disabledReason` and
   disables the prompt (search `environmentProviderInputsBlocker:Qt.blockedReason` and
   `disabledReason:n??void 0` in `plugin-frontend-0dkOuthv.js`) (checked 2026-11-09).
-- The control's types: `PluginMachineProviderInputsProps` in the SDK 0.6.109 typings
-  (`bb-plugin-sdk-app.d.ts`). Checked 2026-11-05.
+- The control's types: `PluginMachineProviderInputsProps` in the SDK 0.6.136 typings
+  (`bb-plugin-sdk-app.d.ts`). Checked 2026-11-13.
 - bb 0.49.0's `updateSettings` (`server/dist/start-server.js`) saves a plugin's settings,
   calls its `onChange` listeners, and reloads the plugin only when its status is
   `needs-configuration`. So a settings save does not reload a healthy plugin: a changed
   setting applies after `bb plugin reload ona` (checked 2026-11-11).
-- SDK surfaces in 0.6.109 that the plugin doesn't use (checked 2026-11-03):
+- SDK surfaces in 0.6.136 that the plugin doesn't use (checked 2026-11-13):
   - host entries: `experimental_defineHostEntry` (plugin code on the daemon,
     fs watch, signals) and the `experimental_host.deleted` event
   - UI: `navPanel`
