@@ -47,6 +47,7 @@ export const adoptedResource = { envId: "env-1", envName: "box", adopted: true, 
  * `machines`: the machines bb lists, of provider "ona" unless `provider` says otherwise; as bb's list does, it leaves
  * out the creating ones unless the call sets `includeCreating`.
  * `hostReadFails`: bb's machine listing (`list`) or a machine's stored resource (`resource`) rejects.
+ * `markFails`: the idle-clock stamp (`markConnected`) rejects.
  */
 export type Setup = {
   found: OnaEnvironment;
@@ -75,6 +76,7 @@ export type Setup = {
   reopenDuringMove?: boolean;
   machines?: { id: string; name: string; phase: string; resource: OnaResource | null; provider?: string }[];
   hostReadFails?: "list" | "resource";
+  markFails?: boolean;
 };
 
 /** Each command as the gated executor runs it: after a `get` that says RUNNING. */
@@ -135,6 +137,7 @@ export function register({
   reopenDuringMove,
   machines = [],
   hostReadFails,
+  markFails,
 }: Setup) {
   const calls: string[] = [];
   const tunnels: string[] = [];
@@ -313,7 +316,10 @@ export function register({
     machineDataDir: rootExits.length ? "/local/bb" : "",
     waitForSharedHome: mountExits.length > 0,
     port: () => 1,
-    markConnected: async (envId: string) => void connected.push(envId),
+    markConnected: async (envId: string) => {
+      if (markFails) throw new Error("bb storage is unreachable");
+      connected.push(envId);
+    },
     releasing,
     forgetBox: async (envId: string) => void forgotten.push(envId),
     executorFor: (_ssh, envId) => {

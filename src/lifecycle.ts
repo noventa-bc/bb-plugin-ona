@@ -19,7 +19,7 @@ export interface MachineActivity {
   phase: string;
   /** Statuses of the threads on this machine. */
   threadStatuses: readonly string[];
-  /** Latest thread activity or (re)connect, epoch ms. */
+  /** Latest thread activity, or the stamp that starts the idle window (create, resume, `bb ona resume`, `bb ona reconnect`), epoch ms. */
   lastActivityAt: number;
   /** bb is setting up or tearing down a workspace on it, retiring one, retrying a failed teardown, or one needs recovery, or its lookup failed. */
   workspacesBlock?: boolean;

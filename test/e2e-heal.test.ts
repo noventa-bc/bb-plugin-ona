@@ -1,7 +1,8 @@
 // The real server.ts inside the SDK's fake bb host (test/e2e-host.ts), for
 // the repairs that touch a box over SSH: the daemon heal after a box
 // restarted outside bb (and the live-daemon refusal), a resume while Ona is
-// still starting the box, and the `thread_cost` rpc. One story in file order:
+// still starting the box, the `thread_cost` rpc, and the idle release of a
+// box whose daemon keeps dropping. One story in file order:
 // run the whole file.
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -11,7 +12,7 @@ import { after, before, test } from "node:test";
 import { CLAUDE_PRICES } from "../src/cost.ts";
 import type { OnaResource } from "../src/provider.ts";
 import { GRACE_MS } from "../src/reconcile.ts";
-import type { BbHost } from "../src/sync.ts";
+import { connectedAtKey, type BbHost } from "../src/sync.ts";
 import { ctx, local, startHost, type E2eHost } from "./e2e-host.ts";
 
 let host: E2eHost["host"];
@@ -46,7 +47,16 @@ before(async () => {
     },
     machineResource: async (hostId) => (hostId === "host-1" ? resource : null),
     sdk: {
-      hosts: { list: async () => hosts, get: async ({ hostId }) => hosts.find((h) => h.id === hostId)! },
+      hosts: {
+        list: async () => hosts,
+        get: async ({ hostId }) => hosts.find((h) => h.id === hostId)!,
+        // bb settles the suspend at once; the provider's suspend is bb's step, not the fake's.
+        experimental_suspend: async ({ hostId }) => {
+          const bbHost = hosts.find((h) => h.id === hostId)!;
+          bbHost.lifecycle = { ...bbHost.lifecycle, phase: "suspended" };
+          return bbHost;
+        },
+      },
       environments: { list: async () => [], get: async () => ({ hostId: "host-1" }) },
       threads: {
         list: async () => [],
@@ -208,3 +218,27 @@ test("thread_cost prices a Claude thread from the box's session files and caches
   rmSync(join(project, "s1.jsonl"));
   assert.deepEqual(await host.harness.behavior.callRpc("thread_cost", { threadId: "thread-1" }), first);
 });
+
+const twoHoursAgo = Date.now() - 2 * 3_600_000;
+
+// Bug: connect stamped the idle clock, so each daemon heal restarted it and a box whose daemon kept dropping was never
+// let go.
+test("a daemon heal leaves the box's idle clock as it was (fails if the heal stamps it)", local, async () => {
+  await host.bb.storage.kv.set(connectedAtKey(resource.envId), twoHoursAgo);
+  disconnectHost();
+  const result = await host.harness.behavior.runCli(["sync"]);
+  assert.match(result.stdout ?? "", /last action: heal-daemon: .*daemon was down; restarted it/);
+  assert.equal(await host.bb.storage.kv.get(connectedAtKey(resource.envId)), twoHoursAgo);
+});
+
+test(
+  "the healed box, its idle clock still two hours old and no thread on it, is let go at the next pass",
+  local,
+  async () => {
+    hosts[0]!.status = "connected";
+    const result = await host.harness.behavior.runCli(["sync"]);
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.match(result.stdout ?? "", /last action: release-idle:/);
+    assert.deepEqual(host.harness.inspection.sdk.callsTo("hosts.experimental_suspend"), [[{ hostId: "host-1" }]]);
+  },
+);
