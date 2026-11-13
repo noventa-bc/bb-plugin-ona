@@ -22,7 +22,7 @@ const threadCostSchema = z.object({
 });
 export type ThreadCost = z.infer<typeof threadCostSchema>;
 
-export const devboxCommandSchema = z.enum(["status", "sync", "reconnect", "resume", "rename", "update"]);
+export const devboxCommandSchema = z.enum(["status", "sync", "reconnect", "resume", "rename"]);
 export type DevboxCommand = z.infer<typeof devboxCommandSchema>;
 
 const devboxCommandReplySchema = z.object({
@@ -57,8 +57,7 @@ export const rpcContract = defineRpcContract({
     output: z.object({ opened: z.boolean() }),
   },
   /**
-   * The settings section's buttons: a `bb ona` command, as the CLI runs it (src/commands.ts), for one devbox or all,
-   * except update, which needs a host id (the refine below).
+   * The settings section's buttons: a `bb ona` command, as the CLI runs it (src/commands.ts), for one devbox or all.
    */
   devbox_command: {
     input: z
@@ -73,10 +72,6 @@ export const rpcContract = defineRpcContract({
       .refine(
         (input) => input.arg === undefined || (input.hostId !== undefined && input.command === "rename"),
         "arg needs a hostId, and only rename takes one",
-      )
-      .refine(
-        (input) => input.command !== "update" || input.hostId !== undefined,
-        "update needs a hostId: without one the CLI updates every devbox",
       ),
     output: devboxCommandReplySchema,
   },

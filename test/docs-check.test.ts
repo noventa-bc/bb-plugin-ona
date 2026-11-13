@@ -197,7 +197,7 @@ const commandDocs = ["README.md", "skills/ona-devboxes/SKILL.md", "PLUGIN_OVERVI
 
 test("every `bb ona` command in src/commands.ts is written `bb ona <name>` in README, SKILL.md and PLUGIN_OVERVIEW.md (fails if a command lacks its docs)", () => {
   assert.ok(
-    commands.some((c) => c.name === "update"),
+    commands.some((c) => c.name === "rename"),
     "src/commands.ts lists no commands",
   );
   const missing = commandDocs.flatMap((file) =>
@@ -245,7 +245,7 @@ test("every setting's description in server.ts names the reload (fails if one la
 test("every setting server.ts declares has a row in README's settings table (fails if a setting lacks its row)", () => {
   const readme = read("README.md");
   const keys = declaredSettings(read("server.ts"));
-  assert.ok(keys.includes("onaPath") && keys.includes("autoUpdateProviders"), `parser found ${keys.join(", ")}`);
+  assert.ok(keys.includes("onaPath") && keys.includes("waitForSharedHome"), `parser found ${keys.join(", ")}`);
   const missing = keys.filter((key) => !new RegExp(`^\\| \`${key}\``, "m").test(readme));
   assert.deepEqual(missing, []);
 });

@@ -124,11 +124,6 @@ test("every devbox_command name in app.tsx is followed by devboxCommandInput( (f
   );
 });
 
-test("the settings section has an Update CLIs button (fails if its line leaves app.tsx)", () => {
-  const app = readFileSync(new URL("../app.tsx", import.meta.url), "utf8");
-  assert.ok(app.includes('{ command: "update", label: "Update CLIs" }'), "app.tsx has no Update CLIs button");
-});
-
 test("the composer's select calls switchedInputs, its text field keeps the mode, and its help text is the new one (fails if a handler or the help text in app.tsx reverts)", () => {
   const app = readFileSync(new URL("../app.tsx", import.meta.url), "utf8");
   assert.ok(app.includes("setInputs(switchedInputs(event.target.value))"), "the select does not call switchedInputs");

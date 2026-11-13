@@ -101,10 +101,6 @@ function fakeRun(
       },
       log: { info: (message: string) => void logs.push(message) },
     },
-    updateClis: async (options: { ref?: string; force?: boolean }) => {
-      calls.push(`updateClis ${options.ref} ${options.force}`);
-      return ["up to date"];
-    },
     tunnels: { status: () => "up", mark: () => 7 },
     statusRows: async (ref?: string) => (ref === "box" ? [{ machine: "ona:box" }] : []),
     onaHealth: () => ({ lastError: null, listedAt: null, autoRepair: false }),
@@ -122,9 +118,9 @@ test("help, --help and no command print the usage", async () => {
   }
 });
 
-test("keep-alive, open and list are neither listed, in the usage nor run (fails if one comes back)", async () => {
+test("keep-alive, open, list and update are neither listed, in the usage nor run (fails if one comes back)", async () => {
   const { run, calls } = fakeRun();
-  for (const name of ["keep-alive", "open", "list"]) {
+  for (const name of ["keep-alive", "open", "list", "update"]) {
     assert.equal(
       commands.some((c) => c.name === name),
       false,
@@ -135,6 +131,7 @@ test("keep-alive, open and list are neither listed, in the usage nor run (fails 
   assert.deepEqual(await run("keep-alive", "box", "2h"), { exitCode: 1, stderr: usage });
   assert.deepEqual(await run("open", "box"), { exitCode: 1, stderr: usage });
   assert.deepEqual(await run("list"), { exitCode: 1, stderr: usage });
+  assert.deepEqual(await run("update", "host_1"), { exitCode: 1, stderr: usage });
   assert.deepEqual(calls, []);
 });
 
@@ -244,12 +241,6 @@ test("reconnect on an active machine restarts its idle clock and reconnects it (
   const { run, calls } = fakeRun();
   assert.deepEqual(await run("reconnect", "box"), { exitCode: 0, stdout: "Reconnected ona:box" });
   assert.deepEqual(calls, ["mark env_1", "reconnect env_1"]);
-});
-
-test("update <host id> runs the CLI update for that box with no force, as the Update CLIs button sends it (fails if the ref or the force flag changes)", async () => {
-  const { run, calls } = fakeRun();
-  assert.deepEqual(await run("update", "host_1"), { exitCode: 0, stdout: "up to date" });
-  assert.deepEqual(calls, ["updateClis host_1 false"]);
 });
 
 test("reconnect refuses when a guard action takes the machine while Ona is listed, and never calls the provider", async () => {
