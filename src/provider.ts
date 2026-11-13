@@ -430,8 +430,8 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
       const env = await ona.findEnvironment(envNameForKey(key), signal);
       // Another machine adopted the box since this create made it: the box is that machine's, not an orphan.
       if (env && !(await machineUsing(env.id, key))) {
-        // Remove's check on the counts. A missing git block is no work here, unlike in remove: the plugin made this
-        // box moments ago and never handed it to anyone.
+        // Remove's check on the counts. A missing git block does not block here, unlike in remove: the box is the
+        // leftover of a create that failed, and no machine uses it.
         const work = unpushedWork(env);
         if (work) {
           bb.log.info(metric("keep", { env: env.id, via: "cleanup", commits: work.count, files: work.files }));
