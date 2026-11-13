@@ -112,25 +112,6 @@ test("a box that is not connected returns the stored figure and is never collect
   assert.deepEqual(w.collectorRuns, []);
 });
 
-test("a paused Claude thread with only a record under the old cost: key keeps that figure (fails if the upgrade drops it)", async () => {
-  // Bug: after the cost2: upgrade a paused Claude thread showed nothing until its box ran again.
-  const w = world({ status: "suspended", turnSeq: 8 });
-  w.kv.set(OLD_KEY, { cost: FIGURE, seq: 7, checkedAt: OLD });
-  assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
-  assert.deepEqual(w.collectorRuns, []);
-});
-
-test("a paused Codex thread keeps an old cost: figure above $0.00 and drops a $0.00 one (fails if either is handled the other way)", async () => {
-  // Guard: a Codex $0.00 under the old key may come from the usage lag (docs/ona-notes.md), so only it is dropped.
-  const kept = world({ status: "suspended", provider: "codex", turnSeq: 8 });
-  kept.kv.set(OLD_KEY, { cost: CODEX_FIGURE, seq: 7, checkedAt: OLD });
-  assert.deepEqual(await kept.costs.threadCost("t1"), CODEX_FIGURE);
-  const dropped = world({ status: "suspended", provider: "codex", turnSeq: 8 });
-  dropped.kv.set(OLD_KEY, { cost: { ...CODEX_FIGURE, usd: 0 }, seq: 7, checkedAt: OLD });
-  assert.equal(await dropped.costs.threadCost("t1"), null);
-  assert.deepEqual([...kept.collectorRuns, ...dropped.collectorRuns], []);
-});
-
 test("a Claude turn with a priced figure runs the collector once, not again after the floor (fails if a priced figure is checked again)", async () => {
   // Guard: a Claude turn is read again only when its first read finds nothing.
   const w = world({ turnSeq: 8, stored: { cost: FIGURE, seq: "7", checkedAt: OLD, runs: 1 } });
@@ -138,14 +119,6 @@ test("a Claude turn with a priced figure runs the collector once, not again afte
   await pastFloor();
   assert.equal((await w.costs.threadCost("t1"))?.usd, 1);
   assert.deepEqual(w.collectorRuns, ["env-1"]);
-});
-
-test("a Claude figure an older version settled stays settled after the upgrade (fails if the old record is read again)", async () => {
-  // Guard: the upgrade must not cost an extra collector run per Claude thread.
-  const w = world({ turnSeq: 7 });
-  w.kv.set(OLD_KEY, { cost: FIGURE, seq: 7, checkedAt: OLD });
-  assert.deepEqual(await w.costs.threadCost("t1"), FIGURE);
-  assert.deepEqual(w.collectorRuns, []);
 });
 
 test("a lower partial Claude figure replaces the stored one (fails if the Codex-only rule applies to Claude)", async () => {
@@ -364,16 +337,6 @@ test("a thread with no finished turn collects once for Codex and twice for Claud
   }
 });
 
-test("a Claude thread with only an old cost: record is read once on a running box and saved under the new key (fails if the old key is written or treated as final)", async () => {
-  // Guard: the upgrade path for every Claude thread.
-  const w = world({ turnSeq: 8 });
-  w.kv.set(OLD_KEY, { cost: FIGURE, seq: 7, checkedAt: OLD });
-  assert.equal((await w.costs.threadCost("t1"))?.usd, 1);
-  assert.deepEqual(w.collectorRuns, ["env-1"]);
-  assert.deepEqual(w.kv.get(OLD_KEY), { cost: FIGURE, seq: 7, checkedAt: OLD });
-  assert.equal((w.kv.get("cost2:t1") as { seq: string }).seq, "8");
-});
-
 test("a collector error does not count as one of a turn's rounds (fails if an error uses one up)", async () => {
   // Bug: a failed round used up one of the turn's rounds, so a few failures ended the checks early.
   let failing = false;
@@ -523,49 +486,3 @@ test("a partial figure keeps a higher stored figure and replaces a lower one (fa
 });
 
 // Bug: records written before the Codex fix settled $0.00 and were kept until the next turn (docs/ona-notes.md).
-test("an old Codex record, $0.00 or above, gets fresh rounds on a running box (fails if an old settled $0.00 is kept, or the old record is treated as settled)", async () => {
-  for (const usd of [0, 1]) {
-    const w = world({
-      turnSeq: 7,
-      provider: "codex",
-      collect: async () => ({ results: { "session-1": recorded(2) } }),
-    });
-    w.kv.set(OLD_KEY, { cost: { ...CODEX_FIGURE, usd }, seq: 7, checkedAt: OLD });
-    assert.equal((await w.costs.threadCost("t1"))?.usd, 2);
-    assert.deepEqual(w.collectorRuns, ["env-1"]);
-    assert.equal((w.kv.get("cost2:t1") as { runs: number }).runs, 1);
-  }
-});
-
-test("an old record on a box Ona says is stopped is never re-asked before the floor (fails if each poll lists Ona)", async () => {
-  // A Claude record with no figure is settled at its turn (no listing); any other old record waits out the floor.
-  for (const [provider, cost, listings] of [
-    ["claude-code", null, 0],
-    ["codex", { ...CODEX_FIGURE, usd: 0 }, 1],
-    ["claude-code", CODEX_FIGURE, 1],
-    ["codex", FIGURE, 1],
-  ] as const) {
-    const w = world({ ona: "ENVIRONMENT_PHASE_STOPPED", turnSeq: 8, provider });
-    w.kv.set(OLD_KEY, { cost, seq: 8, checkedAt: OLD });
-    for (let i = 0; i < 3; i++) {
-      assert.equal(await w.costs.threadCost("t1"), null);
-      await later(1);
-    }
-    assert.equal(w.listings.count, listings, `${provider} ${JSON.stringify(cost)}`);
-  }
-});
-
-test("an old Claude record with no figure settled at this turn is not read on a running box (fails if it is read)", async () => {
-  const w = world({ turnSeq: 8, collect: async () => ({ buckets: [] }) });
-  w.kv.set(OLD_KEY, { cost: null, seq: 8, checkedAt: OLD });
-  assert.equal(await w.costs.threadCost("t1"), null);
-  await pastFloor();
-  assert.equal(await w.costs.threadCost("t1"), null);
-  assert.deepEqual(w.collectorRuns, []);
-});
-
-test("a Claude thread with a Codex figure under the old cost: key is priced, not settled (fails if the other provider's record settles the turn)", async () => {
-  const w = world({ turnSeq: 8 });
-  w.kv.set(OLD_KEY, { cost: CODEX_FIGURE, seq: 8, checkedAt: OLD });
-  assert.deepEqual([(await w.costs.threadCost("t1"))?.usd, w.collectorRuns], [1, ["env-1"]]);
-});

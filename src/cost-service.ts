@@ -51,40 +51,19 @@ const CODEX_ROUNDS = 12;
 // Claude usage lands as its turn runs, so an empty first read gets one more.
 const CLAUDE_ROUNDS = 2;
 
-// Records under `cost:` predate the Codex usage lag (docs/ona-notes.md); their figures are shown
-// (except a Codex $0.00) until a round writes a `cost2:` record.
 const costKey = (threadId: string) => `cost2:${threadId}`;
-const oldCostKey = (threadId: string) => `cost:${threadId}`;
 
 export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: CostDeps) {
   const costInFlight = new Map<string, Promise<ThreadCost | null>>();
 
-  /** Drop a deleted thread's stored figures under both keys. */
+  /** Drop a deleted thread's stored figures. */
   async function forget(threadId: string): Promise<void> {
-    for (const key of [costKey(threadId), oldCostKey(threadId)]) {
+    // `cost:` is the key versions before `cost2:` wrote; nothing else ever removes those records.
+    for (const key of [costKey(threadId), `cost:${threadId}`]) {
       await bb.storage.kv.delete(key).catch((error: unknown) => {
         bb.log.warn(`thread cost for ${threadId}: could not drop it: ${errorText(error)}`);
       });
     }
-  }
-
-  /**
-   * A record kept under the old `cost:` key, read when the thread has no `cost2:` record yet.
-   * A Codex $0.00 there may come from the usage lag (docs/ona-notes.md), so it is not shown.
-   */
-  async function legacyCost(threadId: string, provider: string): Promise<StoredCost | null> {
-    const old = await bb.storage.kv.get<{ cost: ThreadCost | null; seq?: number | string; checkedAt: number }>(
-      oldCostKey(threadId),
-    );
-    if (!old) return null;
-    const own = !old.cost || old.cost.provider === provider;
-    const shown = own && old.cost && (provider === "claude-code" || old.cost.usd > 0);
-    const cost = shown ? old.cost : null;
-    // A Claude record under `cost:` stays settled at its seq, even with no figure. Any other record is
-    // still stored, so the 5-minute floor applies while Ona says the box is stopped.
-    if (provider === "claude-code" && own)
-      return { cost, seq: String(old.seq ?? ""), checkedAt: old.checkedAt, runs: CLAUDE_ROUNDS };
-    return { cost, seq: "", checkedAt: old.checkedAt };
   }
 
   /**
@@ -101,7 +80,7 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
     const agentProvider = thread.providerId;
     if (agentProvider !== "codex" && agentProvider !== "claude-code") return null;
     const key = costKey(threadId);
-    const stored = (await bb.storage.kv.get<StoredCost>(key)) ?? (await legacyCost(threadId, agentProvider));
+    const stored = await bb.storage.kv.get<StoredCost>(key);
     if (devbox.status !== "connected") return stored?.cost ?? null;
     // Recompute at most every 5 minutes, while the newest finished turn has rounds left. Rounds for a
     // finished turn keep running while a later turn is still working; once that later turn finishes,
