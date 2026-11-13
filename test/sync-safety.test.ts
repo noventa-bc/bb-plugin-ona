@@ -33,8 +33,8 @@ test("an unknown daemon answer is reported as unknown (fails if the fake turns n
  * An idle release of h1 whose settle times out: bb still shows the machine suspending after the 6 minutes, and the
  * no-stop flag stays for the provider's suspend bb may still run. Runs on the fake clock the caller enabled.
  */
-async function timedOutRelease(boxes = [idle("h1")]) {
-  const made = world(boxes, {
+async function timedOutRelease() {
+  const made = world([idle("h1")], {
     suspendSettles: { phase: "suspending", message: null },
     pluginStartedAt: Date.now() - 2 * HOUR,
   });
@@ -100,12 +100,26 @@ test("a pass keeps the flag when bb's fresh read shows suspending, though the pa
   assert.ok(made.releasing.has("env-h1"));
 });
 
-test("a pass keeps the flag when an action starts on the machine during its fresh read (fails if the busy check is not made again after the read)", async () => {
+test("a pass keeps the flag when an action starts on the machine during its fresh read (fails if the busy check is made before the read only)", async () => {
   let finish = () => {};
   const made = world([idle("h1")], {
     afterCall: (call) =>
       call === "get h1" &&
       void made.guard.run("h1", RELEASE_IDLE, "test", () => new Promise<void>((resolve) => (finish = resolve))),
+  });
+  made.releasing.add("env-h1");
+  await made.sync.reconcile(new Set(["h1"]), { wait: true });
+  assert.ok(made.releasing.has("env-h1"));
+  finish();
+});
+
+test("a pass keeps the flag while a machine on the box that the pass did not list has an action in flight (fails if only the listed machines' actions are checked)", async () => {
+  let finish = () => {};
+  // h2 shares h1's box and was still being created when the pass listed the machines.
+  const made = world([idle("h1"), idle("h2", { envId: "env-h1", phase: "creating" })], {
+    afterCall: (call) =>
+      call === "get h1" &&
+      void made.guard.run("h2", RELEASE_IDLE, "test", () => new Promise<void>((resolve) => (finish = resolve))),
   });
   made.releasing.add("env-h1");
   await made.sync.reconcile(new Set(["h1"]), { wait: true });
