@@ -10,7 +10,6 @@ import {
   isRunning,
   isStopped,
   metric,
-  sshHost,
   unpushedWork,
   type OnaCli,
   type OnaEnvironment,
@@ -61,20 +60,14 @@ export const devboxPath = z
     "use an absolute path of letters, digits, '.', '_' or '-' (or leave empty), with no '.' or '..' part",
   );
 
-/** A bb machine row as the RPCs show it; `tunnel` is the tunnel's state for the row's box. */
-export function devboxOf(
-  row: { machine: string; hostId: string; status: string; resource: OnaResource },
-  tunnel: Devbox["tunnel"],
-): Devbox {
+/** A bb machine row as the RPCs show it. */
+export function devboxOf(row: { machine: string; hostId: string; status: string; resource: OnaResource }): Devbox {
   return {
     machine: row.machine,
     hostId: row.hostId,
     envId: row.resource.envId,
     envName: row.resource.envName,
     status: row.status,
-    tunnel,
-    adopted: row.resource.adopted,
-    sshCommand: `ssh ${sshHost(row.resource.envId)}`,
   };
 }
 
