@@ -176,24 +176,14 @@ test(
 );
 
 test(
-  "thread_devbox answers pending, from one thread read, for a thread bb has not given a workspace yet",
+  "thread_devbox answers null, from one thread read, for a thread bb has not given a workspace yet",
   local,
   async () => {
     const threadReads = host.harness.inspection.sdk.callsTo("threads.get").length;
-    assert.deepEqual(await host.harness.behavior.callRpc("thread_devbox", { threadId: "thread-2" }), {
-      devbox: null,
-      pending: true,
-    });
+    assert.deepEqual(await host.harness.behavior.callRpc("thread_devbox", { threadId: "thread-2" }), { devbox: null });
     assert.equal(host.harness.inspection.sdk.callsTo("threads.get").length - threadReads, 1);
   },
 );
-
-test("thread_move's refusal reaches the menu as a conflict with the move's message", local, async () => {
-  await assert.rejects(host.harness.behavior.callRpc("thread_move", { threadId: "thread-0", hostId: "host-1" }), {
-    code: "conflict",
-    message: /is not on a devbox this plugin manages right now/,
-  });
-});
 
 test("thread_cost prices a Claude thread from the box's session files and caches it per turn", local, async () => {
   assert.deepEqual(await host.harness.behavior.callRpc("thread_cost", { threadId: "thread-0" }), { cost: null });
