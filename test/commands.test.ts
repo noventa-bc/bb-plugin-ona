@@ -500,3 +500,14 @@ test("a run whose signal is aborted during the wait exits 124 with the stopped-w
     stderr: `Stopped waiting before the command finished; it may still be running on the box. Follow it with: bb terminal attach ${TERMINAL_ID}`,
   });
 });
+
+// Bug: `status <ref>` with no matching machine printed "No Ona machines yet." and exited 0.
+test("status <ref> and status --json <ref> with no match exit 1 naming the ref; status with no ref and no machines still exits 0 (fails if the ref check is dropped)", async () => {
+  const { run } = fakeRun();
+  const refusal = { exitCode: 1, stderr: 'No Ona-backed bb machine matches "nope". See `bb ona status`.' };
+  assert.deepEqual(await run("status", "nope"), refusal);
+  assert.deepEqual(await run("status", "nope", "--json"), refusal);
+  const all = await run("status");
+  assert.equal(all.exitCode, 0);
+  assert.match(all.stdout ?? "", /No Ona machines yet\./);
+});
