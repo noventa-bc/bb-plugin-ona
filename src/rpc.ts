@@ -1,4 +1,4 @@
-// RPCs behind the thread header's Editor button and spend chip, the thread menu's Move to devbox, and the settings section's devbox buttons. app.tsx imports only the contract's type.
+// RPCs behind the thread header's Editor button and spend chip, and the settings section's devbox buttons. app.tsx imports only the contract's type.
 import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 
@@ -22,7 +22,7 @@ const threadCostSchema = z.object({
 });
 export type ThreadCost = z.infer<typeof threadCostSchema>;
 
-export const devboxCommandSchema = z.enum(["status", "sync", "reconnect", "resume", "rename", "update"]);
+export const devboxCommandSchema = z.enum(["status", "sync", "reconnect", "resume", "rename"]);
 export type DevboxCommand = z.infer<typeof devboxCommandSchema>;
 
 const devboxCommandReplySchema = z.object({
@@ -37,28 +37,22 @@ export const rpcContract = defineRpcContract({
     input: z.null(),
     output: z.object({ devboxes: z.array(devboxSchema) }),
   },
-  /** The Ona devbox a thread runs on, or null when it runs elsewhere; `pending` while it has no workspace yet. */
+  /** The Ona devbox a thread runs on, or null when it runs elsewhere or has no workspace yet. */
   thread_devbox: {
     input: z.object({ threadId: z.string().min(1) }),
-    output: z.object({ devbox: devboxSchema.nullable(), pending: z.boolean().optional() }),
+    output: z.object({ devbox: devboxSchema.nullable() }),
   },
   /** Spend so far for a thread on an Ona devbox, or null (other threads, nothing to price yet). */
   thread_cost: {
     input: z.object({ threadId: z.string().min(1) }),
     output: z.object({ cost: threadCostSchema.nullable() }),
   },
-  /** A new thread on another devbox at the same path, handed the work over (src/move.ts). */
-  thread_move: {
-    input: z.object({ threadId: z.string().min(1), hostId: z.string().min(1) }),
-    output: z.object({ threadId: z.string() }),
-  },
   devbox_open_editor: {
     input: z.object({ hostId: z.string().min(1) }),
     output: z.object({ opened: z.boolean() }),
   },
   /**
-   * The settings section's buttons: a `bb ona` command, as the CLI runs it (src/commands.ts), for one devbox or all,
-   * except update, which needs a host id (the refine below).
+   * The settings section's buttons: a `bb ona` command, as the CLI runs it (src/commands.ts), for one devbox or all.
    */
   devbox_command: {
     input: z
@@ -73,10 +67,6 @@ export const rpcContract = defineRpcContract({
       .refine(
         (input) => input.arg === undefined || (input.hostId !== undefined && input.command === "rename"),
         "arg needs a hostId, and only rename takes one",
-      )
-      .refine(
-        (input) => input.command !== "update" || input.hostId !== undefined,
-        "update needs a hostId: without one the CLI updates every devbox",
       ),
     output: devboxCommandReplySchema,
   },

@@ -210,7 +210,7 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    - Suspends, tunnel reopens and idle releases do not wait after a success.
 
    **Backoff and give-up.**
-   - A failure backs off every action on the machine but a CLI update (below): 5, then 10 min.
+   - A failure backs off every action on the machine: 5, then 10 min.
    - The give-up: the third failure, in a row or across a hold (rule 3), stops automatic tries until a forced run acts
      on the box, the hold ends or, for a daemon repair, the box recovers (rule 3).
    - `bb ona status` shows the backoff and the give-up for an active machine.
@@ -230,14 +230,6 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
 
    `bb ona sync` with no ref forces the release (rule 3): a hold does not stop it, its failure replaces the other
    action's record with a count of 1, and its success ends the count and that box's hold.
-
-   **CLI updates** (`bb ona update` and the weekday update).
-   - A CLI update takes the machine's turn and keeps it while bb installs: for each CLI it installs, up to 15 minutes
-     after bb's install request times out (75 s after it is sent; bb's own install limit is in `docs/ona-notes.md`).
-   - While another action runs on the machine, the update is skipped.
-   - It still runs on a machine in cooldown, backoff or give-up.
-   - It records no success or failure.
-   - Its `--force` skips only the busy-agent check.
 
    **Recovery.**
    - A machine bb shows connected with its tunnel up on a box Ona shows running clears the count and quiet period,

@@ -101,12 +101,8 @@ function fakeRun(
       },
       log: { info: (message: string) => void logs.push(message) },
     },
-    updateClis: async (options: { ref?: string; force?: boolean }) => {
-      calls.push(`updateClis ${options.ref} ${options.force}`);
-      return ["up to date"];
-    },
     tunnels: { status: () => "up", mark: () => 7 },
-    statusRows: async () => [],
+    statusRows: async (ref?: string) => (ref === "box" ? [{ machine: "ona:box" }] : []),
     onaHealth: () => ({ lastError: null, listedAt: null, autoRepair: false }),
     resolveEnvId: (ref: string) => Promise.resolve(ref === "box" ? "env_1" : ref),
     markConnected: async (envId: string) => void calls.push(`mark ${envId}`),
@@ -122,9 +118,9 @@ test("help, --help and no command print the usage", async () => {
   }
 });
 
-test("keep-alive, open and list are neither listed, in the usage nor run (fails if one comes back)", async () => {
+test("keep-alive, open, list, update and move are neither listed, in the usage nor run (fails if one comes back)", async () => {
   const { run, calls } = fakeRun();
-  for (const name of ["keep-alive", "open", "list"]) {
+  for (const name of ["keep-alive", "open", "list", "update", "move"]) {
     assert.equal(
       commands.some((c) => c.name === name),
       false,
@@ -135,6 +131,8 @@ test("keep-alive, open and list are neither listed, in the usage nor run (fails 
   assert.deepEqual(await run("keep-alive", "box", "2h"), { exitCode: 1, stderr: usage });
   assert.deepEqual(await run("open", "box"), { exitCode: 1, stderr: usage });
   assert.deepEqual(await run("list"), { exitCode: 1, stderr: usage });
+  assert.deepEqual(await run("move", "thread-1", "box"), { exitCode: 1, stderr: usage });
+  assert.deepEqual(await run("update", "host_1"), { exitCode: 1, stderr: usage });
   assert.deepEqual(calls, []);
 });
 
@@ -244,12 +242,6 @@ test("reconnect on an active machine restarts its idle clock and reconnects it (
   const { run, calls } = fakeRun();
   assert.deepEqual(await run("reconnect", "box"), { exitCode: 0, stdout: "Reconnected ona:box" });
   assert.deepEqual(calls, ["mark env_1", "reconnect env_1"]);
-});
-
-test("update <host id> runs the CLI update for that box with no force, as the Update CLIs button sends it (fails if the ref or the force flag changes)", async () => {
-  const { run, calls } = fakeRun();
-  assert.deepEqual(await run("update", "host_1"), { exitCode: 0, stdout: "up to date" });
-  assert.deepEqual(calls, ["updateClis host_1 false"]);
 });
 
 test("reconnect refuses when a guard action takes the machine while Ona is listed, and never calls the provider", async () => {
@@ -499,4 +491,20 @@ test("a run whose signal is aborted during the wait exits 124 with the stopped-w
     stdout: "out\n",
     stderr: `Stopped waiting before the command finished; it may still be running on the box. Follow it with: bb terminal attach ${TERMINAL_ID}`,
   });
+});
+
+// Bug: `status <ref>` with no matching machine printed "No Ona machines yet." and exited 0.
+test("status <ref> and status --json <ref> with no match exit 1 naming the ref; status with no ref and no machines still exits 0 (fails if the ref check is dropped)", async () => {
+  const { run } = fakeRun();
+  const refusal = { exitCode: 1, stderr: 'No Ona-backed bb machine matches "nope". See `bb ona status`.' };
+  assert.deepEqual(await run("status", "nope"), refusal);
+  assert.deepEqual(await run("status", "nope", "--json"), refusal);
+  const all = await run("status");
+  assert.equal(all.exitCode, 0);
+  assert.match(all.stdout ?? "", /No Ona machines yet\./);
+});
+
+test("status <ref> prints the machine the ref matches (fails if every ref is refused)", async () => {
+  const { run } = fakeRun();
+  assert.deepEqual(await run("status", "box", "--json"), { exitCode: 0, stdout: '[{"machine":"ona:box"}]' });
 });

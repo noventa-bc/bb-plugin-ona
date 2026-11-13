@@ -50,9 +50,6 @@ export const usage = [
   "  bb ona resume <ref>           Start a stopped box and reconnect bb's daemon (your action; a running box is only reconnected; gives up after 30 minutes)",
   "  bb ona status [ref] [--json]  bb's view of each devbox next to Ona's, its box facts, and what the plugin last did",
   "  bb ona sync [ref]             Re-check Ona now and repair (ignores cooldowns, backoff and the give-up, keeps the safety rules); waits up to 32 min for a resume bb answers `resuming`",
-  "  bb ona move <thread-id> <ref>  Continue a thread in a new one on another devbox at the same path",
-  "  bb ona update [ref] [--force] Apply pending updates of the CLIs in `autoUpdateProviders` now",
-  "                                Also weekdays 09:00 when `autoUpdateClis` is on",
   "",
   "<ref> is a bb machine name/id or an Ona environment name/id; a name two devboxes share is refused by commands that act on one box (use a host id); `status` lists them all.",
 ].join("\n");
@@ -83,11 +80,6 @@ export const commands = [
     usage: "bb ona rename <ref> [name]",
   },
   {
-    name: "update",
-    summary: "Apply pending agent-CLI updates on devboxes",
-    usage: "bb ona update [ref] [--force]",
-  },
-  {
     name: "reconnect",
     summary: "Reopen an active machine's tunnel and restart its bb daemon",
     usage: "bb ona reconnect <ref>",
@@ -107,7 +99,6 @@ export const commands = [
     summary: "Re-check Ona now and repair out-of-step devboxes; waits for a resume it starts",
     usage: "bb ona sync [ref]",
   },
-  { name: "move", summary: "Continue a thread on another devbox, same path", usage: "bb ona move <thread-id> <ref>" },
 ] as const satisfies readonly PluginCliCommandInfo[];
 
 type CommandName = (typeof commands)[number]["name"];
@@ -127,8 +118,6 @@ export interface OnaCommandDeps {
   defaultProject: string;
   findMachine(ref: string): Promise<Row | null>;
   resolveEnvId(ref: string): Promise<string>;
-  /** src/move.ts */
-  move(args: { threadId: string; hostId: string }): Promise<{ threadId: string }>;
   shellTarget(ref: string): Promise<ShellTarget>;
   openThreadTerminal(
     threadId: string,
@@ -137,7 +126,6 @@ export interface OnaCommandDeps {
   ): Promise<{ terminalId: string; via: ThreadTerminalPlan["via"] }>;
   setup(apply: boolean, keepGitCredentials: boolean): Promise<CliResult>;
   addMachine(inputs: Record<string, string>): Promise<string>;
-  updateClis(options: { ref?: string; force?: boolean }): Promise<string[]>;
   onaHealth(): OnaHealth;
   /** Restarts a box's idle window (the provider's `markConnected`). */
   markConnected(envId: string): Promise<void>;
@@ -159,12 +147,10 @@ export function onaCommands(deps: OnaCommandDeps) {
     defaultProject,
     findMachine,
     resolveEnvId,
-    move,
     shellTarget,
     openThreadTerminal,
     setup,
     addMachine,
-    updateClis,
     onaHealth,
     markConnected,
   } = deps;
@@ -298,6 +284,8 @@ export function onaCommands(deps: OnaCommandDeps) {
         }
         case "status": {
           const rows = await statusRows(ref);
+          if (ref && rows.length === 0)
+            return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${ref}". See \`bb ona status\`.` };
           if (json) return { exitCode: 0, stdout: JSON.stringify(rows) };
           return { exitCode: 0, stdout: formatStatus(rows, onaHealth()) };
         }
@@ -312,14 +300,6 @@ export function onaCommands(deps: OnaCommandDeps) {
             wait: true,
           });
           return { exitCode: 0, stdout: formatStatus(await statusRows(ref), onaHealth()) };
-        }
-        case "move": {
-          // `ref` is the thread here and `newName` the devbox.
-          if (!ref || !newName) break;
-          const row = await findMachine(newName);
-          if (!row) return { exitCode: 1, stderr: `No Ona-backed bb machine matches "${newName}".` };
-          const moved = await move({ threadId: ref, hostId: row.hostId });
-          return { exitCode: 0, stdout: `Started ${moved.threadId} on ${row.machine}; ${ref} stays as it is.` };
         }
         case "shell": {
           if (!ref) break;
@@ -352,8 +332,6 @@ export function onaCommands(deps: OnaCommandDeps) {
             stderr: `Usage: bb ona shell ${ref} -- <command...>   (for an interactive shell: bb ona ssh ${ref} --thread <thread-id>)`,
           };
         }
-        case "update":
-          return { exitCode: 0, stdout: (await updateClis({ ref, force: flags.has("--force") })).join("\n") };
       }
     } catch (error) {
       return { exitCode: 1, stderr: errorText(error) };

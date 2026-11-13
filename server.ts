@@ -3,7 +3,7 @@
 // Each bb machine is one Ona environment. bb's daemon runs inside the devbox
 // and reaches this server through an SSH reverse tunnel, so the server stays
 // on loopback and nothing goes through a third-party relay.
-import { experimental_PluginRpcRefusal, type BbPluginApi } from "@get-bb/plugin-sdk";
+import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { idleDisconnectSchema } from "./src/lifecycle.ts";
 import { errorText, isRunning, isStopped, OnaCli, OnaSnapshot, sshHost } from "./src/ona.ts";
 import {
@@ -22,11 +22,9 @@ import { connectedAtKey, createSync, forgetBox, rowForRef, watchRealtime, type R
 import { ALL, HostGuard, PassScheduler } from "./src/reconcile.ts";
 import { timerTick, TICK_MS } from "./src/time.ts";
 import { createThreadCost } from "./src/cost-service.ts";
-import { createMove } from "./src/move.ts";
 import { rpcContract, type Devbox } from "./src/rpc.ts";
 import { connectedShellRow, threadTerminalPlan, type ShellBackend, type ShellTarget } from "./src/shells.ts";
 import { TunnelManager } from "./src/ssh.ts";
-import { createUpdateClis } from "./src/updates.ts";
 
 export default async function plugin(bb: BbPluginApi) {
   const settings = bb.settings.define({
@@ -95,20 +93,6 @@ export default async function plugin(bb: BbPluginApi) {
         "After a devbox starts, wait until its home folder (shared over NFS) is mounted before starting bb's daemon and agents. Turn off if your Ona environments don't share a home folder. A changed setting applies after `bb plugin reload ona`.",
       default: true,
     },
-    autoUpdateClis: {
-      type: "boolean",
-      label: "Auto-update agent CLIs on devboxes",
-      description:
-        "Weekdays at 09:00 (this Mac's time), apply pending updates for the CLIs below on connected Ona devboxes. Boxes with a running agent turn, or that another action is running on, are skipped until the next run. A changed setting applies after `bb plugin reload ona`.",
-      default: true,
-    },
-    autoUpdateProviders: {
-      type: "string",
-      label: "CLIs to auto-update",
-      description:
-        "bb provider ids, comma-separated. Only installed CLIs are updated; nothing new is installed. A changed setting applies after `bb plugin reload ona`.",
-      default: "claude-code,codex",
-    },
   });
   const {
     onaPath,
@@ -120,8 +104,6 @@ export default async function plugin(bb: BbPluginApi) {
     codexSqliteHome,
     machineDataDir,
     waitForSharedHome,
-    autoUpdateClis,
-    autoUpdateProviders,
   } = await settings.get();
 
   // Settings path first, then PATH and common install locations.
@@ -335,15 +317,6 @@ export default async function plugin(bb: BbPluginApi) {
     return { terminalId: terminal.id, via: plan.via };
   }
 
-  const move = createMove({ sdk: bb.sdk, machineOfHost });
-
-  const updateClis = createUpdateClis({ bb, machines, autoUpdateProviders, rowForRef, guard, signal: lifetime.signal });
-  if (autoUpdateClis) {
-    bb.background.schedule("cli-updates", "0 9 * * 1-5", async () => {
-      for (const line of await updateClis()) bb.log.info(`cli update: ${line}`);
-    });
-  }
-
   const setup = createSetup({
     server: bb.server,
     run,
@@ -382,29 +355,17 @@ export default async function plugin(bb: BbPluginApi) {
     defaultProject,
     findMachine,
     resolveEnvId,
-    move,
     shellTarget,
     openThreadTerminal,
     setup,
     addMachine,
-    updateClis,
     onaHealth,
     markConnected,
   });
   bb.rpc.register(rpcContract, {
     devboxes_list: async () => ({ devboxes: await devboxes() }),
-    thread_devbox: async ({ threadId }) => {
-      // bb creates a thread before its workspace; the app asks again every 15 s while the thread is shown.
-      const { environmentId } = await bb.sdk.threads.get({ threadId });
-      if (!environmentId) return { devbox: null, pending: true };
-      return { devbox: await workspaceDevbox(environmentId) };
-    },
+    thread_devbox: async ({ threadId }) => ({ devbox: await threadDevbox(threadId) }),
     thread_cost: async ({ threadId }) => ({ cost: await costs.threadCost(threadId) }),
-    // A refusal carries the message to the menu without bb recording a plugin crash, which a plain throw would be.
-    thread_move: (input) =>
-      move(input).catch((error: unknown) => {
-        throw new experimental_PluginRpcRefusal({ code: "conflict", message: errorText(error) });
-      }),
     devbox_open_editor: async ({ hostId }) => {
       const row = (await machines()).find((r) => r.hostId === hostId);
       if (!row) return { opened: false };

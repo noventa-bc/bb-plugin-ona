@@ -18,7 +18,7 @@ Roadmap items are delivered through the orchestrated flow in `FACTORY.md`.
 - Settings: `bb.settings.define` in `server.ts`.
 - Timer: the `lifecycle-sync` service in `server.ts`; its rules: `timerTick` in `src/time.ts`.
 - Sync test fakes: `world` in `test/sync-fakes.ts`.
-- Other modules: `src/setup.ts` (prerequisite checks), `src/ona.ts` (ona CLI wrapper, shared listing), `src/status.ts` (`bb ona status`), `src/move.ts` (thread move), `src/names.ts` (fun names); agent docs: `skills/ona-devboxes/SKILL.md`.
+- Other modules: `src/setup.ts` (prerequisite checks), `src/ona.ts` (ona CLI wrapper, shared listing), `src/status.ts` (`bb ona status`), `src/names.ts` (fun names); agent docs: `skills/ona-devboxes/SKILL.md`.
 - Helper scripts: "Commands" below.
 
 ## Commands

@@ -120,9 +120,6 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
     `requestMachineSuspension`, `suspendMachine`.
   - `hosts.experimental_resume` (POST `/hosts/:id/resume`): `startMachineResume`,
     `resumeMachine`, `resumeMachineWithIntent`.
-  - `hosts.providerCliStatus` (GET `/hosts/:id/provider-clis/status`): `getProviderInstallations`.
-  - `hosts.installProviderCli` (POST `/hosts/:id/provider-clis/install`):
-    `serializeProviderInstallation`, `callHostOnlineRpcForWork`.
   - `experimental_machines.getResource` (in-process): `createPluginApi`, `getResource`.
   - `experimental_machines.bootstrap` (in-process): `createMachineBootstrapApi`, which prepares
     the enrollment, runs the installer through the executor the plugin passes, then waits for the
@@ -311,9 +308,6 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 - bb 0.49.0's SDK for a plugin is built by `createNodeBbSdk` with a fetch that gives up after
   `DEFAULT_BB_REQUEST_TIMEOUT_MS` (75 s) and throws an Error named `BbRequestTimeoutError`, while bb
   goes on with the request (checked 2026-11-09 in `server/dist/start-server.js`).
-- bb 0.49.0 answers `hosts.installProviderCli` only once the install ends, with no streamed events, and runs it for up
-  to `PROVIDER_CLI_INSTALL_TIMEOUT_MS` (15 min); a plugin's call gives up after 75 s while the install goes on
-  (checked 2026-11-11).
 - bb 0.49.0 refuses a thread spawn into its personal project ("Personal project threads must use a
   personal workspace", `assertProjectWorkspaceCompatibility`) unless its environment is `reuse`,
   `provider`, `project-default`, a host's personal workspace, or a host's `unmanaged` workspace with
@@ -321,18 +315,6 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   An environment's `workspaceProvisionType` is set only for bb's default environment providers
   (`resolveDeprecatedWorkspaceProvisionType`); a workspace from any other provider reads null
   (checked 2026-11-09).
-- bb 0.49.0 returns `threads.conversationOutline` items oldest first: event rows sorted ascending,
-  items pushed in timeline order (`selectThreadConversationOutline`, checked 2026-11-09).
-- bb 0.49.0 refuses a fork onto another host in `assertForkSourceHost`, called from
-  `createThreadFromRequest`, only for a create with `originKind` `fork`: a plain spawn meets no host
-  check. `createThreadFromRequest` calls `ensureHostSessionReadyForWork` before the thread row exists,
-  so the create request itself waits while bb resumes a suspended host: a move's stopped target is
-  started by bb (checked 2026-11-09 in `server/dist/start-server.js`).
-- bb 0.49.0 caps each `threads.conversationOutline` item's `preview` at 200
-  characters (`CONVERSATION_OUTLINE_PREVIEW_MAX_LENGTH`) and returns one item
-  per user or assistant message, with no limit on their number (checked 2026-11-09).
-- bb 0.49.0's app only logs an error thrown by a thread action's `run`
-  (`console.error`), so a plugin shows its own (checked 2026-11-09).
 - In SDK 0.6.136 a provider resource is written by the provider's own lifecycle
   hooks (`create`, `suspend`, `resume`, through `checkpoint` or the returned
   `resource`) and read with `bb.experimental_machines.getResource` (checked 2026-11-13).
