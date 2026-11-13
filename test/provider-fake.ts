@@ -328,14 +328,14 @@ export function register({
     },
   });
   // Most tests read neither a start's cause nor a mark: a waiting thread's cause and a mark no close is newer than are the
-  // defaults here, so a caller that drops its mark never has its tunnel refused.
+  // defaults here, so a caller that drops its mark never has its tunnel refused. The machine is host-1, as in `resume`.
   const wake = (
     resource: OnaResource,
     progress: PluginMachineProviderProgress,
     outer: AbortSignal,
     cause: WakeVia = "wake-thread",
     since = Infinity,
-  ) => wakeWithCause(resource, progress, outer, cause, since);
+  ) => wakeWithCause(resource, progress, outer, cause, since, "host-1");
   const reconnect = (
     resource: OnaResource,
     report: PluginMachineProviderProgress,

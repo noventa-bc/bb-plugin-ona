@@ -115,7 +115,7 @@ export function world(
   /** The provider's suspend as bb runs it, for a suspend the user asks for too: it stops a box whose no-stop flag is gone. */
   const providerSuspend = (hostId: string) => {
     const envId = byHost.get(hostId)!.envId;
-    if (!releasing.delete(envId)) calls.push(`stop ${envId}`);
+    if (!releasing.delete(hostId)) calls.push(`stop ${envId}`);
   };
   const lifecycleCall =
     (name: string, answered: string, settled: string) =>

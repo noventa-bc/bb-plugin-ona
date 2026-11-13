@@ -61,7 +61,7 @@ test("a create with no project and no defaultProject is refused, naming the sett
 // must still stop the box.
 test("a resume clears a no-stop flag a suspend left, so the next suspend stops the box (fails if the flag outlives the resume)", async () => {
   const { provider, releasing, calls } = register({ found: box("RUNNING") });
-  releasing.add("env-1");
+  releasing.add("host-1");
   const signal = new AbortController().signal;
   await provider.resume!({ ...lifecycle(), hostId: "host-1", resource: adoptedResource, signal });
   const before = calls.length;
@@ -72,7 +72,7 @@ test("a resume clears a no-stop flag a suspend left, so the next suspend stops t
 // sync sets the flag before bb's suspend, so a flagged suspend only closes the tunnel.
 test("a flagged suspend only closes the tunnel and consumes the flag (fails if it stops the box or keeps the flag)", async () => {
   const { provider, calls, releasing, tunnels } = register({ found: box("RUNNING"), tunnel: "up" });
-  releasing.add("env-1");
+  releasing.add("host-1");
   await provider.suspend!({
     ...lifecycle(),
     hostId: "host-1",
@@ -108,22 +108,22 @@ for (const [phase, after] of [
   });
 }
 
-test("a resume clears only its own box's flag (fails if another box's flag is wiped)", async () => {
+test("a resume clears only its own machine's flag, though another machine shares the box (fails if another machine's flag is wiped)", async () => {
   const { provider, releasing } = register({ found: box("RUNNING") });
-  releasing.add("env-1");
-  releasing.add("env-2");
+  releasing.add("host-1");
+  releasing.add("host-2");
   await provider.resume!({
     ...lifecycle(),
     hostId: "host-1",
     resource: adoptedResource,
     signal: new AbortController().signal,
   });
-  assert.deepEqual([...releasing], ["env-2"]);
+  assert.deepEqual([...releasing], ["host-2"]);
 });
 
 test("a resume that fails at preflight still clears the flag (fails if a failed resume keeps it)", async () => {
   const { provider, releasing } = register({ found: box("RUNNING"), preflightExit: 3 });
-  releasing.add("env-1");
+  releasing.add("host-1");
   await assert.rejects(
     provider.resume!({
       ...lifecycle(),
@@ -138,7 +138,7 @@ test("a resume that fails at preflight still clears the flag (fails if a failed 
 
 test("a resume whose Ona lookup throws clears the no-stop flag (fails if the flag is cleared after the lookup)", async () => {
   const { provider, releasing } = register({ found: box("RUNNING"), phases: [new Error("Ona is unreachable")] });
-  releasing.add("env-1");
+  releasing.add("host-1");
   await assert.rejects(
     provider.resume!({
       ...lifecycle(),
@@ -153,7 +153,7 @@ test("a resume whose Ona lookup throws clears the no-stop flag (fails if the fla
 
 test("a resume of a box Ona shows deleting clears the no-stop flag (fails if the flag is cleared after the start)", async () => {
   const { provider, releasing } = register({ found: box("DELETING") });
-  releasing.add("env-1");
+  releasing.add("host-1");
   await assert.rejects(
     provider.resume!({
       ...lifecycle(),
@@ -168,7 +168,7 @@ test("a resume of a box Ona shows deleting clears the no-stop flag (fails if the
 
 test("a resume of a box Ona no longer has rejects as not found, starts nothing and clears the no-stop flag (fails if an absent box is started or keeps the flag)", async () => {
   const { provider, calls, releasing } = register({ found: box("STOPPED"), phases: [null] });
-  releasing.add("env-1");
+  releasing.add("host-1");
   await assert.rejects(
     provider.resume!({
       ...lifecycle(),
@@ -370,21 +370,21 @@ test("a relative legacy dataDir is kept and a trailing slash is stripped", () =>
 
 test("a remove clears a no-stop flag a suspend left, so the box's next suspend stops it (fails if remove leaves the flag)", async () => {
   const { provider, releasing } = register({ found: box("STOPPED") });
-  releasing.add("env-1");
+  releasing.add("host-1");
   await provider.remove!({
     ...lifecycle(),
     hostId: "host-1",
     resource: adoptedResource,
     signal: new AbortController().signal,
   });
-  assert.equal(releasing.has("env-1"), false);
+  assert.equal(releasing.has("host-1"), false);
 });
 
 test("a wake clears a no-stop flag a failed suspend left, so the next Pause stops the box (fails if wake leaves the flag)", async () => {
   const { wake, releasing } = register({ found: box("RUNNING") });
-  releasing.add("env-1");
+  releasing.add("host-1");
   await wake(adoptedResource, lifecycle().report, new AbortController().signal);
-  assert.equal(releasing.has("env-1"), false);
+  assert.equal(releasing.has("host-1"), false);
 });
 
 test("wake refuses a STOPPING box that Ona settles as deleting, and starts nothing (fails if ensureRunning starts it)", async () => {

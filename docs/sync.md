@@ -155,7 +155,9 @@ box, so safety rule 1 does not gate it (checked 2026-11-06 in Ona's help: `updat
    `bb ona ssh <ref> --thread`.
 
 2. **The plugin's own suspends never stop a box.** Every suspend the plugin makes
-   skips the provider's stop. A suspend you ask for (Pause, `bb machine suspend`, or `bb machine reconcile` of a suspended
+   skips the provider's stop. The skip belongs to the machine the plugin suspends, not to its box: two machines on one
+   box let go in one pass both skip the stop, and a suspend you ask for of the other machine still stops the box. A
+   suspend you ask for (Pause, `bb machine suspend`, or `bb machine reconcile` of a suspended
    machine) stops the box unless Ona shows it stopped or deleted (not deleting) or no longer has it, a STARTING or
    STOPPING box included. _Why: a wrong or stale listing must not stop a box with your work on it._
 3. **Restart a daemon only when the check finds none.** _Why: a restart kills running agent turns._
