@@ -104,7 +104,6 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 ## bb SDK
 
 - bb's server source is the bundle `/Applications/bb.app/Contents/Resources/app.asar.unpacked/node_modules/bb-app/server/dist/start-server.js`; the installed version is the `"version"` field of `package.json` in that `bb-app` folder (`grep '"version"' /Applications/bb.app/Contents/Resources/app.asar.unpacked/node_modules/bb-app/package.json`) (bb 0.49.0, checked 2026-11-09).
-- The plugin pins `@get-bb/plugin-sdk` 0.6.133 (checked 2026-11-12).
 - The bb host and machine SDK calls the plugin makes. Routes come from `createHostsArea` (bb's
   SDK hosts transport in the server bundle; `scripts/bb-source.sh createHostsArea` finds it).
   Server function names come from `scripts/bb-source.sh <name>` on bb-app 0.49.0 (checked
