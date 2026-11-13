@@ -81,7 +81,7 @@ export function world(
     holdSettle?: { hostId: string; until: string };
     /** The tunnel manager; the default records each ensure and never refuses one. */
     tunnels?: SyncDeps["tunnels"];
-    /** Runs after bb answers a host listing ("list") or a lifecycle call ("suspend h1"), and during the daemon check
+    /** Runs after bb answers a host listing ("list"), a host read ("get h1") or a lifecycle call ("suspend h1"), and during the daemon check
      * ("probe"), as a close landing then would. */
     afterCall?: (call: string) => void;
   } = {},
@@ -112,6 +112,11 @@ export function world(
   const pendingSuspends = new Set<string>();
   /** Settle reads of the held host so far (`holdSettle`). */
   let holdReads = 0;
+  /** The provider's suspend as bb runs it, for a suspend the user asks for too: it stops a box whose no-stop flag is gone. */
+  const providerSuspend = (hostId: string) => {
+    const envId = byHost.get(hostId)!.envId;
+    if (!releasing.delete(envId)) calls.push(`stop ${envId}`);
+  };
   const lifecycleCall =
     (name: string, answered: string, settled: string) =>
     async ({ hostId }: { hostId: string }) => {
@@ -174,9 +179,10 @@ export function world(
           // Like bb's list: a creating host is left out unless `includeCreating` is set.
           list: async (args?: { includeCreating?: boolean }) => {
             hostReads.push("list");
-            const listed = [...hosts.values()].filter(
-              (host) => args?.includeCreating || host.lifecycle.phase !== "creating",
-            );
+            // Copies, as bb's answer is: a host changed after the listing does not change the rows read from it.
+            const listed = [...hosts.values()]
+              .filter((host) => args?.includeCreating || host.lifecycle.phase !== "creating")
+              .map((host) => ({ ...host }));
             options.afterCall?.("list");
             return listed;
           },
@@ -194,12 +200,10 @@ export function world(
               holdReads++;
               return { ...host, lifecycle: { ...host.lifecycle, phase: "suspending" } };
             }
-            // bb runs the provider's suspend as it settles an accepted suspend: a box whose no-stop flag is gone is stopped then.
-            if (pendingSuspends.delete(hostId) && host.lifecycle.phase === "suspended") {
-              const envId = byHost.get(hostId)!.envId;
-              if (!releasing.delete(envId)) calls.push(`stop ${envId}`);
-            }
+            // bb runs the provider's suspend as it settles an accepted suspend.
+            if (pendingSuspends.delete(hostId) && host.lifecycle.phase === "suspended") providerSuspend(hostId);
             if (options.holdSettle?.hostId === hostId) calls.push(`settled ${hostId}`);
+            options.afterCall?.(`get ${hostId}`);
             return host;
           },
           experimental_suspend: lifecycleCall("suspend", "suspending", "suspended"),
@@ -285,7 +289,7 @@ export function world(
     pluginStartedAt: options.pluginStartedAt ?? NOW - 2 * HOUR,
     signal: options.signal ?? new AbortController().signal,
   });
-  return { sync, calls, guard, kv, hosts, releasing, hostReads, hostByEnv, logs };
+  return { sync, calls, guard, kv, hosts, releasing, hostReads, hostByEnv, logs, providerSuspend };
 }
 
 export const idle = (hostId: string, extra: Partial<Box> = {}): Box => ({ hostId, envId: `env-${hostId}`, ...extra });
