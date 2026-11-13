@@ -78,9 +78,9 @@ function gitShim(before: string) {
 /** The environment for a run whose `git` is taken from the shim folder `shims`. */
 const withShim = (shims: string): NodeJS.ProcessEnv => ({ ...env, PATH: `${shims}:${env.PATH ?? ""}` });
 
-/** The text of a package.json for "fixture" at `version`, depending on `dependencies`. */
-function packageJson(version: string, dependencies: Record<string, string> = {}) {
-  return JSON.stringify({ name: "fixture", version, dependencies }, null, 2) + "\n";
+/** The text of a package.json for "fixture" at `version`, with `fields` beside an empty `dependencies`. */
+function packageJson(version: string, fields: Record<string, unknown> = {}) {
+  return JSON.stringify({ name: "fixture", version, dependencies: {}, ...fields }, null, 2) + "\n";
 }
 
 /** The text of a package-lock.json for "fixture" at `version`, with `packages` beside the root entry. */
@@ -144,14 +144,40 @@ test("a version-only difference links: the version is left out of package.json a
   assert.equal(realpathSync(join(dir, "node_modules")), realpathSync(join(main, "node_modules")));
 });
 
+test("a commit that changes only a scripts entry of package.json links node_modules: the installed packages are the same", () => {
+  const { main, worktree } = checkouts();
+  const sha = commitManifests(worktree, packageJson("1.0.0", { scripts: { test: "node --test" } }), lockfile("1.0.0"));
+  const dir = newDir();
+  const r = scratchCopy([worktree, sha, dir]);
+  assert.equal(r.status, 0, r.messages);
+  assert.equal(realpathSync(join(dir, "node_modules")), realpathSync(join(main, "node_modules")));
+});
+
 test("a different dependency does not link, and says why", () => {
   const { worktree } = checkouts();
-  const sha = commitManifests(worktree, packageJson("1.0.0", { "left-pad": "1.0.0" }), lockfile("1.0.0"));
+  const sha = commitManifests(
+    worktree,
+    packageJson("1.0.0", { dependencies: { "left-pad": "1.0.0" } }),
+    lockfile("1.0.0"),
+  );
   const dir = newDir();
   const r = scratchCopy([worktree, sha, dir]);
   assert.equal(r.status, 0, r.messages);
   assert.equal(hasEntry(join(dir, "node_modules")), false);
   assert.match(r.messages, /did not link node_modules: package\.json or package-lock\.json differs from /);
+});
+
+test("a version change in any dependency field of package.json does not link, and says why", () => {
+  for (const field of ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies", "overrides"]) {
+    const { main, worktree } = checkouts();
+    writeFileSync(join(main, "package.json"), packageJson("1.0.0", { [field]: { pkg: "1.0.0" } }));
+    const sha = commitManifests(worktree, packageJson("1.0.0", { [field]: { pkg: "1.0.1" } }), lockfile("1.0.0"));
+    const dir = newDir();
+    const r = scratchCopy([worktree, sha, dir]);
+    assert.equal(r.status, 0, `${field}: ${r.messages}`);
+    assert.equal(hasEntry(join(dir, "node_modules")), false, field);
+    assert.match(r.messages, /did not link node_modules: package\.json or package-lock\.json differs from /, field);
+  }
 });
 
 test("lockfiles that differ only in a dependency's version under packages do not link, and say why", () => {

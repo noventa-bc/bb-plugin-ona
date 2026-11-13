@@ -1,19 +1,22 @@
 #!/bin/sh
 # Extracts commit <sha> of <worktree> into a new folder <dir>, for a reviewer to run tests and mutants in
-# without touching <worktree>. The copy has no .git. Its node_modules links to the main checkout's when its
-# package.json and package-lock.json are the same as the main checkout's apart from the package's own version;
-# a copy whose commit has its own node_modules keeps it. <dir>'s parent folder must already exist, and <dir>
-# must not lie inside any git checkout. Prints the copy's absolute path on stdout; the other messages go to stderr.
+# without touching <worktree>. The copy has no .git. Its node_modules links to the main checkout's when the commit's
+# package.json has the same dependencies, devDependencies, optionalDependencies, peerDependencies and overrides as the
+# main checkout's, and its package-lock.json has the same contents apart from the package's own version. A copy whose
+# commit has its own node_modules keeps it. <dir>'s parent folder must already exist, and <dir> must not lie inside
+# any git checkout. Prints the copy's absolute path on stdout; the other messages go to stderr.
 #   scripts/scratch-copy.sh <worktree> <sha> <dir>
 set -eu
 usage() { echo "usage: scripts/scratch-copy.sh <worktree> <sha> <dir>" >&2; exit 2; }
-# Exits 0 when the JSON files $1 and $2 are the same once the package's own version is left out: the top-level one
-# and the lockfile's packages[""] one. Exits 1 when they differ or a file cannot be read or parsed; node's message is
-# hidden, since the caller reports the difference.
+# Exits 0 when the JSON files $1 and $2 agree: for package.json, on its dependency fields and overrides (the `fields`
+# list below); for a lockfile, on everything but the package's own version (the top-level one and packages[""]'s).
+# Exits 1 when they differ or a file cannot be read or parsed; node's message is hidden, since the caller reports it.
 same_deps() {
   node -e '
+    const fields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies", "overrides"];
     const load = (file) => {
       const json = JSON.parse(require("node:fs").readFileSync(file, "utf8"));
+      if (file.endsWith("/package.json")) return JSON.stringify(Object.fromEntries(fields.map((f) => [f, json[f]])));
       delete json.version;
       delete json.packages?.[""]?.version;
       return JSON.stringify(json);
