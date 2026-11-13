@@ -16,7 +16,7 @@ useFakeClock();
 
 const MINUTE = 60_000;
 const KEY = "cost2:t1"; // the record the code reads and writes
-const OLD_KEY = "cost:t1"; // the record key from before the Codex fix (docs/ona-notes.md)
+const OLD_KEY = "cost:t1"; // a key the code never reads, only deletes in forget
 
 const FIGURE: ThreadCost = { provider: "claude-code", usd: 1, basis: "list-price", partial: false, updatedAt: OLD };
 // Codex's account/usage/read answer: with groups once the usage is recorded, without them before.
@@ -105,6 +105,13 @@ async function pollMinutely(w: World, lastMinute: number, changes: Record<number
   }
   return figure;
 }
+
+test("a paused thread whose only record is under cost: shows no figure (fails if the cost: key is read)", async () => {
+  const w = world({ status: "suspended", turnSeq: 8 });
+  w.kv.set(OLD_KEY, { cost: FIGURE, seq: 7, checkedAt: OLD });
+  assert.equal(await w.costs.threadCost("t1"), null);
+  assert.deepEqual(w.collectorRuns, []);
+});
 
 test("a box that is not connected returns the stored figure and is never collected from", async () => {
   const w = world({ status: "suspended", turnSeq: 8, stored: { cost: FIGURE, seq: "7", checkedAt: OLD, runs: 1 } });
@@ -484,5 +491,3 @@ test("a partial figure keeps a higher stored figure and replaces a lower one (fa
   const second = await w.costs.threadCost("t1");
   assert.deepEqual([second?.usd, second?.partial], [2.5, true]); // the partial $2.5 is higher: it replaces
 });
-
-// Bug: records written before the Codex fix settled $0.00 and were kept until the next turn (docs/ona-notes.md).

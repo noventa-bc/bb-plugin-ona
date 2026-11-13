@@ -58,7 +58,7 @@ export function createThreadCost({ bb, runCollector, threadDevbox, snapshot }: C
 
   /** Drop a deleted thread's stored figures. */
   async function forget(threadId: string): Promise<void> {
-    // `cost:` is the key versions before `cost2:` wrote; nothing else ever removes those records.
+    // Records under `cost:` are never read; this delete clears them.
     for (const key of [costKey(threadId), `cost:${threadId}`]) {
       await bb.storage.kv.delete(key).catch((error: unknown) => {
         bb.log.warn(`thread cost for ${threadId}: could not drop it: ${errorText(error)}`);
