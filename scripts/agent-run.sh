@@ -32,8 +32,9 @@ prompt="$brief
 You are running unattended. Follow AGENTS.md. Don't ask questions: decide, or record the question in the handoff. Finish by writing .agent/HANDOFF.md."
 
 # Sessions can write the agent's own config; warn if a run changed it.
-watched=("$HOME/.claude/settings.json")
-before=$(cat "${watched[@]}" 2>/dev/null | shasum)
+# A missing file reads as empty, so a run that creates it is reported too.
+settings() { cat "$HOME/.claude/settings.json" 2>/dev/null || true; }
+before=$(settings)
 
 sandbox=(nono run -s --allow-cwd --profile "$repo/.nono/agent.jsonc"
   --read "$repo/.git" --allow "$repo/.git/worktrees/$slug" ${credential[@]+"${credential[@]}"} --)
@@ -44,7 +45,7 @@ status=0
   --settings '{"permissions":{"deny":["Bash(git commit:*)","Bash(git push:*)"]}}' \
   </dev/null || status=$?
 
-[ "$before" = "$(cat "${watched[@]}" 2>/dev/null | shasum)" ] ||
+[ "$before" = "$(settings)" ] ||
   echo "WARNING: the run changed ~/.claude/settings.json. Check it before your next session." >&2
 echo "Worktree: $tree"
 echo "Handoff:  $tree/.agent/HANDOFF.md"
