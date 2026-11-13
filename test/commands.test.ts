@@ -106,7 +106,7 @@ function fakeRun(
       return ["up to date"];
     },
     tunnels: { status: () => "up", mark: () => 7 },
-    statusRows: async () => [],
+    statusRows: async (ref?: string) => (ref === "box" ? [{ machine: "ona:box" }] : []),
     onaHealth: () => ({ lastError: null, listedAt: null, autoRepair: false }),
     resolveEnvId: (ref: string) => Promise.resolve(ref === "box" ? "env_1" : ref),
     markConnected: async (envId: string) => void calls.push(`mark ${envId}`),
@@ -510,4 +510,9 @@ test("status <ref> and status --json <ref> with no match exit 1 naming the ref; 
   const all = await run("status");
   assert.equal(all.exitCode, 0);
   assert.match(all.stdout ?? "", /No Ona machines yet\./);
+});
+
+test("status <ref> prints the machine the ref matches (fails if every ref is refused)", async () => {
+  const { run } = fakeRun();
+  assert.deepEqual(await run("status", "box", "--json"), { exitCode: 0, stdout: '[{"machine":"ona:box"}]' });
 });
