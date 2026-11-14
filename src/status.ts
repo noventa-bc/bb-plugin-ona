@@ -3,7 +3,7 @@
 import { boxFacts, errorText, reasonOf, type BoxFacts } from "./ona.ts";
 import { GIVE_UP_AFTER, RELEASE_IDLE, type HostGuard } from "./reconcile.ts";
 import type { Row, SyncBb, SyncDeps } from "./sync.ts";
-import { liveThreads, stuckThreads } from "./updates.ts";
+import { liveThreads, stuckThreads } from "./threads.ts";
 
 // Only the all-boxes pass (`bb ona sync` with no ref) runs an idle release; every other action needs its machine's pass.
 const giveUpCommand = (action: string, machine: string) =>

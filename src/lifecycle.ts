@@ -2,7 +2,7 @@
 // box nobody uses is let go and Ona's own inactivity timeout stops it. Syncing
 // changes made outside bb lives in reconcile.ts.
 import { z } from "zod";
-import { hostIsBusy } from "./updates.ts";
+import { hostIsBusy } from "./threads.ts";
 import { pollUntil } from "./time.ts";
 
 /** bb's suspend drain gives up after 5 minutes (docs/ona-notes.md), so a suspend is settled well within this. */

@@ -35,7 +35,7 @@ import {
   shownRunning,
 } from "./reconcile.ts";
 import { createStatusRows } from "./status.ts";
-import { liveThreads, threadStatuses, type LiveThreadsArgs, type ThreadState } from "./updates.ts";
+import { liveThreads, threadStatuses, type LiveThreadsArgs, type ThreadState } from "./threads.ts";
 
 export const connectedAtKey = (envId: string) => `connectedAt:${envId}`;
 

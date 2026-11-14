@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hostIsBusy, STUCK_THREAD_MS, stuckThreads, threadStatuses } from "../src/updates.ts";
+import { hostIsBusy, STUCK_THREAD_MS, stuckThreads, threadStatuses } from "../src/threads.ts";
 
 test("a host with an agent turn in flight is busy", () => {
   assert.equal(hostIsBusy(["idle", "error"]), false);
