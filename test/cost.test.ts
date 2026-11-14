@@ -48,8 +48,9 @@ test("long prompts and fast mode use their own rates", () => {
 test("Fable 5.2 and Mythos 5.2 are priced at their own rates, not as Fable 5 or Mythos 5 (fails if 5.2 falls back to the 5 entry)", () => {
   // Bug: claude-fable-5-2 and claude-mythos-5-2 had no entry, so they were priced as the 5 models (10 / 50 / 1).
   for (const model of ["claude-fable-5-2", "claude-fable-5-2-20261001", "claude-fable-5-2[1m]", "claude-mythos-5-2"]) {
-    const usd = claudeCost([bucket(model, { input: 1_000_000, output: 1_000_000, cacheRead: 1_000_000 })]).usd;
-    close(usd, 8 + 40 + 0.2);
+    close(claudeCost([bucket(model, { input: 1_000_000 })]).usd, 8);
+    close(claudeCost([bucket(model, { output: 1_000_000 })]).usd, 40);
+    close(claudeCost([bucket(model, { cacheRead: 1_000_000 })]).usd, 0.2);
   }
 });
 
