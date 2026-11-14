@@ -45,19 +45,20 @@ test("long prompts and fast mode use their own rates", () => {
   close(claudeCost([bucket("claude-opus-5-5", { fast: true, output: 1_000_000 })]).usd, 40);
 });
 
-test("Fable 5.2 is priced at its own rates, not as Fable 5 (fails if 5.2 falls back to the 5 entry)", () => {
-  // Bug: claude-fable-5-2 had no entry, so it was priced as claude-fable-5 (10 / 50 / 1).
-  for (const model of ["claude-fable-5-2", "claude-fable-5-2-20261001", "claude-fable-5-2[1m]"]) {
+test("Fable 5.2 and Mythos 5.2 are priced at their own rates, not as Fable 5 or Mythos 5 (fails if 5.2 falls back to the 5 entry)", () => {
+  // Bug: claude-fable-5-2 and claude-mythos-5-2 had no entry, so they were priced as the 5 models (10 / 50 / 1).
+  for (const model of ["claude-fable-5-2", "claude-fable-5-2-20261001", "claude-fable-5-2[1m]", "claude-mythos-5-2"]) {
     const usd = claudeCost([bucket(model, { input: 1_000_000, output: 1_000_000, cacheRead: 1_000_000 })]).usd;
     close(usd, 8 + 40 + 0.2);
   }
 });
 
-test("fast Fable 5.2 is priced at 2x", () => {
+test("fast Fable 5.2 and fast Mythos 5.2 are priced at 2x", () => {
   close(claudeCost([bucket("claude-fable-5-2", { fast: true, input: 1_000_000 })]).usd, 16);
+  close(claudeCost([bucket("claude-mythos-5-2", { fast: true, input: 1_000_000 })]).usd, 16);
 });
 
-test("Sonnet 5.5 cache reads cost $0.10 per million (fails on the old $0.20)", () => {
+test("Sonnet 5.5 cache reads cost $0.10 per million (fails if they cost $0.20)", () => {
   // Bug: the Sonnet 5.5 entry priced cache reads at 0.2.
   close(claudeCost([bucket("claude-sonnet-5-5", { cacheRead: 1_000_000 })]).usd, 0.1);
 });
