@@ -19,7 +19,7 @@ interface ClaudePrice {
 const price = (input: number, output: number, cacheRead = input * 0.1): ClaudePrice => ({ input, output, cacheRead });
 
 /** The day CLAUDE_PRICES was last compared with Anthropic's price list. A test fails once it is 90 days old. */
-export const CLAUDE_PRICES_CHECKED = "2026-10-23";
+export const CLAUDE_PRICES_CHECKED = "2026-11-14";
 
 /**
  * Anthropic list prices (first-party API). When Anthropic changes prices,
@@ -27,19 +27,21 @@ export const CLAUDE_PRICES_CHECKED = "2026-10-23";
  * id prefixes; the longest matching key wins.
  */
 export const CLAUDE_PRICES: Record<string, ClaudePrice> = {
+  "claude-fable-5-2": { ...price(8, 40, 0.2), fastMultiplier: 2 },
+  "claude-mythos-5-2": { ...price(8, 40, 0.2), fastMultiplier: 2 },
   "claude-fable-5-1": price(10, 50, 0.25),
   "claude-mythos-5-1": price(10, 50, 0.25),
   "claude-fable-5": price(10, 50, 1),
   "claude-mythos-5": price(10, 50, 1),
   "claude-opus-5-5": { ...price(4, 20, 0.2), fastMultiplier: 2 },
   "claude-opus-5": { ...price(5, 25), fastMultiplier: 2 },
-  "claude-opus-4-8": price(5, 25),
+  "claude-opus-4-8": { ...price(5, 25), fastMultiplier: 2 },
   "claude-opus-4-7": price(5, 25),
   "claude-opus-4-6": price(5, 25),
   "claude-opus-4-5": price(5, 25),
   "claude-opus-4-1": price(15, 75),
   "claude-opus-4": price(15, 75),
-  "claude-sonnet-5-5": price(2, 10, 0.2),
+  "claude-sonnet-5-5": price(2, 10, 0.1),
   "claude-sonnet-5": price(2, 10),
   "claude-sonnet-4": price(3, 15),
   "claude-haiku-5-5": { ...price(0.1, 0.5), long: { input: 0.5, output: 2.5, cacheRead: 0.05 } },
