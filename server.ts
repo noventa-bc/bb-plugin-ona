@@ -59,7 +59,7 @@ export default async function plugin(bb: BbPluginApi) {
       type: "string",
       label: "Let idle devboxes sleep after",
       description:
-        "With no thread activity for this long (e.g. 30m, 1h, or 90 for minutes), bb closes its tunnel to the box and marks the machine suspended, so Ona's own inactivity timeout can stop it (exceptions in the README's How it works). The next message wakes it. Empty or 0 keeps every box connected. A changed setting applies after `bb plugin reload ona`.",
+        "With no thread activity for this long (e.g. 30m, 1h, or 90 for minutes), bb closes its tunnel to the box and marks the machine suspended, so Ona's own inactivity timeout can stop it (the exceptions are in the plugin docs' How bb and Ona stay in sync). The next message wakes it. Empty or 0 keeps every box connected. A changed setting applies after `bb plugin reload ona`.",
       default: "1h",
       experimental_schema: idleDisconnectSchema,
     },
