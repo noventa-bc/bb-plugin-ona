@@ -45,6 +45,30 @@ test("long prompts and fast mode use their own rates", () => {
   close(claudeCost([bucket("claude-opus-5-5", { fast: true, output: 1_000_000 })]).usd, 40);
 });
 
+test("Fable 5.2 is priced at its own rates, not as Fable 5 (fails if 5.2 falls back to the 5 entry)", () => {
+  // Bug: claude-fable-5-2 had no entry, so it was priced as claude-fable-5 (10 / 50 / 1).
+  for (const model of ["claude-fable-5-2", "claude-fable-5-2-20261001", "claude-fable-5-2[1m]"]) {
+    const usd = claudeCost([bucket(model, { input: 1_000_000, output: 1_000_000, cacheRead: 1_000_000 })]).usd;
+    close(usd, 8 + 40 + 0.2);
+  }
+});
+
+test("fast Fable 5.2 is priced at 2x", () => {
+  close(claudeCost([bucket("claude-fable-5-2", { fast: true, input: 1_000_000 })]).usd, 16);
+});
+
+test("Sonnet 5.5 cache reads cost $0.10 per million (fails on the old $0.20)", () => {
+  // Bug: the Sonnet 5.5 entry priced cache reads at 0.2.
+  close(claudeCost([bucket("claude-sonnet-5-5", { cacheRead: 1_000_000 })]).usd, 0.1);
+});
+
+test("fast Opus 4.8 is priced at 2x (fails if it is listed as unknown)", () => {
+  // Bug: claude-opus-4-8 had no fast multiplier, so its fast usage was left out of the total.
+  const { usd, unknownModels } = claudeCost([bucket("claude-opus-4-8", { fast: true, output: 1_000_000 })]);
+  close(usd, 50);
+  assert.deepEqual(unknownModels, []);
+});
+
 test("unknown models and unpriced fast mode are reported, not guessed", () => {
   const { usd, unknownModels } = claudeCost([
     bucket("claude-unknown-9", { input: 1_000_000 }),
