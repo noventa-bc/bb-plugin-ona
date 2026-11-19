@@ -497,7 +497,7 @@ export function registerOnaProvider(bb: BbPluginApi, deps: ProviderDeps) {
         if (!other) await disconnect(owned.envId);
         const env = await ona.getEnvironmentIfExists(owned.envId, signal);
         // The machine is still removed either way; a folder left behind only blocks adopting the box again.
-        // Told through the plugin log: bb 0.48.1 writes `report.log` only to its server log.
+        // Told through the plugin log: bb 0.50.1 writes `report.log` only to its server log.
         const byHand =
           `move aside the bb data folder whose host-id is ${hostId} ` +
           `(see "Adopting a box again after removing its machine" in the plugin's README)`;

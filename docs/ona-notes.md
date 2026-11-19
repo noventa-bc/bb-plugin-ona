@@ -106,11 +106,11 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 
 ## bb SDK
 
-- bb's server source is the bundle `/Applications/bb.app/Contents/Resources/app.asar.unpacked/node_modules/bb-app/server/dist/start-server.js`; the installed version is the `"version"` field of `package.json` in that `bb-app` folder (`grep '"version"' /Applications/bb.app/Contents/Resources/app.asar.unpacked/node_modules/bb-app/package.json`) (bb 0.49.0, checked 2026-11-09).
+- bb's server source is the bundle `/Applications/bb.app/Contents/Resources/app.asar.unpacked/node_modules/bb-app/server/dist/start-server.js`; the installed version is the `"version"` field of `package.json` in that `bb-app` folder (`grep '"version"' /Applications/bb.app/Contents/Resources/app.asar.unpacked/node_modules/bb-app/package.json`) (bb 0.50.1, checked 2026-11-19).
 - The bb host and machine SDK calls the plugin makes. Routes come from `createHostsArea` (bb's
   SDK hosts transport in the server bundle; `scripts/bb-source.sh createHostsArea` finds it).
-  Server function names come from `scripts/bb-source.sh <name>` on bb-app 0.49.0 (checked
-  2026-11-12), the main calls, in order.
+  Server function names come from `scripts/bb-source.sh <name>` on bb-app 0.50.1 (checked
+  2026-11-19), the main calls, in order.
   - `hosts.list` (GET `/hosts`): `listPublicHostsWithStatus`, `listPublicHosts`.
   - `hosts.get` (GET `/hosts/:id`): `requireNonDestroyedHostWithStatus`, `getLatestSessionForHost`.
   - `hosts.update` (PATCH `/hosts/:id`): `updateHost`.
@@ -158,11 +158,11 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
 - SDK 0.6.136 has no `machine_busy` suspend error code (checked 2026-11-13: the
   name occurs nowhere in its typings or `dist`; bb's server does answer with it, see
   the suspend and reconcile bullets).
-- bb 0.49.0's `startMachineResume` accepts a machine that is `active`,
+- bb 0.50.1's `startMachineResume` accepts a machine that is `active`,
   `suspended`, `suspending` or `resuming`, answers 409 `machine_not_suspended` for
   `creating` and `removing`, and 404 `host_not_found` for a destroyed host (from
-  `requireSuspendableMachine`; checked 2026-11-09).
-- bb 0.49.0's suspend (`maintainMachine`, checked 2026-11-11) cancels unfinished
+  `requireSuspendableMachine`; checked 2026-11-19).
+- bb 0.50.1's suspend (`maintainMachine`, checked 2026-11-19) cancels unfinished
   environment hooks, stops active threads through the daemon and force-closes the host's
   terminals before the provider's suspend runs. With the daemon gone, that stop
   fails at once with "Host is not connected" (502 `host_unavailable`). bb then sets
@@ -173,7 +173,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   lock, not a retry: while it holds, bb's suspend fails inside the background
   operation (the next bullet).
 - bb answers the suspend and resume routes with 202 before the operation runs
-  (`startMachineSuspension`, `startMachineResume`; bb 0.49.0, checked 2026-11-09). The host reads
+  (`startMachineSuspension`, `startMachineResume`; bb 0.50.1, checked 2026-11-19). The host reads
   `suspending` or `resuming` until bb settles it. Inside the lock the 202 carries the
   host as it is, `active` with the old message: the lock's 409 `machine_maintenance`
   is raised inside the background operation and only logged. What reaches the client at
@@ -187,37 +187,37 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   `machine_not_suspended`, for a machine that is neither active, suspended, suspending nor
   resuming. A suspend that bb later fails looks accepted when
   it is answered.
-- For an enrolled machine, bb's `createMachineBootstrapApi` runs `install-machine.sh --start`, whose start branch returns at once when `daemon_matches` holds (the daemon on the host's port reports this host id and server URL). `prepare` returns `enrolled` for a host bb has seen (`lastSeenAt` set) or that is connected, so a plugin wake reaches that branch once SSH and the tunnel are up; the start branch never kills a daemon (bb 0.49.0 server source, checked 2026-11-09).
-- `startMachineReconciliation` (behind `hosts.experimental_reconcile`) returns at once unless the machine's phase is `suspended`. On a suspended machine it rejects with 409 `machine_busy` ("Wait for thread provisioning to finish before suspending this machine.") while thread provisioning is pending on the host, the same check suspend makes. bb's own 10-second sweep (`sweepProviderMachine`) calls `resumeMachine` for a machine left `resuming`, for a machine left `suspending` with no suspend operation running in the server process (a server restart mid-suspend; a failed resume keeps `suspending`, so the next tick calls again), and for a suspended machine with a thread waiting in its offline queue; a failed resume of a machine left `resuming` ends `suspended`. bb passes the provider's resume the host id, resource, checkpoint, report and signal (bb 0.49.0 server source, checked 2026-11-09).
+- For an enrolled machine, bb's `createMachineBootstrapApi` runs `install-machine.sh --start`, whose start branch returns at once when `daemon_matches` holds (the daemon on the host's port reports this host id and server URL). `prepare` returns `enrolled` for a host bb has seen (`lastSeenAt` set) or that is connected, so a plugin wake reaches that branch once SSH and the tunnel are up; the start branch never kills a daemon (`createMachineBootstrapApi` in bb 0.50.1, checked 2026-11-19; the installer's start branch in bb 0.49.0, checked 2026-11-09).
+- `startMachineReconciliation` (behind `hosts.experimental_reconcile`) returns at once unless the machine's phase is `suspended`. On a suspended machine it rejects with 409 `machine_busy` ("Wait for thread provisioning to finish before suspending this machine.") while thread provisioning is pending on the host, the same check suspend makes. bb's own 10-second sweep (`sweepProviderMachine`) calls `resumeMachine` for a machine left `resuming`, for a machine left `suspending` with no suspend operation running in the server process (a server restart mid-suspend; a failed resume keeps `suspending`, so the next tick calls again), and for a suspended machine with a thread waiting in its offline queue; a failed resume of a machine left `resuming` ends `suspended`. bb passes the provider's resume the host id, resource, checkpoint, report and signal (bb 0.50.1 server source, checked 2026-11-19).
 - `resumeMachine` waits for an in-flight suspend, then `resumeMachineWithIntent`
   returns at once unless the phase is suspended, suspending or resuming. A resume of
   an active machine does nothing. While a remove runs, `resumeMachine` waits for it and
-  resumes nothing (bb 0.49.0, checked 2026-11-09).
-- `resumeMachineWithIntent` puts no deadline on the provider's resume: the call ends only when the provider's resume settles or the plugin is released. On success it sets the machine `active`; on failure it sets `suspended` (or `suspending`, when it began there) with "Machine resume failed: …" (bb 0.49.0 server source, checked 2026-11-09).
-- bb's `createMachineBootstrapApi` runs the installer through the provider's `executor.exec` with `timeoutMs` 10 minutes, then waits for the daemon's connection (`enrollments.waitForConnection`) with `timeoutMs` 2 minutes. The plugin's executor asks Ona first (`docs/sync.md` rule 1), so the 10 minutes start once Ona says ready (bb 0.49.0 server source, checked 2026-11-09).
-- bb's `removeMachine` awaits the host's in-flight suspend and resume operations before it removes the host (bb 0.49.0 server source, checked 2026-11-09); `remove` in src/provider.ts relies on it.
-- bb's `createMachineBootstrapApi` reports the steps "Preparing machine enrollment", then "Starting enrolled machine" (a host `prepare` returns as `enrolled`) or "Bootstrapping machine", then "Waiting for machine connection". When `executor.exec` throws, it rethrows the signal's reason if the signal was aborted (`throwIfAborted`), else "Machine bootstrap command failed"; when the installer exits non-zero, it throws "Machine bootstrap command failed:" followed by the installer's last 20 output lines, or the bare "Machine bootstrap command failed" when it printed none (`failureMessage`); on any failure it clears the pending enrollment for the key (bb 0.49.0 server source, checked 2026-11-09).
-- bb's enrollment `prepare` runs under `runSerialized`, a per-key lock (the key is the plugin id and the launch key): calls for one key run one after another, and a failed call does not block the next (bb 0.49.0 server source, checked 2026-11-09).
-- bb runs a machine provider's calls through `invokeWrapped` with no deadline: `create`, `suspend`, `resume` and `remove` end only when the provider's promise settles or the plugin is released (reloaded or disabled). Only `availability` and `validate` are bounded, by `decideWithinBox` with `DEFAULT_PLUGIN_HOOK_TIMEOUT_MS` (10 s) (bb 0.49.0 server source, checked 2026-11-09).
-- bb's host list (`listPublicHosts`) never lists a destroyed host and leaves out a `creating` host unless `includeCreating` is true. The list route takes `includeCreating=true` as a query string and the SDK's `hosts.list({includeCreating: true})` sends it (bb 0.49.0 server source and SDK typings, checked 2026-11-09).
-- bb names a host it creates for a machine provider "<provider display name> <suffix>", the suffix being the last 6 letters or digits of the host id (`askMachineLaunch`), and renames it to the name the provider's `create` returns only when the host turns active (`runCreate`) (bb 0.49.0 server source, checked 2026-11-09).
+  resumes nothing (bb 0.50.1, checked 2026-11-19).
+- `resumeMachineWithIntent` puts no deadline on the provider's resume: the call ends only when the provider's resume settles or the plugin is released. On success it sets the machine `active`; on failure it sets `suspended` (or `suspending`, when it began there) with "Machine resume failed: …" (bb 0.50.1 server source, checked 2026-11-19).
+- bb's `createMachineBootstrapApi` runs the installer through the provider's `executor.exec` with `timeoutMs` 10 minutes, then waits for the daemon's connection (`enrollments.waitForConnection`) with `timeoutMs` 2 minutes. The plugin's executor asks Ona first (`docs/sync.md` rule 1), so the 10 minutes start once Ona says ready (bb 0.50.1 server source, checked 2026-11-19).
+- bb's `removeMachine` awaits the host's in-flight suspend and resume operations before it removes the host (bb 0.50.1 server source, checked 2026-11-19); `remove` in src/provider.ts relies on it.
+- bb's `createMachineBootstrapApi` reports the steps "Preparing machine enrollment", then "Starting enrolled machine" (a host `prepare` returns as `enrolled`) or "Bootstrapping machine", then "Waiting for machine connection". When `executor.exec` throws, it rethrows the signal's reason if the signal was aborted (`throwIfAborted`), else "Machine bootstrap command failed"; when the installer exits non-zero, it throws "Machine bootstrap command failed:" followed by the installer's last 20 output lines, or the bare "Machine bootstrap command failed" when it printed none (`failureMessage`); on any failure it clears the pending enrollment for the key (bb 0.50.1 server source, checked 2026-11-19).
+- bb's enrollment `prepare` runs under `runSerialized`, a per-key lock (the key is the plugin id and the launch key): calls for one key run one after another, and a failed call does not block the next (bb 0.50.1 server source, checked 2026-11-19).
+- bb runs a machine provider's calls through `invokeWrapped` with no deadline: `create`, `suspend`, `resume` and `remove` end only when the provider's promise settles or the plugin is released (reloaded or disabled). Only `availability` and `validate` are bounded, by `decideWithinBox` with `DEFAULT_PLUGIN_HOOK_TIMEOUT_MS` (10 s) (bb 0.50.1 server source, checked 2026-11-19).
+- bb's host list (`listPublicHosts`) never lists a destroyed host and leaves out a `creating` host unless `includeCreating` is true. The list route takes `includeCreating=true` as a query string and the SDK's `hosts.list({includeCreating: true})` sends it (bb 0.50.1 server source, checked 2026-11-19).
+- bb names a host it creates for a machine provider "<provider display name> <suffix>", the suffix being the last 6 letters or digits of the host id (`askMachineLaunch`), and renames it to the name the provider's `create` returns only when the host turns active (`runCreate`) (bb 0.50.1 server source, checked 2026-11-19).
 - The host's status is only `connected` or `disconnected` (`toHostWithStatus`). The
   new-thread composer labels a selected host whose status is not connected "Host is
   offline" (search `Host is offline` in the app's `plugin-frontend-0dkOuthv.js`; bb 0.49.0,
   checked 2026-11-09).
-- bb 0.49.0's `threads.list` leaves out hidden threads (workflow steps, side
+- bb 0.50.1's `threads.list` leaves out hidden threads (workflow steps, side
   chats) unless asked with `includeHidden: true`, drops archived ones on the
   server with `archived: false`, and applies no limit when none is passed (the
-  threads list route; checked 2026-11-09). `bb thread archive <id>` accepts a hidden
+  threads list route; checked 2026-11-19). `bb thread archive <id>` accepts a hidden
   thread's id, and archiving a thread also archives the hidden threads it started
   (checked 2026-11-03).
-- bb 0.49.0 registers the daemon's `/internal` routes in the `registerInternal*`
+- bb registers the daemon's `/internal` routes in the `registerInternal*`
   functions of `server/dist/start-server.js` and calls them from
   `host-daemon/dist/daemon-bundle.mjs` (its route-string calls, plus
   `/internal/hosts/enroll`, `/internal/ws` and the server-move downloads built
   from `downloadPath`), both under the app's
   `node_modules/bb-app` (on macOS inside `bb.app/Contents/Resources/app.asar.unpacked`).
-  `src/proxy.ts` lists them (checked 2026-11-09).
+  `src/proxy.ts` lists them (the server's routes checked 2026-11-19 in bb 0.50.1; the daemon's calls checked 2026-11-09 in bb 0.49.0).
 - bb 0.49.0's installer (`server/dist/assets/install-machine.sh` under the
   app's `node_modules/bb-app`) refuses, outside `--adopt`, a data folder whose
   `host-id` names another machine, or whose `auth.json` does when `host-id` is
@@ -227,94 +227,95 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   daemon clones a project into `<data folder>/checkouts/<slug>` unless given a
   path (`resolveProjectCloneDefaultPath` in
   `host-daemon/dist/start-host-daemon.js`) (checked 2026-11-09).
-- bb 0.49.0 accepts `bb machine remove <m> --force` only for a provider machine
+- bb 0.50.1 accepts `bb machine remove <m> --force` only for a provider machine
   left removing after a failed cleanup that a workspace still blocks, and only
   while no daemon is connected for it (409 `machine_cleanup_not_failed`,
   `machine_connected`, `machine_cleanup_not_blocked`; `assertForcedRemovalAllowed`
-  in `server/dist/start-server.js`) (checked 2026-11-09).
-- bb 0.49.0 writes a machine provider's `report.log` from suspend, resume, remove and
+  in `server/dist/start-server.js`) (checked 2026-11-19).
+- bb 0.50.1 writes a machine provider's `report.log` from suspend, resume, remove and
   remove's cleanup reconciliation (`reconcileCleanup`) only to bb's server log
   (`lifecycleReporter`); `bb.log.*` also goes to
   `bb plugin logs <id>` (`emitLog`); `report.step` text is cleared when the remove
-  finishes (checked 2026-11-09).
-- bb 0.49.0 sets a host whose create failed to `removing` with the failure in its status
+  succeeds (checked 2026-11-19).
+- bb 0.50.1 sets a host whose create failed to `removing` with the failure in its status
   message (`runCreate`), and its cleanup is due 30 s later
   (`MACHINE_CREATE_FAILURE_CLEANUP_GRACE_MS`). The cleanup's steps replace the message;
   bb writes the failure back only when the first cleanup attempt succeeds
   (`creationFailureMessage`). A destroyed host's route answers 404 `host_unavailable`
-  (`requireNonDestroyedHostWithStatus`) (checked 2026-11-11).
-- bb 0.49.0 appends `report.log` from create to the host's `lifecycle.pendingLog`
+  (`requireNonDestroyedHostWithStatus`) (checked 2026-11-19).
+- bb 0.50.1 appends `report.log` from create to the host's `lifecycle.pendingLog`
   (last 16384 characters, `createReporter`); bb empties it when a thread launch waiting
   on the host reads it (`takeCreateLog`) and when the host turns active (`runCreate`)
-  (checked 2026-11-09).
-- bb 0.49.0 retries a failed environment teardown (`writeEnvironmentTeardownFailure` in
+  (checked 2026-11-19).
+- bb 0.50.1 retries a failed environment teardown (`writeEnvironmentTeardownFailure` in
   `server/dist/start-server.js`): after the first to fourth failed attempt,
   `lifecycle.retireAt` is the next retry, 1, 2, 4 or 8 minutes later (`REMOVE_RETRY_MS`
   doubled per failure); after the fifth (`MAX_REMOVE_ATTEMPTS` is 5) it is null and the
-  message starts "Needs recovery:" (checked 2026-11-09). bb sets `retireAt` from
+  message starts "Needs recovery:" (checked 2026-11-19). bb sets `retireAt` from
   `Date.now()` in `requestEnvironmentRemoval` and `writeEnvironmentTeardownFailure`, so
-  its unit is epoch ms; the SDK types it `number | null` (bb 0.49.0, checked 2026-11-09).
+  its unit is epoch ms (bb 0.50.1, checked 2026-11-19); the plugin SDK 0.6.136 types it
+  `number | null` (checked 2026-11-19).
 - bb's `lifecycle.phase` for a workspace is `destroyed` when it is destroyed, else
   `teardown` once a teardown status is set, else `retiring` while `retireAt` is set,
-  else `active` (`toEnvironmentResponseWithHostLifecycle`; bb 0.49.0, checked 2026-11-09).
+  else `active` (`toEnvironmentResponseWithHostLifecycle`; bb 0.50.1, checked 2026-11-19).
 - bb's retire grace: `refreshProviderRetirement` runs after bb deletes a thread whose
   storage is gone and after an unarchive. It sets `retireAt` to now plus the provider's
   `retireGraceMs` while no thread on the workspace is live (`environmentHasLiveThreads`),
   keeps an existing `retireAt`, and clears `retireAt` while a thread is live or when
-  `retireGraceMs` is null. It does nothing once a teardown status is set (bb 0.49.0, checked
+  `retireGraceMs` is null. It does nothing once a teardown status is set (bb 0.50.1, checked
   2026-11-09).
 - `sweepProviderEnvironmentInSlot` sets the same `retireAt` on a
   workspace with no owner thread and no live thread, clears it while a live thread is
   on the workspace and no teardown status is set, and returns while the workspace has an
   owner thread id and no teardown status. Once `retireAt` has passed it asks for the
   removal (`requestEnvironmentRemoval`). `retireGraceMs` defaults to 300000 (5 min) in
-  `environmentProviderPolicySchema`, and the plugin's provider keeps that default (bb 0.49.0,
-  checked 2026-11-09).
+  `environmentProviderPolicySchema`, and the plugin's provider keeps that default (bb 0.50.1,
+  checked 2026-11-19).
 - bb's periodic sweep runs every 10 s (`setInterval` with `1e4` in
   `server/dist/start-server.js`), except while a server move is frozen. A tick is skipped while the previous run of the
   job is still going (`runPeriodicSweepJob`). A run waits for each workspace it
   sweeps, including that workspace's teardown hook, which can take up to 15 min
   (`ENVIRONMENT_HOOK_TIMEOUT_MS`). A teardown retry starts through its host's
   cleanup slot: one active cleanup per host, four in all
-  (`withEnvironmentCleanupSlot`, `MAX_ACTIVE_CLEANUPS`) (bb 0.49.0, checked 2026-11-09).
-- bb 0.49.0's owner-mismatch failure (`PROVIDER_OWNER_MISMATCH_MESSAGE` in
+  (`withEnvironmentCleanupSlot`, `MAX_ACTIVE_CLEANUPS`) (bb 0.50.1, checked 2026-11-19).
+- bb 0.50.1's owner-mismatch failure (`PROVIDER_OWNER_MISMATCH_MESSAGE` in
   `server/dist/start-server.js`) sets `lifecycle.teardown.status` to failed and leaves
-  `retireAt` as it was; no retry runs while the mismatch lasts (checked 2026-11-09). The
+  `retireAt` as it was; no retry runs while the mismatch lasts (checked 2026-11-19). The
   message says the workspace belongs to a different plugin or has no recorded owner, and
-  bb writes no `Needs recovery:` text for it (checked 2026-11-09).
+  bb writes no `Needs recovery:` text for it (checked 2026-11-19).
 - A teardown's hook, a retry's included, needs its host active: an inactive host fails the attempt with
   `host_unavailable` (`assertHostActiveForRead`), except while the machine is being
   removed (`isCleanupRpc`). A teardown never wakes the host (`hostCommandMayWake`)
-  (bb 0.49.0, checked 2026-11-09).
+  (bb 0.50.1, checked 2026-11-19).
 - bb pauses a retry while a live thread is on the environment, except while the machine
   is being removed; the next bullet says when it releases the workspace.
   `environmentHasLiveThreads` counts a thread on the environment that is not archived or
   deleted, plus any thread whose status is `active` or `stopping`, whatever its archive
   or delete state. `sweepProviderEnvironmentInSlot` returns before the retry while that
   holds. `requestEnvironmentRemoval` returns false, before any write, when a live thread
-  is on the environment and the machine is not being removed (bb 0.49.0, checked 2026-11-09).
+  is on the environment and the machine is not being removed (bb 0.50.1, checked 2026-11-19).
 - `sweepProviderEnvironmentInSlot` releases a workspace that has an owner and a teardown
   status when a live thread is on the environment, or when it is `ready` with a path,
   and never while the machine is being removed. The release clears `ownerThreadId`,
   `claimPath`, `retireAt` and `teardownStatus`; with a live thread the function then
   returns. A released workspace has no teardown status and no `retireAt`, so bb reports
   its phase as `active` (`toEnvironmentResponseWithHostLifecycle` derives the phase from
-  the teardown status), and the plugin reads it as active (bb 0.49.0, checked 2026-11-09).
+  the teardown status), and the plugin reads it as active (bb 0.50.1, checked 2026-11-19).
 - bb blocks automatic cleanup of a workspace whose hook outcome is unknown after an
   interruption. `cancelPendingEnvironmentHook` throws "Environment hook outcome is
   unknown after interruption. Automatic cleanup is blocked; inspect the workspace before
   recovering it." `sweepProviderEnvironmentInSlot` records that error as a failed
-  teardown (bb 0.49.0, checked 2026-11-09).
-- bb 0.49.0's SDK for a plugin is built by `createNodeBbSdk` with a fetch that gives up after
+  teardown (bb 0.50.1, checked 2026-11-19).
+- bb 0.50.1's SDK for a plugin is built by `createNodeBbSdk` with a fetch that gives up after
   `DEFAULT_BB_REQUEST_TIMEOUT_MS` (75 s) and throws an Error named `BbRequestTimeoutError`, while bb
-  goes on with the request (checked 2026-11-09 in `server/dist/start-server.js`).
-- bb 0.49.0 refuses a thread spawn into its personal project ("Personal project threads must use a
+  goes on with the request (checked 2026-11-19 in `server/dist/start-server.js`).
+- bb 0.50.1 refuses a thread spawn into its personal project ("Personal project threads must use a
   personal workspace", `assertProjectWorkspaceCompatibility`) unless its environment is `reuse`,
   `provider`, `project-default`, a host's personal workspace, or a host's `unmanaged` workspace with
-  a null path; a host `unmanaged` workspace at a path is refused (checked 2026-11-09).
+  a null path; a host `unmanaged` workspace at a path is refused (checked 2026-11-19).
   An environment's `workspaceProvisionType` is set only for bb's default environment providers
   (`resolveDeprecatedWorkspaceProvisionType`); a workspace from any other provider reads null
-  (checked 2026-11-09).
+  (checked 2026-11-19).
 - In SDK 0.6.136 a provider resource is written by the provider's own lifecycle
   hooks (`create`, `suspend`, `resume`, through `checkpoint` or the returned
   `resource`) and read with `bb.experimental_machines.getResource` (checked 2026-11-13).
@@ -362,10 +363,10 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   `disabledReason:n??void 0` in `plugin-frontend-0dkOuthv.js`) (checked 2026-11-09).
 - The control's types: `PluginMachineProviderInputsProps` in the SDK 0.6.136 typings
   (`bb-plugin-sdk-app.d.ts`). Checked 2026-11-13.
-- bb 0.49.0's `updateSettings` (`server/dist/start-server.js`) saves a plugin's settings,
+- bb 0.50.1's `updateSettings` (`server/dist/start-server.js`) saves a plugin's settings,
   calls its `onChange` listeners, and reloads the plugin only when its status is
   `needs-configuration`. So a settings save does not reload a healthy plugin: a changed
-  setting applies after `bb plugin reload ona` (checked 2026-11-11).
+  setting applies after `bb plugin reload ona` (checked 2026-11-19).
 - SDK surfaces in 0.6.136 that the plugin doesn't use (checked 2026-11-13):
   - host entries: `experimental_defineHostEntry` (plugin code on the daemon,
     fs watch, signals) and the `experimental_host.deleted` event
@@ -376,7 +377,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   - declarative `defineCli`
   - `bb.status.needsConfiguration`
   - `ephemeral: true` machines
-- bb 0.49.0 stores a plugin's log lines as one JSON object per line, `{"ts":<epoch ms>,"level":<debug, info, warn or error>,"message":<text>}`, in `<data-dir>/plugins/<plugin-id>/logs/plugin.log` (`appendPluginLogLine` and `pluginLogsDir` in the server bundle, checked 2026-11-11). The message is the text the plugin passed to its logger, without the `[plugin:<id>]` prefix that bb's own log line adds (`emitLog`, same bundle, checked 2026-11-11).
-- bb 0.49.0 caps that file at `PLUGIN_LOG_MAX_BYTES`, 5 * 1024 * 1024 bytes (5 MiB): before a write, a file over the cap is renamed to `plugin.log.1`, replacing the earlier one, so one rotated file is kept (`appendPluginLogLine`, checked 2026-11-11).
-- bb 0.49.0's stored lines survive a bb restart and a plugin reload: `readPluginLogTail` reads `plugin.log.1` and then `plugin.log` from disk (checked 2026-11-11).
+- bb 0.50.1 stores a plugin's log lines as one JSON object per line, `{"ts":<epoch ms>,"level":<debug, info, warn or error>,"message":<text>}`, in `<data-dir>/plugins/<plugin-id>/logs/plugin.log` (`appendPluginLogLine` and `pluginLogsDir` in the server bundle, checked 2026-11-19). The message is the text the plugin passed to its logger, without the `[plugin:<id>]` prefix that bb's own log line adds (`emitLog`, same bundle, checked 2026-11-19).
+- bb 0.50.1 caps that file at `PLUGIN_LOG_MAX_BYTES`, 5 * 1024 * 1024 bytes (5 MiB): before a write, a file over the cap is renamed to `plugin.log.1`, replacing the earlier one, so one rotated file is kept (`appendPluginLogLine`, checked 2026-11-19).
+- bb 0.50.1's stored lines survive a bb restart and a plugin reload: `readPluginLogTail` reads `plugin.log.1` and then `plugin.log` from disk (checked 2026-11-19).
 - bb 0.49.0's `bb plugin logs <id>` prints the last 100 lines by default. `-n` (`--lines`) sets the count, and the server's `/plugins/:id/logs` route caps `tail` at 10000, so a larger `-n` prints 10000. Each line prints unchanged (the `logs <id>` command in `host-daemon/dist/bb-chunks/plugin-K4RLPVUQ.js`, and `app.get("/plugins/:id/logs")` in `server/dist/start-server.js`, checked 2026-11-11).
