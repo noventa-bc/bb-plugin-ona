@@ -254,7 +254,7 @@ Facts checked 2026-10-30 unless marked otherwise. Re-check before relying on the
   message starts "Needs recovery:" (checked 2026-11-19). bb sets `retireAt` from
   `Date.now()` in `requestEnvironmentRemoval` and `writeEnvironmentTeardownFailure`, so
   its unit is epoch ms (bb 0.50.1, checked 2026-11-19); the plugin SDK 0.6.136 types it
-  `number | null`.
+  `number | null` (checked 2026-11-19).
 - bb's `lifecycle.phase` for a workspace is `destroyed` when it is destroyed, else
   `teardown` once a teardown status is set, else `retiring` while `retireAt` is set,
   else `active` (`toEnvironmentResponseWithHostLifecycle`; bb 0.50.1, checked 2026-11-19).
