@@ -32,8 +32,8 @@ the quick fix is right and when it is not.
   independent of the orchestrator. Blocking findings go back to the builder
   (`docs/review-standards.md` says which block).
 - **Researcher.** A read-only agent for a question whose answer someone will
-  act on: a diagnosis, what a bb version changed, whether something is used,
-  the options for a decision. It changes nothing and marks each claim as read
+  act on: a diagnosis, what the installed bb does, whether something is used,
+  the options for a decision. It changes no repo file and marks each claim as read
   or inferred; the orchestrator checks the claims it relies on.
 
 Builders and researchers run on Opus at low effort and reviewers on Haiku at max effort by
