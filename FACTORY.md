@@ -31,8 +31,12 @@ the quick fix is right and when it is not.
   pass and `/ponytail-review`: the passes step 6 gives a PR, all
   independent of the orchestrator. Blocking findings go back to the builder
   (`docs/review-standards.md` says which block).
+- **Researcher.** A read-only agent for a question whose answer someone will
+  act on: a diagnosis, what the installed bb does, whether something is used,
+  the options for a decision. It changes no repo file and marks each claim as read
+  or inferred; the orchestrator checks the claims it relies on.
 
-Builders run on Opus at low effort and reviewers on Haiku at max effort by
+Builders and researchers run on Opus at low effort and reviewers on Haiku at max effort by
 default; the role definitions in `.claude/agents/` set it, and a brief for an
 agent without a definition names its model and effort (for example, Haiku at max
 effort for mechanical work). Use Opus at medium effort only per call, with a stated reason
